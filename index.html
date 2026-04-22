@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>塑料粒子测试分析平台</title>
+  <link rel="icon" type="image/png" href="./logo.png" />
+  <style>
+    :root{
+      --bg:#f5f6f8;
+      --surface:#ffffff;
+      --surface-2:#fafafa;
+      --surface-3:#f3f4f6;
+      --border:#e5e7eb;
+      --border-2:#d7dbe2;
+      --text:#111827;
+      --text-2:#374151;
+      --muted:#6b7280;
+      --muted-2:#9ca3af;
+      --accent:#06b6d4;
+      --accent-soft:rgba(6,182,212,.1);
+      --success:#65a30d;
+      --warn:#f59e0b;
+      --danger:#ef4444;
+      --radius:16px;
+      --radius-sm:12px;
+      --radius-xs:10px;
+      --sidebar:266px;
+      --assistant:366px;
+      --topbar:56px;
+      --shadow:0 1px 4px rgba(0,0,0,.05);
+      --ease:cubic-bezier(.4,0,.2,1);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing:antialiased;
+      overflow:hidden;
+    }
+    .app{height:100vh}
+    .shell{
+      height:100vh;
+      display:flex;
+      min-height:0;
+      position:relative;
+      overflow:hidden;
+    }
+    .shell::before{
+      content:'';
+      position:absolute;
+      left:0;right:0;top:var(--topbar);
+      height:1px;background:var(--border);
+      pointer-events:none;z-index:3;
+    }
+    .shell.sidebar-collapsed{--sidebar:72px}
+
+    .sidebar{
+      width:var(--sidebar);
+      min-width:var(--sidebar);
+      max-width:var(--sidebar);
+      flex:0 0 var(--sidebar);
+      height:100%;
+      background:var(--surface);
+      border-right:1px solid var(--border);
+      display:flex;
+      flex-direction:column;
+      padding:0;
+      overflow:auto;
+      transition:width .3s var(--ease),min-width .3s var(--ease),max-width .3s var(--ease),flex-basis .3s var(--ease),padding .3s var(--ease),opacity .3s var(--ease);
+    }
+    .sidebar-top{
+      display:flex;
+      align-items:center;
+      height:var(--topbar);
+      min-height:var(--topbar);
+      padding:0 14px;
+    }
+    .brand{
+      display:grid;
+      grid-template-columns:32px minmax(0,1fr);
+      align-items:center;
+      column-gap:8px;
+      width:100%;
+      height:36px;
+      min-height:36px;
+    }
+    .brand-badge{
+      width:32px;height:32px;
+      display:grid;
+      place-items:center;
+      justify-self:center;
+      background:transparent;
+      transform:translateY(-1px);
+    }
+    .brand-badge img{
+      width:100%;
+      height:100%;
+      padding:2px;
+      object-fit:contain;
+      display:block;
+    }
+    .brand-title{
+      display:flex;
+      align-items:center;
+      height:100%;
+      font-size:22px;
+      font-weight:600;
+      color:var(--text);
+      line-height:1.1;
+      margin-left:5px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:none;
+      transition:max-width .3s var(--ease),opacity .2s ease,transform .3s var(--ease);
+    }
+    .sidebar-search{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      height:42px;
+      padding:0 14px;
+      border:1px solid var(--border);
+      background:#fff;
+      border-radius:14px;
+      box-shadow:0 1px 0 rgba(31,41,55,.03);
+      overflow:hidden;
+    }
+    .sidebar-search svg{flex:0 0 auto;color:var(--muted)}
+    .sidebar-search input{
+      flex:1;
+      min-width:0;
+      border:0;
+      outline:none;
+      background:transparent;
+      font-size:13px;
+      color:var(--text-2);
+      font-weight:500;
+    }
+    .sidebar-search input::placeholder{color:var(--muted-2)}
+    .search-kbd{
+      flex:0 0 auto;
+      font-size:11px;
+      color:var(--muted-2);
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      padding:4px 8px;
+      line-height:1.3;
+    }
+    .sidebar-scroll{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:12px 14px 16px;
+      scrollbar-width:none;
+    }
+    .sidebar-scroll::-webkit-scrollbar{display:none}
+    .sidebar-section{
+      margin-bottom:8px;
+      padding:0;
+    }
+    .sidebar-scroll > .sidebar-section:first-child{
+      margin-top:2px;
+      margin-bottom:12px;
+    }
+    .section-label{
+      padding:10px 10px 8px;
+      font-size:12px;
+      font-weight:700;
+      color:var(--muted-2);
+      letter-spacing:.02em;
+    }
+    .nav-item{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 0;
+      margin:2px 0;
+      border:0;
+      background:transparent;
+      color:var(--text-2);
+      border-radius:12px;
+      cursor:pointer;
+      text-align:left;
+      font-size:14px;
+      font-weight:500;
+      position:relative;
+      overflow:hidden;
+      transition:background .18s, color .18s, padding .3s var(--ease), width .3s var(--ease), max-width .3s var(--ease), opacity .2s ease;
+    }
+    .nav-item:hover{background:var(--surface-3)}
+    .nav-item.active{
+      background:var(--surface-3);
+      color:var(--text);
+      font-weight:600;
+    }
+    .nav-main{
+      display:grid;
+      grid-template-columns:44px minmax(0,1fr);
+      align-items:center;
+      gap:0;
+      min-width:0;
+      flex:1;
+      overflow:hidden;
+    }
+    .nav-icon{
+      width:18px;height:18px;
+      display:grid;place-items:center;
+      flex:0 0 auto;
+      color:var(--muted);
+      justify-self:center;
+    }
+    .nav-item.active .nav-icon{color:var(--accent)}
+    .nav-text{
+      min-width:0;
+      flex:1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:180px;
+      transition:max-width .3s var(--ease),opacity .2s ease,transform .3s var(--ease);
+    }
+    .nav-arrow{
+      color:var(--muted-2);
+      font-size:15px;
+      line-height:1;
+      width:44px;
+      flex:0 0 44px;
+      display:grid;
+      place-items:center;
+      margin-right:0;
+      transition:transform .2s ease,color .2s ease;
+    }
+    .nav-group.expanded > .nav-parent .nav-arrow{transform:rotate(90deg);color:var(--muted)}
+    .nav-children{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      margin:2px 0 4px 22px;
+      padding-left:12px;
+      border-left:1px solid var(--border-2);
+    }
+    .nav-group:not(.expanded) .nav-children{display:none}
+    .nav-subitem{
+      width:100%;
+      border:0;
+      background:transparent;
+      color:var(--text-2);
+      text-align:left;
+      padding:8px 12px;
+      border-radius:10px;
+      font-size:13px;
+      cursor:pointer;
+      transition:background .18s ease,color .18s ease;
+    }
+    .nav-subitem:hover{background:var(--surface-3)}
+    .nav-subitem.active{
+      background:rgba(6,182,212,.1);
+      color:var(--accent);
+      font-weight:600;
+    }
+    .sidebar-footer{
+      margin-top:auto;
+      padding:12px 14px 14px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    .sidebar-account{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      color:var(--text-2);
+      background:var(--surface-2);
+      border:1px solid var(--border);
+      font-size:14px;
+    }
+    .sidebar-toggle{
+      width:100%;
+      height:44px;
+      min-height:44px;
+      display:grid;
+      grid-template-columns:44px minmax(0,1fr);
+      align-items:center;
+      justify-content:flex-start;
+      gap:0;
+      padding:0;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      cursor:pointer;
+      font-size:13px;
+      font-weight:500;
+      transition:all .2s;
+      overflow:hidden;
+    }
+    .sidebar-toggle:hover{border-color:var(--border-2);background:var(--surface-2)}
+    .toggle-icon{display:grid;place-items:center;color:var(--muted);justify-self:center}
+    .sidebar-toggle-label{justify-self:start;text-align:left}
+
+    .main{
+      flex:1;
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      background:#fff;
+    }
+    .topbar{
+      height:var(--topbar);
+      min-height:var(--topbar);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:0 20px;
+      background:var(--surface);
+    }
+    .top-actions{
+      margin-left:auto;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .pill-btn,.icon-btn,.time-chip{
+      height:38px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      color:var(--text-2);
+      border-radius:12px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      padding:0 14px;
+      font-weight:500;
+      transition:all .2s;
+    }
+    .icon-btn{width:38px;justify-content:center;padding:0}
+    .pill-btn strong{font-size:13px;color:var(--text);font-weight:600}
+    .primary{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .primary strong{color:#fff}
+
+    .content{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:22px 24px 24px;
+      scrollbar-width:none;
+      background:#fff;
+    }
+    .content::-webkit-scrollbar{display:none}
+    .dashboard{
+      width:100%;
+      min-width:920px;
+      max-width:none;
+      margin:0 auto;
+    }
+    .hero{
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    .hero p{
+      margin:0;
+      color:var(--muted);
+      font-size:12.5px;
+      max-width:760px;
+    }
+    .hero h1{
+      margin:4px 0 8px;
+      font-size:28px;
+      line-height:1.15;
+      letter-spacing:-.03em;
+      font-weight:800;
+      color:var(--text);
+    }
+    .hero-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+      gap:10px;
+      padding-top:10px;
+    }
+
+    .stats-grid{
+      display:grid;
+      grid-template-columns:1.2fr 1fr 1fr 1fr;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .card,.panel,.table-card,.summary-card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+    .card:hover,.panel:hover,.table-card:hover,.summary-card:hover{
+      border-color:var(--border-2);
+      box-shadow:0 4px 16px rgba(0,0,0,.07);
+    }
+    .stat-card{overflow:hidden;min-height:148px}
+    .stat-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 16px 10px;
+      border-bottom:1px solid var(--border);
+      font-size:13px;
+      font-weight:600;
+    }
+    .stat-head small{font-size:11px;color:var(--muted);font-weight:500}
+    .stat-body{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      min-height:104px;
+    }
+    .metric{
+      padding:16px 16px 14px;
+      position:relative;
+      border-right:1px solid var(--border);
+    }
+    .metric:last-child{border-right:0}
+    .label{font-size:12px;color:var(--muted);font-weight:500}
+    .value{margin-top:8px;font-size:26px;font-weight:800;letter-spacing:-.04em}
+    .sub{margin-top:5px;font-size:11.5px;color:var(--muted)}
+    .delta{font-size:12px;color:var(--success);margin-left:6px;font-weight:700}
+    .delta.up{color:var(--danger)}
+    .spark{
+      position:absolute;
+      left:0;right:0;bottom:0;height:36px;
+      pointer-events:none;
+    }
+    .stat-card:nth-child(1) .spark{background:rgba(6,182,212,.05)}
+    .stat-card:nth-child(2) .spark{background:rgba(139,92,246,.05)}
+    .stat-card:nth-child(3) .spark{background:rgba(245,158,11,.05)}
+    .stat-card:nth-child(4) .spark{background:rgba(101,163,13,.05)}
+
+    .section-grid{
+      display:grid;
+      gap:12px;
+      margin-bottom:14px;
+    }
+    .section-grid.three{grid-template-columns:1.15fr 1fr 1fr}
+    .section-grid.three.bottom{grid-template-columns:1fr 1fr 1fr}
+    .panel{
+      padding:14px;
+      min-height:320px;
+    }
+    .panel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:12px;
+      font-weight:700;
+      font-size:14px;
+    }
+    .chip,.ghost{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      border:1px solid var(--border);
+      background:var(--surface-2);
+      color:var(--muted);
+      border-radius:999px;
+      height:28px;
+      padding:0 10px;
+      font-size:11px;
+      font-weight:600;
+    }
+    .ghost{background:var(--surface);color:var(--text-2)}
+    .chart-box{
+      height:250px;
+      border:1px dashed var(--border);
+      border-radius:12px;
+      background:linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.01));
+      position:relative;
+      overflow:hidden;
+      padding:18px;
+    }
+    .bars{
+      position:absolute;
+      inset:54px 18px 42px 18px;
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:10px;
+      align-items:end;
+    }
+    .bar{
+      border-radius:10px 10px 0 0;
+      background:linear-gradient(180deg, rgba(6,182,212,.18), rgba(6,182,212,.06));
+      border:1px solid rgba(6,182,212,.14);
+      min-height:36px;
+    }
+    .bar:nth-child(2){height:80px}
+    .bar:nth-child(3){height:126px}
+    .bar:nth-child(4){height:102px}
+    .bar:nth-child(5){height:68px}
+    .bar:nth-child(6){height:46px}
+    .bar:nth-child(1){height:64px}
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .list-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      border:1px solid var(--border);
+      background:var(--surface-2);
+      border-radius:12px;
+      padding:12px;
+    }
+    .list-item strong{display:block;font-size:14px}
+    .list-item small{display:block;color:var(--muted);margin-top:4px}
+    .status-dot{
+      width:8px;height:8px;border-radius:50%;
+      background:var(--success);
+      display:inline-block;
+      margin-right:6px;
+    }
+    .ai-box{
+      display:flex;
+      flex-direction:column;
+      height:100%;
+      gap:12px;
+    }
+    .ai-message{
+      border:1px solid var(--border);
+      background:var(--surface-2);
+      border-radius:16px;
+      padding:14px;
+    }
+    .ai-message.user{
+      background:linear-gradient(180deg, rgba(6,182,212,.12), rgba(6,182,212,.08));
+      border-color:rgba(6,182,212,.22);
+    }
+    .ai-message p{margin:0;line-height:1.6}
+    .msg-meta{font-size:11px;color:var(--muted);margin-bottom:8px}
+    .ai-chips{display:flex;gap:8px;flex-wrap:wrap}
+    .ai-chip{
+      height:30px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      display:inline-flex;
+      align-items:center;
+      padding:0 12px;
+      font-size:12px;
+      color:var(--text-2);
+    }
+    .bottom-space{height:8px}
+
+    .assistant{
+      width:var(--assistant);
+      min-width:var(--assistant);
+      max-width:var(--assistant);
+      flex:0 0 var(--assistant);
+      border-left:1px solid var(--border);
+      background:var(--surface);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      transition:width .3s var(--ease),min-width .3s var(--ease),max-width .3s var(--ease),flex-basis .3s var(--ease);
+    }
+    .assistant-head{
+      height:var(--topbar);
+      min-height:var(--topbar);
+      padding:0 14px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .assistant-head strong{font-size:18px;letter-spacing:-.02em}
+    .assistant-body{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:14px;
+    }
+    .assistant-footer{
+      padding:14px;
+      border-top:1px solid var(--border);
+    }
+    .textarea{
+      min-height:96px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:var(--surface-2);
+      padding:12px;
+      color:var(--muted-2);
+      line-height:1.6;
+      font-size:13px;
+    }
+    .footer-actions{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      margin-top:12px;
+    }
+    .tiny-btn{
+      height:34px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      padding:0 12px;
+      font-size:12px;
+      color:var(--text-2);
+    }
+    .send-btn{
+      height:34px;
+      border-radius:10px;
+      border:0;
+      background:var(--accent);
+      color:#fff;
+      padding:0 16px;
+      font-weight:600;
+    }
+    .shell.assistant-collapsed{
+      --assistant:0px;
+    }
+    .shell.assistant-collapsed .assistant{
+      width:0;
+      min-width:0;
+      max-width:0;
+      flex:0 0 0;
+      border-left:0;
+      overflow:hidden;
+    }
+
+    .shell.sidebar-collapsed .sidebar{overflow-x:hidden}
+    .shell.sidebar-collapsed .sidebar-top{
+      justify-content:flex-start;
+      padding:10px 14px;
+    }
+    .shell.sidebar-collapsed .sidebar-search{
+      width:100%;
+      min-width:0;
+      height:44px;
+      padding:0;
+      margin:0;
+      justify-content:flex-start;
+      border-radius:14px;
+    }
+    .shell.sidebar-collapsed .sidebar-search svg{
+      margin-left:14px;
+    }
+    .shell.sidebar-collapsed .sidebar-search input,
+    .shell.sidebar-collapsed .sidebar-search .search-kbd{
+      display:none;
+    }
+    .shell.sidebar-collapsed .brand{
+      grid-template-columns:44px 0;
+    }
+    .shell.sidebar-collapsed .brand-title,
+    .shell.sidebar-collapsed .section-label,
+    .shell.sidebar-collapsed .sidebar-toggle-label,
+    .shell.sidebar-collapsed .sidebar-account,
+    .shell.sidebar-collapsed .nav-children{display:none}
+    .shell.sidebar-collapsed .brand-title{
+      max-width:0;
+      opacity:0;
+      transform:translateX(8px);
+    }
+    .shell.sidebar-collapsed .sidebar-section{
+      margin:0;
+      padding:8px 0;
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+      gap:4px;
+    }
+    .shell.sidebar-collapsed .nav-item{
+      width:100%;
+      min-width:0;
+      max-width:none;
+      height:44px;
+      padding:0;
+      margin:2px 0;
+      justify-content:flex-start;
+      font-size:0;
+      border-radius:14px;
+    }
+    .shell.sidebar-collapsed .nav-main{justify-content:flex-start;gap:0}
+    .shell.sidebar-collapsed .nav-text{
+      max-width:0;
+      opacity:0;
+      transform:translateX(8px);
+    }
+    .shell.sidebar-collapsed .nav-arrow{display:none}
+    .shell.sidebar-collapsed .sidebar-toggle{
+      width:100%;
+      min-width:0;
+      max-width:none;
+      height:44px;
+      min-height:44px;
+      justify-content:flex-start;
+      padding:0;
+      margin:0;
+    }
+    .shell.sidebar-collapsed .sidebar-toggle .toggle-icon svg{width:14px;height:14px}
+    @media (max-width: 1200px){
+      .assistant{display:none}
+      .dashboard{min-width:760px}
+    }
+    @media (max-width: 980px){
+      .sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);box-shadow:12px 0 28px rgba(0,0,0,.12)}
+      .shell.sidebar-open .sidebar{transform:translateX(0)}
+      .assistant{display:none}
+      .dashboard{min-width:0}
+      .content{padding:16px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="shell" id="shell">
+            <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand">
+            <div class="brand-badge"><img src="./logo.png" alt="广俊新材料 Logo"></div>
+            <div class="brand-title">广俊塑料科技</div>
+          </div>
+        </div>
+
+        <div class="sidebar-scroll">
+          <div class="sidebar-section">
+            <div class="sidebar-search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <input type="text" placeholder="快速搜索..." aria-label="快速搜索" />
+              <span class="search-kbd">Ctrl K</span>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <button class="nav-item active" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 11.5L12 5l8 6.5V20a1 1 0 0 1-1 1h-4.8v-6.2H9.8V21H5a1 1 0 0 1-1-1v-8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">仪表盘</span>
+              </span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                <span class="nav-text">基础树脂</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 17V9M12 17V5M19 17v-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 19h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                <span class="nav-text">改性添加剂</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <div class="nav-group">
+              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
+                <span class="nav-main">
+                  <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 12h17M12 3.5a14 14 0 0 1 0 17M12 3.5a14 14 0 0 0 0 17" stroke="currentColor" stroke-width="1.2"/></svg></span>
+                  <span class="nav-text">销售库存</span>
+                </span>
+                <span class="nav-arrow">›</span>
+              </button>
+              <div class="nav-children">
+                <button class="nav-subitem active" type="button">配方管理</button>
+                <button class="nav-subitem" type="button">生产计划</button>
+                <button class="nav-subitem" type="button">开单打印</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">核心业务</div>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 7.5 12 4l6 3.5v9L12 20l-6-3.5v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 4v16M6 7.5l6 3.5 6-3.5" stroke="currentColor" stroke-width="1.2"/></svg></span>
+                <span class="nav-text">配方管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <div class="nav-group">
+              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
+                <span class="nav-main">
+                  <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.3L20 9l-4 3.9.9 5.6L12 15.8 7.1 18.5 8 12.9 4 9l5.4-.7L12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+                  <span class="nav-text">生产计划</span>
+                </span>
+                <span class="nav-arrow">›</span>
+              </button>
+              <div class="nav-children">
+                <button class="nav-subitem" type="button">开单打印</button>
+                <button class="nav-subitem" type="button">订单管理</button>
+                <button class="nav-subitem" type="button">供应商管理</button>
+                <button class="nav-subitem" type="button">客户管理</button>
+                <button class="nav-subitem" type="button">人员管理</button>
+              </div>
+            </div>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 5.5h12v13H6z" stroke="currentColor" stroke-width="1.5"/><path d="M6 10h12M10 5.5v13" stroke="currentColor" stroke-width="1.2"/></svg></span>
+                <span class="nav-text">订单管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><path d="M13 9.5 17 12l-4 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">供应商管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">基础数据</div>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3 18 5.5V11c0 4.1-2.4 7.3-6 9-3.6-1.7-6-4.9-6-9V5.5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9.5 12 1.6 1.6 3.4-3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">供应商管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 4h3M17 4h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                <span class="nav-text">客户管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M7.8 11.1 16 7M7.8 12.9 16 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                <span class="nav-text">人员管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4 8.5 11h4L10 20l6-9h-4.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">数据源配置</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">系统管理</div>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3 18 5.5V11c0 4.1-2.4 7.3-6 9-3.6-1.7-6-4.9-6-9V5.5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9.5 12 1.6 1.6 3.4-3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">人员管理</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 4h3M17 4h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+                <span class="nav-text">数据源配置</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">报表</div>
+            <button class="nav-item" type="button">
+              <span class="nav-main">
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4 8.5 11h4L10 20l6-9h-4.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">数据报表</span>
+              </span>
+              <span class="nav-arrow">›</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-expanded="true" aria-label="收起侧边栏">
+            <span class="toggle-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="sidebar-toggle-label">收起侧边栏</span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="top-actions">
+            <button class="pill-btn primary" id="askAiToggle" type="button" aria-expanded="true" aria-label="收起 AI 助手"><span>✦</span><strong>Ask AI</strong></button>
+            <button class="icon-btn" type="button" aria-label="账户">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c0-3.314 3.582-6 8-6s8 2.686 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="content">
+          <section class="dashboard">
+            <div class="hero">
+              <div>
+                <p>Account Home / 粒子检测总览</p>
+                <h1>塑料粒子测试分析平台</h1>
+                <p>围绕塑料粒子粒径、纯度、熔融指数、色差和污染风险建立统一分析台账。右侧 AI 面板可以展开查看建议、自动归因和报告草稿。</p>
+              </div>
+            </div>
+
+            <div class="stats-grid">
+              <article class="card stat-card">
+                <div class="stat-head"><span>安全 / 合规</span><small>已通过 98.4%</small></div>
+                <div class="stat-body">
+                  <div class="metric">
+                    <div class="label">批次合格率</div>
+                    <div class="value">96.8%</div>
+                    <div class="sub">12 个批次中 11 个通过</div>
+                    <div class="spark"></div>
+                  </div>
+                  <div class="metric">
+                    <div class="label">异常粒子</div>
+                    <div class="value">2.1% <span class="delta">↓ 0.4%</span></div>
+                    <div class="sub">主要来自深色杂质</div>
+                    <div class="spark"></div>
+                  </div>
+                </div>
+              </article>
+              <article class="card stat-card">
+                <div class="stat-head"><span>粒径分布</span><small>µm</small></div>
+                <div class="stat-body">
+                  <div class="metric"><div class="label">D50</div><div class="value">412</div><div class="sub">稳定区间 390 - 430</div></div>
+                  <div class="metric"><div class="label">D90</div><div class="value">892 <span class="delta up">↑ 1.8%</span></div><div class="sub">略高于上周均值</div></div>
+                </div>
+              </article>
+              <article class="card stat-card">
+                <div class="stat-head"><span>熔融指标</span><small>g/10min</small></div>
+                <div class="stat-body">
+                  <div class="metric"><div class="label">MFI</div><div class="value">18.7</div><div class="sub">工艺窗口内</div></div>
+                  <div class="metric"><div class="label">波动值</div><div class="value">0.6 <span class="delta">↓ 0.1</span></div><div class="sub">连续 5 批更稳</div></div>
+                </div>
+              </article>
+              <article class="card stat-card">
+                <div class="stat-head"><span>污染识别</span><small>AI</small></div>
+                <div class="stat-body">
+                  <div class="metric"><div class="label">金属 / 黑点</div><div class="value">0.3%</div><div class="sub">建议复核原料仓</div></div>
+                  <div class="metric"><div class="label">色差 ΔE</div><div class="value">1.9 <span class="delta">↓ 0.2</span></div><div class="sub">接近目标区间</div></div>
+                </div>
+              </article>
+            </div>
+
+            <div class="section-grid three">
+              <article class="panel">
+                <div class="panel-head">
+                  <span>粒径分布趋势 <span class="chip">批次 A-017</span></span>
+                  <span style="display:flex;gap:8px;"><span class="ghost">导出</span><span class="ghost">对比</span></span>
+                </div>
+                <div class="chart-box">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;color:var(--muted);font-size:12px;">
+                    <span>测试粒径区间</span>
+                    <span style="display:flex;gap:12px;align-items:center;">
+                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#06b6d4;margin-right:4px"></span>异常颗粒</span>
+                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8b5cf6;margin-right:4px"></span>主粒径</span>
+                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;margin-right:4px"></span>合格样本</span>
+                    </span>
+                  </div>
+                  <div class="bars">
+                    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                  </div>
+                  <div style="position:absolute;left:18px;right:18px;bottom:14px;display:grid;grid-template-columns:repeat(6,1fr);gap:10px;font-size:12px;color:var(--text-2);font-weight:700;">
+                    <div style="text-align:center">11%</div><div style="text-align:center">31%</div><div style="text-align:center">47%</div><div style="text-align:center">22%</div><div style="text-align:center">6%</div><div style="text-align:center">3%</div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <span>关键样本列表 <span class="chip">12 条</span></span>
+                  <span class="ghost">筛选</span>
+                </div>
+                <div class="list">
+                  <div class="list-item"><div><strong>PP-240418-A17</strong><small>粒径稳定，杂质低于阈值</small></div><div><span class="status-dot"></span>通过</div></div>
+                  <div class="list-item"><div><strong>PE-240418-B08</strong><small>熔融指数偏高，需复测</small></div><div><span style="color:var(--warn);font-weight:700">待复核</span></div></div>
+                  <div class="list-item"><div><strong>ABS-240417-C05</strong><small>黑点数量轻微上升</small></div><div><span style="color:var(--danger);font-weight:700">告警</span></div></div>
+                  <div class="list-item"><div><strong>PP-240417-C02</strong><small>色差、流动性均处于目标带</small></div><div><span class="status-dot"></span>通过</div></div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <span>AI 结论建议 <span class="chip">自动生成</span></span>
+                  <span class="ghost">复制</span>
+                </div>
+                <div class="ai-box">
+                  <div class="ai-message user">
+                    <div class="msg-meta">你 · 刚刚</div>
+                    <p>请分析 A-017 批次的粒径分布，并给出是否需要复测的建议。</p>
+                  </div>
+                  <div class="ai-message">
+                    <div class="msg-meta">AI · 智能分析</div>
+                    <p>主粒径集中度较高，D50 与历史均值接近，整体稳定。但黑点检测和 D90 略有抬升，建议先对原料仓、输送管路和清洁周期进行复核。如需，我可以继续生成标准实验结论和整改建议。</p>
+                  </div>
+                  <div class="ai-chips">
+                    <span class="ai-chip">粒径稳定</span>
+                    <span class="ai-chip">熔融指数正常</span>
+                    <span class="ai-chip">建议复核原料仓</span>
+                    <span class="ai-chip">可生成报告草稿</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div class="section-grid three bottom">
+              <article class="panel">
+                <div class="panel-head"><span>测试记录 <span class="chip">Audit</span></span><span class="ghost">全部</span></div>
+                <div class="list">
+                  <div class="list-item"><div><strong>粒径分布</strong><small>项目记录</small></div><div><span class="status-dot"></span>通过</div></div>
+                  <div class="list-item"><div><strong>熔融指数</strong><small>项目记录</small></div><div><span class="status-dot"></span>通过</div></div>
+                  <div class="list-item"><div><strong>杂质检测</strong><small>项目记录</small></div><div><span style="color:var(--warn);font-weight:700">复核中</span></div></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><span>设备状态 <span class="chip">Lab</span></span><span class="ghost">校准</span></div>
+                <div class="list">
+                  <div class="list-item"><div><strong>激光粒度仪</strong><small>在线，最近校准 8 小时前</small></div><div><span class="status-dot"></span>正常</div></div>
+                  <div class="list-item"><div><strong>熔指测试机</strong><small>在线，温度偏差 0.2℃</small></div><div><span class="status-dot"></span>正常</div></div>
+                  <div class="list-item"><div><strong>采样传送带</strong><small>清洁完成 30 分钟前</small></div><div><span class="status-dot"></span>正常</div></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><span>下一步建议 <span class="chip">AI</span></span><span class="ghost">展开</span></div>
+                <div class="list">
+                  <div class="list-item"><div><strong>复核黑点来源</strong><small>重点检查输送带与粉料仓</small></div><div>优先级 1</div></div>
+                  <div class="list-item"><div><strong>生成批次报告</strong><small>自动整理结果和图表截图</small></div><div>优先级 2</div></div>
+                  <div class="list-item"><div><strong>安排复测</strong><small>如黑点持续偏高则触发</small></div><div>优先级 3</div></div>
+                </div>
+              </article>
+            </div>
+            <div class="bottom-space"></div>
+          </section>
+        </div>
+      </main>
+
+      <aside class="assistant">
+        <div class="assistant-head">
+          <strong>AI 助手</strong>
+          <button class="icon-btn" type="button" aria-label="更多">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.4 3.8h3.2l.5 2.1a6.7 6.7 0 0 1 1.4.8l2-.8 1.6 2.8-1.6 1.5c.1.5.2 1 .2 1.6s-.1 1.1-.2 1.6l1.6 1.5-1.6 2.8-2-.8a6.7 6.7 0 0 1-1.4.8l-.5 2.1h-3.2l-.5-2.1a6.7 6.7 0 0 1-1.4-.8l-2 .8-1.6-2.8 1.6-1.5A6.7 6.7 0 0 1 6.2 12c0-.5.1-1.1.2-1.6L4.8 8.9l1.6-2.8 2 .8a6.7 6.7 0 0 1 1.4-.8l.6-2.3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+        </div>
+        <div class="assistant-body">
+          <div class="ai-message user">
+            <div class="msg-meta">你 · 刚刚</div>
+            <p>请分析 A-017 批次的粒径分布，并给出是否需要复测的建议。</p>
+          </div>
+          <div style="height:12px"></div>
+          <div class="ai-message">
+            <div class="msg-meta">AI · 智能分析</div>
+            <p>主粒径集中度较高，D50 与历史均值接近，整体稳定。但黑点检测和 D90 略有抬升，建议先对原料仓、输送管路和清洁周期进行复核。如需，我可以继续生成标准实验结论和整改建议。</p>
+          </div>
+        </div>
+        <div class="assistant-footer">
+          <div class="textarea">输入问题，例如：帮我判断这批粒子是否合格，并生成简短结论...</div>
+          <div class="footer-actions">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="tiny-btn">附加文件</button>
+              <button class="tiny-btn">模板</button>
+            </div>
+            <button class="send-btn">发送</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <script>
+    const shell = document.getElementById('shell');
+    const toggle = document.getElementById('sidebarToggle');
+    const askAiToggle = document.getElementById('askAiToggle');
+    const groups = document.querySelectorAll('[data-toggle="group"]');
+    const sidebarSearch = document.querySelector('.sidebar-search');
+    const sidebarSearchInput = document.querySelector('.sidebar-search input');
+    const SIDEBAR_STATE_KEY = 'sidebar-collapsed';
+    const ASSISTANT_STATE_KEY = 'assistant-collapsed';
+
+    const updateSidebarToggle = (collapsed) => {
+      if (!toggle) return;
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.setAttribute('aria-label', collapsed ? '展开侧边栏' : '收起侧边栏');
+      const label = toggle.querySelector('.sidebar-toggle-label');
+      if (label) label.textContent = collapsed ? '展开侧边栏' : '收起侧边栏';
+    };
+
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const collapsed = shell.classList.toggle('sidebar-collapsed');
+        localStorage.setItem(SIDEBAR_STATE_KEY, collapsed ? '1' : '0');
+        updateSidebarToggle(collapsed);
+      });
+    }
+
+    if (sidebarSearch) {
+      sidebarSearch.addEventListener('click', (event) => {
+        if (!shell.classList.contains('sidebar-collapsed')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        shell.classList.remove('sidebar-collapsed');
+        localStorage.setItem(SIDEBAR_STATE_KEY, '0');
+        updateSidebarToggle(false);
+        requestAnimationFrame(() => {
+          if (sidebarSearchInput) sidebarSearchInput.focus();
+        });
+      });
+    }
+
+    groups.forEach((groupToggle) => {
+      groupToggle.addEventListener('click', () => {
+        if (shell.classList.contains('sidebar-collapsed')) return;
+        const group = groupToggle.closest('.nav-group');
+        if (!group) return;
+        const expanded = group.classList.toggle('expanded');
+        groupToggle.setAttribute('aria-expanded', String(expanded));
+      });
+    });
+
+    const updateAssistantToggle = () => {
+      if (!askAiToggle) return;
+      const collapsed = shell.classList.contains('assistant-collapsed');
+      askAiToggle.setAttribute('aria-expanded', String(!collapsed));
+      askAiToggle.setAttribute('aria-label', collapsed ? '展开 AI 助手' : '收起 AI 助手');
+    };
+
+    if (askAiToggle) {
+      updateAssistantToggle();
+      askAiToggle.addEventListener('click', () => {
+        const collapsed = shell.classList.toggle('assistant-collapsed');
+        localStorage.setItem(ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
+        updateAssistantToggle();
+      });
+    }
+
+    const savedSidebarCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === '1';
+    const savedAssistantCollapsed = localStorage.getItem(ASSISTANT_STATE_KEY) === '1';
+
+    if (savedSidebarCollapsed) {
+      shell.classList.add('sidebar-collapsed');
+    }
+    if (savedAssistantCollapsed) {
+      shell.classList.add('assistant-collapsed');
+    }
+
+    updateSidebarToggle(savedSidebarCollapsed);
+    updateAssistantToggle();
+  </script>
+</body>
+</html>

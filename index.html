@@ -25,7 +25,7 @@
       --radius:16px;
       --radius-sm:12px;
       --radius-xs:10px;
-      --sidebar:266px;
+      --sidebar:228px;
       --assistant:366px;
       --topbar:56px;
       --shadow:0 1px 4px rgba(0,0,0,.05);
@@ -70,7 +70,7 @@
       flex-direction:column;
       padding:0;
       overflow:auto;
-      transition:width .3s var(--ease),min-width .3s var(--ease),max-width .3s var(--ease),flex-basis .3s var(--ease),padding .3s var(--ease),opacity .3s var(--ease);
+      transition:width .5s var(--ease),min-width .5s var(--ease),max-width .5s var(--ease),flex-basis .5s var(--ease),padding .5s var(--ease),opacity .5s var(--ease);
     }
     .sidebar-top{
       display:flex;
@@ -116,7 +116,7 @@
       overflow:hidden;
       text-overflow:ellipsis;
       max-width:none;
-      transition:max-width .3s var(--ease),opacity .2s ease,transform .3s var(--ease);
+      transition:max-width .5s var(--ease),opacity .5s var(--ease),transform .5s var(--ease);
     }
     .sidebar-search{
       display:flex;
@@ -224,8 +224,8 @@
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      max-width:180px;
-      transition:max-width .3s var(--ease),opacity .2s ease,transform .3s var(--ease);
+      max-width:140px;
+      transition:max-width .5s var(--ease),opacity .5s var(--ease),transform .5s var(--ease);
     }
     .nav-arrow{
       color:var(--muted-2);
@@ -364,10 +364,12 @@
       background:#fff;
     }
     .content::-webkit-scrollbar{display:none}
+    .page-section{display:none}
+    .page-section.active{display:block}
     .dashboard{
       width:100%;
-      min-width:920px;
-      max-width:none;
+      min-width:0;
+      max-width:1280px;
       margin:0 auto;
     }
     .hero{
@@ -571,6 +573,304 @@
     }
     .bottom-space{height:8px}
 
+    .placeholder-page{
+      width:100%;
+      max-width:1280px;
+      margin:0 auto;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:calc(100vh - var(--topbar) - 44px);
+    }
+    .placeholder-card{
+      width:min(820px,100%);
+      padding:28px;
+      border-radius:24px;
+      border:1px solid var(--border);
+      background:
+        radial-gradient(circle at top right, rgba(6,182,212,.12), transparent 30%),
+        linear-gradient(180deg, #fff, #fbfdff);
+      box-shadow:var(--shadow);
+    }
+    .placeholder-eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      height:30px;
+      padding:0 12px;
+      border-radius:999px;
+      background:rgba(6,182,212,.08);
+      color:#155e75;
+      font-size:12px;
+      font-weight:700;
+    }
+    .placeholder-title{
+      margin:14px 0 10px;
+      font-size:32px;
+      line-height:1.1;
+      letter-spacing:-.03em;
+    }
+    .placeholder-desc{
+      margin:0;
+      color:var(--muted);
+      line-height:1.7;
+      font-size:14px;
+      max-width:720px;
+    }
+    .placeholder-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:20px;
+    }
+    .shell.page-other .dashboard{max-width:1280px}
+
+    .config-hero{
+      padding:18px 18px 16px;
+      border-radius:20px;
+      background:
+        radial-gradient(circle at top right, rgba(6,182,212,.14), transparent 28%),
+        linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,250,252,.96));
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+    }
+    .config-hero .hero-actions{
+      padding-top:0;
+      align-items:flex-start;
+    }
+    .status-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      height:38px;
+      padding:0 14px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:600;
+      white-space:nowrap;
+    }
+    .status-pill.success{
+      border-color:rgba(101,163,13,.2);
+      background:rgba(101,163,13,.08);
+      color:#3f6212;
+    }
+    .status-pill.warn{
+      border-color:rgba(245,158,11,.2);
+      background:rgba(245,158,11,.1);
+      color:#92400e;
+    }
+    .config-layout{
+      display:grid;
+      grid-template-columns:1fr;
+      gap:12px;
+      margin-top:12px;
+      align-items:start;
+    }
+    .config-column{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-width:0;
+    }
+    .config-card{
+      padding:16px;
+      min-height:0;
+    }
+    .config-form{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .form-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+      min-width:0;
+    }
+    .field.full{grid-column:1 / -1}
+    .field label{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      font-size:12px;
+      font-weight:700;
+      color:var(--muted);
+      letter-spacing:.01em;
+    }
+    .field input,
+    .field select,
+    .field textarea{
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface);
+      color:var(--text);
+      padding:11px 12px;
+      font:inherit;
+      font-size:13px;
+      outline:none;
+      transition:border-color .18s, box-shadow .18s, background .18s;
+    }
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus{
+      border-color:rgba(6,182,212,.6);
+      box-shadow:0 0 0 3px rgba(6,182,212,.1);
+    }
+    .field textarea{
+      min-height:124px;
+      resize:vertical;
+      line-height:1.6;
+    }
+    .field small,
+    .inline-help{
+      color:var(--muted);
+      font-size:11.5px;
+      line-height:1.6;
+    }
+    .slider-row{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .slider-row input[type="range"]{
+      flex:1;
+      padding:0;
+      height:auto;
+      accent-color:var(--accent);
+    }
+    .slider-value{
+      min-width:52px;
+      text-align:right;
+      font-size:12px;
+      font-weight:700;
+      color:var(--text-2);
+    }
+    .switches{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .switch{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:var(--surface-2);
+      font-size:12px;
+      color:var(--text-2);
+      user-select:none;
+    }
+    .switch input{
+      margin:0;
+      accent-color:var(--accent);
+    }
+    .action-bar{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      padding-top:2px;
+    }
+    .action-buttons{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .ghost-btn,
+    .save-btn,
+    .accent-btn{
+      height:38px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      padding:0 14px;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      transition:all .2s;
+    }
+    .ghost-btn{
+      background:var(--surface);
+      color:var(--text-2);
+    }
+    .ghost-btn:hover{background:var(--surface-2);border-color:var(--border-2)}
+    .save-btn,
+    .accent-btn{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .save-btn:hover,
+    .accent-btn:hover{filter:brightness(.98)}
+    .summary-stack{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-width:0;
+    }
+    .summary-card{
+      padding:16px;
+      min-height:0;
+    }
+    .kv-list{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:10px 12px;
+      align-items:start;
+    }
+    .kv-list dt{
+      color:var(--muted);
+      font-size:11.5px;
+      font-weight:700;
+    }
+    .kv-list dd{
+      margin:0;
+      color:var(--text-2);
+      font-size:12.5px;
+      text-align:right;
+      word-break:break-all;
+    }
+    .code-sample{
+      margin:0;
+      padding:14px;
+      border-radius:14px;
+      background:#0f172a;
+      color:#e2e8f0;
+      overflow:auto;
+      font-size:12px;
+      line-height:1.6;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    .preset-list{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin-top:10px;
+    }
+    .preset-item{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface-2);
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--text-2);
+    }
+    .preset-item strong{display:block;color:var(--text);margin-bottom:4px}
+
     .assistant{
       width:var(--assistant);
       min-width:var(--assistant);
@@ -581,7 +881,7 @@
       display:flex;
       flex-direction:column;
       min-height:0;
-      transition:width .3s var(--ease),min-width .3s var(--ease),max-width .3s var(--ease),flex-basis .3s var(--ease);
+      transition:width .5s var(--ease),min-width .5s var(--ease),max-width .5s var(--ease),flex-basis .5s var(--ease);
     }
     .assistant-head{
       height:var(--topbar);
@@ -603,7 +903,8 @@
       padding:14px;
       border-top:1px solid var(--border);
     }
-    .textarea{
+    .textarea,
+    .chat-input{
       min-height:96px;
       border:1px solid var(--border);
       border-radius:14px;
@@ -612,6 +913,14 @@
       color:var(--muted-2);
       line-height:1.6;
       font-size:13px;
+    }
+    .chat-input{
+      width:100%;
+      min-height:88px;
+      resize:vertical;
+      outline:none;
+      color:var(--text);
+      font-family:inherit;
     }
     .footer-actions{
       display:flex;
@@ -723,7 +1032,8 @@
     .shell.sidebar-collapsed .sidebar-toggle .toggle-icon svg{width:14px;height:14px}
     @media (max-width: 1200px){
       .assistant{display:none}
-      .dashboard{min-width:760px}
+      .config-layout{grid-template-columns:1fr}
+      .placeholder-page{min-height:auto}
     }
     @media (max-width: 980px){
       .sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);box-shadow:12px 0 28px rgba(0,0,0,.12)}
@@ -731,6 +1041,9 @@
       .assistant{display:none}
       .dashboard{min-width:0}
       .content{padding:16px}
+      .form-grid{grid-template-columns:1fr}
+      .config-layout{grid-template-columns:1fr}
+      .placeholder-card{padding:20px}
     }
   </style>
 </head>
@@ -755,141 +1068,92 @@
           </div>
 
           <div class="sidebar-section">
-            <button class="nav-item active" type="button">
+            <button class="nav-item" type="button" data-page="dashboard">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 11.5L12 5l8 6.5V20a1 1 0 0 1-1 1h-4.8v-6.2H9.8V21H5a1 1 0 0 1-1-1v-8.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
                 <span class="nav-text">仪表盘</span>
               </span>
             </button>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" id="aiConfigNav" data-page="ai-config">
               <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5"/></svg></span>
-                <span class="nav-text">基础树脂</span>
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4 8.5 11h4L10 20l6-9h-4.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">AI配置</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
-            <button class="nav-item" type="button">
-              <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 17V9M12 17V5M19 17v-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 19h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-                <span class="nav-text">改性添加剂</span>
-              </span>
-              <span class="nav-arrow">›</span>
-            </button>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-label">业务中心</div>
+            <div class="nav-group expanded">
+              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="true">
+                <span class="nav-main">
+                  <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.3L20 9l-4 3.9.9 5.6L12 15.8 7.1 18.5 8 12.9 4 9l5.4-.7L12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
+                  <span class="nav-text">销售与订单</span>
+                </span>
+                <span class="nav-arrow">›</span>
+              </button>
+              <div class="nav-children">
+                <button class="nav-subitem" type="button" data-page="order-management">订单管理</button>
+                <button class="nav-subitem" type="button" data-page="invoice-print">开单打印</button>
+                <button class="nav-subitem" type="button" data-page="sales-stock">销售库存</button>
+              </div>
+            </div>
             <div class="nav-group">
               <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
                 <span class="nav-main">
                   <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 12h17M12 3.5a14 14 0 0 1 0 17M12 3.5a14 14 0 0 0 0 17" stroke="currentColor" stroke-width="1.2"/></svg></span>
-                  <span class="nav-text">销售库存</span>
+                  <span class="nav-text">生产与配方</span>
                 </span>
                 <span class="nav-arrow">›</span>
               </button>
               <div class="nav-children">
-                <button class="nav-subitem active" type="button">配方管理</button>
-                <button class="nav-subitem" type="button">生产计划</button>
-                <button class="nav-subitem" type="button">开单打印</button>
+                <button class="nav-subitem" type="button" data-page="formula-management">配方管理</button>
+                <button class="nav-subitem" type="button" data-page="production-plan">生产计划</button>
               </div>
             </div>
-          </div>
-
-          <div class="sidebar-section">
-            <div class="section-label">核心业务</div>
-            <button class="nav-item" type="button">
-              <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 7.5 12 4l6 3.5v9L12 20l-6-3.5v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 4v16M6 7.5l6 3.5 6-3.5" stroke="currentColor" stroke-width="1.2"/></svg></span>
-                <span class="nav-text">配方管理</span>
-              </span>
-              <span class="nav-arrow">›</span>
-            </button>
-            <div class="nav-group">
-              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
-                <span class="nav-main">
-                  <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.6 5.3L20 9l-4 3.9.9 5.6L12 15.8 7.1 18.5 8 12.9 4 9l5.4-.7L12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span>
-                  <span class="nav-text">生产计划</span>
-                </span>
-                <span class="nav-arrow">›</span>
-              </button>
-              <div class="nav-children">
-                <button class="nav-subitem" type="button">开单打印</button>
-                <button class="nav-subitem" type="button">订单管理</button>
-                <button class="nav-subitem" type="button">供应商管理</button>
-                <button class="nav-subitem" type="button">客户管理</button>
-                <button class="nav-subitem" type="button">人员管理</button>
-              </div>
-            </div>
-            <button class="nav-item" type="button">
-              <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 5.5h12v13H6z" stroke="currentColor" stroke-width="1.5"/><path d="M6 10h12M10 5.5v13" stroke="currentColor" stroke-width="1.2"/></svg></span>
-                <span class="nav-text">订单管理</span>
-              </span>
-              <span class="nav-arrow">›</span>
-            </button>
-            <button class="nav-item" type="button">
-              <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><path d="M13 9.5 17 12l-4 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                <span class="nav-text">供应商管理</span>
-              </span>
-              <span class="nav-arrow">›</span>
-            </button>
           </div>
 
           <div class="sidebar-section">
             <div class="section-label">基础数据</div>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="supplier-archive">
               <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3 18 5.5V11c0 4.1-2.4 7.3-6 9-3.6-1.7-6-4.9-6-9V5.5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9.5 12 1.6 1.6 3.4-3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                <span class="nav-text">供应商管理</span>
+                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><path d="M13 9.5 17 12l-4 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="nav-text">供应商档案</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="customer-archive">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 4h3M17 4h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-                <span class="nav-text">客户管理</span>
+                <span class="nav-text">客户档案</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="personnel-archive">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="6" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="18" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M7.8 11.1 16 7M7.8 12.9 16 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-                <span class="nav-text">人员管理</span>
+                <span class="nav-text">人员档案</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="data-source-config">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4 8.5 11h4L10 20l6-9h-4.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
                 <span class="nav-text">数据源配置</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
           </div>
 
           <div class="sidebar-section">
             <div class="section-label">系统管理</div>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="permission-management">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3 18 5.5V11c0 4.1-2.4 7.3-6 9-3.6-1.7-6-4.9-6-9V5.5L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m9.5 12 1.6 1.6 3.4-3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                <span class="nav-text">人员管理</span>
+                <span class="nav-text">权限管理</span>
               </span>
-              <span class="nav-arrow">›</span>
             </button>
-            <button class="nav-item" type="button">
+            <button class="nav-item" type="button" data-page="audit-log">
               <span class="nav-main">
                 <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M6 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M4 4h3M17 4h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
-                <span class="nav-text">数据源配置</span>
+                <span class="nav-text">审计日志</span>
               </span>
-              <span class="nav-arrow">›</span>
-            </button>
-          </div>
-
-          <div class="sidebar-section">
-            <div class="section-label">报表</div>
-            <button class="nav-item" type="button">
-              <span class="nav-main">
-                <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4 8.5 11h4L10 20l6-9h-4.5L12 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
-                <span class="nav-text">数据报表</span>
-              </span>
-              <span class="nav-arrow">›</span>
             </button>
           </div>
         </div>
@@ -907,7 +1171,7 @@
       <main class="main">
         <header class="topbar">
           <div class="top-actions">
-            <button class="pill-btn primary" id="askAiToggle" type="button" aria-expanded="true" aria-label="收起 AI 助手"><span>✦</span><strong>Ask AI</strong></button>
+            <button class="pill-btn primary" id="askAiToggle" type="button" aria-expanded="true" aria-label="收起 Gjun AI"><span>✦</span><strong>Gjun AI</strong></button>
             <button class="icon-btn" type="button" aria-label="账户">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c0-3.314 3.582-6 8-6s8 2.686 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             </button>
@@ -915,174 +1179,173 @@
         </header>
 
         <div class="content">
-          <section class="dashboard">
-            <div class="hero">
+          <section class="dashboard ai-config page-section active" data-page-section="ai-config">
+            <div class="hero config-hero">
               <div>
-                <p>Account Home / 粒子检测总览</p>
-                <h1>塑料粒子测试分析平台</h1>
-                <p>围绕塑料粒子粒径、纯度、熔融指数、色差和污染风险建立统一分析台账。右侧 AI 面板可以展开查看建议、自动归因和报告草稿。</p>
+                <p>System Home / OpenRouter 配置</p>
+                <h1>AI 配置中心</h1>
+                <p>在这里保存 OpenRouter 的 API 密钥、模型 ID 与调用参数。导入和导出都按 UTF-8 处理，适合直接备份到本地文件。</p>
+              </div>
+              <div class="hero-actions">
+                <span class="status-pill success" id="configStatus">本地配置：未保存</span>
+                <button class="ghost-btn" type="button" id="loadDefaultsBtn">恢复默认</button>
               </div>
             </div>
 
-            <div class="stats-grid">
-              <article class="card stat-card">
-                <div class="stat-head"><span>安全 / 合规</span><small>已通过 98.4%</small></div>
-                <div class="stat-body">
-                  <div class="metric">
-                    <div class="label">批次合格率</div>
-                    <div class="value">96.8%</div>
-                    <div class="sub">12 个批次中 11 个通过</div>
-                    <div class="spark"></div>
+            <div class="config-layout">
+              <div class="config-column">
+                <article class="panel config-card">
+                  <div class="panel-head">
+                    <span>OpenRouter 接入</span>
+                    <span class="chip">兼容 OpenAI Chat API</span>
                   </div>
-                  <div class="metric">
-                    <div class="label">异常粒子</div>
-                    <div class="value">2.1% <span class="delta">↓ 0.4%</span></div>
-                    <div class="sub">主要来自深色杂质</div>
-                    <div class="spark"></div>
+                  <form class="config-form" id="aiConfigForm">
+                    <div class="form-grid">
+                      <div class="field full">
+                        <label for="openrouterApiKey">OpenRouter API 密钥 <span>私密存储</span></label>
+                        <input id="openrouterApiKey" name="openrouterApiKey" type="password" placeholder="sk-or-..." autocomplete="off" />
+                        <small>仅保存到本地浏览器。导出时同样会保留该字段，请注意文件安全。</small>
+                      </div>
+                      <div class="field">
+                        <label for="openrouterBaseUrl">API 基地址 <span>默认值</span></label>
+                        <input id="openrouterBaseUrl" name="openrouterBaseUrl" type="url" value="https://openrouter.ai/api/v1" />
+                      </div>
+                      <div class="field">
+                        <label for="appTitle">应用标题 <span>请求头</span></label>
+                        <input id="appTitle" name="appTitle" type="text" value="广进后台" />
+                      </div>
+                      <div class="field">
+                        <label for="httpReferer">HTTP-Referer <span>可选</span></label>
+                        <input id="httpReferer" name="httpReferer" type="url" placeholder="https://example.com" />
+                      </div>
+                      <div class="field">
+                        <label for="modelSelect">模型选择 <span>OpenRouter</span></label>
+                        <select id="modelSelect" name="modelSelect">
+                          <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
+                          <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
+                          <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+                          <option value="deepseek/deepseek-chat">deepseek/deepseek-chat</option>
+                          <option value="custom">自定义模型 ID</option>
+                        </select>
+                      </div>
+                      <div class="field full">
+                        <label for="customModel">自定义模型 ID <span>当上方选择“自定义”时启用</span></label>
+                        <input id="customModel" name="customModel" type="text" placeholder="例如：google/gemini-2.5-pro-preview" disabled />
+                        <small>OpenRouter 的模型 ID 需要保留组织前缀，例如 <code>openai/gpt-4o</code> 或 <code>anthropic/claude-3.5-sonnet</code>。</small>
+                      </div>
+                      <div class="field full">
+                        <label for="systemPrompt">系统提示词 <span>默认模板</span></label>
+                        <textarea id="systemPrompt" name="systemPrompt" placeholder="你是一个专业、简洁的企业 AI 助手。">你是一个专业、简洁的企业 AI 助手，输出要准确、结构清晰，并优先给出可执行建议。</textarea>
+                      </div>
+                      <div class="field">
+                        <label for="temperature">Temperature <span>0 - 2</span></label>
+                        <div class="slider-row">
+                          <input id="temperature" name="temperature" type="range" min="0" max="2" step="0.1" value="0.7" />
+                          <span class="slider-value" id="temperatureValue">0.7</span>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label for="maxTokens">Max Tokens <span>输出长度</span></label>
+                        <input id="maxTokens" name="maxTokens" type="number" min="64" step="64" value="1024" />
+                      </div>
+                      <div class="field full">
+                        <label>调用选项 <span>可同时开启</span></label>
+                        <div class="switches">
+                          <label class="switch"><input id="streamEnabled" name="streamEnabled" type="checkbox" checked />流式输出</label>
+                          <label class="switch"><input id="jsonMode" name="jsonMode" type="checkbox" />启用 JSON 输出</label>
+                          <label class="switch"><input id="logEnabled" name="logEnabled" type="checkbox" checked />保存本地调用日志</label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="action-bar">
+                      <div class="inline-help">提示：OpenRouter 的请求头可选加入 <code>HTTP-Referer</code> 和 <code>X-Title</code>，导入与导出都使用 UTF-8 编码。</div>
+                      <div class="action-buttons">
+                        <button class="ghost-btn" type="button" id="loadModelsBtn">加载模型列表</button>
+                        <button class="ghost-btn" type="button" id="importConfigBtn">导入配置</button>
+                        <button class="ghost-btn" type="button" id="exportConfigBtn">导出配置</button>
+                        <button class="accent-btn" type="button" id="testConfigBtn">检测配置</button>
+                        <button class="save-btn" type="submit">保存配置</button>
+                      </div>
+                    </div>
+                  </form>
+                </article>
+
+                <article class="panel summary-card">
+                  <div class="panel-head">
+                    <span>OpenRouter 调用示例</span>
+                    <span class="chip">UTF-8 JSON</span>
                   </div>
-                </div>
-              </article>
-              <article class="card stat-card">
-                <div class="stat-head"><span>粒径分布</span><small>µm</small></div>
-                <div class="stat-body">
-                  <div class="metric"><div class="label">D50</div><div class="value">412</div><div class="sub">稳定区间 390 - 430</div></div>
-                  <div class="metric"><div class="label">D90</div><div class="value">892 <span class="delta up">↑ 1.8%</span></div><div class="sub">略高于上周均值</div></div>
-                </div>
-              </article>
-              <article class="card stat-card">
-                <div class="stat-head"><span>熔融指标</span><small>g/10min</small></div>
-                <div class="stat-body">
-                  <div class="metric"><div class="label">MFI</div><div class="value">18.7</div><div class="sub">工艺窗口内</div></div>
-                  <div class="metric"><div class="label">波动值</div><div class="value">0.6 <span class="delta">↓ 0.1</span></div><div class="sub">连续 5 批更稳</div></div>
-                </div>
-              </article>
-              <article class="card stat-card">
-                <div class="stat-head"><span>污染识别</span><small>AI</small></div>
-                <div class="stat-body">
-                  <div class="metric"><div class="label">金属 / 黑点</div><div class="value">0.3%</div><div class="sub">建议复核原料仓</div></div>
-                  <div class="metric"><div class="label">色差 ΔE</div><div class="value">1.9 <span class="delta">↓ 0.2</span></div><div class="sub">接近目标区间</div></div>
-                </div>
-              </article>
+                  <pre class="code-sample">fetch('https://openrouter.ai/api/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${apiKey}`,
+    'HTTP-Referer': referer || '',
+    'X-Title': appTitle,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+    temperature,
+    max_tokens: maxTokens,
+    stream: streamEnabled,
+  }),
+});</pre>
+                  <div class="preset-list">
+                    <div class="preset-item"><strong>模型格式</strong>保留组织前缀，例如 <code>openai/...</code>、<code>anthropic/...</code>、<code>google/...</code>。</div>
+                    <div class="preset-item"><strong>接入方式</strong>本页仅负责配置与本地保存，真正调用可直接复用 OpenAI 兼容接口。</div>
+                  </div>
+                </article>
+              </div>
             </div>
 
-            <div class="section-grid three">
-              <article class="panel">
-                <div class="panel-head">
-                  <span>粒径分布趋势 <span class="chip">批次 A-017</span></span>
-                  <span style="display:flex;gap:8px;"><span class="ghost">导出</span><span class="ghost">对比</span></span>
-                </div>
-                <div class="chart-box">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;color:var(--muted);font-size:12px;">
-                    <span>测试粒径区间</span>
-                    <span style="display:flex;gap:12px;align-items:center;">
-                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#06b6d4;margin-right:4px"></span>异常颗粒</span>
-                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8b5cf6;margin-right:4px"></span>主粒径</span>
-                      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;margin-right:4px"></span>合格样本</span>
-                    </span>
-                  </div>
-                  <div class="bars">
-                    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
-                  </div>
-                  <div style="position:absolute;left:18px;right:18px;bottom:14px;display:grid;grid-template-columns:repeat(6,1fr);gap:10px;font-size:12px;color:var(--text-2);font-weight:700;">
-                    <div style="text-align:center">11%</div><div style="text-align:center">31%</div><div style="text-align:center">47%</div><div style="text-align:center">22%</div><div style="text-align:center">6%</div><div style="text-align:center">3%</div>
-                  </div>
-                </div>
-              </article>
-
-              <article class="panel">
-                <div class="panel-head">
-                  <span>关键样本列表 <span class="chip">12 条</span></span>
-                  <span class="ghost">筛选</span>
-                </div>
-                <div class="list">
-                  <div class="list-item"><div><strong>PP-240418-A17</strong><small>粒径稳定，杂质低于阈值</small></div><div><span class="status-dot"></span>通过</div></div>
-                  <div class="list-item"><div><strong>PE-240418-B08</strong><small>熔融指数偏高，需复测</small></div><div><span style="color:var(--warn);font-weight:700">待复核</span></div></div>
-                  <div class="list-item"><div><strong>ABS-240417-C05</strong><small>黑点数量轻微上升</small></div><div><span style="color:var(--danger);font-weight:700">告警</span></div></div>
-                  <div class="list-item"><div><strong>PP-240417-C02</strong><small>色差、流动性均处于目标带</small></div><div><span class="status-dot"></span>通过</div></div>
-                </div>
-              </article>
-
-              <article class="panel">
-                <div class="panel-head">
-                  <span>AI 结论建议 <span class="chip">自动生成</span></span>
-                  <span class="ghost">复制</span>
-                </div>
-                <div class="ai-box">
-                  <div class="ai-message user">
-                    <div class="msg-meta">你 · 刚刚</div>
-                    <p>请分析 A-017 批次的粒径分布，并给出是否需要复测的建议。</p>
-                  </div>
-                  <div class="ai-message">
-                    <div class="msg-meta">AI · 智能分析</div>
-                    <p>主粒径集中度较高，D50 与历史均值接近，整体稳定。但黑点检测和 D90 略有抬升，建议先对原料仓、输送管路和清洁周期进行复核。如需，我可以继续生成标准实验结论和整改建议。</p>
-                  </div>
-                  <div class="ai-chips">
-                    <span class="ai-chip">粒径稳定</span>
-                    <span class="ai-chip">熔融指数正常</span>
-                    <span class="ai-chip">建议复核原料仓</span>
-                    <span class="ai-chip">可生成报告草稿</span>
-                  </div>
-                </div>
-              </article>
-            </div>
-
-            <div class="section-grid three bottom">
-              <article class="panel">
-                <div class="panel-head"><span>测试记录 <span class="chip">Audit</span></span><span class="ghost">全部</span></div>
-                <div class="list">
-                  <div class="list-item"><div><strong>粒径分布</strong><small>项目记录</small></div><div><span class="status-dot"></span>通过</div></div>
-                  <div class="list-item"><div><strong>熔融指数</strong><small>项目记录</small></div><div><span class="status-dot"></span>通过</div></div>
-                  <div class="list-item"><div><strong>杂质检测</strong><small>项目记录</small></div><div><span style="color:var(--warn);font-weight:700">复核中</span></div></div>
-                </div>
-              </article>
-              <article class="panel">
-                <div class="panel-head"><span>设备状态 <span class="chip">Lab</span></span><span class="ghost">校准</span></div>
-                <div class="list">
-                  <div class="list-item"><div><strong>激光粒度仪</strong><small>在线，最近校准 8 小时前</small></div><div><span class="status-dot"></span>正常</div></div>
-                  <div class="list-item"><div><strong>熔指测试机</strong><small>在线，温度偏差 0.2℃</small></div><div><span class="status-dot"></span>正常</div></div>
-                  <div class="list-item"><div><strong>采样传送带</strong><small>清洁完成 30 分钟前</small></div><div><span class="status-dot"></span>正常</div></div>
-                </div>
-              </article>
-              <article class="panel">
-                <div class="panel-head"><span>下一步建议 <span class="chip">AI</span></span><span class="ghost">展开</span></div>
-                <div class="list">
-                  <div class="list-item"><div><strong>复核黑点来源</strong><small>重点检查输送带与粉料仓</small></div><div>优先级 1</div></div>
-                  <div class="list-item"><div><strong>生成批次报告</strong><small>自动整理结果和图表截图</small></div><div>优先级 2</div></div>
-                  <div class="list-item"><div><strong>安排复测</strong><small>如黑点持续偏高则触发</small></div><div>优先级 3</div></div>
-                </div>
-              </article>
-            </div>
+            <input id="configFileInput" type="file" accept="application/json,.json" hidden />
             <div class="bottom-space"></div>
+          </section>
+
+          <section class="dashboard page-section" data-page-section="placeholder">
+            <div class="placeholder-page">
+              <div class="placeholder-card">
+                <span class="placeholder-eyebrow" id="placeholderEyebrow">功能开发中</span>
+                <h2 class="placeholder-title" id="placeholderTitle">请选择左侧功能</h2>
+                <p class="placeholder-desc" id="placeholderDesc">点击一个导航项后，这里会展示对应页面。当前只有 AI 配置中心是完整可用的，其它模块先以占位页提示“功能开发中”。</p>
+                <div class="placeholder-actions">
+                  <button class="ghost-btn" type="button" id="placeholderBackBtn">返回 AI 配置</button>
+                  <button class="accent-btn" type="button" id="placeholderOpenBtn">继续浏览</button>
+                </div>
+              </div>
+            </div>
           </section>
         </div>
       </main>
 
       <aside class="assistant">
         <div class="assistant-head">
-          <strong>AI 助手</strong>
+          <strong>AI聊天</strong>
           <button class="icon-btn" type="button" aria-label="更多">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.4 3.8h3.2l.5 2.1a6.7 6.7 0 0 1 1.4.8l2-.8 1.6 2.8-1.6 1.5c.1.5.2 1 .2 1.6s-.1 1.1-.2 1.6l1.6 1.5-1.6 2.8-2-.8a6.7 6.7 0 0 1-1.4.8l-.5 2.1h-3.2l-.5-2.1a6.7 6.7 0 0 1-1.4-.8l-2 .8-1.6-2.8 1.6-1.5A6.7 6.7 0 0 1 6.2 12c0-.5.1-1.1.2-1.6L4.8 8.9l1.6-2.8 2 .8a6.7 6.7 0 0 1 1.4-.8l.6-2.3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.7" stroke="currentColor" stroke-width="1.5"/></svg>
           </button>
         </div>
         <div class="assistant-body">
-          <div class="ai-message user">
-            <div class="msg-meta">你 · 刚刚</div>
-            <p>请分析 A-017 批次的粒径分布，并给出是否需要复测的建议。</p>
-          </div>
-          <div style="height:12px"></div>
-          <div class="ai-message">
-            <div class="msg-meta">AI · 智能分析</div>
-            <p>主粒径集中度较高，D50 与历史均值接近，整体稳定。但黑点检测和 D90 略有抬升，建议先对原料仓、输送管路和清洁周期进行复核。如需，我可以继续生成标准实验结论和整改建议。</p>
+          <div id="chatMessages" class="ai-box" style="overflow:auto;max-height:100%;">
+            <div class="ai-message">
+              <div class="msg-meta">系统</div>
+              <p id="chatIntroText">先去保存 OpenRouter 配置，然后我就能在全局聊天里帮你回答问题。</p>
+            </div>
           </div>
         </div>
         <div class="assistant-footer">
-          <div class="textarea">输入问题，例如：帮我判断这批粒子是否合格，并生成简短结论...</div>
+          <textarea class="chat-input" id="chatInput" placeholder="输入消息，按 Enter 发送，Shift+Enter 换行"></textarea>
           <div class="footer-actions">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="tiny-btn">附加文件</button>
-              <button class="tiny-btn">模板</button>
+              <button class="tiny-btn" type="button" id="clearChatBtn">清空聊天</button>
+              <button class="tiny-btn" type="button" id="copyConfigBtn">复制配置</button>
             </div>
-            <button class="send-btn">发送</button>
+            <button class="send-btn" type="button" id="chatSendBtn">发送</button>
           </div>
         </div>
       </aside>
@@ -1097,6 +1360,143 @@
     const sidebarSearchInput = document.querySelector('.sidebar-search input');
     const SIDEBAR_STATE_KEY = 'sidebar-collapsed';
     const ASSISTANT_STATE_KEY = 'assistant-collapsed';
+    const NAV_PAGE_KEY = 'sidebar-active-page';
+    const navPageButtons = document.querySelectorAll('[data-page]');
+    const aiPageSection = document.querySelector('[data-page-section="ai-config"]');
+    const placeholderPageSection = document.querySelector('[data-page-section="placeholder"]');
+    const placeholderEyebrow = document.getElementById('placeholderEyebrow');
+    const placeholderTitle = document.getElementById('placeholderTitle');
+    const placeholderDesc = document.getElementById('placeholderDesc');
+    const placeholderBackBtn = document.getElementById('placeholderBackBtn');
+    const placeholderOpenBtn = document.getElementById('placeholderOpenBtn');
+
+    const aiConfigForm = document.getElementById('aiConfigForm');
+    const configStatus = document.getElementById('configStatus');
+    const configFileInput = document.getElementById('configFileInput');
+    const openrouterApiKey = document.getElementById('openrouterApiKey');
+    const openrouterBaseUrl = document.getElementById('openrouterBaseUrl');
+    const appTitle = document.getElementById('appTitle');
+    const httpReferer = document.getElementById('httpReferer');
+    const modelSelect = document.getElementById('modelSelect');
+    const customModel = document.getElementById('customModel');
+    const systemPrompt = document.getElementById('systemPrompt');
+    const temperature = document.getElementById('temperature');
+    const temperatureValue = document.getElementById('temperatureValue');
+    const maxTokens = document.getElementById('maxTokens');
+    const streamEnabled = document.getElementById('streamEnabled');
+    const jsonMode = document.getElementById('jsonMode');
+    const logEnabled = document.getElementById('logEnabled');
+    const previewModel = document.getElementById('previewModel');
+    const previewBaseUrl = document.getElementById('previewBaseUrl');
+    const previewAppTitle = document.getElementById('previewAppTitle');
+    const previewKey = document.getElementById('previewKey');
+    const previewFlags = document.getElementById('previewFlags');
+    const previewPrompt = document.getElementById('previewPrompt');
+    const previewStatusText = document.getElementById('previewStatusText');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatIntroText = document.getElementById('chatIntroText');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    const loadModelsBtn = document.getElementById('loadModelsBtn');
+    const importConfigBtn = document.getElementById('importConfigBtn');
+    const exportConfigBtn = document.getElementById('exportConfigBtn');
+    const testConfigBtn = document.getElementById('testConfigBtn');
+    const loadDefaultsBtn = document.getElementById('loadDefaultsBtn');
+    const clearConfigBtn = document.getElementById('clearConfigBtn');
+    const copyConfigBtn = document.getElementById('copyConfigBtn');
+    const syncPreviewBtn = document.getElementById('syncPreviewBtn');
+    const resetPreviewBtn = document.getElementById('resetPreviewBtn');
+    const refreshPreviewBtn = document.getElementById('refreshPreviewBtn');
+    const copyEndpointBtn = document.getElementById('copyEndpointBtn');
+    const aiConfigNav = document.getElementById('aiConfigNav');
+    const CONFIG_STORAGE_KEY = 'openrouter-ai-config-v1';
+    const CONFIG_LOG_KEY = 'openrouter-ai-config-log-v1';
+    const CHAT_STORAGE_KEY = 'openrouter-ai-chat-v1';
+    const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+    const DEFAULT_CONFIG = {
+      apiKey: '',
+      baseUrl: DEFAULT_BASE_URL,
+      appTitle: '广进后台',
+      httpReferer: '',
+      modelChoice: 'openai/gpt-4o-mini',
+      customModel: '',
+      systemPrompt: '你是一个专业、简洁的企业 AI 助手，输出要准确、结构清晰，并优先给出可执行建议。',
+      temperature: 0.7,
+      maxTokens: 1024,
+      streamEnabled: true,
+      jsonMode: false,
+      logEnabled: true,
+    };
+    const PAGE_DEFS = {
+      dashboard: {
+        title: '仪表盘',
+        eyebrow: '功能开发中',
+        desc: '仪表盘页面还在建设中，当前先保留导航入口。后续接入后，这里会展示关键指标、趋势和待办事项。',
+      },
+      'order-management': {
+        title: '订单管理',
+        eyebrow: '功能开发中',
+        desc: '订单管理页面暂未接入，当前仅保留菜单位，后续会支持订单查询、编辑和状态流转。',
+      },
+      'invoice-print': {
+        title: '开单打印',
+        eyebrow: '功能开发中',
+        desc: '开单打印页面暂未实现，后续会在这里接入单据生成、打印模板和批量输出。',
+      },
+      'sales-stock': {
+        title: '销售库存',
+        eyebrow: '功能开发中',
+        desc: '销售库存页面暂未接入，后续会展示库存变化、出入库记录和销售联动数据。',
+      },
+      'formula-management': {
+        title: '配方管理',
+        eyebrow: '功能开发中',
+        desc: '配方管理页面暂未接入，后续会支持配方维护、版本对比和参数查看。',
+      },
+      'production-plan': {
+        title: '生产计划',
+        eyebrow: '功能开发中',
+        desc: '生产计划页面暂未接入，后续会支持排产、计划调整和产线视图。',
+      },
+      'supplier-archive': {
+        title: '供应商档案',
+        eyebrow: '功能开发中',
+        desc: '供应商档案页面暂未接入，后续会管理供应商资料、联系人和资质信息。',
+      },
+      'customer-archive': {
+        title: '客户档案',
+        eyebrow: '功能开发中',
+        desc: '客户档案页面暂未接入，后续会管理客户资料、分组和历史交易信息。',
+      },
+      'personnel-archive': {
+        title: '人员档案',
+        eyebrow: '功能开发中',
+        desc: '人员档案页面暂未接入，后续会管理员工资料、岗位和权限关联。',
+      },
+      'data-source-config': {
+        title: '数据源配置',
+        eyebrow: '功能开发中',
+        desc: '数据源配置页面暂未接入，后续会配置接口、同步规则和字段映射。',
+      },
+      'permission-management': {
+        title: '权限管理',
+        eyebrow: '功能开发中',
+        desc: '权限管理页面暂未接入，后续会支持角色、菜单权限和数据权限配置。',
+      },
+      'audit-log': {
+        title: '审计日志',
+        eyebrow: '功能开发中',
+        desc: '审计日志页面暂未接入，后续会记录关键操作、配置变更和访问历史。',
+      },
+      'ai-config': {
+        title: 'AI配置中心',
+        eyebrow: '当前可用',
+        desc: '这里可以配置 OpenRouter 的 API Key、模型 ID 和调用参数。支持导入、导出与本地保存。',
+      },
+    };
+    let chatHistory = [];
+    let chatBusy = false;
 
     const updateSidebarToggle = (collapsed) => {
       if (!toggle) return;
@@ -1104,6 +1504,458 @@
       toggle.setAttribute('aria-label', collapsed ? '展开侧边栏' : '收起侧边栏');
       const label = toggle.querySelector('.sidebar-toggle-label');
       if (label) label.textContent = collapsed ? '展开侧边栏' : '收起侧边栏';
+    };
+
+    const updateAssistantToggle = () => {
+      if (!askAiToggle) return;
+      const collapsed = shell.classList.contains('assistant-collapsed');
+      askAiToggle.setAttribute('aria-expanded', String(!collapsed));
+      askAiToggle.setAttribute('aria-label', collapsed ? '展开 Gjun AI' : '收起 Gjun AI');
+    };
+
+    const getNavLabel = (button) => {
+      if (!button) return '';
+      const label = button.querySelector('.nav-text');
+      return (label?.textContent || button.textContent || '').trim();
+    };
+
+    const getPageDefinition = (pageId, fallbackLabel) => {
+      return PAGE_DEFS[pageId] || {
+        title: fallbackLabel || '未命名页面',
+        eyebrow: '功能开发中',
+        desc: `「${fallbackLabel || '当前模块'}」页面正在开发中，当前先保留占位提示。`,
+      };
+    };
+
+    const setActiveNavPage = (pageId) => {
+      navPageButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.page === pageId);
+      });
+
+      document.querySelectorAll('.nav-group .nav-parent').forEach((parent) => {
+        parent.classList.remove('active');
+      });
+
+      const activeButton = document.querySelector(`[data-page="${pageId}"]`);
+      const group = activeButton?.closest('.nav-group');
+      const parent = group?.querySelector('.nav-parent');
+      if (parent && activeButton !== parent) {
+        parent.classList.add('active');
+      }
+    };
+
+    const showPage = (pageId, options = {}) => {
+      const { scrollTop = true } = options;
+      const isAiPage = pageId === 'ai-config';
+      const activeButton = document.querySelector(`[data-page="${pageId}"]`);
+      const label = getNavLabel(activeButton);
+      const def = getPageDefinition(pageId, label);
+
+      if (aiPageSection) aiPageSection.classList.toggle('active', isAiPage);
+      if (placeholderPageSection) placeholderPageSection.classList.toggle('active', !isAiPage);
+      shell.classList.toggle('page-other', !isAiPage);
+
+      if (!isAiPage) {
+        if (placeholderEyebrow) placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
+        if (placeholderTitle) placeholderTitle.textContent = def.title || label || '功能开发中';
+        if (placeholderDesc) placeholderDesc.textContent = def.desc || `「${label || def.title}」页面正在开发中。`;
+        if (placeholderBackBtn) placeholderBackBtn.textContent = '返回 AI 配置';
+        if (placeholderOpenBtn) placeholderOpenBtn.textContent = '查看仪表盘';
+      }
+
+      setActiveNavPage(pageId);
+      localStorage.setItem(NAV_PAGE_KEY, pageId);
+      if (scrollTop) {
+        requestAnimationFrame(() => {
+          const content = document.querySelector('.content');
+          if (content) content.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      }
+    };
+
+    const setStatus = (message, tone = 'success') => {
+      if (!configStatus) return;
+      configStatus.textContent = message;
+      configStatus.classList.remove('success', 'warn');
+      configStatus.classList.add(tone === 'warn' ? 'warn' : 'success');
+    };
+
+    const saveChatHistory = () => {
+      try {
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatHistory.slice(-30)));
+      } catch {}
+    };
+
+    const loadChatHistory = () => {
+      try {
+        const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const escapeHtml = (value) => (value || '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[ch]);
+
+    const markdownLite = (value) => {
+      const text = escapeHtml(value || '');
+      return text
+        .replace(/\n/g, '<br>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    };
+
+    const scrollChatToBottom = () => {
+      if (!chatMessages) return;
+      requestAnimationFrame(() => {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      });
+    };
+
+    const renderChat = () => {
+      if (!chatMessages) return;
+      const intro = chatIntroText;
+      const items = chatHistory.length
+        ? chatHistory
+        : [{ role: 'system', content: '先去保存 OpenRouter 配置，然后我就能在全局聊天里帮你回答问题。' }];
+      chatMessages.innerHTML = items.map((item) => {
+        const label = item.role === 'user' ? '你' : item.role === 'assistant' ? 'AI' : '系统';
+        return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="msg-meta">${label}</div><p>${markdownLite(item.content)}</p></div>`;
+      }).join('');
+      if (intro) {
+        const hasKey = !!(openrouterApiKey?.value || '').trim();
+        const resolvedModel = getResolvedModel();
+        intro.textContent = hasKey
+          ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里聊天。`
+          : '先去保存 OpenRouter 配置，然后我就能在全局聊天里帮你回答问题。';
+      }
+      scrollChatToBottom();
+    };
+
+    const pushChatMessage = (role, content) => {
+      chatHistory.push({ role, content });
+      saveChatHistory();
+      renderChat();
+    };
+
+    const sendChatMessage = async () => {
+      if (chatBusy) return;
+      const config = getFormConfig();
+      const prompt = (chatInput?.value || '').trim();
+      if (!prompt) return;
+      if (!config.apiKey) {
+        pushChatMessage('assistant', '请先在 AI 配置里填写 OpenRouter API 密钥，然后再发送消息。');
+        return;
+      }
+      const model = getResolvedModel();
+      if (!model) {
+        pushChatMessage('assistant', '请先选择一个模型。');
+        return;
+      }
+
+      chatBusy = true;
+      if (chatSendBtn) chatSendBtn.disabled = true;
+      if (chatInput) chatInput.disabled = true;
+      pushChatMessage('user', prompt);
+      if (chatInput) chatInput.value = '';
+      pushChatMessage('assistant', '正在思考...');
+      const pendingIndex = chatHistory.length - 1;
+
+      try {
+        const requestMessages = chatHistory
+          .slice(0, pendingIndex)
+          .filter((item) => item.role === 'user' || item.role === 'assistant')
+          .slice(-12);
+        const response = await fetch(`${config.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: getRequestHeaders(config),
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: config.systemPrompt || DEFAULT_CONFIG.systemPrompt },
+              ...requestMessages,
+            ],
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const answer = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+        chatHistory[pendingIndex] = { role: 'assistant', content: answer };
+        saveChatHistory();
+        renderChat();
+      } catch (error) {
+        chatHistory[pendingIndex] = { role: 'assistant', content: `发送失败：${error?.message || '网络或权限错误'}` };
+        saveChatHistory();
+        renderChat();
+      } finally {
+        chatBusy = false;
+        if (chatSendBtn) chatSendBtn.disabled = false;
+        if (chatInput) chatInput.disabled = false;
+      }
+    };
+
+    const normalizeBaseUrl = (value) => (value || DEFAULT_BASE_URL).replace(/\/+$/, '');
+
+    const getResolvedModel = () => {
+      if (!modelSelect) return DEFAULT_CONFIG.modelChoice;
+      return modelSelect.value === 'custom' ? (customModel?.value || '').trim() : modelSelect.value;
+    };
+
+    const getFormConfig = () => ({
+      apiKey: (openrouterApiKey?.value || '').trim(),
+      baseUrl: normalizeBaseUrl(openrouterBaseUrl?.value || DEFAULT_BASE_URL),
+      appTitle: (appTitle?.value || '').trim() || DEFAULT_CONFIG.appTitle,
+      httpReferer: (httpReferer?.value || '').trim(),
+      modelChoice: modelSelect?.value || DEFAULT_CONFIG.modelChoice,
+      customModel: (customModel?.value || '').trim(),
+      systemPrompt: (systemPrompt?.value || '').trim(),
+      temperature: Number(temperature?.value || DEFAULT_CONFIG.temperature),
+      maxTokens: Number(maxTokens?.value || DEFAULT_CONFIG.maxTokens),
+      streamEnabled: !!streamEnabled?.checked,
+      jsonMode: !!jsonMode?.checked,
+      logEnabled: !!logEnabled?.checked,
+    });
+
+    const setFormConfig = (config) => {
+      const next = { ...DEFAULT_CONFIG, ...config };
+      if (openrouterApiKey) openrouterApiKey.value = next.apiKey || '';
+      if (openrouterBaseUrl) openrouterBaseUrl.value = next.baseUrl || DEFAULT_BASE_URL;
+      if (appTitle) appTitle.value = next.appTitle || DEFAULT_CONFIG.appTitle;
+      if (httpReferer) httpReferer.value = next.httpReferer || '';
+      if (modelSelect) modelSelect.value = next.modelChoice || next.model || DEFAULT_CONFIG.modelChoice;
+      if (customModel) customModel.value = next.customModel || next.model || '';
+      if (systemPrompt) systemPrompt.value = next.systemPrompt || DEFAULT_CONFIG.systemPrompt;
+      if (temperature) temperature.value = String(next.temperature ?? DEFAULT_CONFIG.temperature);
+      if (maxTokens) maxTokens.value = String(next.maxTokens ?? DEFAULT_CONFIG.maxTokens);
+      if (streamEnabled) streamEnabled.checked = !!next.streamEnabled;
+      if (jsonMode) jsonMode.checked = !!next.jsonMode;
+      if (logEnabled) logEnabled.checked = !!next.logEnabled;
+      syncTemperatureLabel();
+      syncModelState();
+      syncPreview();
+    };
+
+    const syncTemperatureLabel = () => {
+      if (temperatureValue && temperature) temperatureValue.textContent = Number(temperature.value).toFixed(1);
+    };
+
+    const syncModelState = () => {
+      if (!modelSelect || !customModel) return;
+      const isCustom = modelSelect.value === 'custom';
+      customModel.disabled = !isCustom;
+      customModel.style.opacity = isCustom ? '1' : '.6';
+      if (!isCustom && !customModel.value.trim()) {
+        customModel.placeholder = '选择“自定义”后可输入模型 ID';
+      } else {
+        customModel.placeholder = '例如：google/gemini-2.5-pro-preview';
+      }
+    };
+
+    const maskKey = (key) => {
+      const value = (key || '').trim();
+      if (!value) return '未填写';
+      if (value.length <= 8) return `${value.slice(0, 2)}***`;
+      return `${value.slice(0, 4)}…${value.slice(-4)}`;
+    };
+
+    const buildModelSelect = (models) => {
+      if (!modelSelect) return;
+      const currentResolved = getResolvedModel();
+      const currentChoice = modelSelect.value === 'custom' ? 'custom' : modelSelect.value;
+      modelSelect.innerHTML = '';
+
+      const appendOption = (value, label) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        modelSelect.appendChild(option);
+      };
+
+      const seen = new Set();
+      const list = Array.isArray(models) && models.length
+        ? models
+        : [
+            { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini' },
+            { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
+            { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+            { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' },
+          ];
+
+      list.forEach((item) => {
+        const id = item?.id || '';
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        appendOption(id, item?.name ? `${item.name} (${id})` : id);
+      });
+
+      appendOption('custom', '自定义模型 ID');
+
+      if ([...modelSelect.options].some((option) => option.value === currentChoice)) {
+        modelSelect.value = currentChoice;
+      } else if (currentResolved) {
+        modelSelect.value = 'custom';
+        if (customModel) customModel.value = currentResolved;
+      }
+      syncModelState();
+    };
+
+    const syncPreview = () => {
+      const config = getFormConfig();
+      const resolvedModel = getResolvedModel();
+      const baseUrl = normalizeBaseUrl(config.baseUrl);
+      if (temperatureValue) temperatureValue.textContent = config.temperature.toFixed(1);
+      if (previewModel) previewModel.textContent = resolvedModel || '未选择';
+      if (previewBaseUrl) previewBaseUrl.textContent = baseUrl;
+      if (previewAppTitle) previewAppTitle.textContent = config.appTitle || DEFAULT_CONFIG.appTitle;
+      if (previewKey) previewKey.textContent = maskKey(config.apiKey);
+      if (previewFlags) {
+        previewFlags.textContent = [
+          config.streamEnabled ? 'stream' : 'no-stream',
+          config.jsonMode ? 'json' : 'text',
+          config.logEnabled ? 'log' : 'no-log',
+        ].join(' / ');
+      }
+      if (previewPrompt) {
+        previewPrompt.textContent = config.apiKey
+          ? `已准备使用 ${resolvedModel || '未选择的模型'} 调用 ${baseUrl}/chat/completions。导入/导出均使用 UTF-8。`
+          : '当前还没有填写 API 密钥。先保存配置，再用“加载模型列表”或“检测配置”验证 OpenRouter 接入。';
+      }
+      if (previewStatusText) {
+        previewStatusText.textContent = config.apiKey
+          ? `配置已就绪，模型为 ${resolvedModel || '未选择'}，保存后即可接入。`
+          : '当前还没有保存过配置，先填写 API 密钥和模型 ID，然后点击保存。';
+      }
+    };
+
+    const saveLog = (entry) => {
+      try {
+        const current = JSON.parse(localStorage.getItem(CONFIG_LOG_KEY) || '[]');
+        current.unshift(entry);
+        localStorage.setItem(CONFIG_LOG_KEY, JSON.stringify(current.slice(0, 10)));
+      } catch {
+        localStorage.setItem(CONFIG_LOG_KEY, JSON.stringify([entry]));
+      }
+    };
+
+    const persistConfig = (config) => {
+      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+      if (config.logEnabled) {
+        saveLog({ type: 'save', at: new Date().toISOString(), model: getResolvedModel(), baseUrl: config.baseUrl });
+      }
+    };
+
+    const getRequestHeaders = (config) => {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+      if (config.httpReferer) headers['HTTP-Referer'] = config.httpReferer;
+      if (config.appTitle) headers['X-Title'] = config.appTitle;
+      return headers;
+    };
+
+    const downloadUtf8Json = (filename, data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    const loadSavedConfig = () => {
+      try {
+        const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    };
+
+    const updateSavedState = (saved) => {
+      setStatus(saved ? '本地配置：已保存' : '本地配置：未保存', saved ? 'success' : 'warn');
+    };
+
+    const fetchModels = async () => {
+      const config = getFormConfig();
+      if (!config.apiKey) {
+        setStatus('请先填写 OpenRouter API 密钥', 'warn');
+        return;
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        setStatus('正在加载模型列表…', 'success');
+        const response = await fetch(`${config.baseUrl}/models?output_modalities=text`, {
+          method: 'GET',
+          headers: getRequestHeaders(config),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const models = Array.isArray(payload?.data)
+          ? payload.data
+              .filter((item) => item && typeof item.id === 'string' && item.id.includes('/'))
+              .sort((a, b) => (b.created || 0) - (a.created || 0))
+              .slice(0, 20)
+          : [];
+        buildModelSelect(models);
+        setStatus(`已加载 ${models.length || 0} 个模型`, 'success');
+        if (config.logEnabled) saveLog({ type: 'models', at: new Date().toISOString(), count: models.length || 0 });
+      } catch (error) {
+        buildModelSelect([]);
+        setStatus(`模型加载失败：${error?.message || '未知错误'}`, 'warn');
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const testConfig = async () => {
+      const config = getFormConfig();
+      if (!config.apiKey) {
+        setStatus('请先填写 API 密钥再检测', 'warn');
+        return;
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        setStatus('正在检测连接…', 'success');
+        const response = await fetch(`${config.baseUrl}/models?output_modalities=text`, {
+          method: 'GET',
+          headers: getRequestHeaders(config),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const count = Array.isArray(payload?.data) ? payload.data.length : 0;
+        setStatus(`连接正常，模型总数 ${count}`, 'success');
+        if (config.logEnabled) saveLog({ type: 'test', at: new Date().toISOString(), ok: true, count });
+      } catch (error) {
+        setStatus(`检测失败：${error?.message || '网络或权限错误'}`, 'warn');
+        if (getFormConfig().logEnabled) saveLog({ type: 'test', at: new Date().toISOString(), ok: false, error: error?.message || 'unknown' });
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    const applyDefaults = (shouldSave = false) => {
+      setFormConfig(DEFAULT_CONFIG);
+      updateSavedState(false);
+      if (shouldSave) persistConfig(getFormConfig());
     };
 
     if (toggle) {
@@ -1138,13 +1990,6 @@
       });
     });
 
-    const updateAssistantToggle = () => {
-      if (!askAiToggle) return;
-      const collapsed = shell.classList.contains('assistant-collapsed');
-      askAiToggle.setAttribute('aria-expanded', String(!collapsed));
-      askAiToggle.setAttribute('aria-label', collapsed ? '展开 AI 助手' : '收起 AI 助手');
-    };
-
     if (askAiToggle) {
       updateAssistantToggle();
       askAiToggle.addEventListener('click', () => {
@@ -1157,15 +2002,169 @@
     const savedSidebarCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === '1';
     const savedAssistantCollapsed = localStorage.getItem(ASSISTANT_STATE_KEY) === '1';
 
-    if (savedSidebarCollapsed) {
-      shell.classList.add('sidebar-collapsed');
-    }
-    if (savedAssistantCollapsed) {
-      shell.classList.add('assistant-collapsed');
-    }
+    if (savedSidebarCollapsed) shell.classList.add('sidebar-collapsed');
+    if (savedAssistantCollapsed) shell.classList.add('assistant-collapsed');
 
     updateSidebarToggle(savedSidebarCollapsed);
     updateAssistantToggle();
+
+    navPageButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const pageId = button.dataset.page;
+        if (!pageId) return;
+        showPage(pageId);
+      });
+    });
+
+    if (placeholderBackBtn) {
+      placeholderBackBtn.addEventListener('click', () => showPage('ai-config'));
+    }
+
+    if (placeholderOpenBtn) {
+      placeholderOpenBtn.addEventListener('click', () => showPage('dashboard'));
+    }
+
+    if (modelSelect) {
+      modelSelect.addEventListener('change', () => {
+        syncModelState();
+        syncPreview();
+      });
+    }
+
+    [openrouterApiKey, openrouterBaseUrl, appTitle, httpReferer, customModel, systemPrompt, maxTokens]
+      .filter(Boolean)
+      .forEach((input) => {
+        input.addEventListener('input', syncPreview);
+      });
+
+    if (temperature) {
+      temperature.addEventListener('input', syncPreview);
+    }
+
+    [streamEnabled, jsonMode, logEnabled].filter(Boolean).forEach((input) => {
+      input.addEventListener('change', syncPreview);
+    });
+
+    if (aiConfigForm) {
+      aiConfigForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const config = getFormConfig();
+        if (!config.apiKey) {
+          setStatus('请先填写 OpenRouter API 密钥', 'warn');
+          return;
+        }
+        if (modelSelect?.value === 'custom' && !config.customModel) {
+          setStatus('自定义模型 ID 不能为空', 'warn');
+          return;
+        }
+        persistConfig(config);
+        updateSavedState(true);
+        syncPreview();
+      });
+    }
+
+    if (loadDefaultsBtn) {
+      loadDefaultsBtn.addEventListener('click', () => applyDefaults(false));
+    }
+    if (resetPreviewBtn) {
+      resetPreviewBtn.addEventListener('click', () => applyDefaults(false));
+    }
+    if (refreshPreviewBtn) {
+      refreshPreviewBtn.addEventListener('click', syncPreview);
+    }
+    if (syncPreviewBtn) {
+      syncPreviewBtn.addEventListener('click', syncPreview);
+    }
+
+    if (clearConfigBtn) {
+      clearConfigBtn.addEventListener('click', () => {
+        localStorage.removeItem(CONFIG_STORAGE_KEY);
+        localStorage.removeItem(CONFIG_LOG_KEY);
+        applyDefaults(false);
+        setStatus('已清空本地缓存', 'warn');
+      });
+    }
+
+    if (copyConfigBtn) {
+      copyConfigBtn.addEventListener('click', async () => {
+        const payload = JSON.stringify(getFormConfig(), null, 2);
+        try {
+          await navigator.clipboard.writeText(payload);
+          setStatus('配置 JSON 已复制', 'success');
+        } catch {
+          setStatus('复制失败，请改用导出文件', 'warn');
+        }
+      });
+    }
+
+    if (copyEndpointBtn) {
+      copyEndpointBtn.addEventListener('click', async () => {
+        const baseUrl = normalizeBaseUrl(openrouterBaseUrl?.value || DEFAULT_BASE_URL);
+        try {
+          await navigator.clipboard.writeText(`${baseUrl}/chat/completions`);
+          setStatus('接口地址已复制', 'success');
+        } catch {
+          setStatus('接口地址复制失败', 'warn');
+        }
+      });
+    }
+
+    if (exportConfigBtn) {
+      exportConfigBtn.addEventListener('click', () => {
+        downloadUtf8Json('openrouter-ai-config.json', getFormConfig());
+        setStatus('已导出 UTF-8 JSON', 'success');
+      });
+    }
+
+    if (importConfigBtn && configFileInput) {
+      importConfigBtn.addEventListener('click', () => {
+        configFileInput.value = '';
+        configFileInput.click();
+      });
+      configFileInput.addEventListener('change', () => {
+        const file = configFileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const parsed = JSON.parse(String(reader.result || '{}'));
+            setFormConfig(parsed);
+            persistConfig(getFormConfig());
+            updateSavedState(true);
+            setStatus('已导入 UTF-8 JSON', 'success');
+          } catch (error) {
+            setStatus(`导入失败：${error?.message || 'JSON 解析错误'}`, 'warn');
+          }
+        };
+        reader.onerror = () => setStatus('导入失败：无法读取文件', 'warn');
+        reader.readAsText(file, 'UTF-8');
+      });
+    }
+
+    if (loadModelsBtn) loadModelsBtn.addEventListener('click', fetchModels);
+    if (testConfigBtn) testConfigBtn.addEventListener('click', testConfig);
+
+    const savedConfig = loadSavedConfig();
+    if (savedConfig) {
+      setFormConfig(savedConfig);
+      updateSavedState(true);
+      if (savedConfig.modelChoice === 'custom' && savedConfig.customModel) {
+        modelSelect.value = 'custom';
+        syncModelState();
+      }
+    } else {
+      setFormConfig(DEFAULT_CONFIG);
+      updateSavedState(false);
+    }
+
+    const savedPage = localStorage.getItem(NAV_PAGE_KEY);
+    showPage(PAGE_DEFS[savedPage] ? savedPage : 'ai-config', { scrollTop: false });
+    syncPreview();
+    if (aiConfigForm) {
+      aiConfigForm.querySelectorAll('input, textarea, select').forEach((element) => {
+        element.addEventListener('change', syncPreview);
+      });
+    }
   </script>
 </body>
 </html>

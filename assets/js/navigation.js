@@ -5,6 +5,7 @@
   if (!App) return;
 
   const { refs, constants } = App;
+  let assistantFullscreenExitTimer = null;
 
   const updateSidebarToggle = (collapsed) => {
     if (!refs.sidebarToggle) return;
@@ -21,8 +22,78 @@
     refs.askAiToggle.setAttribute('aria-label', collapsed ? '展开 Gjun AI' : '收起 Gjun AI');
   };
 
+  const updateAssistantFullscreenToggle = () => {
+    if (!refs.assistantExpandBtn || !refs.shell) return;
+    const fullscreen = refs.shell.classList.contains('assistant-fullscreen');
+    refs.assistantExpandBtn.setAttribute('aria-label', fullscreen ? '退出全屏' : '展开聊天区');
+  };
+
   const syncAssistantCollapsedAttr = (collapsed) => {
     document.documentElement.dataset.assistantCollapsed = collapsed ? '1' : '0';
+  };
+
+  const syncAssistantFullscreenAttr = (fullscreen) => {
+    document.documentElement.dataset.assistantFullscreen = fullscreen ? '1' : '0';
+  };
+
+  const clearAssistantFullscreenExitTimer = () => {
+    if (assistantFullscreenExitTimer) {
+      window.clearTimeout(assistantFullscreenExitTimer);
+      assistantFullscreenExitTimer = null;
+    }
+  };
+
+  const setAssistantCollapsed = (collapsed) => {
+    if (!refs.shell) return;
+    clearAssistantFullscreenExitTimer();
+    if (collapsed) {
+      refs.shell.classList.remove('assistant-fullscreen');
+      refs.shell.classList.remove('assistant-fullscreen-open');
+      syncAssistantFullscreenAttr(false);
+    }
+    refs.shell.classList.toggle('assistant-collapsed', collapsed);
+    localStorage.setItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
+    syncAssistantCollapsedAttr(Boolean(collapsed));
+    updateAssistantToggle();
+    updateAssistantFullscreenToggle();
+  };
+
+  const setAssistantFullscreen = (fullscreen) => {
+    if (!refs.shell) return;
+    clearAssistantFullscreenExitTimer();
+
+    if (fullscreen) {
+      refs.shell.classList.remove('assistant-collapsed');
+      refs.shell.classList.add('assistant-fullscreen');
+      refs.shell.classList.remove('assistant-fullscreen-open');
+      syncAssistantCollapsedAttr(false);
+      syncAssistantFullscreenAttr(true);
+      localStorage.setItem(constants.ASSISTANT_STATE_KEY, '0');
+      updateAssistantToggle();
+      updateAssistantFullscreenToggle();
+      requestAnimationFrame(() => {
+        void refs.shell?.offsetWidth;
+        requestAnimationFrame(() => {
+          refs.shell?.classList.add('assistant-fullscreen-open');
+        });
+      });
+      return;
+    }
+
+    refs.shell.classList.remove('assistant-fullscreen-open');
+    syncAssistantFullscreenAttr(false);
+    assistantFullscreenExitTimer = window.setTimeout(() => {
+      refs.shell?.classList.remove('assistant-fullscreen');
+      refs.shell?.classList.remove('assistant-fullscreen-open');
+      updateAssistantFullscreenToggle();
+      assistantFullscreenExitTimer = null;
+    }, 420);
+  };
+
+  const toggleAssistantFullscreen = () => {
+    if (!refs.shell) return;
+    const fullscreen = refs.shell.classList.contains('assistant-fullscreen');
+    setAssistantFullscreen(!fullscreen);
   };
 
   const getNavLabel = (button) => {
@@ -35,7 +106,7 @@
     return constants.PAGE_DEFS[pageId] || {
       title: fallbackLabel || '未命名页面',
       eyebrow: '功能开发中',
-      desc: `「${fallbackLabel || '当前模块'}」页面正在开发中，当前先保留占位提示。`,
+      desc: `“${fallbackLabel || '当前模块'}”页面正在开发中，当前先保留占位提示。`,
     };
   };
 
@@ -70,7 +141,7 @@
     if (!isAiPage) {
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
       if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
-      if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `「${label || def.title}」页面正在开发中。`;
+      if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;
       if (refs.placeholderBackBtn) refs.placeholderBackBtn.textContent = '返回 AI 配置';
       if (refs.placeholderOpenBtn) refs.placeholderOpenBtn.textContent = '查看仪表盘';
     }
@@ -93,8 +164,10 @@
     refs.shell?.classList.toggle('sidebar-collapsed', sidebarCollapsed);
     refs.shell?.classList.toggle('assistant-collapsed', assistantCollapsed);
     syncAssistantCollapsedAttr(assistantCollapsed);
+    syncAssistantFullscreenAttr(false);
     updateSidebarToggle(sidebarCollapsed);
     updateAssistantToggle();
+    updateAssistantFullscreenToggle();
   };
 
   const bindNavigation = () => {
@@ -131,12 +204,24 @@
     if (refs.askAiToggle) {
       updateAssistantToggle();
       refs.askAiToggle.addEventListener('click', () => {
-        const collapsed = refs.shell?.classList.toggle('assistant-collapsed');
-        localStorage.setItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
-        syncAssistantCollapsedAttr(Boolean(collapsed));
-        updateAssistantToggle();
+        const collapsed = !refs.shell?.classList.contains('assistant-collapsed');
+        setAssistantCollapsed(Boolean(collapsed));
       });
     }
+
+    updateAssistantFullscreenToggle();
+
+    refs.assistantExpandBtn?.addEventListener('click', () => {
+      toggleAssistantFullscreen();
+    });
+
+    refs.assistantCloseBtn?.addEventListener('click', () => {
+      if (refs.shell?.classList.contains('assistant-fullscreen')) {
+        setAssistantFullscreen(false);
+        return;
+      }
+      setAssistantCollapsed(true);
+    });
 
     refs.navPageButtons.forEach((button) => {
       button.addEventListener('click', () => {

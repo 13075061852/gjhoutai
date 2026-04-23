@@ -51,6 +51,13 @@
     renderChat();
   };
 
+  const startNewConversation = () => {
+    state.chatHistory = [];
+    saveChatHistory();
+    renderChat();
+    requestAnimationFrame(() => refs.chatInput?.focus());
+  };
+
   const sendChatMessage = async () => {
     if (state.chatBusy) return;
     const config = App.config.getFormConfig();
@@ -116,10 +123,11 @@
 
   const bindChat = () => {
     refs.clearChatBtn?.addEventListener('click', () => {
-      state.chatHistory = [];
-      saveChatHistory();
-      renderChat();
+      startNewConversation();
     });
+
+    refs.newConversationBtn?.addEventListener('click', startNewConversation);
+    refs.assistantNewBtn?.addEventListener('click', startNewConversation);
 
     refs.chatSendBtn?.addEventListener('click', sendChatMessage);
     refs.chatInput?.addEventListener('keydown', (event) => {

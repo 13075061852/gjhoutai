@@ -5,6 +5,7 @@
   if (!App) return;
 
   const { refs, constants, utils } = App;
+  let usdToCny = 6.838833;
 
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
@@ -15,7 +16,43 @@
 
   const getResolvedModel = () => {
     if (!refs.modelSelect) return constants.DEFAULT_CONFIG.modelChoice;
-    return refs.modelSelect.value === 'custom' ? (refs.customModel?.value || '').trim() : refs.modelSelect.value;
+    return refs.modelSelect.value;
+  };
+
+  const getModelProviderLabel = (modelValue = '') => {
+    const raw = String(modelValue || '').trim();
+    if (!raw) return 'OpenRouter';
+    const provider = raw.split('/')[0] || raw;
+    const normalized = provider.replace(/[-_]/g, ' ').trim().toLowerCase();
+    const aliases = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      google: 'Google',
+      deepseek: 'DeepSeek',
+      qwen: 'Qwen',
+      meta: 'Meta',
+      mistral: 'Mistral',
+      cohere: 'Cohere',
+      perplexity: 'Perplexity',
+      xai: 'xAI',
+      'x ai': 'xAI',
+      openrouter: 'OpenRouter',
+    };
+    if (aliases[normalized]) return aliases[normalized];
+    return normalized
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || provider;
+  };
+
+  const toIso88591HeaderValue = (value, fallback = '') => {
+    const text = String(value || '').trim();
+    if (!text) return fallback;
+    const asciiSafe = [...text].every((char) => char.charCodeAt(0) <= 255);
+    if (asciiSafe) return text;
+    const stripped = text.replace(/[^\x00-\xff]/g, '').trim();
+    return stripped || fallback;
   };
 
   const getFormConfig = () => ({
@@ -24,7 +61,6 @@
     appTitle: (refs.appTitle?.value || constants.DEFAULT_CONFIG.appTitle || '').trim(),
     httpReferer: (refs.httpReferer?.value || '').trim(),
     modelChoice: refs.modelSelect?.value || constants.DEFAULT_CONFIG.modelChoice,
-    customModel: (refs.customModel?.value || '').trim(),
     systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
     temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
     maxTokens: Number(refs.maxTokens?.value ?? constants.DEFAULT_CONFIG.maxTokens),
@@ -40,13 +76,13 @@
     if (refs.appTitle) refs.appTitle.value = next.appTitle || constants.DEFAULT_CONFIG.appTitle;
     if (refs.httpReferer) refs.httpReferer.value = next.httpReferer || '';
     if (refs.modelSelect) refs.modelSelect.value = next.modelChoice || next.model || constants.DEFAULT_CONFIG.modelChoice;
-    if (refs.customModel) refs.customModel.value = next.customModel || next.model || '';
     if (refs.systemPrompt) refs.systemPrompt.value = next.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     if (refs.temperature) refs.temperature.value = String(next.temperature ?? constants.DEFAULT_CONFIG.temperature);
     if (refs.maxTokens) refs.maxTokens.value = String(next.maxTokens ?? constants.DEFAULT_CONFIG.maxTokens);
     if (refs.streamEnabled) refs.streamEnabled.checked = Boolean(next.streamEnabled);
     if (refs.jsonMode) refs.jsonMode.checked = Boolean(next.jsonMode);
     if (refs.logEnabled) refs.logEnabled.checked = Boolean(next.logEnabled);
+    syncModelProviderField();
     syncModelState();
     syncTemperatureLabel();
     syncPreview();
@@ -59,13 +95,14 @@
   };
 
   const syncModelState = () => {
-    if (!refs.modelSelect || !refs.customModel) return;
-    const isCustom = refs.modelSelect.value === 'custom';
-    refs.customModel.disabled = !isCustom;
-    refs.customModel.style.opacity = isCustom ? '1' : '.6';
-    refs.customModel.placeholder = isCustom
-      ? '例如：google/gemini-2.5-pro-preview'
-      : '选择“自定义”后可输入模型 ID';
+    if (!refs.modelSelect) return;
+    syncModelDropdown();
+    syncModelProviderField();
+  };
+
+  const syncModelProviderField = () => {
+    if (!refs.appTitle) return;
+    refs.appTitle.value = getModelProviderLabel(getResolvedModel());
   };
 
   const maskKey = (key) => utils.maskKey(key);
@@ -127,11 +164,166 @@
     };
     if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
     if (config.httpReferer) headers['HTTP-Referer'] = config.httpReferer;
-    if (config.appTitle) headers['X-Title'] = config.appTitle;
+    const headerTitle = toIso88591HeaderValue(config.appTitle, 'Gjun Backend');
+    if (headerTitle) headers['X-Title'] = headerTitle;
     return headers;
   };
 
   const loadSavedConfig = () => utils.readJson(constants.CONFIG_STORAGE_KEY, null);
+
+  const getModelOptions = () => {
+    if (!refs.modelSelect) return [];
+    return Array.from(refs.modelSelect.options).map((option) => ({
+      value: option.value,
+      label: (option.textContent || option.value || '').trim(),
+      pricing: (option.dataset?.pricing || '').trim(),
+      category: (option.dataset?.category || '').trim(),
+    }));
+  };
+
+  const splitModelLabel = (label) => {
+    const text = String(label || '').trim();
+    const match = text.match(/^(.*)\s+\((.+)\)$/);
+    if (match) {
+      return { title: match[1].trim(), desc: match[2].trim() };
+    }
+    return { title: text, desc: text };
+  };
+
+  const parseUsdPricing = (value) => {
+    const amount = Number.parseFloat(value);
+    return Number.isFinite(amount) ? amount : null;
+  };
+
+  const formatCnyPerMillionTokens = (usdPerToken) => {
+    const price = parseUsdPricing(usdPerToken);
+    if (price == null) return '—';
+    const cnyPerMillion = price * 1000000 * usdToCny;
+    return `¥${cnyPerMillion.toFixed(cnyPerMillion >= 100 ? 0 : 2)}`;
+  };
+
+  const getPricingLabel = (pricing) => {
+    const prompt = formatCnyPerMillionTokens(pricing?.prompt);
+    const completion = formatCnyPerMillionTokens(pricing?.completion);
+    return `${prompt} / ${completion}`;
+  };
+
+  const getModelCategoryLabel = (item) => {
+    const modalities = Array.isArray(item?.architecture?.input_modalities) ? item.architecture.input_modalities : [];
+    const raw = String(item?.category || '').toLowerCase();
+    if (modalities.includes('image') || raw.includes('image')) return '图像理解';
+    if (raw.includes('code')) return '代码';
+    if (raw.includes('reason') || raw.includes('think')) return '推理';
+    return '通用文本';
+  };
+
+  const getProviderGroupLabel = (value) => {
+    const raw = String(value || '');
+    if (!raw) return '其他';
+    const provider = raw.split('/')[0] || raw;
+    return provider.replace(/[-_]/g, ' ').toUpperCase();
+  };
+
+  const getProviderSortRank = (value) => {
+    const raw = String(value || '').toLowerCase();
+    const provider = (raw.split('/')[0] || raw).replace(/[-_]/g, '');
+    if (provider.includes('qwen')) return 0;
+    if (provider.includes('deepseek')) return 1;
+    if (provider.includes('kimi') || provider.includes('moonshot')) return 2;
+    if (provider.includes('xiaomi')) return 3;
+    if (provider.includes('openai') || provider.includes('gpt')) return 4;
+    return 10;
+  };
+
+  const fetchUsdToCnyRate = async () => {
+    try {
+      const response = await fetch('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const rate = Number(payload?.rates?.CNY);
+      if (Number.isFinite(rate) && rate > 0) {
+        usdToCny = rate;
+      }
+    } catch {
+      // Keep the baked-in fallback if the live rate fetch fails.
+    }
+  };
+
+  const getModelTriggerLabel = () => {
+    if (!refs.modelSelect) return constants.DEFAULT_CONFIG.modelChoice;
+    const match = Array.from(refs.modelSelect.options).find((option) => option.value === refs.modelSelect.value);
+    const parts = splitModelLabel(match?.textContent || refs.modelSelect.value || constants.DEFAULT_CONFIG.modelChoice);
+    return parts.title || refs.modelSelect.value || constants.DEFAULT_CONFIG.modelChoice;
+  };
+
+  const setModelDropdownOpen = (open) => {
+    if (!refs.modelDropdown || !refs.modelSelectTrigger) return;
+    refs.modelDropdown.classList.toggle('is-open', open);
+    refs.modelSelectTrigger.setAttribute('aria-expanded', String(open));
+  };
+
+  const closeModelDropdown = () => setModelDropdownOpen(false);
+
+  const openModelDropdown = () => setModelDropdownOpen(true);
+
+  const syncModelDropdown = () => {
+    if (!refs.modelDropdown || !refs.modelSelectPanel || !refs.modelSelectTriggerLabel) return;
+    const currentValue = refs.modelSelect?.value || constants.DEFAULT_CONFIG.modelChoice;
+    refs.modelSelectTriggerLabel.textContent = getModelTriggerLabel();
+
+    const options = getModelOptions();
+    const grouped = new Map();
+
+    options.forEach((option) => {
+      const parts = splitModelLabel(option.label);
+      const provider = getProviderGroupLabel(option.value);
+      const pricing = option.pricing ? (() => {
+        try {
+          return JSON.parse(option.pricing);
+        } catch {
+          return null;
+        }
+      })() : null;
+      const category = option.category || getModelCategoryLabel(option);
+      const items = grouped.get(provider) || [];
+      items.push({
+        ...option,
+        title: parts.title,
+        pricingLabel: getPricingLabel(pricing),
+        category,
+      });
+      grouped.set(provider, items);
+    });
+
+    refs.modelSelectPanel.innerHTML = Array.from(grouped.entries()).map(([provider, items]) => {
+      const rows = items.map((option) => {
+        const isActive = option.value === currentValue;
+        return `
+          <button
+            type="button"
+            class="model-dropdown-option${isActive ? ' is-active' : ''}"
+            role="option"
+            aria-selected="${isActive ? 'true' : 'false'}"
+            data-model-value="${option.value}">
+            <span class="model-dropdown-option-body">
+              <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
+              <span class="model-dropdown-option-subline">
+                <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
+              </span>
+            </span>
+            <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <div class="model-dropdown-group">
+          <div class="model-dropdown-group-title">${utils.escapeHtml(provider)}</div>
+          <div class="model-dropdown-group-body">${rows}</div>
+        </div>
+      `;
+    }).join('');
+  };
 
   const buildModelSelect = (models) => {
     if (!refs.modelSelect) return;
@@ -146,50 +338,46 @@
       refs.modelSelect.appendChild(option);
     };
 
-    const seen = new Set();
-    const list = Array.isArray(models) && models.length
-      ? models
-      : [
-          { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini' },
-          { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-          { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-          { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat' },
-        ];
-
-    list.forEach((item) => {
+    const appendModelOption = (item) => {
       const id = item?.id || '';
       if (!id || seen.has(id)) return;
       seen.add(id);
-      appendOption(id, item?.name ? `${item.name} (${id})` : id);
-    });
+      const label = item?.name ? `${item.name} (${id})` : id;
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = label;
+      option.dataset.pricing = JSON.stringify(item?.pricing || {});
+      option.dataset.category = getModelCategoryLabel(item);
+      refs.modelSelect.appendChild(option);
+    };
 
-    appendOption('custom', '自定义模型 ID');
+    const seen = new Set();
+    const list = Array.isArray(models) ? models : [];
+
+    list.forEach(appendModelOption);
 
     if ([...refs.modelSelect.options].some((option) => option.value === currentChoice)) {
       refs.modelSelect.value = currentChoice;
     } else if (currentResolved) {
-      refs.modelSelect.value = 'custom';
-      if (refs.customModel) refs.customModel.value = currentResolved;
+      refs.modelSelect.value = currentResolved;
     }
 
     syncModelState();
+    syncModelDropdown();
   };
 
   const fetchModels = async () => {
     const config = getFormConfig();
-    if (!config.apiKey) {
-      setStatus('请先填写 OpenRouter API 密钥', 'warn');
-      return;
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      setStatus('正在加载模型列表…', 'success');
+      setStatus('正在加载 OpenRouter 官方模型列表…', 'success');
       const response = await fetch(`${config.baseUrl}/models?output_modalities=text`, {
         method: 'GET',
         headers: getRequestHeaders(config),
+        cache: 'no-store',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -197,14 +385,20 @@
       const models = Array.isArray(payload?.data)
         ? payload.data
           .filter((item) => item && typeof item.id === 'string' && item.id.includes('/'))
-          .sort((a, b) => (b.created || 0) - (a.created || 0))
-          .slice(0, 20)
+          .sort((a, b) => {
+            const rankA = getProviderSortRank(a.id);
+            const rankB = getProviderSortRank(b.id);
+            if (rankA !== rankB) return rankA - rankB;
+            const providerA = String(a.id || '').split('/')[0] || '';
+            const providerB = String(b.id || '').split('/')[0] || '';
+            if (providerA !== providerB) return providerA.localeCompare(providerB);
+            return (b.created || 0) - (a.created || 0);
+          })
         : [];
       buildModelSelect(models);
-      setStatus(`已加载 ${models.length || 0} 个模型`, 'success');
+      setStatus(`已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', at: new Date().toISOString(), count: models.length || 0 });
     } catch (error) {
-      buildModelSelect([]);
       setStatus(`模型加载失败：${error?.message || '未知错误'}`, 'warn');
     } finally {
       clearTimeout(timeout);
@@ -298,12 +492,6 @@
     setStatus('已清空本地配置', 'warn');
   };
 
-  const applyDefaults = (shouldSave = false) => {
-    setFormConfig(constants.DEFAULT_CONFIG);
-    updateSavedState(false);
-    if (shouldSave) persistConfig(getFormConfig());
-  };
-
   const syncConfigBindings = () => {
     if (refs.modelSelect) {
       refs.modelSelect.addEventListener('change', () => {
@@ -312,7 +500,7 @@
       });
     }
 
-    [refs.openrouterApiKey, refs.openrouterBaseUrl, refs.appTitle, refs.httpReferer, refs.customModel, refs.systemPrompt, refs.maxTokens]
+    [refs.openrouterApiKey, refs.openrouterBaseUrl, refs.appTitle, refs.httpReferer, refs.systemPrompt, refs.maxTokens]
       .filter(Boolean)
       .forEach((input) => input.addEventListener('input', syncPreview));
 
@@ -332,20 +520,65 @@
         setStatus('请先填写 OpenRouter API 密钥', 'warn');
         return;
       }
-      if (refs.modelSelect?.value === 'custom' && !config.customModel) {
-        setStatus('自定义模型 ID 不能为空', 'warn');
-        return;
-      }
       persistConfig(config);
       updateSavedState(true);
       syncPreview();
+    });
+
+    refs.apiKeyToggle?.addEventListener('click', () => {
+      if (!refs.openrouterApiKey) return;
+      refs.openrouterApiKey.type = refs.openrouterApiKey.type === 'password' ? 'text' : 'password';
+      refs.apiKeyToggle.setAttribute(
+        'aria-label',
+        refs.openrouterApiKey.type === 'password' ? '显示 API 密钥' : '隐藏 API 密钥',
+      );
+      refs.apiKeyToggle.classList.toggle('is-visible', refs.openrouterApiKey.type === 'text');
+    });
+
+    refs.modelSelectTrigger?.addEventListener('click', () => {
+      const isOpen = refs.modelDropdown?.classList.contains('is-open');
+      if (isOpen) {
+        closeModelDropdown();
+      } else {
+        openModelDropdown();
+      }
+    });
+
+    refs.modelSelectTrigger?.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openModelDropdown();
+      } else if (event.key === 'Escape') {
+        closeModelDropdown();
+      }
+    });
+
+    refs.modelSelectPanel?.addEventListener('click', (event) => {
+      const option = event.target.closest('[data-model-value]');
+      if (!option || !refs.modelSelect) return;
+      const nextValue = option.getAttribute('data-model-value');
+      refs.modelSelect.value = nextValue || refs.modelSelect.value;
+      refs.modelSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      closeModelDropdown();
+      refs.modelSelectTrigger?.focus();
+    });
+
+    refs.modelSelectPanel?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeModelDropdown();
+        refs.modelSelectTrigger?.focus();
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!refs.modelDropdown || refs.modelDropdown.contains(event.target)) return;
+      closeModelDropdown();
     });
 
     refs.loadModelsBtn?.addEventListener('click', fetchModels);
     refs.importConfigBtn?.addEventListener('click', importConfig);
     refs.exportConfigBtn?.addEventListener('click', exportConfig);
     refs.testConfigBtn?.addEventListener('click', testConfig);
-    refs.loadDefaultsBtn?.addEventListener('click', () => applyDefaults(false));
     refs.clearConfigBtn?.addEventListener('click', clearConfig);
     refs.copyConfigBtn?.addEventListener('click', copyConfig);
     refs.syncPreviewBtn?.addEventListener('click', syncPreview);
@@ -377,10 +610,6 @@
     if (savedConfig) {
       setFormConfig(savedConfig);
       updateSavedState(true);
-      if (savedConfig.modelChoice === 'custom' && savedConfig.customModel) {
-        if (refs.modelSelect) refs.modelSelect.value = 'custom';
-        syncModelState();
-      }
     } else {
       setFormConfig(constants.DEFAULT_CONFIG);
       updateSavedState(false);
@@ -388,6 +617,7 @@
 
     syncTemperatureLabel();
     syncPreview();
+    fetchUsdToCnyRate().finally(() => fetchModels());
   };
 
   App.config = {
@@ -405,6 +635,5 @@
     buildModelSelect,
     fetchModels,
     testConfig,
-    applyDefaults,
   };
 })();

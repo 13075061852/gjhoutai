@@ -1459,6 +1459,20 @@
       padding:0 12px;
       font-size:12px;
       color:var(--text-2);
+      cursor:pointer;
+      transition:background-color .15s ease, border-color .15s ease, color .15s ease;
+    }
+    .tiny-btn:hover{
+      background:var(--surface-2);
+      border-color:rgba(37,99,235,.18);
+      color:var(--text);
+    }
+    .tiny-btn:active{
+      background:var(--surface-2);
+    }
+    .tiny-btn:focus-visible{
+      outline:2px solid rgba(37,99,235,.24);
+      outline-offset:2px;
     }
     .send-btn{
       height:36px;
@@ -1469,6 +1483,18 @@
       padding:0 18px;
       font-weight:600;
       box-shadow:0 8px 16px rgba(14,165,233,.16);
+      cursor:pointer;
+      transition:background-color .15s ease, filter .15s ease;
+    }
+    .send-btn:hover{
+      filter:brightness(1.03);
+    }
+    .send-btn:active{
+      filter:brightness(.98);
+    }
+    .send-btn:focus-visible{
+      outline:2px solid rgba(14,165,233,.3);
+      outline-offset:2px;
     }
     .shell.assistant-collapsed{
       --assistant:0px;

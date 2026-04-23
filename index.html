@@ -86,6 +86,19 @@
 
           <div class="sidebar-section">
             <div class="section-label">基础数据</div>
+            <div class="nav-group">
+              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
+                <span class="nav-main">
+                  <span class="nav-icon"><i class="ti ti-chart-dots" aria-hidden="true"></i></span>
+                  <span class="nav-text">数据分析</span>
+                </span>
+                <span class="nav-arrow">›</span>
+              </button>
+              <div class="nav-children">
+                <button class="nav-subitem" type="button" data-page="property-analysis">物性分析</button>
+                <button class="nav-subitem" type="button" data-page="spectrum-analysis">图谱分析</button>
+              </div>
+            </div>
             <button class="nav-item" type="button" data-page="supplier-archive">
               <span class="nav-main">
                 <span class="nav-icon"><i class="ti ti-package" aria-hidden="true"></i></span>
@@ -298,6 +311,27 @@
             <div class="bottom-space"></div>
           </section>
 
+          <section class="dashboard analysis-page page-section" data-page-section="property-analysis">
+            <article class="panel analysis-panel">
+              <div class="panel-head panel-head-hero">
+                <div class="analysis-toolbar">
+                  <label class="analysis-search">
+                    <i class="ti ti-search" aria-hidden="true"></i>
+                    <input id="analysisSearchInput" type="search" placeholder="搜索当前 sheet ..." aria-label="搜索当前 sheet" />
+                  </label>
+                  <div class="analysis-sheet-tabs" id="analysisSheetTabs"></div>
+                </div>
+              </div>
+              <div class="analysis-table-wrap" id="analysisTableWrap"></div>
+              <div class="analysis-pagination" id="analysisPagination">
+                <button class="analysis-page-btn" id="analysisPrevPageBtn" type="button">上一页</button>
+                <span class="analysis-page-info" id="analysisPageInfo">第 1 页 / 共 1 页</span>
+                <button class="analysis-page-btn" id="analysisNextPageBtn" type="button">下一页</button>
+              </div>
+            </article>
+            <div class="bottom-space"></div>
+          </section>
+
           <section class="dashboard page-section" data-page-section="placeholder">
             <div class="placeholder-page">
               <div class="placeholder-card">
@@ -388,6 +422,7 @@
   </div>
   <script src="./assets/js/app-state.js"></script>
   <script src="./assets/js/navigation.js"></script>
+  <script src="./assets/js/property-analysis.js"></script>
   <script src="./assets/js/config.js"></script>
   <script src="./assets/js/chat.js"></script>
   <script src="./assets/js/app.js"></script>

@@ -8,6 +8,7 @@
 
   const boot = () => {
     App.navigation?.init();
+    App.propertyAnalysis?.init();
     App.config?.init();
     App.chat?.init();
   };

@@ -72,6 +72,7 @@
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
+      .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
     @media (max-width: 980px){
       .sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);box-shadow:12px 0 28px rgba(0,0,0,.12)}
@@ -82,6 +83,17 @@
       .form-grid{grid-template-columns:1fr}
       .config-layout{grid-template-columns:1fr}
       .placeholder-card{padding:20px}
+      .analysis-hero{padding:18px 20px;flex-direction:column}
+      .analysis-summary-grid{grid-template-columns:1fr}
+      .analysis-toolbar{gap:8px}
+      .analysis-search{flex:1 1 auto;min-width:0}
+      .analysis-panel .panel-head{padding:16px}
+      .analysis-table-wrap{padding:16px}
+      .analysis-pagination{padding:0 16px 16px}
+      .analysis-table th,
+      .analysis-table td{padding:10px 12px}
+      .analysis-page{min-height:auto}
+      .analysis-panel{min-height:0}
     }
     .ai-box-scroll{
       overflow:auto;

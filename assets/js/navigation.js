@@ -132,15 +132,17 @@
   const showPage = (pageId, options = {}) => {
     const { scrollTop = true } = options;
     const isAiPage = pageId === 'ai-config';
+    const isAnalysisPage = pageId === 'property-analysis';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
     const def = getPageDefinition(pageId, label);
 
     refs.aiPageSection?.classList.toggle('active', isAiPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage);
+    refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
 
-    if (!isAiPage) {
+    if (!isAiPage && !isAnalysisPage) {
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
       if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
       if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;

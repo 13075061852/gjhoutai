@@ -115,6 +115,16 @@
     refs.appTitle.value = getModelProviderLabel(getResolvedModel());
   };
 
+  const syncApiKeyToggleIcon = () => {
+    if (!refs.apiKeyToggle) return;
+    const isVisible = refs.openrouterApiKey?.type === 'text';
+    const icon = refs.apiKeyToggle.querySelector('.password-toggle-icon');
+    if (icon) {
+      icon.classList.toggle('ti-eye', !isVisible);
+      icon.classList.toggle('ti-eye-off', isVisible);
+    }
+  };
+
   const maskKey = (key) => utils.maskKey(key);
 
   const syncPreview = () => {
@@ -543,6 +553,7 @@
         refs.openrouterApiKey.type === 'password' ? '显示 API 密钥' : '隐藏 API 密钥',
       );
       refs.apiKeyToggle.classList.toggle('is-visible', refs.openrouterApiKey.type === 'text');
+      syncApiKeyToggleIcon();
     });
 
     refs.modelSelectTrigger?.addEventListener('click', () => {
@@ -625,6 +636,7 @@
       updateSavedState(false);
     }
 
+    syncApiKeyToggleIcon();
     syncTemperatureLabel();
     syncPreview();
     fetchUsdToCnyRate().finally(() => fetchModels());

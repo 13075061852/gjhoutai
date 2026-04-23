@@ -11,7 +11,7 @@
       justify-content:flex-start;
       border-radius:14px;
     }
-    .shell.sidebar-collapsed .sidebar-search svg{
+    .shell.sidebar-collapsed .sidebar-search .ti{
       margin-left:14px;
     }
     .shell.sidebar-collapsed .sidebar-search input,
@@ -67,7 +67,7 @@
       padding:0;
       margin:0;
     }
-    .shell.sidebar-collapsed .sidebar-toggle .toggle-icon svg{width:14px;height:14px}
+    .shell.sidebar-collapsed .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
     @media (max-width: 1200px){
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}

@@ -428,6 +428,8 @@
     .field-label-icon{
       flex:0 0 auto;
       color:#5f7391;
+      font-size:16px;
+      line-height:1;
     }
     .field-label-row{
       align-items:flex-end;
@@ -503,6 +505,8 @@
     }
     .password-toggle-icon{
       display:block;
+      font-size:18px;
+      line-height:1;
     }
     .field small{
       color:#6f7f94;
@@ -902,9 +906,11 @@
       justify-content:center;
       gap:8px;
     }
-    .save-btn svg,
-    .outline-btn svg{
+    .save-btn .ti,
+    .outline-btn .ti{
       flex:0 0 auto;
+      font-size:16px;
+      line-height:1;
     }
     .ghost-btn,
     .save-btn,
@@ -1134,6 +1140,10 @@
       justify-content:center;
       flex:0 0 auto;
     }
+    .assistant-convo-caret .ti{
+      font-size:14px;
+      line-height:1;
+    }
     .assistant-head-actions{
       display:flex;
       align-items:center;
@@ -1190,6 +1200,8 @@
     .assistant-convo-search-icon{
       color:var(--muted-2);
       flex:0 0 auto;
+      font-size:15px;
+      line-height:1;
     }
     .assistant-convo-search-input{
       width:100%;
@@ -1284,6 +1296,10 @@
       opacity:.55;
       transition:opacity .15s ease, background-color .15s ease, color .15s ease;
     }
+    .assistant-convo-delete-btn .ti{
+      font-size:14px;
+      line-height:1;
+    }
     .assistant-convo-menu-item:hover .assistant-convo-delete-btn,
     .assistant-convo-menu-item:focus-within .assistant-convo-delete-btn,
     .assistant-convo-menu-item.active .assistant-convo-delete-btn{
@@ -1358,6 +1374,10 @@
       color:var(--text-2);
       transition:background .2s,border-color .2s,color .2s,transform .2s;
     }
+    .assistant-icon-btn .ti{
+      font-size:16px;
+      line-height:1;
+    }
     .assistant-icon-btn:hover{
       background:var(--surface-2);
       border-color:var(--border);
@@ -1380,8 +1400,12 @@
       z-index:1;
     }
     .assistant-footer{
-      padding:14px;
+      padding:12px 14px 14px;
       border-top:1px solid var(--border);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      background:linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,1));
     }
     .assistant-head,
     .assistant-body,
@@ -1406,22 +1430,30 @@
     }
     .chat-input{
       width:100%;
-      min-height:88px;
+      min-height:92px;
       resize:vertical;
       outline:none;
       color:var(--text);
       font-family:inherit;
+      background:var(--surface);
+      box-shadow:0 1px 0 rgba(15,23,42,.02), inset 0 1px 0 rgba(255,255,255,.72);
     }
     .footer-actions{
       display:flex;
       justify-content:space-between;
       align-items:center;
       gap:10px;
-      margin-top:12px;
+      margin-top:0;
+    }
+    .footer-actions-left{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-width:0;
     }
     .tiny-btn{
-      height:34px;
-      border-radius:10px;
+      height:36px;
+      border-radius:12px;
       border:1px solid var(--border);
       background:var(--surface);
       padding:0 12px;
@@ -1429,13 +1461,14 @@
       color:var(--text-2);
     }
     .send-btn{
-      height:34px;
-      border-radius:10px;
+      height:36px;
+      border-radius:12px;
       border:0;
       background:var(--accent);
       color:#fff;
-      padding:0 16px;
+      padding:0 18px;
       font-weight:600;
+      box-shadow:0 8px 16px rgba(14,165,233,.16);
     }
     .shell.assistant-collapsed{
       --assistant:0px;

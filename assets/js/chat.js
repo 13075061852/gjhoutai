@@ -244,7 +244,7 @@
                     <span class="assistant-convo-menu-age">${ageText}</span>
                   </button>
                   <button class="assistant-convo-delete-btn" type="button" aria-label="删除对话" data-delete-session-id="${utils.escapeHtml(session.id)}">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12M10 7V5h4v2m-7 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 10v6M14 10v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    <i class="ti ti-trash" aria-hidden="true"></i>
                   </button>
                 </div>
               `;
@@ -258,7 +258,7 @@
     refs.conversationMenuPanel.innerHTML = `
       <div class="assistant-convo-menu-shell">
         <div class="assistant-convo-search">
-          <svg class="assistant-convo-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <i class="assistant-convo-search-icon ti ti-search" aria-hidden="true"></i>
           <input id="conversationMenuSearch" class="assistant-convo-search-input" type="search" placeholder="搜索..." value="${utils.escapeHtml(state.conversationMenuQuery || '')}" aria-label="搜索对话" />
         </div>
         <div class="assistant-convo-menu-scroll">

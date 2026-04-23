@@ -210,6 +210,7 @@
       pricing: (option.dataset?.pricing || '').trim(),
       category: (option.dataset?.category || '').trim(),
       contextLength: (option.dataset?.contextLength || '').trim(),
+      outputModalities: (option.dataset?.outputModalities || '').trim(),
     }));
   };
 
@@ -256,8 +257,11 @@
 
   const getModelCategoryLabel = (item) => {
     const modalities = Array.isArray(item?.architecture?.input_modalities) ? item.architecture.input_modalities : [];
+    const outputModalities = Array.isArray(item?.output_modalities) ? item.output_modalities : [];
     const raw = String(item?.category || '').toLowerCase();
     if (modalities.includes('image') || raw.includes('image')) return '图像理解';
+    if (outputModalities.includes('image') && !outputModalities.includes('text')) return '图像生成';
+    if (outputModalities.includes('image') && outputModalities.includes('text')) return '图像/文本';
     if (raw.includes('code')) return '代码';
     if (raw.includes('reason') || raw.includes('think')) return '推理';
     return '通用文本';
@@ -320,6 +324,20 @@
   };
 
   const isSlowOrFreeModelLike = (valueOrItem) => isSlowModelLike(valueOrItem) || isFreeModelLike(valueOrItem);
+
+  const supportsImageOutput = (valueOrItem) => {
+    const raw = typeof valueOrItem === 'string'
+      ? valueOrItem
+      : [
+          valueOrItem?.id,
+          valueOrItem?.name,
+          valueOrItem?.category,
+          valueOrItem?.output_modalities?.join(' '),
+        ].filter(Boolean).join(' ');
+
+    const text = String(raw || '').toLowerCase();
+    return text.includes('image') || text.includes('图像');
+  };
 
   const getProviderGroupLabel = (value) => {
     const raw = String(value || '');
@@ -460,6 +478,7 @@
       option.dataset.pricing = JSON.stringify(item?.pricing || {});
       option.dataset.category = getModelCategoryLabel(item);
       option.dataset.contextLength = String(item?.context_length ?? '');
+      option.dataset.outputModalities = JSON.stringify(item?.output_modalities || []);
       refs.modelSelect.appendChild(option);
     };
 
@@ -494,7 +513,7 @@
 
     try {
       setStatus('正在加载 OpenRouter 官方模型列表…', 'success');
-      const response = await fetch(`${config.baseUrl}/models?output_modalities=text`, {
+      const response = await fetch(`${config.baseUrl}/models?output_modalities=text,image`, {
         method: 'GET',
         headers: getRequestHeaders(config),
         cache: 'no-store',

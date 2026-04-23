@@ -18,6 +18,12 @@
   const normalizeMessage = (message) => ({
     role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
     content: String(message?.content || ''),
+    images: Array.isArray(message?.images) ? message.images.map((item) => ({
+      type: String(item?.type || 'image_url'),
+      image_url: {
+        url: String(item?.image_url?.url || item?.url || ''),
+      },
+    })).filter((item) => item.image_url.url) : [],
   });
 
   const deriveSessionTitle = (messages) => {
@@ -108,7 +114,15 @@
     const sessionsToSave = state.chatSessions.map((session) => ({
       id: session.id,
       title: session.title,
-      messages: session.messages.map((item) => ({ ...item })),
+      messages: session.messages.map((item) => ({
+        ...item,
+        images: Array.isArray(item.images) ? item.images.map((image) => ({
+          type: String(image?.type || 'image_url'),
+          image_url: {
+            url: String(image?.image_url?.url || image?.url || ''),
+          },
+        })).filter((image) => image.image_url.url) : [],
+      })),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     }));
@@ -171,7 +185,14 @@
 
     refs.chatMessages.innerHTML = items.length
       ? items.map((item) => {
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div></div>`;
+          const images = Array.isArray(item.images) && item.images.length
+            ? `<div class="ai-message-images">${item.images.map((image) => {
+                const imageUrl = String(image?.image_url?.url || image?.url || '').trim();
+                if (!imageUrl) return '';
+                return `<img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" loading="lazy" />`;
+              }).join('')}</div>`
+            : '';
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}</div>`;
         }).join('')
       : '';
 
@@ -555,7 +576,7 @@
     const session = getActiveSession();
     if (!session) return;
 
-    session.messages.push({ role, content });
+    session.messages.push({ role, content, images: [] });
     session.updatedAt = nowIso();
     if (role === 'user') {
       session.title = deriveSessionTitle(session.messages);
@@ -581,6 +602,10 @@
       pushChatMessage('assistant', '请先选择一个模型。');
       return;
     }
+    const selectedModelOption = Array.from(refs.modelSelect?.options || []).find((option) => option.value === model);
+    const outputModalities = JSON.parse(selectedModelOption?.dataset?.outputModalities || '[]');
+    const supportsImages = Array.isArray(outputModalities) && outputModalities.includes('image');
+    const wantsImages = supportsImages && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
 
     state.chatBusy = true;
     if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
@@ -592,6 +617,7 @@
     const pendingIndex = state.chatHistory.length - 1;
     const streamEnabled = Boolean(config.streamEnabled);
     let streamedContent = '';
+    let streamedImages = [];
 
     try {
       const requestMessages = state.chatHistory
@@ -610,13 +636,14 @@
           ],
           temperature: config.temperature,
           max_tokens: config.maxTokens,
-          stream: streamEnabled,
+          modalities: wantsImages ? ['image', 'text'] : undefined,
+          stream: wantsImages ? false : streamEnabled,
         }),
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      const shouldStream = streamEnabled && response.body && contentType.includes('text/event-stream');
+      const shouldStream = !wantsImages && streamEnabled && response.body && contentType.includes('text/event-stream');
 
       if (shouldStream) {
         await consumeChatCompletionStream(response, (delta) => {
@@ -624,6 +651,7 @@
           state.chatHistory[pendingIndex] = {
             role: 'assistant',
             content: streamedContent || '正在思考...',
+            images: [],
           };
           const session = getActiveSession();
           if (session) session.updatedAt = nowIso();
@@ -633,9 +661,21 @@
       } else {
         const data = await response.json();
         streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+        streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
+          ? data.choices[0].message.images.map((image) => ({
+              type: String(image?.type || 'image_url'),
+              image_url: {
+                url: String(image?.image_url?.url || image?.url || ''),
+              },
+            })).filter((image) => image.image_url.url)
+          : [];
       }
 
-      state.chatHistory[pendingIndex] = { role: 'assistant', content: streamedContent || '我暂时没有返回内容。' };
+      state.chatHistory[pendingIndex] = {
+        role: 'assistant',
+        content: streamedContent || '我暂时没有返回内容。',
+        images: streamedImages,
+      };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       saveChatState();
@@ -646,6 +686,7 @@
       state.chatHistory[pendingIndex] = {
         role: 'assistant',
         content: currentContent ? `${currentContent}\n\n${fallbackMessage}` : fallbackMessage,
+        images: [],
       };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();

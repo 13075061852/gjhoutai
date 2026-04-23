@@ -1,18 +1,99 @@
-(function () {
+﻿(function () {
   'use strict';
 
   const App = window.GJHApp;
   if (!App) return;
 
   const { refs, constants, state, utils } = App;
+  const NEW_CONVERSATION_TITLE = '新建对话';
+  let conversationMenuOpen = false;
 
-  const saveChatHistory = () => {
-    utils.writeJson(constants.CHAT_STORAGE_KEY, state.chatHistory.slice(-30));
+  const nowIso = () => new Date().toISOString();
+
+  const makeSessionId = () => {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
 
-  const loadChatHistory = () => {
-    const parsed = utils.readJson(constants.CHAT_STORAGE_KEY, []);
-    return Array.isArray(parsed) ? parsed : [];
+  const normalizeMessage = (message) => ({
+    role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
+    content: String(message?.content || ''),
+  });
+
+  const deriveSessionTitle = (messages) => {
+    const firstUser = (messages || []).find((item) => item.role === 'user');
+    const raw = String(firstUser?.content || '').trim().replace(/\s+/g, ' ');
+    if (!raw) return NEW_CONVERSATION_TITLE;
+    return raw.length > 28 ? `${raw.slice(0, 28)}…` : raw;
+  };
+
+  const normalizeSession = (session) => {
+    const messages = Array.isArray(session?.messages) ? session.messages.map(normalizeMessage) : [];
+    const updatedAt = String(session?.updatedAt || session?.createdAt || nowIso());
+    return {
+      id: String(session?.id || makeSessionId()),
+      title: String(session?.title || '').trim() || deriveSessionTitle(messages),
+      messages,
+      createdAt: String(session?.createdAt || updatedAt),
+      updatedAt,
+    };
+  };
+
+  const getActiveSession = () => {
+    if (!state.chatSessions.length) return null;
+    return state.chatSessions.find((session) => session.id === state.chatSessionId) || state.chatSessions[0];
+  };
+
+  const isFreshSession = () => {
+    const session = getActiveSession();
+    return !session || session.messages.length === 0;
+  };
+
+  const saveChatState = () => {
+    const activeSession = getActiveSession();
+    const sessionsToSave = state.chatSessions.map((session) => ({
+      id: session.id,
+      title: session.title,
+      messages: session.messages.map((item) => ({ ...item })),
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }));
+
+    utils.writeJson(constants.CHAT_SESSIONS_KEY, sessionsToSave);
+    utils.writeJson(constants.CHAT_ACTIVE_SESSION_KEY, activeSession?.id || '');
+    utils.writeJson(constants.CHAT_STORAGE_KEY, activeSession?.messages || []);
+  };
+
+  const loadChatState = () => {
+    const storedSessions = utils.readJson(constants.CHAT_SESSIONS_KEY, null);
+    const storedActiveId = utils.readJson(constants.CHAT_ACTIVE_SESSION_KEY, '');
+
+    if (Array.isArray(storedSessions) && storedSessions.length) {
+      const sessions = storedSessions.map(normalizeSession);
+      const activeSession = sessions.find((session) => session.id === storedActiveId) || sessions[0];
+      return { sessions, activeId: activeSession?.id || sessions[0].id };
+    }
+
+    const legacyHistory = utils.readJson(constants.CHAT_STORAGE_KEY, []);
+    if (Array.isArray(legacyHistory) && legacyHistory.length) {
+      const session = normalizeSession({
+        id: makeSessionId(),
+        title: deriveSessionTitle(legacyHistory),
+        messages: legacyHistory,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+      return { sessions: [session], activeId: session.id };
+    }
+
+    const session = normalizeSession({
+      id: makeSessionId(),
+      title: NEW_CONVERSATION_TITLE,
+      messages: [],
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    return { sessions: [session], activeId: session.id };
   };
 
   const scrollChatToBottom = () => {
@@ -22,40 +103,288 @@
     });
   };
 
+  const mountConversationMenu = () => {
+    if (!refs.conversationMenuPanel || !refs.conversationMenuWrap) return;
+    if (refs.conversationMenuPanel.parentElement !== document.body) {
+      document.body.appendChild(refs.conversationMenuPanel);
+    }
+    refs.conversationMenuPanel.classList.add('assistant-convo-menu-floating');
+  };
+
+  const unmountConversationMenu = () => {
+    if (!refs.conversationMenuPanel || !refs.conversationMenuWrap) return;
+    if (refs.conversationMenuPanel.parentElement !== refs.conversationMenuWrap) {
+      refs.conversationMenuWrap.appendChild(refs.conversationMenuPanel);
+    }
+    refs.conversationMenuPanel.classList.remove('assistant-convo-menu-floating');
+    refs.conversationMenuPanel.style.removeProperty('--menu-top');
+    refs.conversationMenuPanel.style.removeProperty('--menu-left');
+    refs.conversationMenuPanel.style.removeProperty('--menu-width');
+    refs.conversationMenuPanel.style.removeProperty('--menu-max-height');
+  };
+
+  const updateConversationMenuPosition = () => {
+    if (!refs.conversationMenuPanel || !refs.conversationMenuBtn) return;
+
+    const rect = refs.conversationMenuBtn.getBoundingClientRect();
+    const width = Math.max(240, Math.min(340, window.innerWidth - 24));
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const top = Math.min(rect.bottom + 4, window.innerHeight - 24);
+    const maxHeight = Math.max(180, window.innerHeight - top - 12);
+
+    refs.conversationMenuPanel.style.setProperty('--menu-top', `${top}px`);
+    refs.conversationMenuPanel.style.setProperty('--menu-left', `${left}px`);
+    refs.conversationMenuPanel.style.setProperty('--menu-width', `${width}px`);
+    refs.conversationMenuPanel.style.setProperty('--menu-max-height', `${maxHeight}px`);
+  };
+
+  const closeConversationMenu = () => {
+    if (refs.conversationMenuPanel) refs.conversationMenuPanel.hidden = true;
+    refs.conversationMenuBtn?.setAttribute('aria-expanded', 'false');
+    conversationMenuOpen = false;
+    unmountConversationMenu();
+  };
+
+  const deleteConversation = (sessionId) => {
+    const session = state.chatSessions.find((item) => item.id === sessionId);
+    if (!session) return;
+
+    const confirmed = window.confirm(`确定删除「${session.title || NEW_CONVERSATION_TITLE}」吗？此操作不可恢复。`);
+    if (!confirmed) return;
+
+    const remaining = state.chatSessions.filter((item) => item.id !== sessionId);
+    if (remaining.length) {
+      state.chatSessions = remaining;
+      const nextActive = remaining.find((item) => item.id === state.chatSessionId) || remaining[0];
+      state.chatSessionId = nextActive.id;
+      state.chatHistory = nextActive.messages;
+    } else {
+      const freshSession = normalizeSession({
+        id: makeSessionId(),
+        title: NEW_CONVERSATION_TITLE,
+        messages: [],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      });
+      state.chatSessions = [freshSession];
+      state.chatSessionId = freshSession.id;
+      state.chatHistory = freshSession.messages;
+    }
+
+    saveChatState();
+    renderChat();
+    if (conversationMenuOpen) renderConversationMenu();
+  };
+
+  const formatRelativeAge = (isoValue) => {
+    const time = new Date(isoValue || Date.now()).getTime();
+    if (!Number.isFinite(time)) return '';
+    const diffHours = Math.max(0, Math.round((Date.now() - time) / 36e5));
+    if (diffHours < 24) return `${Math.max(1, diffHours)}h`;
+    return `${Math.max(1, Math.round(diffHours / 24))}d`;
+  };
+
+  const getSessionBucket = (session) => {
+    const updated = new Date(session?.updatedAt || session?.createdAt || Date.now()).getTime();
+    if (!Number.isFinite(updated)) return '更早';
+    const diffDays = (Date.now() - updated) / 86400000;
+    if (diffDays < 1) return '今天';
+    if (diffDays < 7) return '最近一周';
+    if (diffDays < 30) return '最近一个月';
+    return '更早';
+  };
+
+  const renderConversationMenu = () => {
+    if (!refs.conversationMenuPanel) return;
+
+    const query = String(state.conversationMenuQuery || '').trim().toLowerCase();
+    const sessions = [...state.chatSessions].sort((a, b) => {
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+
+    const filtered = query
+      ? sessions.filter((session) => {
+          const text = [
+            session.title,
+            session.messages.map((item) => item.content).join(' '),
+          ].join(' ').toLowerCase();
+          return text.includes(query);
+        })
+      : sessions;
+
+    const grouped = filtered.reduce((acc, session) => {
+      const bucket = getSessionBucket(session);
+      if (!acc[bucket]) acc[bucket] = [];
+      acc[bucket].push(session);
+      return acc;
+    }, {});
+
+    const bucketOrder = ['今天', '最近一周', '最近一个月', '更早'];
+    const sectionsHtml = bucketOrder.map((bucket) => {
+      const items = grouped[bucket] || [];
+      if (!items.length) return '';
+      return `
+        <section class="assistant-convo-section">
+          <div class="assistant-convo-section-title">${bucket}</div>
+          <div class="assistant-convo-section-list">
+            ${items.map((session) => {
+              const active = session.id === state.chatSessionId ? ' active' : '';
+              const title = utils.escapeHtml(session.title || NEW_CONVERSATION_TITLE);
+              const lastMessage = session.messages.length ? session.messages[session.messages.length - 1] : null;
+              const preview = session.messages.find((item) => item.role === 'user')?.content || lastMessage?.content || '';
+              const previewText = utils.escapeHtml(String(preview).trim().replace(/\s+/g, ' ').slice(0, 72) || '暂无消息');
+              const ageText = utils.escapeHtml(formatRelativeAge(session.updatedAt || session.createdAt));
+              return `
+                <div class="assistant-convo-menu-item${active}">
+                  <button class="assistant-convo-menu-item-main" type="button" role="menuitem" data-session-id="${utils.escapeHtml(session.id)}">
+                    <span class="assistant-convo-menu-main">
+                      <span class="assistant-convo-menu-title">${title}</span>
+                      <span class="assistant-convo-menu-meta">${previewText}</span>
+                    </span>
+                    <span class="assistant-convo-menu-age">${ageText}</span>
+                  </button>
+                  <button class="assistant-convo-delete-btn" type="button" aria-label="删除对话" data-delete-session-id="${utils.escapeHtml(session.id)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12M10 7V5h4v2m-7 0 .7 11.2A2 2 0 0 0 9.7 20h4.6a2 2 0 0 0 2-1.8L17 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 10v6M14 10v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </section>
+      `;
+    }).join('');
+
+    const newConversationDisabled = isFreshSession();
+    refs.conversationMenuPanel.innerHTML = `
+      <div class="assistant-convo-menu-shell">
+        <div class="assistant-convo-search">
+          <svg class="assistant-convo-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input id="conversationMenuSearch" class="assistant-convo-search-input" type="search" placeholder="搜索..." value="${utils.escapeHtml(state.conversationMenuQuery || '')}" aria-label="搜索对话" />
+        </div>
+        <div class="assistant-convo-menu-scroll">
+          ${sectionsHtml || '<div class="assistant-convo-empty">暂无对话</div>'}
+        </div>
+        <div class="assistant-convo-menu-footer">
+          <button class="assistant-convo-create-btn" type="button" data-action="create-new" ${newConversationDisabled ? 'disabled' : ''}>+ 新建对话</button>
+        </div>
+      </div>
+    `;
+
+    const searchInput = refs.conversationMenuPanel.querySelector('#conversationMenuSearch');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        state.conversationMenuQuery = searchInput.value || '';
+        renderConversationMenu();
+      });
+    }
+
+    refs.conversationMenuPanel.querySelectorAll('[data-session-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const sessionId = button.getAttribute('data-session-id');
+        if (sessionId) {
+          setActiveSession(sessionId);
+          closeConversationMenu();
+        }
+      });
+    });
+
+    refs.conversationMenuPanel.querySelectorAll('[data-delete-session-id]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const sessionId = button.getAttribute('data-delete-session-id');
+        if (sessionId) deleteConversation(sessionId);
+      });
+    });
+
+    refs.conversationMenuPanel.querySelector('[data-action="create-new"]')?.addEventListener('click', () => {
+      if (!newConversationDisabled) createNewConversation();
+    });
+
+    if (conversationMenuOpen) {
+      mountConversationMenu();
+      updateConversationMenuPosition();
+    }
+  };
+
+  const updateHeaderState = () => {
+    const activeSession = getActiveSession();
+    if (refs.conversationMenuLabel) {
+      refs.conversationMenuLabel.textContent = activeSession?.title || NEW_CONVERSATION_TITLE;
+    }
+    if (refs.assistantNewBtn) {
+      const disabled = isFreshSession();
+      refs.assistantNewBtn.disabled = disabled;
+      refs.assistantNewBtn.setAttribute('aria-disabled', String(disabled));
+      refs.assistantNewBtn.setAttribute('title', disabled ? '当前已经是新窗口' : '新建窗口');
+    }
+    renderConversationMenu();
+  };
+
   const renderChat = () => {
     if (!refs.chatMessages) return;
     const intro = refs.chatIntroText;
-    const items = state.chatHistory.length
-      ? state.chatHistory
-      : [{ role: 'system', content: '先去保存 OpenRouter 配置，然后我就能在全局聊天里帮你回答问题。' }];
+    const items = state.chatHistory;
 
-    refs.chatMessages.innerHTML = items.map((item) => {
-      const label = item.role === 'user' ? '你' : item.role === 'assistant' ? 'AI' : '系统';
-      return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="msg-meta">${label}</div><p>${utils.markdownLite(item.content)}</p></div>`;
-    }).join('');
+    refs.chatMessages.innerHTML = items.length
+      ? items.map((item) => {
+          const label = item.role === 'user' ? '你' : 'AI';
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="msg-meta">${label}</div><p>${utils.markdownLite(item.content)}</p></div>`;
+        }).join('')
+      : '';
 
     if (intro) {
       const hasKey = Boolean((App.config.getFormConfig().apiKey || '').trim());
       const resolvedModel = App.config.getResolvedModel();
       intro.textContent = hasKey
-        ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里聊天。`
-        : '先去保存 OpenRouter 配置，然后我就能在全局聊天里帮你回答问题。';
+        ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里对话。`
+        : '先保存 OpenRouter 配置，然后就可以在这里直接发起分析。';
     }
 
+    updateHeaderState();
     scrollChatToBottom();
+  };
+  const setActiveSession = (sessionId) => {
+    const session = state.chatSessions.find((item) => item.id === sessionId);
+    if (!session) return;
+    state.chatSessionId = session.id;
+    state.chatHistory = session.messages;
+    saveChatState();
+    renderChat();
+    requestAnimationFrame(() => refs.chatInput?.focus());
+  };
+
+  const createNewConversation = () => {
+    if (isFreshSession()) return;
+
+    const session = normalizeSession({
+      id: makeSessionId(),
+      title: NEW_CONVERSATION_TITLE,
+      messages: [],
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    state.chatSessions.unshift(session);
+    state.chatSessionId = session.id;
+    state.chatHistory = session.messages;
+    saveChatState();
+    renderChat();
+    requestAnimationFrame(() => refs.chatInput?.focus());
   };
 
   const pushChatMessage = (role, content) => {
-    state.chatHistory.push({ role, content });
-    saveChatHistory();
-    renderChat();
-  };
+    const session = getActiveSession();
+    if (!session) return;
 
-  const startNewConversation = () => {
-    state.chatHistory = [];
-    saveChatHistory();
+    session.messages.push({ role, content });
+    session.updatedAt = nowIso();
+    if (role === 'user') {
+      session.title = deriveSessionTitle(session.messages);
+    }
+
+    state.chatHistory = session.messages;
+    saveChatState();
     renderChat();
-    requestAnimationFrame(() => refs.chatInput?.focus());
   };
 
   const sendChatMessage = async () => {
@@ -64,7 +393,7 @@
     const prompt = (refs.chatInput?.value || '').trim();
     if (!prompt) return;
     if (!config.apiKey) {
-      pushChatMessage('assistant', '请先在 AI 配置里填写 OpenRouter API 密钥，然后再发送消息。');
+      pushChatMessage('assistant', '请先在 AI 配置里填入 OpenRouter API 密钥，然后再发送消息。');
       return;
     }
 
@@ -108,11 +437,15 @@
       const data = await response.json();
       const answer = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
       state.chatHistory[pendingIndex] = { role: 'assistant', content: answer };
-      saveChatHistory();
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
       renderChat();
     } catch (error) {
       state.chatHistory[pendingIndex] = { role: 'assistant', content: `发送失败：${error?.message || '网络或权限错误'}` };
-      saveChatHistory();
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
       renderChat();
     } finally {
       state.chatBusy = false;
@@ -123,11 +456,35 @@
 
   const bindChat = () => {
     refs.clearChatBtn?.addEventListener('click', () => {
-      startNewConversation();
+      const session = getActiveSession();
+      if (!session) return;
+      session.messages = [];
+      session.title = NEW_CONVERSATION_TITLE;
+      session.updatedAt = nowIso();
+      state.chatHistory = session.messages;
+      saveChatState();
+      renderChat();
     });
 
-    refs.newConversationBtn?.addEventListener('click', startNewConversation);
-    refs.assistantNewBtn?.addEventListener('click', startNewConversation);
+    refs.conversationMenuBtn?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!refs.conversationMenuPanel) return;
+      const shouldOpen = refs.conversationMenuPanel.hidden;
+      if (shouldOpen) {
+        conversationMenuOpen = true;
+        state.conversationMenuQuery = state.conversationMenuQuery || '';
+        renderConversationMenu();
+        mountConversationMenu();
+        refs.conversationMenuPanel.hidden = false;
+        refs.conversationMenuBtn?.setAttribute('aria-expanded', 'true');
+        requestAnimationFrame(() => updateConversationMenuPosition());
+        requestAnimationFrame(() => refs.conversationMenuPanel.querySelector('#conversationMenuSearch')?.focus());
+      } else {
+        closeConversationMenu();
+      }
+    });
+
+    refs.assistantNewBtn?.addEventListener('click', createNewConversation);
 
     refs.chatSendBtn?.addEventListener('click', sendChatMessage);
     refs.chatInput?.addEventListener('keydown', (event) => {
@@ -136,12 +493,31 @@
         sendChatMessage();
       }
     });
+
+    document.addEventListener('pointerdown', (event) => {
+      if (!refs.conversationMenuPanel || refs.conversationMenuPanel.hidden) return;
+      if (refs.conversationMenuPanel.contains(event.target) || refs.conversationMenuBtn?.contains(event.target)) return;
+      closeConversationMenu();
+    });
+
+    window.addEventListener('resize', () => {
+      if (conversationMenuOpen) updateConversationMenuPosition();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeConversationMenu();
+    });
   };
 
   const init = () => {
-    state.chatHistory = loadChatHistory();
+    const loaded = loadChatState();
+    state.chatSessions = loaded.sessions;
+    state.chatSessionId = loaded.activeId;
+    const activeSession = getActiveSession();
+    state.chatHistory = activeSession?.messages || [];
     bindChat();
     renderChat();
+    updateHeaderState();
   };
 
   App.chat = {
@@ -150,3 +526,4 @@
     sendChatMessage,
   };
 })();
+

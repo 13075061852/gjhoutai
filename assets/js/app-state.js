@@ -53,7 +53,11 @@
     chatInput: byId('chatInput'),
     chatSendBtn: byId('chatSendBtn'),
     clearChatBtn: byId('clearChatBtn'),
-    newConversationBtn: byId('newConversationBtn'),
+    conversationMenuBtn: byId('conversationMenuBtn'),
+    conversationMenuLabel: byId('conversationMenuLabel'),
+    conversationMenuPanel: byId('conversationMenuPanel'),
+    conversationMenuWrap: byId('conversationMenuWrap'),
+    conversationMenuSearch: byId('conversationMenuSearch'),
     assistantNewBtn: byId('assistantNewBtn'),
     assistantExpandBtn: byId('assistantExpandBtn'),
     assistantCloseBtn: byId('assistantCloseBtn'),
@@ -77,6 +81,8 @@
     CONFIG_STORAGE_KEY: 'openrouter-ai-config-v1',
     CONFIG_LOG_KEY: 'openrouter-ai-config-log-v1',
     CHAT_STORAGE_KEY: 'openrouter-ai-chat-v1',
+    CHAT_SESSIONS_KEY: 'openrouter-ai-chat-sessions-v1',
+    CHAT_ACTIVE_SESSION_KEY: 'openrouter-ai-chat-active-session-v1',
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     DEFAULT_CONFIG: {
       apiKey: '',
@@ -162,6 +168,9 @@
 
   const state = {
     chatHistory: [],
+    chatSessions: [],
+    chatSessionId: '',
+    conversationMenuQuery: '',
     chatBusy: false,
   };
 

@@ -88,7 +88,17 @@
     syncPreview();
   };
 
+  const syncTemperatureFill = () => {
+    if (!refs.temperature) return;
+    const min = Number(refs.temperature.min ?? 0);
+    const max = Number(refs.temperature.max ?? 100);
+    const value = Number(refs.temperature.value ?? constants.DEFAULT_CONFIG.temperature);
+    const fill = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    refs.temperature.style.setProperty('--slider-fill', `${Math.max(0, Math.min(100, fill))}%`);
+  };
+
   const syncTemperatureLabel = () => {
+    syncTemperatureFill();
     if (refs.temperatureValue && refs.temperature) {
       refs.temperatureValue.textContent = Number(refs.temperature.value || constants.DEFAULT_CONFIG.temperature).toFixed(1);
     }

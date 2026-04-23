@@ -1025,6 +1025,22 @@
       overflow:hidden;
       transition:width .5s var(--ease),min-width .5s var(--ease),max-width .5s var(--ease),flex-basis .5s var(--ease),transform .5s var(--ease),opacity .25s var(--ease);
     }
+    html[data-assistant-collapsed="1"] .assistant{
+      width:0;
+      min-width:0;
+      max-width:0;
+      flex:0 0 0;
+      border-left:0;
+      overflow:hidden;
+      transform:translateX(100%);
+      opacity:0;
+      pointer-events:none;
+    }
+    html[data-assistant-collapsed="1"] .assistant-head,
+    html[data-assistant-collapsed="1"] .assistant-body,
+    html[data-assistant-collapsed="1"] .assistant-footer{
+      opacity:0;
+    }
     .assistant-head{
       height:var(--topbar);
       min-height:var(--topbar);

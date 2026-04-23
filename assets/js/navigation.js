@@ -21,6 +21,10 @@
     refs.askAiToggle.setAttribute('aria-label', collapsed ? '展开 Gjun AI' : '收起 Gjun AI');
   };
 
+  const syncAssistantCollapsedAttr = (collapsed) => {
+    document.documentElement.dataset.assistantCollapsed = collapsed ? '1' : '0';
+  };
+
   const getNavLabel = (button) => {
     if (!button) return '';
     const label = button.querySelector('.nav-text');
@@ -88,6 +92,7 @@
 
     refs.shell?.classList.toggle('sidebar-collapsed', sidebarCollapsed);
     refs.shell?.classList.toggle('assistant-collapsed', assistantCollapsed);
+    syncAssistantCollapsedAttr(assistantCollapsed);
     updateSidebarToggle(sidebarCollapsed);
     updateAssistantToggle();
   };
@@ -128,6 +133,7 @@
       refs.askAiToggle.addEventListener('click', () => {
         const collapsed = refs.shell?.classList.toggle('assistant-collapsed');
         localStorage.setItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
+        syncAssistantCollapsedAttr(Boolean(collapsed));
         updateAssistantToggle();
       });
     }

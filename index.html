@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (function () {
+      try {
+        var root = document.documentElement;
+        root.dataset.assistantCollapsed = localStorage.getItem('assistant-collapsed') === '1' ? '1' : '0';
+      } catch (error) {
+        // Ignore storage access failures and fall back to the default expanded state.
+      }
+    })();
+  </script>
   <title>塑料粒子测试分析平台</title>
   <link rel="icon" type="image/png" href="./logo.png" />
   <link rel="stylesheet" href="./assets/css/styles.css" />

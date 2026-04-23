@@ -71,6 +71,7 @@
       pointer-events:none;z-index:3;
     }
     .shell.sidebar-collapsed{--sidebar:72px}
+    html[data-assistant-collapsed="1"] .shell{--assistant:0px}
 
     .sidebar{
       width:var(--sidebar);

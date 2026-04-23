@@ -192,9 +192,90 @@
       }[ch]));
     },
     markdownLite(value) {
-      return utils.escapeHtml(value || '')
-        .replace(/\n/g, '<br>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      const text = String(value || '').replace(/\r\n/g, '\n').trim();
+      if (!text) return '';
+
+      const escape = (input) => utils.escapeHtml(input);
+      const formatInline = (input) => {
+        const escaped = escape(input);
+        return escaped
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      };
+
+      const lines = text.split('\n');
+      const blocks = [];
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i].trimEnd();
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          i += 1;
+          continue;
+        }
+
+        if (/^---+$/.test(trimmed)) {
+          blocks.push('<hr>');
+          i += 1;
+          continue;
+        }
+
+        const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          blocks.push(`<h${level}>${formatInline(headingMatch[2].trim())}</h${level}>`);
+          i += 1;
+          continue;
+        }
+
+        const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/);
+        if (unorderedMatch) {
+          const items = [];
+          while (i < lines.length) {
+            const current = lines[i].trim();
+            const match = current.match(/^[-*+]\s+(.+)$/);
+            if (!match) break;
+            items.push(`<li>${formatInline(match[1].trim())}</li>`);
+            i += 1;
+          }
+          blocks.push(`<ul>${items.join('')}</ul>`);
+          continue;
+        }
+
+        const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+        if (orderedMatch) {
+          const items = [];
+          while (i < lines.length) {
+            const current = lines[i].trim();
+            const match = current.match(/^\d+\.\s+(.+)$/);
+            if (!match) break;
+            items.push(`<li>${formatInline(match[1].trim())}</li>`);
+            i += 1;
+          }
+          blocks.push(`<ol>${items.join('')}</ol>`);
+          continue;
+        }
+
+        const paragraph = [];
+        while (i < lines.length) {
+          const current = lines[i];
+          const currentTrimmed = current.trim();
+          if (!currentTrimmed) break;
+          if (/^---+$/.test(currentTrimmed) || /^(#{1,6})\s+/.test(currentTrimmed) || /^[-*+]\s+/.test(currentTrimmed) || /^\d+\.\s+/.test(currentTrimmed)) {
+            break;
+          }
+          paragraph.push(currentTrimmed);
+          i += 1;
+        }
+
+        const paragraphHtml = formatInline(paragraph.join(' ')).replace(/\n/g, '<br>');
+        blocks.push(`<p>${paragraphHtml}</p>`);
+      }
+
+      return blocks.join('');
     },
     maskKey(key) {
       const value = String(key || '').trim();

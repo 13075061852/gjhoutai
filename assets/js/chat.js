@@ -153,8 +153,37 @@
   const scrollChatToBottom = () => {
     if (!refs.chatMessages) return;
     requestAnimationFrame(() => {
-      refs.chatMessages.scrollTop = refs.chatMessages.scrollHeight;
+      requestAnimationFrame(() => {
+        const lastMessage = refs.chatMessages?.lastElementChild;
+        if (lastMessage?.scrollIntoView) {
+          lastMessage.scrollIntoView({ block: 'end', inline: 'nearest' });
+          return;
+        }
+        refs.chatMessages.scrollTop = refs.chatMessages.scrollHeight;
+      });
     });
+  };
+
+  const renderChatMessages = () => {
+    if (!refs.chatMessages) return;
+    const intro = refs.chatIntroText;
+    const items = state.chatHistory;
+
+    refs.chatMessages.innerHTML = items.length
+      ? items.map((item) => {
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div></div>`;
+        }).join('')
+      : '';
+
+    if (intro) {
+      const hasKey = Boolean((App.config.getFormConfig().apiKey || '').trim());
+      const resolvedModel = App.config.getResolvedModel();
+      intro.textContent = hasKey
+        ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里对话。`
+        : '先保存 OpenRouter 配置，然后就可以在这里直接发起分析。';
+    }
+
+    scrollChatToBottom();
   };
 
   const mountConversationMenu = () => {
@@ -436,24 +465,7 @@
   };
 
   const renderChat = () => {
-    if (!refs.chatMessages) return;
-    const intro = refs.chatIntroText;
-    const items = state.chatHistory;
-
-    refs.chatMessages.innerHTML = items.length
-      ? items.map((item) => {
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><p>${utils.markdownLite(item.content)}</p></div>`;
-        }).join('')
-      : '';
-
-    if (intro) {
-      const hasKey = Boolean((App.config.getFormConfig().apiKey || '').trim());
-      const resolvedModel = App.config.getResolvedModel();
-      intro.textContent = hasKey
-        ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里对话。`
-        : '先保存 OpenRouter 配置，然后就可以在这里直接发起分析。';
-    }
-
+    renderChatMessages();
     updateHeaderState();
     scrollChatToBottom();
   };
@@ -482,6 +494,61 @@
     saveChatState();
     renderChat();
     requestAnimationFrame(() => refs.chatInput?.focus());
+  };
+
+  const consumeChatCompletionStream = async (response, onDelta) => {
+    if (!response.body) return false;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let finished = false;
+
+    const processBlock = (block) => {
+      const dataLines = [];
+      block.split('\n').forEach((line) => {
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+      });
+
+      const data = dataLines.join('\n').trim();
+      if (!data) return;
+      if (data === '[DONE]') {
+        finished = true;
+        return;
+      }
+      try {
+        const payload = JSON.parse(data);
+        const delta = payload?.choices?.[0]?.delta?.content ?? payload?.choices?.[0]?.message?.content ?? '';
+        if (delta) onDelta(delta, payload);
+      } catch (error) {
+        // Ignore malformed heartbeat/control frames and keep streaming.
+      }
+    };
+
+    while (!finished) {
+      const { value, done } = await reader.read();
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
+        buffer = buffer.replace(/\r\n/g, '\n');
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        parts.forEach((part) => {
+          if (!finished) processBlock(part);
+        });
+      }
+      if (done) break;
+    }
+
+    buffer += decoder.decode();
+    buffer = buffer.replace(/\r\n/g, '\n');
+    const tailParts = buffer.split('\n\n');
+    tailParts.forEach((part) => {
+      if (!finished) processBlock(part);
+    });
+
+    return true;
   };
 
   const pushChatMessage = (role, content) => {
@@ -523,6 +590,8 @@
     if (refs.chatInput) refs.chatInput.value = '';
     pushChatMessage('assistant', '正在思考...');
     const pendingIndex = state.chatHistory.length - 1;
+    const streamEnabled = Boolean(config.streamEnabled);
+    let streamedContent = '';
 
     try {
       const requestMessages = state.chatHistory
@@ -541,20 +610,43 @@
           ],
           temperature: config.temperature,
           max_tokens: config.maxTokens,
-          stream: false,
+          stream: streamEnabled,
         }),
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const answer = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
-      state.chatHistory[pendingIndex] = { role: 'assistant', content: answer };
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const shouldStream = streamEnabled && response.body && contentType.includes('text/event-stream');
+
+      if (shouldStream) {
+        await consumeChatCompletionStream(response, (delta) => {
+          streamedContent += delta;
+          state.chatHistory[pendingIndex] = {
+            role: 'assistant',
+            content: streamedContent || '正在思考...',
+          };
+          const session = getActiveSession();
+          if (session) session.updatedAt = nowIso();
+          saveChatState();
+          renderChatMessages();
+        });
+      } else {
+        const data = await response.json();
+        streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+      }
+
+      state.chatHistory[pendingIndex] = { role: 'assistant', content: streamedContent || '我暂时没有返回内容。' };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       saveChatState();
       renderChat();
     } catch (error) {
-      state.chatHistory[pendingIndex] = { role: 'assistant', content: `发送失败：${error?.message || '网络或权限错误'}` };
+      const currentContent = String(state.chatHistory[pendingIndex]?.content || '').trim();
+      const fallbackMessage = `发送失败：${error?.message || '网络或权限错误'}`;
+      state.chatHistory[pendingIndex] = {
+        role: 'assistant',
+        content: currentContent ? `${currentContent}\n\n${fallbackMessage}` : fallbackMessage,
+      };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       saveChatState();

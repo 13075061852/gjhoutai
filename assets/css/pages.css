@@ -183,7 +183,56 @@
       border-color:rgba(6,182,212,.22);
       align-self:flex-end;
     }
-    .ai-message p{margin:0;line-height:1.6}
+    .ai-message-content{
+      color:var(--text);
+      font-size:14px;
+      line-height:1.7;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+    .ai-message-content > :first-child{margin-top:0}
+    .ai-message-content > :last-child{margin-bottom:0}
+    .ai-message-content p{
+      margin:0 0 10px;
+    }
+    .ai-message-content h1,
+    .ai-message-content h2,
+    .ai-message-content h3,
+    .ai-message-content h4,
+    .ai-message-content h5,
+    .ai-message-content h6{
+      margin:0 0 10px;
+      line-height:1.25;
+      letter-spacing:-.02em;
+      font-weight:800;
+      color:var(--text);
+    }
+    .ai-message-content h1{font-size:1.35em}
+    .ai-message-content h2{font-size:1.25em}
+    .ai-message-content h3{font-size:1.12em}
+    .ai-message-content h4,
+    .ai-message-content h5,
+    .ai-message-content h6{font-size:1em}
+    .ai-message-content ul,
+    .ai-message-content ol{
+      margin:0 0 10px;
+      padding-left:1.4em;
+    }
+    .ai-message-content li{margin:0 0 6px}
+    .ai-message-content hr{
+      border:0;
+      border-top:1px solid var(--border);
+      margin:12px 0;
+    }
+    .ai-message-content strong{font-weight:800}
+    .ai-message-content em{font-style:italic}
+    .ai-message-content code{
+      padding:0 .35em;
+      border-radius:6px;
+      background:rgba(15,23,42,.07);
+      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:.95em;
+    }
     .ai-chips{display:flex;gap:8px;flex-wrap:wrap}
     .ai-chip{
       height:30px;
@@ -658,6 +707,12 @@
       font-size:12px;
       white-space:nowrap;
     }
+    .model-dropdown-option-context{
+      flex:0 0 auto;
+      color:#3b4b63;
+      font-size:12px;
+      white-space:nowrap;
+    }
     .model-dropdown-option-meta{
       flex:0 0 auto;
       min-height:24px;
@@ -695,6 +750,9 @@
     }
     body[data-theme="dark"] .model-dropdown-option-price{
       color:#9fb0c8;
+    }
+    body[data-theme="dark"] .model-dropdown-option-context{
+      color:#c6d3e6;
     }
     body[data-theme="dark"] .model-dropdown-option-meta{
       background:#152338;

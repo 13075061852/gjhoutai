@@ -75,7 +75,18 @@
     if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = next.baseUrl || constants.DEFAULT_BASE_URL;
     if (refs.appTitle) refs.appTitle.value = next.appTitle || constants.DEFAULT_CONFIG.appTitle;
     if (refs.httpReferer) refs.httpReferer.value = next.httpReferer || '';
-    if (refs.modelSelect) refs.modelSelect.value = next.modelChoice || next.model || constants.DEFAULT_CONFIG.modelChoice;
+    if (refs.modelSelect) {
+      const modelChoice = next.modelChoice || next.model || constants.DEFAULT_CONFIG.modelChoice;
+      const existing = Array.from(refs.modelSelect.options).find((option) => option.value === modelChoice);
+      if (!existing) {
+        const option = document.createElement('option');
+        option.value = modelChoice;
+        option.textContent = `${modelChoice}（已保存）`;
+        option.dataset.category = '已保存模型';
+        refs.modelSelect.appendChild(option);
+      }
+      refs.modelSelect.value = modelChoice;
+    }
     if (refs.systemPrompt) refs.systemPrompt.value = next.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     if (refs.temperature) refs.temperature.value = String(next.temperature ?? constants.DEFAULT_CONFIG.temperature);
     if (refs.maxTokens) refs.maxTokens.value = String(next.maxTokens ?? constants.DEFAULT_CONFIG.maxTokens);
@@ -198,6 +209,7 @@
       label: (option.textContent || option.value || '').trim(),
       pricing: (option.dataset?.pricing || '').trim(),
       category: (option.dataset?.category || '').trim(),
+      contextLength: (option.dataset?.contextLength || '').trim(),
     }));
   };
 
@@ -228,6 +240,20 @@
     return `${prompt} / ${completion}`;
   };
 
+  const formatContextLength = (value) => {
+    const length = Number(value);
+    if (!Number.isFinite(length) || length <= 0) return '';
+    if (length >= 1000000) {
+      const millions = length / 1000000;
+      return `${millions.toFixed(Number.isInteger(millions) ? 0 : 1)}M`;
+    }
+    if (length >= 1000) {
+      const thousands = length / 1000;
+      return `${thousands.toFixed(Number.isInteger(thousands) ? 0 : 1)}K`;
+    }
+    return `${length}`;
+  };
+
   const getModelCategoryLabel = (item) => {
     const modalities = Array.isArray(item?.architecture?.input_modalities) ? item.architecture.input_modalities : [];
     const raw = String(item?.category || '').toLowerCase();
@@ -236,6 +262,64 @@
     if (raw.includes('reason') || raw.includes('think')) return '推理';
     return '通用文本';
   };
+
+  const isSlowModelLike = (valueOrItem) => {
+    const raw = typeof valueOrItem === 'string'
+      ? valueOrItem
+      : [
+          valueOrItem?.id,
+          valueOrItem?.name,
+          valueOrItem?.category,
+          valueOrItem?.architecture?.input_modalities?.join(' '),
+        ].filter(Boolean).join(' ');
+
+    const text = String(raw || '').toLowerCase();
+    if (!text) return false;
+
+    return [
+      'reason',
+      'thinking',
+      'think',
+      'reasoning',
+      'research',
+      'deepresearch',
+      'preview',
+      'r1',
+      'o1',
+      'o3',
+      'slow',
+    ].some((token) => text.includes(token)) || text.includes('推理');
+  };
+
+  const isFreeModelLike = (valueOrItem) => {
+    const raw = typeof valueOrItem === 'string'
+      ? valueOrItem
+      : [
+          valueOrItem?.id,
+          valueOrItem?.name,
+          valueOrItem?.category,
+          valueOrItem?.pricing?.prompt,
+          valueOrItem?.pricing?.completion,
+        ].filter(Boolean).join(' ');
+
+    const text = String(raw || '').toLowerCase();
+    if (!text) return false;
+
+    const pricing = typeof valueOrItem === 'string' ? null : valueOrItem?.pricing;
+    const prompt = parseUsdPricing(pricing?.prompt);
+    const completion = parseUsdPricing(pricing?.completion);
+    const hasFreePricing = [prompt, completion].some((value) => value === 0)
+      && [prompt, completion].every((value) => value == null || value === 0);
+
+    return hasFreePricing
+      || text.includes('free')
+      || text.includes('鍏嶈垂')
+      || text.includes('免费')
+      || text.includes('free tier')
+      || text.includes('free plan');
+  };
+
+  const isSlowOrFreeModelLike = (valueOrItem) => isSlowModelLike(valueOrItem) || isFreeModelLike(valueOrItem);
 
   const getProviderGroupLabel = (value) => {
     const raw = String(value || '');
@@ -305,12 +389,14 @@
         }
       })() : null;
       const category = option.category || getModelCategoryLabel(option);
+      const contextLabel = formatContextLength(option.contextLength);
       const items = grouped.get(provider) || [];
       items.push({
         ...option,
         title: parts.title,
         pricingLabel: getPricingLabel(pricing),
         category,
+        contextLabel,
       });
       grouped.set(provider, items);
     });
@@ -329,6 +415,7 @@
               <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
               <span class="model-dropdown-option-subline">
                 <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
+                ${option.contextLabel ? `<span class="model-dropdown-option-context">${utils.escapeHtml(option.contextLabel)}</span>` : ''}
               </span>
             </span>
             <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
@@ -349,6 +436,10 @@
     if (!refs.modelSelect) return;
     const currentResolved = getResolvedModel();
     const currentChoice = refs.modelSelect.value === 'custom' ? 'custom' : refs.modelSelect.value;
+    const currentLabel = (() => {
+      const match = Array.from(refs.modelSelect.options).find((option) => option.value === currentChoice);
+      return (match?.textContent || currentChoice || constants.DEFAULT_CONFIG.modelChoice).trim();
+    })();
     refs.modelSelect.innerHTML = '';
 
     const appendOption = (value, label) => {
@@ -368,6 +459,7 @@
       option.textContent = label;
       option.dataset.pricing = JSON.stringify(item?.pricing || {});
       option.dataset.category = getModelCategoryLabel(item);
+      option.dataset.contextLength = String(item?.context_length ?? '');
       refs.modelSelect.appendChild(option);
     };
 
@@ -375,6 +467,14 @@
     const list = Array.isArray(models) ? models : [];
 
     list.forEach(appendModelOption);
+
+    if (currentChoice && ![...refs.modelSelect.options].some((option) => option.value === currentChoice) && !isSlowOrFreeModelLike(currentChoice)) {
+      const option = document.createElement('option');
+      option.value = currentChoice;
+      option.textContent = `${currentLabel}${currentLabel === currentChoice ? '' : '（已保存）'}`;
+      option.dataset.category = '已保存模型';
+      refs.modelSelect.appendChild(option);
+    }
 
     if ([...refs.modelSelect.options].some((option) => option.value === currentChoice)) {
       refs.modelSelect.value = currentChoice;
@@ -405,6 +505,7 @@
       const models = Array.isArray(payload?.data)
         ? payload.data
           .filter((item) => item && typeof item.id === 'string' && item.id.includes('/'))
+          .filter((item) => !isSlowOrFreeModelLike(item))
           .sort((a, b) => {
             const rankA = getProviderSortRank(a.id);
             const rankB = getProviderSortRank(b.id);
@@ -415,6 +516,9 @@
             return (b.created || 0) - (a.created || 0);
           })
         : [];
+      if (refs.modelSelect && isSlowOrFreeModelLike(getResolvedModel()) && models.length) {
+        refs.modelSelect.value = models[0].id;
+      }
       buildModelSelect(models);
       setStatus(`已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', at: new Date().toISOString(), count: models.length || 0 });

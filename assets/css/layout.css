@@ -1,0 +1,63 @@
+﻿    .main{
+      flex:1;
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      background:#fff;
+    }
+    .topbar{
+      height:var(--topbar);
+      min-height:var(--topbar);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:0 20px;
+      background:var(--surface);
+    }
+    .top-actions{
+      margin-left:auto;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .pill-btn,.icon-btn,.time-chip{
+      height:38px;
+      border:1px solid var(--border);
+      background:var(--surface);
+      color:var(--text-2);
+      border-radius:12px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      padding:0 14px;
+      font-weight:500;
+      transition:all .2s;
+    }
+    .icon-btn{width:38px;justify-content:center;padding:0}
+    .pill-btn strong{font-size:13px;color:var(--text);font-weight:600}
+    .primary{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .primary strong{color:#fff}
+
+    .content{
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:22px 24px 24px;
+      scrollbar-width:none;
+      background:#fff;
+    }
+    .content::-webkit-scrollbar{display:none}
+    .page-section{display:none}
+    .page-section.active{display:block}
+    .dashboard{
+      width:100%;
+      min-width:0;
+      max-width:1280px;
+      margin:0 auto;
+    }

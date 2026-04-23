@@ -68,11 +68,10 @@
       position:absolute;
       left:0;right:0;top:var(--topbar);
       height:1px;background:var(--border);
-      pointer-events:none;z-index:3;
+      pointer-events:none;z-index:41;
     }
     .shell.sidebar-collapsed{--sidebar:72px}
     html[data-assistant-collapsed="1"] .shell{--assistant:0px}
-
     .sidebar{
       width:var(--sidebar);
       min-width:var(--sidebar);

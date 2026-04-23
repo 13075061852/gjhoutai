@@ -56,7 +56,6 @@
     syncAssistantCollapsedAttr(Boolean(collapsed));
     updateAssistantToggle();
     updateAssistantFullscreenToggle();
-    window.GJHApp?.chat?.renderChat?.();
   };
 
   const setAssistantFullscreen = (fullscreen) => {

@@ -27,6 +27,32 @@
     return raw.length > 28 ? `${raw.slice(0, 28)}…` : raw;
   };
 
+  const getNextConversationTitle = () => {
+    const baseTitle = NEW_CONVERSATION_TITLE;
+    const matches = state.chatSessions
+      .map((session) => String(session?.title || '').trim())
+      .filter((title) => title === baseTitle || title.startsWith(`${baseTitle} `));
+
+    if (!matches.length) return baseTitle;
+
+    const usedNumbers = new Set();
+    matches.forEach((title) => {
+      const suffix = title.slice(baseTitle.length).trim();
+      if (!suffix) {
+        usedNumbers.add(1);
+        return;
+      }
+      const numeric = Number.parseInt(suffix, 10);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        usedNumbers.add(numeric);
+      }
+    });
+
+    let nextNumber = 2;
+    while (usedNumbers.has(nextNumber)) nextNumber += 1;
+    return `${baseTitle} ${nextNumber}`;
+  };
+
   const normalizeSession = (session) => {
     const messages = Array.isArray(session?.messages) ? session.messages.map(normalizeMessage) : [];
     const updatedAt = String(session?.updatedAt || session?.createdAt || nowIso());
@@ -335,7 +361,6 @@
       `;
     }).join('');
 
-    const newConversationDisabled = isFreshSession();
     refs.conversationMenuPanel.innerHTML = `
       <div class="assistant-convo-menu-shell">
         <div class="assistant-convo-search">
@@ -346,7 +371,7 @@
           ${sectionsHtml || '<div class="assistant-convo-empty">暂无对话</div>'}
         </div>
         <div class="assistant-convo-menu-footer">
-          <button class="assistant-convo-create-btn" type="button" data-action="create-new" ${newConversationDisabled ? 'disabled' : ''}>+ 新建对话</button>
+          <button class="assistant-convo-create-btn" type="button" data-action="create-new">+ 新建对话</button>
         </div>
       </div>
     `;
@@ -379,7 +404,7 @@
     });
 
     refs.conversationMenuPanel.querySelector('[data-action="create-new"]')?.addEventListener('click', () => {
-      if (!newConversationDisabled) createNewConversation();
+      createNewConversation();
     });
 
     if (conversationMenuOpen) {
@@ -397,16 +422,14 @@
       refs.assistantFullscreenTitle.textContent = activeSession?.title || NEW_CONVERSATION_TITLE;
     }
     if (refs.assistantNewBtn) {
-      const disabled = isFreshSession();
-      refs.assistantNewBtn.disabled = disabled;
-      refs.assistantNewBtn.setAttribute('aria-disabled', String(disabled));
-      refs.assistantNewBtn.setAttribute('title', disabled ? '当前已经是新窗口' : '新建窗口');
+      refs.assistantNewBtn.disabled = false;
+      refs.assistantNewBtn.setAttribute('aria-disabled', 'false');
+      refs.assistantNewBtn.setAttribute('title', '新建窗口');
     }
     if (refs.assistantFullscreenNewBtn) {
-      const disabled = isFreshSession();
-      refs.assistantFullscreenNewBtn.disabled = disabled;
-      refs.assistantFullscreenNewBtn.setAttribute('aria-disabled', String(disabled));
-      refs.assistantFullscreenNewBtn.setAttribute('title', disabled ? '当前已经是新窗口' : '新建窗口');
+      refs.assistantFullscreenNewBtn.disabled = false;
+      refs.assistantFullscreenNewBtn.setAttribute('aria-disabled', 'false');
+      refs.assistantFullscreenNewBtn.setAttribute('title', '新建窗口');
     }
     renderConversationMenu();
     renderFullscreenSidebar();
@@ -445,11 +468,9 @@
   };
 
   const createNewConversation = () => {
-    if (isFreshSession()) return;
-
     const session = normalizeSession({
       id: makeSessionId(),
-      title: NEW_CONVERSATION_TITLE,
+      title: getNextConversationTitle(),
       messages: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),

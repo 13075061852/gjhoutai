@@ -49,6 +49,34 @@
     return !session || session.messages.length === 0;
   };
 
+  const isAssistantFullscreen = () => Boolean(refs.shell?.classList.contains('assistant-fullscreen'));
+
+  const getFilteredSessions = () => {
+    const query = String(state.conversationMenuQuery || '').trim().toLowerCase();
+    const sessions = [...state.chatSessions].sort((a, b) => {
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+
+    if (!query) return sessions;
+
+    return sessions.filter((session) => {
+      const text = [
+        session.title,
+        session.messages.map((item) => item.content).join(' '),
+      ].join(' ').toLowerCase();
+      return text.includes(query);
+    });
+  };
+
+  const getGroupedSessions = (sessions) => {
+    return sessions.reduce((acc, session) => {
+      const bucket = getSessionBucket(session);
+      if (!acc[bucket]) acc[bucket] = [];
+      acc[bucket].push(session);
+      return acc;
+    }, {});
+  };
+
   const saveChatState = () => {
     const activeSession = getActiveSession();
     const sessionsToSave = state.chatSessions.map((session) => ({
@@ -194,6 +222,59 @@
     return '更早';
   };
 
+  const renderFullscreenSidebar = () => {
+    if (!refs.assistantFullscreenSidebar) return;
+
+    const query = String(state.conversationMenuQuery || '').trim();
+    const sessions = getFilteredSessions();
+    const grouped = getGroupedSessions(sessions);
+    const bucketOrder = ['今天', '最近一周', '最近一个月', '更早'];
+
+    if (refs.assistantFullscreenSearch && refs.assistantFullscreenSearch.value !== query) {
+      refs.assistantFullscreenSearch.value = query;
+    }
+
+    refs.assistantFullscreenSidebar.innerHTML = `
+      <div class="assistant-fs-sidebar-shell">
+        ${bucketOrder.map((bucket) => {
+          const items = grouped[bucket] || [];
+          if (!items.length) return '';
+          return `
+            <section class="assistant-fs-section">
+              <div class="assistant-fs-section-title">${bucket}</div>
+              <div class="assistant-fs-section-list">
+                ${items.map((session) => {
+                  const active = session.id === state.chatSessionId ? ' active' : '';
+                  const title = utils.escapeHtml(session.title || NEW_CONVERSATION_TITLE);
+                  const lastMessage = session.messages.length ? session.messages[session.messages.length - 1] : null;
+                  const preview = session.messages.find((item) => item.role === 'user')?.content || lastMessage?.content || '';
+                  const previewText = utils.escapeHtml(String(preview).trim().replace(/\s+/g, ' ').slice(0, 72) || '暂无消息');
+                  const ageText = utils.escapeHtml(formatRelativeAge(session.updatedAt || session.createdAt));
+                  return `
+                    <button class="assistant-fs-item${active}" type="button" data-fs-session-id="${utils.escapeHtml(session.id)}">
+                      <span class="assistant-fs-item-main">
+                        <span class="assistant-fs-item-title">${title}</span>
+                        <span class="assistant-fs-item-preview">${previewText}</span>
+                      </span>
+                      <span class="assistant-fs-item-age">${ageText}</span>
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+            </section>
+          `;
+        }).join('') || '<div class="assistant-fs-empty">暂无对话</div>'}
+      </div>
+    `;
+
+    refs.assistantFullscreenSidebar.querySelectorAll('[data-fs-session-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const sessionId = button.getAttribute('data-fs-session-id');
+        if (sessionId) setActiveSession(sessionId);
+      });
+    });
+  };
+
   const renderConversationMenu = () => {
     if (!refs.conversationMenuPanel) return;
 
@@ -234,7 +315,7 @@
               const preview = session.messages.find((item) => item.role === 'user')?.content || lastMessage?.content || '';
               const previewText = utils.escapeHtml(String(preview).trim().replace(/\s+/g, ' ').slice(0, 72) || '暂无消息');
               const ageText = utils.escapeHtml(formatRelativeAge(session.updatedAt || session.createdAt));
-              return `
+                  return `
                 <div class="assistant-convo-menu-item${active}">
                   <button class="assistant-convo-menu-item-main" type="button" role="menuitem" data-session-id="${utils.escapeHtml(session.id)}">
                     <span class="assistant-convo-menu-main">
@@ -244,7 +325,7 @@
                     <span class="assistant-convo-menu-age">${ageText}</span>
                   </button>
                   <button class="assistant-convo-delete-btn" type="button" aria-label="删除对话" data-delete-session-id="${utils.escapeHtml(session.id)}">
-                    <i class="ti ti-trash" aria-hidden="true"></i>
+                    <i class="ti ti-x" aria-hidden="true"></i>
                   </button>
                 </div>
               `;
@@ -275,6 +356,7 @@
       searchInput.addEventListener('input', () => {
         state.conversationMenuQuery = searchInput.value || '';
         renderConversationMenu();
+        renderFullscreenSidebar();
       });
     }
 
@@ -311,13 +393,23 @@
     if (refs.conversationMenuLabel) {
       refs.conversationMenuLabel.textContent = activeSession?.title || NEW_CONVERSATION_TITLE;
     }
+    if (refs.assistantFullscreenTitle) {
+      refs.assistantFullscreenTitle.textContent = activeSession?.title || NEW_CONVERSATION_TITLE;
+    }
     if (refs.assistantNewBtn) {
       const disabled = isFreshSession();
       refs.assistantNewBtn.disabled = disabled;
       refs.assistantNewBtn.setAttribute('aria-disabled', String(disabled));
       refs.assistantNewBtn.setAttribute('title', disabled ? '当前已经是新窗口' : '新建窗口');
     }
+    if (refs.assistantFullscreenNewBtn) {
+      const disabled = isFreshSession();
+      refs.assistantFullscreenNewBtn.disabled = disabled;
+      refs.assistantFullscreenNewBtn.setAttribute('aria-disabled', String(disabled));
+      refs.assistantFullscreenNewBtn.setAttribute('title', disabled ? '当前已经是新窗口' : '新建窗口');
+    }
     renderConversationMenu();
+    renderFullscreenSidebar();
   };
 
   const renderChat = () => {
@@ -327,8 +419,7 @@
 
     refs.chatMessages.innerHTML = items.length
       ? items.map((item) => {
-          const label = item.role === 'user' ? '你' : 'AI';
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="msg-meta">${label}</div><p>${utils.markdownLite(item.content)}</p></div>`;
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><p>${utils.markdownLite(item.content)}</p></div>`;
         }).join('')
       : '';
 
@@ -485,6 +576,13 @@
     });
 
     refs.assistantNewBtn?.addEventListener('click', createNewConversation);
+    refs.assistantFullscreenNewBtn?.addEventListener('click', createNewConversation);
+
+    refs.assistantFullscreenSearch?.addEventListener('input', () => {
+      state.conversationMenuQuery = refs.assistantFullscreenSearch?.value || '';
+      renderConversationMenu();
+      renderFullscreenSidebar();
+    });
 
     refs.chatSendBtn?.addEventListener('click', sendChatMessage);
     refs.chatInput?.addEventListener('keydown', (event) => {
@@ -502,6 +600,7 @@
 
     window.addEventListener('resize', () => {
       if (conversationMenuOpen) updateConversationMenuPosition();
+      if (isAssistantFullscreen()) renderFullscreenSidebar();
     });
 
     document.addEventListener('keydown', (event) => {
@@ -524,6 +623,7 @@
     init,
     renderChat,
     sendChatMessage,
+    renderFullscreenSidebar,
   };
 })();
 

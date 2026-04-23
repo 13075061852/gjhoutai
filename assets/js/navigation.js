@@ -56,6 +56,7 @@
     syncAssistantCollapsedAttr(Boolean(collapsed));
     updateAssistantToggle();
     updateAssistantFullscreenToggle();
+    window.GJHApp?.chat?.renderChat?.();
   };
 
   const setAssistantFullscreen = (fullscreen) => {
@@ -75,6 +76,7 @@
         void refs.shell?.offsetWidth;
         requestAnimationFrame(() => {
           refs.shell?.classList.add('assistant-fullscreen-open');
+          window.GJHApp?.chat?.renderChat?.();
         });
       });
       return;
@@ -86,6 +88,7 @@
       refs.shell?.classList.remove('assistant-fullscreen');
       refs.shell?.classList.remove('assistant-fullscreen-open');
       updateAssistantFullscreenToggle();
+      window.GJHApp?.chat?.renderChat?.();
       assistantFullscreenExitTimer = null;
     }, 420);
   };

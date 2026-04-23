@@ -55,8 +55,8 @@
 
           <div class="sidebar-section">
             <div class="section-label">业务中心</div>
-            <div class="nav-group expanded">
-              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="true">
+            <div class="nav-group">
+              <button class="nav-item nav-parent" type="button" data-toggle="group" aria-expanded="false">
                 <span class="nav-main">
                   <span class="nav-icon"><i class="ti ti-shopping-cart" aria-hidden="true"></i></span>
                   <span class="nav-text">销售与订单</span>
@@ -315,40 +315,72 @@
       </main>
 
       <aside class="assistant">
-        <div class="assistant-head">
-          <div class="assistant-convo-wrap" id="conversationMenuWrap">
-            <button class="assistant-convo-btn" type="button" id="conversationMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-label="历史对话">
-              <span class="assistant-convo-label" id="conversationMenuLabel">新建对话</span>
-              <span class="assistant-convo-caret" aria-hidden="true">
-                <i class="ti ti-chevron-down" aria-hidden="true"></i>
-              </span>
-            </button>
-            <div class="assistant-convo-menu" id="conversationMenuPanel" role="menu" aria-label="历史对话" hidden></div>
-          </div>
-          <div class="assistant-head-actions">
-            <button class="icon-btn assistant-icon-btn" type="button" id="assistantNewBtn" aria-label="新建窗口">
-              <i class="ti ti-plus" aria-hidden="true"></i>
-            </button>
-            <button class="icon-btn assistant-icon-btn" type="button" id="assistantExpandBtn" aria-label="展开聊天区">
-              <i class="ti ti-maximize" aria-hidden="true"></i>
-            </button>
-            <button class="icon-btn assistant-icon-btn" type="button" id="assistantCloseBtn" aria-label="收起聊天区">
-              <i class="ti ti-x" aria-hidden="true"></i>
-            </button>
-          </div>
-        </div>
-        <div class="assistant-body">
-          <div id="chatMessages" class="ai-box ai-box-scroll">
-          </div>
-        </div>
-        <div class="assistant-footer">
-          <textarea class="chat-input" id="chatInput" placeholder="输入问题，按 Enter 分析，Shift+Enter 换行"></textarea>
-          <div class="footer-actions">
-            <div class="footer-actions-left">
-              <button class="tiny-btn" type="button" id="clearChatBtn">清空聊天</button>
-              <button class="tiny-btn" type="button" id="copyConfigBtn">复制配置</button>
+        <div class="assistant-frame">
+          <aside class="assistant-rail" aria-label="对话历史侧栏">
+            <div class="assistant-rail-top">
+              <div class="assistant-rail-brand">
+                <span class="assistant-rail-brand-mark" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <rect x="5" y="8" width="14" height="10" rx="4" fill="currentColor" opacity=".18"></rect>
+                    <rect x="6.5" y="9.5" width="11" height="7" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+                    <circle cx="9" cy="13" r="1" fill="currentColor"></circle>
+                    <circle cx="15" cy="13" r="1" fill="currentColor"></circle>
+                    <path d="M12 4v2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                    <circle cx="12" cy="4" r="1" fill="currentColor"></circle>
+                    <path d="M8.3 17.8v1.4M15.7 17.8v1.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                    <path d="M10 15.4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                  </svg>
+                </span>
+                <span class="assistant-rail-brand-text">GjunAI</span>
+              </div>
             </div>
-            <button class="send-btn" type="button" id="chatSendBtn">开始分析</button>
+            <div class="assistant-rail-actions">
+              <button class="assistant-rail-action assistant-rail-new" type="button" id="assistantFullscreenNewBtn">+ New chat</button>
+              <label class="assistant-rail-search" for="assistantFullscreenSearch">
+                <i class="ti ti-search" aria-hidden="true"></i>
+                <input id="assistantFullscreenSearch" type="search" placeholder="Search" aria-label="搜索对话" />
+              </label>
+            </div>
+            <div class="assistant-rail-scroll" id="assistantFullscreenSidebar"></div>
+          </aside>
+          <div class="assistant-main">
+            <div class="assistant-head">
+              <div class="assistant-convo-wrap" id="conversationMenuWrap">
+                <button class="assistant-convo-btn" type="button" id="conversationMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-label="历史对话">
+                  <span class="assistant-convo-label" id="conversationMenuLabel">新建对话</span>
+                  <span class="assistant-convo-caret" aria-hidden="true">
+                    <i class="ti ti-chevron-down" aria-hidden="true"></i>
+                  </span>
+                </button>
+                <div class="assistant-convo-menu" id="conversationMenuPanel" role="menu" aria-label="历史对话" hidden></div>
+              </div>
+              <div class="assistant-fullscreen-title" id="assistantFullscreenTitle">新建对话</div>
+              <div class="assistant-head-actions">
+                <button class="icon-btn assistant-icon-btn" type="button" id="assistantNewBtn" aria-label="新建窗口">
+                  <i class="ti ti-plus" aria-hidden="true"></i>
+                </button>
+                <button class="icon-btn assistant-icon-btn" type="button" id="assistantExpandBtn" aria-label="展开聊天区">
+                  <i class="ti ti-maximize" aria-hidden="true"></i>
+                </button>
+                <button class="icon-btn assistant-icon-btn" type="button" id="assistantCloseBtn" aria-label="收起聊天区">
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <div class="assistant-body">
+              <div id="chatMessages" class="ai-box ai-box-scroll">
+              </div>
+            </div>
+            <div class="assistant-footer">
+              <textarea class="chat-input" id="chatInput" placeholder="输入问题，按 Enter 分析，Shift+Enter 换行"></textarea>
+              <div class="footer-actions">
+                <div class="footer-actions-left">
+                  <button class="tiny-btn" type="button" id="clearChatBtn">清空聊天</button>
+                  <button class="tiny-btn" type="button" id="copyConfigBtn">复制配置</button>
+                </div>
+                <button class="send-btn" type="button" id="chatSendBtn">开始分析</button>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

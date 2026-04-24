@@ -63,6 +63,7 @@
     chatIntroText: byId('chatIntroText'),
     chatInput: byId('chatInput'),
     chatSendBtn: byId('chatSendBtn'),
+    assistantDataToggleBtn: byId('assistantDataToggleBtn'),
     clearChatBtn: byId('clearChatBtn'),
     conversationMenuBtn: byId('conversationMenuBtn'),
     conversationMenuLabel: byId('conversationMenuLabel'),
@@ -204,6 +205,7 @@
     chatSessionId: '',
     conversationMenuQuery: '',
     chatBusy: false,
+    dataAttachmentEnabled: false,
   };
 
   const utils = {

@@ -7,6 +7,7 @@
   const { refs, constants, state, utils } = App;
   const NEW_CONVERSATION_TITLE = '新建对话';
   let conversationMenuOpen = false;
+  let pendingDraftImages = [];
 
   const nowIso = () => new Date().toISOString();
 
@@ -517,6 +518,13 @@
     requestAnimationFrame(() => refs.chatInput?.focus());
   };
 
+  const normalizeImages = (images) => (Array.isArray(images) ? images.map((item) => ({
+    type: String(item?.type || 'image_url'),
+    image_url: {
+      url: String(item?.image_url?.url || item?.url || ''),
+    },
+  })).filter((item) => item.image_url.url) : []);
+
   const draftPrompt = (prompt, options = {}) => {
     const value = String(prompt || '').trim();
     if (!value || !refs.chatInput) return;
@@ -525,6 +533,7 @@
       createNewConversation();
     }
 
+    pendingDraftImages = normalizeImages(options.images).slice(0, 4);
     refs.chatInput.value = value;
     refs.chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     App.navigation?.setAssistantCollapsed?.(false);
@@ -533,6 +542,104 @@
       const length = refs.chatInput.value.length;
       refs.chatInput.setSelectionRange?.(length, length);
     });
+  };
+
+  const getActivePageId = () => {
+    try {
+      return localStorage.getItem(constants.NAV_PAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const getProjectContext = () => [
+    '【项目背景】',
+    '你正在广俊塑料科技后台管理系统中工作。',
+    '项目当前包含物性分析、图谱分析、主题设置和 OpenRouter AI 配置中心。',
+    '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
+  ].join('\n');
+
+  const getAttachedDataContext = (prompt) => {
+    if (!state.dataAttachmentEnabled) return '';
+
+    const pageId = getActivePageId();
+    if (pageId === 'property-analysis') {
+      return App.propertyAnalysis?.getFullAiContext?.(prompt) || '【已请求接入数据】物性分析数据尚未加载完成。';
+    }
+
+    if (pageId === 'spectrum-analysis') {
+      return App.spectrumAnalysis?.getAiContext?.() || '【已请求接入数据】图谱分析数据尚未加载完成。';
+    }
+
+    return '【已请求接入数据】当前页面没有可接入的数据表，请切换到物性分析或图谱分析页面。';
+  };
+
+  const getContextMessages = (config, prompt) => {
+    const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
+    const attachedDataContext = prompt ? getAttachedDataContext(prompt) : '';
+    const messages = [{ role: 'system', content: basePrompt }];
+
+    if (attachedDataContext) {
+      messages.push({
+        role: 'system',
+        content: [
+          getProjectContext(),
+          '如果后续消息中出现“后台接入数据”，必须优先依据该数据回答；不要忽略、不要改用外部常识。',
+        ].filter(Boolean).join('\n\n'),
+      });
+      messages.push({
+        role: 'user',
+        content: [
+          '【后台接入数据，用户不可见】',
+          attachedDataContext,
+          '请确认你已经读取这些后台数据。接下来回答用户问题时，必须基于这里的数据。',
+        ].join('\n\n'),
+      });
+      messages.push({
+        role: 'assistant',
+        content: '已读取后台接入的数据。我会优先基于这些数据回答用户问题。',
+      });
+    }
+
+    return messages;
+  };
+
+  const toApiMessage = (message, options = {}) => {
+    const images = normalizeImages(message.images);
+    const content = String(options.content ?? message.content ?? '');
+    if (message.role === 'user' && images.length) {
+      return {
+        role: 'user',
+        content: [
+          { type: 'text', text: content },
+          ...images.map((image) => ({
+            type: 'image_url',
+            image_url: image.image_url,
+          })),
+        ],
+      };
+    }
+
+    return {
+      role: message.role,
+      content,
+    };
+  };
+
+  const buildUserPromptWithData = (prompt, attachedDataContext) => {
+    if (!attachedDataContext) return prompt;
+    return [
+      '【用户问题】',
+      prompt,
+      '',
+      '【后台已接入的数据表，界面不显示】',
+      attachedDataContext,
+      '',
+      '【回答要求】',
+      '必须优先使用上面的后台数据表回答用户问题。',
+      '如果问题中的型号/批次在表格里没有完全匹配，请明确说未找到完全匹配，并列出表格中的相近型号/批次。',
+      '禁止把表格里的材料型号解释成服务器、网络设备或其他外部产品型号。',
+    ].join('\n');
   };
 
   const consumeChatCompletionStream = async (response, onDelta) => {
@@ -590,11 +697,11 @@
     return true;
   };
 
-  const pushChatMessage = (role, content) => {
+  const pushChatMessage = (role, content, images = []) => {
     const session = getActiveSession();
     if (!session) return;
 
-    session.messages.push({ role, content, images: [] });
+    session.messages.push({ role, content, images: normalizeImages(images).slice(0, 4) });
     session.updatedAt = nowIso();
     if (role === 'user') {
       session.title = deriveSessionTitle(session.messages);
@@ -605,10 +712,30 @@
     renderChat();
   };
 
+  const renderDataAttachmentState = () => {
+    if (!refs.assistantDataToggleBtn) return;
+    const enabled = Boolean(state.dataAttachmentEnabled);
+    const pageId = getActivePageId();
+    const label = enabled ? '已接入数据' : '接入数据';
+
+    refs.assistantDataToggleBtn.textContent = label;
+    refs.assistantDataToggleBtn.classList.toggle('is-active', enabled);
+    refs.assistantDataToggleBtn.setAttribute('aria-pressed', String(enabled));
+    refs.assistantDataToggleBtn.setAttribute(
+      'title',
+      enabled
+        ? '已开启：发送问题时会在后台携带当前分析页数据'
+        : pageId === 'property-analysis'
+          ? '开启后会在后台携带物性分析完整表格数据'
+          : '开启后会在后台携带当前分析页数据'
+    );
+  };
+
   const sendChatMessage = async () => {
     if (state.chatBusy) return;
     const config = App.config.getFormConfig();
     const prompt = (refs.chatInput?.value || '').trim();
+    const attachedImages = pendingDraftImages.slice(0, 4);
     if (!prompt) return;
     if (!config.apiKey) {
       pushChatMessage('assistant', '请先在 AI 配置里填入 OpenRouter API 密钥，然后再发送消息。');
@@ -623,13 +750,14 @@
     const selectedModelOption = Array.from(refs.modelSelect?.options || []).find((option) => option.value === model);
     const outputModalities = JSON.parse(selectedModelOption?.dataset?.outputModalities || '[]');
     const supportsImages = Array.isArray(outputModalities) && outputModalities.includes('image');
-    const wantsImages = supportsImages && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+    const wantsImages = supportsImages && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
 
     state.chatBusy = true;
     if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
     if (refs.chatInput) refs.chatInput.disabled = true;
 
-    pushChatMessage('user', prompt);
+    pushChatMessage('user', prompt, attachedImages);
+    pendingDraftImages = [];
     if (refs.chatInput) refs.chatInput.value = '';
     pushChatMessage('assistant', '正在思考...');
     const pendingIndex = state.chatHistory.length - 1;
@@ -638,10 +766,19 @@
     let streamedImages = [];
 
     try {
+      const attachedDataContext = getAttachedDataContext(prompt);
       const requestMessages = state.chatHistory
         .slice(0, pendingIndex)
         .filter((item) => item.role === 'user' || item.role === 'assistant')
-        .slice(-12);
+        .slice(-12)
+        .map((item, index, items) => {
+          const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
+          return toApiMessage(item, {
+            content: isCurrentUserMessage
+              ? buildUserPromptWithData(item.content, attachedDataContext)
+              : item.content,
+          });
+        });
 
       const response = await fetch(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -649,7 +786,7 @@
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+            ...getContextMessages(config, ''),
             ...requestMessages,
           ],
           temperature: config.temperature,
@@ -718,6 +855,11 @@
   };
 
   const bindChat = () => {
+    refs.assistantDataToggleBtn?.addEventListener('click', () => {
+      state.dataAttachmentEnabled = !state.dataAttachmentEnabled;
+      renderDataAttachmentState();
+    });
+
     refs.clearChatBtn?.addEventListener('click', () => {
       const session = getActiveSession();
       if (!session) return;
@@ -775,6 +917,10 @@
       if (isAssistantFullscreen()) renderFullscreenSidebar();
     });
 
+    window.addEventListener('storage', (event) => {
+      if (event.key === constants.NAV_PAGE_KEY) renderDataAttachmentState();
+    });
+
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') closeConversationMenu();
     });
@@ -788,6 +934,7 @@
     state.chatHistory = activeSession?.messages || [];
     bindChat();
     renderChat();
+    renderDataAttachmentState();
     updateHeaderState();
   };
 

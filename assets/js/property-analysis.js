@@ -445,6 +445,163 @@
       refs.selectAllBtn.classList.toggle('is-active', allSelected);
       refs.selectAllBtn.querySelector('span').textContent = allSelected ? '取消全选' : '全选';
     }
+
+  };
+
+  const getSelectedRowsForActiveSheet = () => {
+    const sheetName = getActiveSheet(state.data);
+    return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
+  };
+
+  const summarizeMetric = (rows, key) => {
+    const values = rows
+      .map((row) => getMetricValue(row, key))
+      .filter((value) => value != null);
+
+    if (!values.length) return '';
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return `${formatHeader(key)}：均值 ${avg.toFixed(2).replace(/\.?0+$/, '')}，范围 ${min} - ${max}`;
+  };
+
+  const summarizeRowsForAi = (rows, columns, limit = 12) => {
+    return rows.slice(0, limit).map((row, index) => {
+      const cells = columns
+        .filter((column) => column !== '__rowKey')
+        .map((column) => `${formatHeader(column)}=${valueToText(row[column]) || '-'}`)
+        .join('；');
+      return `${index + 1}. ${cells}`;
+    });
+  };
+
+  const getAiContext = () => {
+    if (!state.data) return '';
+
+    const sheetName = getActiveSheet(state.data);
+    const { filteredRows, columns } = getVisibleRows();
+    const selectedRows = getSelectedRowsForActiveSheet();
+    const targetRows = selectedRows.length ? selectedRows : filteredRows;
+    const targetLabel = selectedRows.length ? '已选数据' : '当前筛选结果';
+    const metrics = [
+      '熔指',
+      '拉伸强度[Mpa]',
+      '断裂伸长率[%]',
+      '弯曲强度[Mpa]',
+      '弯曲模量[Mpa]',
+      '冲击强度[Mpa]',
+      '灰份',
+    ].map((key) => summarizeMetric(targetRows, key)).filter(Boolean);
+
+    const lines = [
+      '【当前物性分析上下文】',
+      `工作表：${sheetName || '未选择'}`,
+      `查询词：${state.query.trim() || '无'}`,
+      `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}`,
+      `排序：${state.sort}`,
+      `数据范围：共 ${filteredRows.length} 条筛选结果，当前工作表已选 ${selectedRows.length} 条；当前上下文使用${targetLabel} ${targetRows.length} 条。`,
+    ];
+
+    if (metrics.length) {
+      lines.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
+    }
+
+    const rowLines = summarizeRowsForAi(targetRows, columns, 12);
+    if (rowLines.length) {
+      lines.push('代表性数据：', ...rowLines);
+      if (targetRows.length > rowLines.length) lines.push(`还有 ${targetRows.length - rowLines.length} 条未展开。`);
+    }
+
+    return lines.join('\n');
+  };
+
+  const extractQuestionTerms = (question) => {
+    const text = String(question || '');
+    const terms = text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || [];
+    return [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 2))];
+  };
+
+  const rowMatchesTerms = (row, terms) => {
+    if (!terms.length) return false;
+    const values = Object.values(row)
+      .flatMap((value) => Array.isArray(value) ? value : [value])
+      .map((value) => String(value ?? '').trim().toLowerCase())
+      .filter(Boolean);
+
+    return terms.some((term) => {
+      const normalizedTerm = term.toLowerCase();
+      return values.some((value) => value.includes(normalizedTerm) || normalizedTerm.includes(value));
+    });
+  };
+
+  const formatRowsForAi = (rows, columns, limit = 30) => {
+    return rows.slice(0, limit).map((row, index) => {
+      const cells = columns
+        .map((column) => `${formatHeader(column)}=${valueToText(row[column]) || '-'}`)
+        .join('；');
+      return `${index + 1}. ${cells}`;
+    });
+  };
+
+  const formatSheetTableForAi = (sheetName, rows, columns) => {
+    const headers = columns.map(formatHeader);
+    const lines = rows.map((row, index) => {
+      const values = columns.map((column) => {
+        const text = Array.isArray(row[column]) ? row[column].join('/') : valueToText(row[column]);
+        return String(text || '-').replace(/\s+/g, ' ');
+      });
+      return `${index + 1}\t${values.join('\t')}`;
+    });
+
+    return [
+      `### 工作表：${sheetName}（共 ${rows.length} 行）`,
+      `序号\t${headers.join('\t')}`,
+      ...lines,
+    ].join('\n');
+  };
+
+  const getFullAiContext = (question = '') => {
+    if (!state.data) return '';
+
+    const sheetNames = getSheetNames(state.data);
+    const questionTerms = extractQuestionTerms(question);
+    const matchedRows = [];
+    const fullTableSections = sheetNames.map((sheetName) => {
+      const rows = getRowsForSheet(sheetName);
+      const columns = getColumns(rows);
+      rows.forEach((row) => {
+        if (!rowMatchesTerms(row, questionTerms)) return;
+        matchedRows.push({ sheetName, row, columns });
+      });
+
+      return formatSheetTableForAi(sheetName, rows, columns);
+    });
+
+    const matchedLines = matchedRows.length
+      ? matchedRows.slice(0, 50).map((item, index) => {
+          const cells = item.columns
+            .map((column) => `${formatHeader(column)}=${valueToText(item.row[column]) || '-'}`)
+            .join('；');
+          return `${index + 1}. 工作表=${item.sheetName}；${cells}`;
+        })
+      : [];
+
+    const activeSheet = getActiveSheet(state.data);
+    const activeRows = activeSheet ? getRowsForSheet(activeSheet) : [];
+    const activeColumns = getColumns(activeRows);
+
+    return [
+      '【已后台接入：物性分析完整表格数据】',
+      '以下数据来自物性分析页面加载的整张表，包含全部工作表/分类和全部行。请优先基于这些数据回答用户问题，不要要求用户重新粘贴表格。',
+      '重要规则：如果用户问题里出现型号或批次，必须先在下方表格字段中匹配。没有完全匹配时，要明确说明“未找到完全匹配”，再列出相近匹配；不要按外部常识解释为服务器、网络设备或其他无关产品。',
+      `当前页面状态：工作表=${getActiveSheet(state.data) || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
+      questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
+      matchedLines.length ? `问题相关匹配行（优先参考）：\n${matchedLines.join('\n')}` : '问题相关匹配行：未匹配到完全或相近行，请基于完整表格继续查找并说明。',
+      activeRows.length ? `当前工作表前 ${Math.min(30, activeRows.length)} 行预览：\n${formatRowsForAi(activeRows, activeColumns, 30).join('\n')}` : '',
+      '完整表格数据：',
+      fullTableSections.join('\n\n'),
+    ].filter(Boolean).join('\n');
   };
 
   const buildTable = (rows, columns) => {
@@ -833,5 +990,7 @@
     init,
     loadData,
     render,
+    getAiContext,
+    getFullAiContext,
   };
 })();

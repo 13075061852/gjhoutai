@@ -33,7 +33,6 @@
     refs.uploadBtn = document.getElementById('spectrumUploadBtn');
     refs.uploadInput = document.getElementById('spectrumUploadInput');
     refs.printBtn = document.getElementById('spectrumPrintBtn');
-    refs.sendAiBtn = document.getElementById('spectrumSendAiBtn');
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
     refs.tagFilters = document.getElementById('spectrumTagFilters');
     refs.clearSelectedBtn = document.getElementById('spectrumClearSelectedBtn');
@@ -484,7 +483,6 @@
   const updateActions = () => {
     const selectedCount = state.selectedIds.size;
     if (refs.printBtn) refs.printBtn.disabled = selectedCount < 1;
-    if (refs.sendAiBtn) refs.sendAiBtn.disabled = selectedCount < 1 && !state.activeId;
   };
 
   const updateDetailCollapsed = () => {
@@ -594,17 +592,62 @@
     const lines = targetItems.map((item, index) => [
       `${index + 1}. ${item.title}`,
       `编号：${item.code}`,
+      `类型：${item.spectrumType || '未识别'}`,
       `分类：${item.category}`,
       `标签：${item.tags.join('、')}`,
       `备注：${item.note}`,
     ].join('\n'));
 
-    return `${intro}\n\n${lines.join('\n\n')}\n\n图片已在图谱分析页面选中，请结合图谱图片和上述业务信息给出结论。`;
+    return `${intro}\n\n${lines.join('\n\n')}\n\n图谱图片会随消息一并发送；如果模型不支持视觉输入，请先基于文件名、类型、分类、标签和备注给出可执行分析。`;
+  };
+
+  const getAiItems = () => {
+    const selected = getSelectedItems();
+    return selected.length ? selected : [getActiveItem()].filter(Boolean);
+  };
+
+  const getAiImages = (items) => items
+    .filter((item) => String(item?.image || '').trim())
+    .slice(0, 4)
+    .map((item) => ({
+      type: 'image_url',
+      image_url: {
+        url: item.image,
+      },
+    }));
+
+  const getAiContext = () => {
+    const items = getAiItems();
+    const filtered = getFilteredItems();
+    const lines = [
+      '【当前图谱分析上下文】',
+      `图谱总数：${state.items.length}`,
+      `当前筛选后：${filtered.length} 张`,
+      `已选图谱：${state.selectedIds.size} 张`,
+      `类型模式：${state.mode}`,
+      `分类筛选：${state.category}`,
+      `标签筛选：${state.tag}`,
+      `关键词：${state.query.trim() || '无'}`,
+    ];
+
+    if (items.length) {
+      lines.push('待分析图谱：');
+      items.slice(0, 8).forEach((item, index) => {
+        lines.push(`${index + 1}. ${item.title}；类型=${item.spectrumType || '-'}；分类=${item.category || '-'}；标签=${item.tags.join('、') || '-'}；备注=${item.note || '-'}`);
+      });
+      if (items.length > 8) lines.push(`还有 ${items.length - 8} 张图谱未展开。`);
+    }
+
+    return lines.join('\n');
   };
 
   const sendToAi = (items) => {
-    const prompt = buildAiPrompt(items);
-    App.chat?.draftPrompt?.(prompt);
+    const targetItems = items.length ? items : getAiItems();
+    const prompt = buildAiPrompt(targetItems);
+    App.chat?.draftPrompt?.(prompt, {
+      newConversation: true,
+      images: getAiImages(targetItems),
+    });
   };
 
   const closeImagePreview = () => {
@@ -969,11 +1012,6 @@
 
     refs.printBtn?.addEventListener('click', printSelectedList);
 
-    refs.sendAiBtn?.addEventListener('click', () => {
-      const selected = getSelectedItems();
-      sendToAi(selected.length ? selected : [getActiveItem()].filter(Boolean));
-    });
-
     refs.uploadBtn?.addEventListener('click', () => refs.uploadInput?.click());
     refs.uploadInput?.addEventListener('change', () => {
       uploadSpectrumFiles(refs.uploadInput.files);
@@ -1011,5 +1049,9 @@
     render();
   };
 
-  App.spectrumAnalysis = { init };
+  App.spectrumAnalysis = {
+    init,
+    getAiContext,
+    getAiImages: () => getAiImages(getAiItems()),
+  };
 })();

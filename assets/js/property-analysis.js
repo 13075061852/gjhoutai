@@ -28,10 +28,17 @@
     return String(value);
   };
 
+  const isEmptyLikeText = (value) => {
+    const text = valueToText(value).trim();
+    return !text || /^[-_]+$/.test(text);
+  };
+
+  const isPlaceholderColumn = (key) => /^_+empty(?:_\d+)?$/i.test(String(key || '').trim());
+
   const summarizeValue = (value) => {
     const text = valueToText(value);
     if (!text) return '—';
-    return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+    return text.length > 120 ? `${text.slice(0, 117)}...` : text;
   };
 
   const getSheetNames = (data) => {
@@ -50,10 +57,11 @@
     const seen = new Set();
     rows.forEach((row) => {
       Object.keys(row).forEach((key) => {
-        if (!seen.has(key)) {
-          seen.add(key);
-          columns.push(key);
-        }
+        if (isPlaceholderColumn(key) || seen.has(key)) return;
+        const hasMeaningfulValue = rows.some((candidateRow) => !isEmptyLikeText(candidateRow?.[key]));
+        if (!hasMeaningfulValue) return;
+        seen.add(key);
+        columns.push(key);
       });
     });
     return columns;
@@ -79,7 +87,7 @@
   };
 
   const buildTable = (rows, columns, emptyText = '暂无数据可展示') => {
-    if (!rows.length) {
+    if (!rows.length || !columns.length) {
       return `<div class="analysis-empty">${escapeHtml(emptyText)}</div>`;
     }
 

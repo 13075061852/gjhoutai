@@ -7,6 +7,10 @@
   const { refs, constants } = App;
   let assistantFullscreenExitTimer = null;
 
+  const syncSidebarCollapsedAttr = (collapsed) => {
+    document.documentElement.dataset.sidebarCollapsed = collapsed ? '1' : '0';
+  };
+
   const updateSidebarToggle = (collapsed) => {
     if (!refs.sidebarToggle) return;
     refs.sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
@@ -167,6 +171,7 @@
 
     refs.shell?.classList.toggle('sidebar-collapsed', sidebarCollapsed);
     refs.shell?.classList.toggle('assistant-collapsed', assistantCollapsed);
+    syncSidebarCollapsedAttr(sidebarCollapsed);
     syncAssistantCollapsedAttr(assistantCollapsed);
     syncAssistantFullscreenAttr(false);
     updateSidebarToggle(sidebarCollapsed);
@@ -179,6 +184,7 @@
       refs.sidebarToggle.addEventListener('click', () => {
         const collapsed = refs.shell?.classList.toggle('sidebar-collapsed');
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, collapsed ? '1' : '0');
+        syncSidebarCollapsedAttr(Boolean(collapsed));
         updateSidebarToggle(Boolean(collapsed));
       });
     }
@@ -190,6 +196,7 @@
         event.stopPropagation();
         refs.shell.classList.remove('sidebar-collapsed');
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');
+        syncSidebarCollapsedAttr(false);
         updateSidebarToggle(false);
         requestAnimationFrame(() => refs.sidebarSearchInput?.focus());
       });

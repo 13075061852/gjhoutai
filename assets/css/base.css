@@ -70,6 +70,7 @@
       height:1px;background:var(--border);
       pointer-events:none;z-index:41;
     }
+    html[data-sidebar-collapsed="1"] .shell,
     .shell.sidebar-collapsed{--sidebar:72px}
     html[data-assistant-collapsed="1"] .shell{--assistant:0px}
     .sidebar{

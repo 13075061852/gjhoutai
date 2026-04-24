@@ -324,6 +324,7 @@
       width:100%;
       max-width:none;
       margin:0;
+      height:calc(100dvh - var(--topbar) - 46px);
       min-height:calc(100vh - var(--topbar) - 46px);
     }
     .analysis-hero{
@@ -414,6 +415,9 @@
       flex:1 1 auto;
       min-height:0;
     }
+    .analysis-page > .bottom-space{
+      display:none;
+    }
     .analysis-panel .panel-head{
       padding:18px 20px 14px;
       margin:0;
@@ -441,8 +445,10 @@
       align-items:center;
       gap:8px;
       height:38px;
-      flex:1 1 320px;
-      min-width:0;
+      flex:0 0 auto;
+      width:clamp(240px, 30vw, 360px);
+      min-width:240px;
+      flex-shrink:0;
       padding:0 12px;
       border:1px solid var(--border);
       border-radius:14px;
@@ -454,7 +460,7 @@
       line-height:1;
       flex:0 0 auto;
     }
-    .analysis-search input{
+    #analysisSearchInput{
       width:100%;
       min-width:0;
       border:0;
@@ -499,7 +505,7 @@
       border-color:var(--accent);
       background:var(--accent);
       color:#fff;
-      box-shadow:0 10px 18px rgba(59,130,246,.18);
+      box-shadow:none;
     }
     .analysis-table-wrap{
       padding:18px 20px 20px;
@@ -611,6 +617,7 @@
     .analysis-table td{
       padding:12px 14px;
       text-align:center;
+      border-right:1px solid #edf2f7;
       border-bottom:1px solid #edf2f7;
       vertical-align:top;
       font-size:13px;
@@ -630,6 +637,10 @@
       max-width:260px;
       overflow:hidden;
       text-overflow:ellipsis;
+    }
+    .analysis-table th:last-child,
+    .analysis-table td:last-child{
+      border-right:none;
     }
     .analysis-table tr:last-child td{border-bottom:none}
     .analysis-table td span{
@@ -1031,7 +1042,7 @@
       outline:none;
     }
     .model-dropdown-option.is-active{
-      background:#eef5ff;
+      box-shadow:none;
     }
     .model-dropdown-option-body{
       min-width:0;
@@ -1098,7 +1109,7 @@
       background:#121c2d;
     }
     body[data-theme="dark"] .model-dropdown-option.is-active{
-      background:#152338;
+      box-shadow:none;
     }
     body[data-theme="dark"] .model-dropdown-option-label{
       color:#e5edf7;

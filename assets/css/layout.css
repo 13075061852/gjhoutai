@@ -59,6 +59,7 @@
     .content::-webkit-scrollbar{display:none}
     .page-section{display:none}
     .page-section.active{display:block}
+    .page-section.active.analysis-page{display:flex}
     .dashboard{
       width:100%;
       min-width:0;

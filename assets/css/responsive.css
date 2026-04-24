@@ -1,8 +1,8 @@
-﻿    .shell.sidebar-collapsed .sidebar-top{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-top{
       justify-content:flex-start;
       padding:10px 14px;
     }
-    .shell.sidebar-collapsed .sidebar-search{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-search{
       width:100%;
       min-width:0;
       height:44px;
@@ -11,27 +11,27 @@
       justify-content:flex-start;
       border-radius:14px;
     }
-    .shell.sidebar-collapsed .sidebar-search .ti{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-search .ti{
       margin-left:14px;
     }
-    .shell.sidebar-collapsed .sidebar-search input,
-    .shell.sidebar-collapsed .sidebar-search .search-kbd{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-search input,
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-search .search-kbd{
       display:none;
     }
-    .shell.sidebar-collapsed .brand{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .brand{
       grid-template-columns:44px 0;
     }
-    .shell.sidebar-collapsed .brand-title,
-    .shell.sidebar-collapsed .section-label,
-    .shell.sidebar-collapsed .sidebar-toggle-label,
-    .shell.sidebar-collapsed .sidebar-account,
-    .shell.sidebar-collapsed .nav-children{display:none}
-    .shell.sidebar-collapsed .brand-title{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .brand-title,
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .section-label,
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle-label,
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-account,
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .nav-children{display:none}
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .brand-title{
       max-width:0;
       opacity:0;
       transform:translateX(8px);
     }
-    .shell.sidebar-collapsed .sidebar-section{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-section{
       margin:0;
       padding:8px 0;
       display:flex;
@@ -39,7 +39,7 @@
       align-items:stretch;
       gap:4px;
     }
-    .shell.sidebar-collapsed .nav-item{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .nav-item{
       width:100%;
       min-width:0;
       max-width:none;
@@ -50,14 +50,14 @@
       font-size:0;
       border-radius:14px;
     }
-    .shell.sidebar-collapsed .nav-main{justify-content:flex-start;gap:0}
-    .shell.sidebar-collapsed .nav-text{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .nav-main{justify-content:flex-start;gap:0}
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .nav-text{
       max-width:0;
       opacity:0;
       transform:translateX(8px);
     }
-    .shell.sidebar-collapsed .nav-arrow{display:none}
-    .shell.sidebar-collapsed .sidebar-toggle{
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .nav-arrow{display:none}
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle{
       width:100%;
       min-width:0;
       max-width:none;
@@ -67,7 +67,7 @@
       padding:0;
       margin:0;
     }
-    .shell.sidebar-collapsed .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
+    :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
     @media (max-width: 1200px){
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}
@@ -86,12 +86,18 @@
       .analysis-hero{padding:18px 20px;flex-direction:column}
       .analysis-summary-grid{grid-template-columns:1fr}
       .analysis-toolbar{gap:8px}
-      .analysis-search{flex:1 1 auto;min-width:0}
+      .analysis-search{
+        flex:0 0 auto;
+        width:clamp(180px, 40vw, 280px);
+        min-width:180px;
+        flex-shrink:0;
+      }
       .analysis-panel .panel-head{padding:16px}
       .analysis-table-wrap{padding:16px}
       .analysis-pagination{padding:0 16px 16px}
       .analysis-table th,
       .analysis-table td{padding:10px 12px}
+      .analysis-page{height:auto}
       .analysis-page{min-height:auto}
       .analysis-panel{min-height:0}
     }

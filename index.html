@@ -7,6 +7,7 @@
     (function () {
       try {
         var root = document.documentElement;
+        root.dataset.sidebarCollapsed = localStorage.getItem('sidebar-collapsed') === '1' ? '1' : '0';
         root.dataset.assistantCollapsed = localStorage.getItem('assistant-collapsed') === '1' ? '1' : '0';
       } catch (error) {
         // Ignore storage access failures and fall back to the default expanded state.

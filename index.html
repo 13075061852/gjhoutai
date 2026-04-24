@@ -9,6 +9,14 @@
         var root = document.documentElement;
         root.dataset.sidebarCollapsed = localStorage.getItem('sidebar-collapsed') === '1' ? '1' : '0';
         root.dataset.assistantCollapsed = localStorage.getItem('assistant-collapsed') === '1' ? '1' : '0';
+        root.dataset.colorMode = localStorage.getItem('gjh-theme-mode-v1') || 'light';
+        var savedThemeVars = JSON.parse(localStorage.getItem('gjh-theme-vars-v1') || 'null');
+        if (savedThemeVars && typeof savedThemeVars === 'object') {
+          Object.keys(savedThemeVars).forEach(function (key) {
+            root.style.setProperty(key, savedThemeVars[key]);
+          });
+        }
+        root.dataset.colorTheme = localStorage.getItem('gjh-theme-id-v1') || 'white';
       } catch (error) {
         // Ignore storage access failures and fall back to the default expanded state.
       }
@@ -138,6 +146,12 @@
               <span class="nav-main">
                 <span class="nav-icon"><i class="ti ti-history" aria-hidden="true"></i></span>
                 <span class="nav-text">审计日志</span>
+              </span>
+            </button>
+            <button class="nav-item" type="button" data-page="theme-settings">
+              <span class="nav-main">
+                <span class="nav-icon"><i class="ti ti-palette" aria-hidden="true"></i></span>
+                <span class="nav-text">主题色设置</span>
               </span>
             </button>
           </div>
@@ -348,7 +362,7 @@
               </div>
             </article>
 
-            <article class="panel analysis-panel">
+            <article class="panel analysis-panel" id="analysisPanel">
               <div class="analysis-panel-head">
                 <div class="analysis-panel-title-row">
                   <div class="analysis-panel-title">物性数据列表</div>
@@ -480,6 +494,24 @@
             <div class="bottom-space"></div>
           </section>
 
+          <section class="dashboard theme-settings-page page-section" data-page-section="theme-settings">
+            <div class="theme-settings-shell">
+              <section class="theme-settings-head">
+                <div>
+                  <div class="theme-settings-kicker">系统管理</div>
+                  <h1>主题色设置</h1>
+                  <p>切换系统主色、背景层级和控件强调色，适配不同办公环境下的阅读习惯。</p>
+                </div>
+                <button class="theme-reset-btn" id="themeResetBtn" type="button">
+                  <i class="ti ti-refresh" aria-hidden="true"></i>
+                  <span>恢复默认</span>
+                </button>
+              </section>
+
+              <section class="theme-grid" id="themePresetGrid" aria-label="主题色列表"></section>
+            </div>
+          </section>
+
           <section class="dashboard page-section" data-page-section="placeholder">
             <div class="placeholder-page">
               <div class="placeholder-card">
@@ -569,9 +601,11 @@
     </div>
   </div>
   <script src="./assets/js/app-state.js"></script>
+  <script src="./assets/js/custom-select.js"></script>
   <script src="./assets/js/navigation.js"></script>
   <script src="./assets/js/property-analysis.js"></script>
   <script src="./assets/js/spectrum-analysis.js"></script>
+  <script src="./assets/js/theme-settings.js"></script>
   <script src="./assets/js/config.js"></script>
   <script src="./assets/js/chat.js"></script>
   <script src="./assets/js/app.js"></script>

@@ -18,6 +18,7 @@
     aiPageSection: qs('[data-page-section="ai-config"]'),
     propertyAnalysisPageSection: qs('[data-page-section="property-analysis"]'),
     spectrumAnalysisPageSection: qs('[data-page-section="spectrum-analysis"]'),
+    themeSettingsPageSection: qs('[data-page-section="theme-settings"]'),
     placeholderPageSection: qs('[data-page-section="placeholder"]'),
     placeholderEyebrow: byId('placeholderEyebrow'),
     placeholderTitle: byId('placeholderTitle'),
@@ -183,6 +184,11 @@
         title: '审计日志',
         eyebrow: '功能开发中',
         desc: '审计日志页面暂未接入，后续会记录关键操作、配置变更和访问历史。',
+      },
+      'theme-settings': {
+        title: '主题色设置',
+        eyebrow: '当前可用',
+        desc: '这里可以切换系统主色、背景层级和控件强调色，并把选择保存在本地。',
       },
       'ai-config': {
         title: 'AI配置中心',

@@ -8,6 +8,7 @@
 
   const boot = () => {
     App.navigation?.init();
+    App.themeSettings?.init();
     App.propertyAnalysis?.init();
     App.spectrumAnalysis?.init();
     App.config?.init();

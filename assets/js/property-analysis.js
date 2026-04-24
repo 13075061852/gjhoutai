@@ -51,6 +51,7 @@
     searchMode: document.getElementById('analysisSearchMode'),
     searchSuggest: document.getElementById('analysisSearchSuggest'),
     sheetTabs: document.getElementById('analysisSheetTabs'),
+    panel: document.getElementById('analysisPanel'),
     tableWrap: document.getElementById('analysisTableWrap'),
     prevPageBtn: document.getElementById('analysisPrevPageBtn'),
     nextPageBtn: document.getElementById('analysisNextPageBtn'),
@@ -168,15 +169,20 @@
     return parseNumericValue(value);
   };
 
+  const hasRowsForSheet = (data, sheetName) => normalizeRows(data?.sheets?.raw?.[sheetName]).length > 0;
+
   const getSheetNames = (data) => {
     const sheetNames = Array.isArray(data?.project?.sheetNames) ? data.project.sheetNames : [];
     const fallbackNames = Object.keys(data?.sheets?.raw || {});
-    return sheetNames.length ? sheetNames : fallbackNames;
+    const names = sheetNames.length ? sheetNames : fallbackNames;
+    return names.filter((name) => hasRowsForSheet(data, name));
   };
 
   const getActiveSheet = (data) => {
     const names = getSheetNames(data);
-    return state.activeSheet || data?.project?.activeSheetName || names[0] || '';
+    if (state.activeSheet && names.includes(state.activeSheet)) return state.activeSheet;
+    if (names.includes(data?.project?.activeSheetName)) return data.project.activeSheetName;
+    return names[0] || '';
   };
 
   const getRowsForSheet = (sheetName) => {
@@ -452,24 +458,12 @@
           <table class="analysis-table">
             <thead>
               <tr>
-                <th class="analysis-check-col">
-                  <label class="analysis-check">
-                    <input id="analysisTableSelectAll" type="checkbox" ${isAllFilteredSelected(getVisibleRows().filteredRows) ? 'checked' : ''} />
-                    <span></span>
-                  </label>
-                </th>
                 ${columns.map((column) => `<th>${escapeHtml(formatHeader(column))}</th>`).join('')}
               </tr>
             </thead>
             <tbody>
               ${rows.map((row) => `
-                <tr class="${state.selectedKeys.has(row.__rowKey) ? 'is-selected' : ''}">
-                  <td class="analysis-check-col">
-                    <label class="analysis-check">
-                      <input class="analysis-row-check" type="checkbox" data-row-key="${escapeHtml(row.__rowKey)}" ${state.selectedKeys.has(row.__rowKey) ? 'checked' : ''} />
-                      <span></span>
-                    </label>
-                  </td>
+                <tr class="${state.selectedKeys.has(row.__rowKey) ? 'is-selected' : ''}" data-row-key="${escapeHtml(row.__rowKey)}">
                   ${columns.map((column) => {
                     const cell = getCellDisplay(row[column], column);
                     return `
@@ -548,7 +542,9 @@
   };
 
   const render = () => {
-    const { rows, filteredRows, columns, currentPage, totalPages } = getVisibleRows();
+    const { rows, allRows, filteredRows, columns, currentPage, totalPages } = getVisibleRows();
+    const hasTableRows = allRows.length > 0;
+    const hasFilteredRows = filteredRows.length > 0;
 
     renderTabs();
 
@@ -556,6 +552,10 @@
       refs.searchMode.querySelectorAll('[data-search-mode]').forEach((button) => {
         button.classList.toggle('is-active', button.getAttribute('data-search-mode') === state.searchMode);
       });
+    }
+
+    if (refs.panel) {
+      refs.panel.hidden = !hasTableRows;
     }
 
     if (refs.tableWrap) {
@@ -571,7 +571,7 @@
     const totalText = `共 ${filteredRows.length} 条`;
     if (refs.panelCount) refs.panelCount.textContent = totalText;
     if (refs.footerTotal) refs.footerTotal.textContent = totalText;
-    if (refs.pagination) refs.pagination.hidden = filteredRows.length === 0;
+    if (refs.pagination) refs.pagination.hidden = !hasFilteredRows;
 
     updateToolbarState(filteredRows);
     renderPagination(currentPage, totalPages);
@@ -643,6 +643,7 @@
       state.data = null;
 
       if (refs.sheetTabs) refs.sheetTabs.innerHTML = '';
+      if (refs.panel) refs.panel.hidden = true;
       if (refs.tableWrap) {
         refs.tableWrap.innerHTML = '<div class="analysis-empty">物性数据加载失败，请检查数据文件或编码格式。</div>';
       }
@@ -771,38 +772,10 @@
       render();
     });
 
-    refs.tableWrap?.addEventListener('change', (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement)) return;
-
-      if (target.id === 'analysisTableSelectAll') {
-        toggleSelectAllFiltered();
-        return;
-      }
-
-      if (!target.classList.contains('analysis-row-check')) return;
-
-      const rowKey = target.getAttribute('data-row-key');
-      if (!rowKey) return;
-
-      if (target.checked) {
-        state.selectedKeys.add(rowKey);
-      } else {
-        state.selectedKeys.delete(rowKey);
-        if (state.compareOnly && state.selectedKeys.size < 2) {
-          state.compareOnly = false;
-        }
-      }
-
-      render();
-    });
-
     refs.tableWrap?.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (
-        target.closest('input.analysis-row-check') ||
-        target.closest('#analysisTableSelectAll') ||
         target.closest('button') ||
         target.closest('a') ||
         target.closest('select') ||
@@ -814,11 +787,19 @@
       const row = target.closest('tbody tr');
       if (!row) return;
 
-      const checkbox = row.querySelector('input.analysis-row-check');
-      if (!(checkbox instanceof HTMLInputElement)) return;
+      const rowKey = row.getAttribute('data-row-key');
+      if (!rowKey) return;
 
-      checkbox.checked = !checkbox.checked;
-      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      if (state.selectedKeys.has(rowKey)) {
+        state.selectedKeys.delete(rowKey);
+        if (state.compareOnly && state.selectedKeys.size < 2) {
+          state.compareOnly = false;
+        }
+      } else {
+        state.selectedKeys.add(rowKey);
+      }
+
+      render();
     });
 
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);

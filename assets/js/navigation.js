@@ -8,6 +8,11 @@
   let assistantFullscreenExitTimer = null;
   let collapsedNavFlyout = null;
   let collapsedNavFlyoutTimer = null;
+  let draggedVisitedPageId = '';
+  let draggedVisitedEntry = null;
+  let draggedVisitedOriginalNext = null;
+  let visitedDragPlaceholder = null;
+  let suppressVisitedClick = false;
   const MAX_RECENT_PAGES = 8;
 
   const clearCollapsedNavFlyoutTimer = () => {
@@ -229,6 +234,172 @@
     return recentPages;
   };
 
+  const getRenderedRecentPages = () => {
+    if (!refs.topVisitedPages) return [];
+    return [...refs.topVisitedPages.querySelectorAll('.top-visited-entry[data-visited-entry]')]
+      .map((entry) => entry.getAttribute('data-visited-entry') || '')
+      .filter(Boolean);
+  };
+
+  const saveRenderedRecentPages = () => {
+    const pages = getRenderedRecentPages();
+    if (pages.length) {
+      saveRecentPages(pages);
+    }
+    return pages;
+  };
+
+  const getTopVisitedEntries = () => {
+    if (!refs.topVisitedPages) return [];
+    return [...refs.topVisitedPages.querySelectorAll('.top-visited-entry[data-visited-entry], .top-visited-placeholder')];
+  };
+
+  const getTopVisitedDropEntries = () => {
+    if (!refs.topVisitedPages) return [];
+    return [...refs.topVisitedPages.querySelectorAll('.top-visited-entry[data-visited-entry]:not(.is-dragging)')];
+  };
+
+  const animateTopVisitedReorder = (moveEntry) => {
+    if (!refs.topVisitedPages) return;
+
+    const entries = getTopVisitedEntries();
+    const firstRects = new Map(entries.map((entry) => [entry, entry.getBoundingClientRect()]));
+    moveEntry();
+
+    const nextEntries = getTopVisitedEntries();
+    nextEntries.forEach((entry) => {
+      if (entry.classList.contains('is-dragging')) return;
+      const firstRect = firstRects.get(entry);
+      if (!firstRect) return;
+
+      const nextRect = entry.getBoundingClientRect();
+      const offsetX = firstRect.left - nextRect.left;
+      const offsetY = firstRect.top - nextRect.top;
+      if (!offsetX && !offsetY) return;
+
+      entry.style.transition = 'none';
+      entry.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    });
+
+    void refs.topVisitedPages.offsetHeight;
+
+    nextEntries.forEach((entry) => {
+      if (entry.classList.contains('is-dragging')) return;
+      if (!firstRects.has(entry)) return;
+
+      entry.style.transition = 'transform .24s cubic-bezier(.22,.9,.24,1), background-color .18s ease, border-color .18s ease';
+      entry.style.transform = '';
+
+      const clearInlineMotion = (transitionEvent) => {
+        if (transitionEvent && transitionEvent.propertyName !== 'transform') return;
+        entry.style.transition = '';
+        entry.removeEventListener('transitionend', clearInlineMotion);
+      };
+      entry.addEventListener('transitionend', clearInlineMotion);
+      window.setTimeout(clearInlineMotion, 280);
+    });
+  };
+
+  const createVisitedDragGhost = (entry, rect) => {
+    const ghost = entry.cloneNode(true);
+    ghost.classList.remove('is-dragging');
+    ghost.classList.add('top-visited-drag-ghost');
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    ghost.style.position = 'fixed';
+    ghost.style.top = '-1000px';
+    ghost.style.left = '-1000px';
+    ghost.style.pointerEvents = 'none';
+    document.body.appendChild(ghost);
+    window.setTimeout(() => ghost.remove(), 0);
+    return ghost;
+  };
+
+  const createVisitedPlaceholder = (rect) => {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'top-visited-placeholder';
+    placeholder.style.width = '0px';
+    placeholder.style.height = `${rect.height}px`;
+    placeholder.style.opacity = '0';
+    placeholder.setAttribute('aria-hidden', 'true');
+    return placeholder;
+  };
+
+  const openVisitedPlaceholder = () => {
+    if (!visitedDragPlaceholder) return;
+    visitedDragPlaceholder.classList.add('is-open');
+    const width = visitedDragPlaceholder.dataset.width || '0';
+    visitedDragPlaceholder.style.width = `${width}px`;
+    visitedDragPlaceholder.style.opacity = '1';
+  };
+
+  const cleanupVisitedDrag = () => {
+    draggedVisitedEntry?.classList.remove('is-dragging');
+    draggedVisitedEntry?.removeAttribute('aria-hidden');
+    draggedVisitedEntry = null;
+    draggedVisitedOriginalNext = null;
+    visitedDragPlaceholder?.remove();
+    visitedDragPlaceholder = null;
+    refs.topVisitedPages?.classList.remove('is-sorting');
+  };
+
+  const restoreDraggedVisitedEntry = () => {
+    if (!refs.topVisitedPages || !draggedVisitedEntry) return;
+
+    if (visitedDragPlaceholder?.parentNode === refs.topVisitedPages) {
+      refs.topVisitedPages.insertBefore(draggedVisitedEntry, visitedDragPlaceholder);
+      return;
+    }
+
+    if (draggedVisitedOriginalNext?.parentNode === refs.topVisitedPages) {
+      refs.topVisitedPages.insertBefore(draggedVisitedEntry, draggedVisitedOriginalNext);
+      return;
+    }
+
+    refs.topVisitedPages.appendChild(draggedVisitedEntry);
+  };
+
+  const returnDraggedVisitedEntry = () => {
+    if (!refs.topVisitedPages || !draggedVisitedEntry) return;
+
+    if (draggedVisitedOriginalNext?.parentNode === refs.topVisitedPages) {
+      refs.topVisitedPages.insertBefore(draggedVisitedEntry, draggedVisitedOriginalNext);
+      return;
+    }
+
+    refs.topVisitedPages.appendChild(draggedVisitedEntry);
+  };
+
+  const finishVisitedDrag = (commitOrder) => {
+    if (!draggedVisitedPageId) return;
+
+    if (commitOrder) {
+      restoreDraggedVisitedEntry();
+    } else {
+      returnDraggedVisitedEntry();
+    }
+
+    saveRenderedRecentPages();
+    const activePageId = localStorage.getItem(constants.NAV_PAGE_KEY) || '';
+    draggedVisitedPageId = '';
+    cleanupVisitedDrag();
+    renderRecentPages(activePageId);
+    suppressVisitedClick = true;
+    window.setTimeout(() => {
+      suppressVisitedClick = false;
+    }, 0);
+  };
+
+  const placeVisitedPlaceholder = (referenceEntry) => {
+    if (!refs.topVisitedPages || !visitedDragPlaceholder) return;
+    if (referenceEntry === visitedDragPlaceholder || visitedDragPlaceholder.nextSibling === referenceEntry) return;
+
+    animateTopVisitedReorder(() => {
+      refs.topVisitedPages.insertBefore(visitedDragPlaceholder, referenceEntry);
+      requestAnimationFrame(openVisitedPlaceholder);
+    });
+  };
+
   const trackRecentPage = (pageId) => {
     const recentPages = getRecentPages().filter((item) => item !== pageId);
     recentPages.unshift(pageId);
@@ -253,7 +424,7 @@
       const button = document.querySelector(`[data-page="${pageId}"]`);
       const label = getPageDefinition(pageId, getNavLabel(button)).title || getNavLabel(button) || pageId;
       return `
-        <div class="top-visited-entry${active}">
+        <div class="top-visited-entry${active}" draggable="true" data-visited-entry="${pageId}">
           <button class="top-visited-item${active}" type="button" data-visited-page="${pageId}">${label}</button>
           <button class="top-visited-remove" type="button" data-remove-visited-page="${pageId}" aria-label="移除 ${label}">×</button>
         </div>
@@ -261,6 +432,129 @@
     }).join('');
   };
 
+  const bindTopVisitedDragging = () => {
+    if (!refs.topVisitedPages) return;
+
+    refs.topVisitedPages.addEventListener('dragstart', (event) => {
+      if (event.target.closest('[data-remove-visited-page]')) {
+        event.preventDefault();
+        return;
+      }
+
+      const entry = event.target.closest('.top-visited-entry[data-visited-entry]');
+      if (!entry) return;
+
+      draggedVisitedPageId = entry.getAttribute('data-visited-entry') || '';
+      if (!draggedVisitedPageId) {
+        event.preventDefault();
+        return;
+      }
+
+      draggedVisitedEntry = entry;
+      draggedVisitedOriginalNext = entry.nextElementSibling;
+      const entryRect = entry.getBoundingClientRect();
+      visitedDragPlaceholder = createVisitedPlaceholder(entryRect);
+      visitedDragPlaceholder.dataset.width = `${entryRect.width}`;
+      entry.classList.add('is-dragging');
+      entry.setAttribute('aria-hidden', 'true');
+      refs.topVisitedPages.classList.add('is-sorting');
+
+      if (event.dataTransfer) {
+        const ghost = createVisitedDragGhost(entry, entryRect);
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggedVisitedPageId);
+        event.dataTransfer.setDragImage(ghost, Math.min(entryRect.width / 2, event.offsetX || entryRect.width / 2), Math.min(entryRect.height / 2, event.offsetY || entryRect.height / 2));
+      }
+
+      requestAnimationFrame(() => {
+        animateTopVisitedReorder(() => {
+          entry.remove();
+        });
+      });
+    });
+
+    refs.topVisitedPages.addEventListener('dragenter', (event) => {
+      if (!draggedVisitedPageId || !visitedDragPlaceholder || visitedDragPlaceholder.parentNode) return;
+      const nextEntry = getTopVisitedDropEntries().find((entry) => {
+        const rect = entry.getBoundingClientRect();
+        return event.clientX < rect.left + rect.width / 2;
+      });
+      animateTopVisitedReorder(() => {
+        refs.topVisitedPages.insertBefore(visitedDragPlaceholder, nextEntry || null);
+        requestAnimationFrame(openVisitedPlaceholder);
+      });
+    });
+
+    refs.topVisitedPages.addEventListener('dragleave', (event) => {
+      if (!draggedVisitedPageId || !visitedDragPlaceholder) return;
+      if (refs.topVisitedPages.contains(event.relatedTarget)) return;
+      animateTopVisitedReorder(() => {
+        visitedDragPlaceholder.style.width = '0px';
+        visitedDragPlaceholder.style.opacity = '0';
+        visitedDragPlaceholder.classList.remove('is-open');
+        window.setTimeout(() => {
+          if (!draggedVisitedPageId || visitedDragPlaceholder?.classList.contains('is-open')) return;
+          visitedDragPlaceholder?.remove();
+        }, 220);
+      });
+    });
+
+    refs.topVisitedPages.addEventListener('dragover', (event) => {
+      if (!draggedVisitedPageId) return;
+      event.preventDefault();
+
+      if (!visitedDragPlaceholder?.parentNode) {
+        const nextEntry = getTopVisitedDropEntries().find((entry) => {
+          const rect = entry.getBoundingClientRect();
+          return event.clientX < rect.left + rect.width / 2;
+        });
+        placeVisitedPlaceholder(nextEntry || null);
+        return;
+      }
+
+      if (event.target.closest('.top-visited-placeholder')) return;
+
+      const targetEntry = event.target.closest('.top-visited-entry[data-visited-entry]:not(.is-dragging)');
+      const entries = getTopVisitedDropEntries();
+      if (!visitedDragPlaceholder || !entries.length) return;
+
+      if (!targetEntry) {
+        const nextEntry = entries.find((entry) => {
+          const rect = entry.getBoundingClientRect();
+          return event.clientX < rect.left + rect.width / 2;
+        });
+        placeVisitedPlaceholder(nextEntry || null);
+        return;
+      }
+
+      const targetRect = targetEntry.getBoundingClientRect();
+      const insertAfter = event.clientX > targetRect.left + targetRect.width / 2;
+      const referenceEntry = insertAfter ? targetEntry.nextSibling : targetEntry;
+      placeVisitedPlaceholder(referenceEntry);
+    });
+
+    refs.topVisitedPages.addEventListener('drop', (event) => {
+      if (!draggedVisitedPageId) return;
+      event.preventDefault();
+      finishVisitedDrag(true);
+    });
+
+    document.addEventListener('dragover', (event) => {
+      if (!draggedVisitedPageId) return;
+      event.preventDefault();
+    }, true);
+
+    document.addEventListener('drop', (event) => {
+      if (!draggedVisitedPageId) return;
+      if (refs.topVisitedPages?.contains(event.target)) return;
+      event.preventDefault();
+      finishVisitedDrag(false);
+    }, true);
+
+    document.addEventListener('dragend', () => {
+      finishVisitedDrag(false);
+    }, true);
+  };
   const setActiveNavPage = (pageId) => {
     refs.navPageButtons.forEach((button) => {
       button.classList.toggle('active', button.dataset.page === pageId);
@@ -283,6 +577,7 @@
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
     const isSpectrumPage = pageId === 'spectrum-analysis';
+    const isThemeSettingsPage = pageId === 'theme-settings';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
     const def = getPageDefinition(pageId, label);
@@ -290,11 +585,12 @@
     refs.aiPageSection?.classList.toggle('active', isAiPage);
     refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
     refs.spectrumAnalysisPageSection?.classList.toggle('active', isSpectrumPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage);
+    refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isThemeSettingsPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage) {
+    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isThemeSettingsPage) {
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
       if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
       if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;
@@ -424,7 +720,10 @@
 
     refs.placeholderBackBtn?.addEventListener('click', () => showPage('ai-config'));
     refs.placeholderOpenBtn?.addEventListener('click', () => showPage('dashboard'));
+    bindTopVisitedDragging();
     refs.topVisitedPages?.addEventListener('click', (event) => {
+      if (suppressVisitedClick) return;
+
       const removeButton = event.target.closest('[data-remove-visited-page]');
       if (removeButton) {
         const pageId = removeButton.getAttribute('data-remove-visited-page') || '';

@@ -1,16 +1,16 @@
 ﻿    :root{
-      --bg:#eef3ed;
-      --surface:#fbfcf7;
-      --surface-2:#f4f8ef;
-      --surface-3:#eaf2e7;
-      --border:#d6e1d2;
-      --border-2:#c3d3bf;
-      --text:#1f2a24;
-      --text-2:#435349;
-      --muted:#68776d;
-      --muted-2:#8a998f;
-      --accent:#3f8f72;
-      --accent-soft:rgba(63,143,114,.12);
+      --bg:#f3f4f6;
+      --surface:#ffffff;
+      --surface-2:#f9fafb;
+      --surface-3:#eef2f7;
+      --border:#e5e7eb;
+      --border-2:#cbd5e1;
+      --text:#111827;
+      --text-2:#374151;
+      --muted:#6b7280;
+      --muted-2:#9ca3af;
+      --accent:#2563eb;
+      --accent-soft:rgba(37,99,235,.12);
       --success:#65a30d;
       --warn:#f59e0b;
       --danger:#ef4444;
@@ -20,19 +20,19 @@
       --sidebar:228px;
       --assistant:366px;
       --topbar:56px;
-      --shadow:0 1px 4px rgba(28,56,42,.06);
+      --shadow:none;
       --ease:cubic-bezier(.4,0,.2,1);
       --control-bg:var(--surface);
       --control-bg-hover:var(--surface-2);
       --control-border:var(--border);
       --control-border-hover:var(--border-2);
-      --control-border-focus:rgba(63,143,114,.58);
-      --control-ring:rgba(63,143,114,.14);
+      --control-border-focus:rgba(37,99,235,.58);
+      --control-ring:rgba(37,99,235,.14);
       --control-text:var(--text);
       --control-muted:var(--muted-2);
-      --control-shadow:0 1px 0 rgba(255,255,255,.62), 0 10px 22px rgba(31,67,49,.05);
-      --control-shadow-hover:0 1px 0 rgba(255,255,255,.72), 0 12px 26px rgba(31,67,49,.07);
-      --scrollbar-thumb:rgba(174,193,180,.9);
+      --control-shadow:none;
+      --control-shadow-hover:none;
+      --scrollbar-thumb:rgba(156,163,175,.9);
       --scrollbar-track:transparent;
     }
     body[data-theme="dark"]{
@@ -44,8 +44,8 @@
       --control-ring:rgba(34,211,238,.16);
       --control-text:#e5edf7;
       --control-muted:#8b9bb2;
-      --control-shadow:0 1px 0 rgba(255,255,255,.05), 0 14px 28px rgba(0,0,0,.32);
-      --control-shadow-hover:0 1px 0 rgba(255,255,255,.07), 0 16px 32px rgba(0,0,0,.4);
+      --control-shadow:none;
+      --control-shadow-hover:none;
     }
     *{box-sizing:border-box}
     html,body{height:100%}

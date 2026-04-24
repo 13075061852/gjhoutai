@@ -321,7 +321,6 @@
       width:100%;
       max-width:none;
       margin:0;
-      display:flex;
       flex-direction:column;
       gap:18px;
       height:100%;
@@ -685,6 +684,9 @@
       font-size:11px;
       font-weight:600;
     }
+    .analysis-table tbody tr.is-selected td{
+      background:#f3f8ff;
+    }
     .analysis-table th:last-child,
     .analysis-table td:last-child{
       border-right:none;
@@ -805,7 +807,6 @@
       font-size:12px;
       font-weight:600;
     }
-    .shell.page-other .dashboard{max-width:1280px}
     .shell.page-other .analysis-page{
       max-width:none;
       margin:0;

@@ -5,7 +5,7 @@
   if (!App) return;
 
   const { constants, utils } = App;
-  const PAGE_SIZE_DEFAULT = 12;
+  const PAGE_SIZE_DEFAULT = 15;
   const HEADER_LABELS = {
     型号: '型号',
     批次: '批次',
@@ -463,7 +463,7 @@
             </thead>
             <tbody>
               ${rows.map((row) => `
-                <tr>
+                <tr class="${state.selectedKeys.has(row.__rowKey) ? 'is-selected' : ''}">
                   <td class="analysis-check-col">
                     <label class="analysis-check">
                       <input class="analysis-row-check" type="checkbox" data-row-key="${escapeHtml(row.__rowKey)}" ${state.selectedKeys.has(row.__rowKey) ? 'checked' : ''} />
@@ -795,6 +795,30 @@
       }
 
       render();
+    });
+
+    refs.tableWrap?.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest('input.analysis-row-check') ||
+        target.closest('#analysisTableSelectAll') ||
+        target.closest('button') ||
+        target.closest('a') ||
+        target.closest('select') ||
+        target.closest('label')
+      ) {
+        return;
+      }
+
+      const row = target.closest('tbody tr');
+      if (!row) return;
+
+      const checkbox = row.querySelector('input.analysis-row-check');
+      if (!(checkbox instanceof HTMLInputElement)) return;
+
+      checkbox.checked = !checkbox.checked;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);

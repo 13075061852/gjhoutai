@@ -74,25 +74,27 @@
       .placeholder-page{min-height:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .spectrum-page{
-        height:auto;
-        min-height:auto;
-        overflow:visible;
+        height:calc(100dvh - 88px);
+        min-height:0;
+        overflow:hidden;
       }
       .spectrum-toolbar-row{
-        flex-direction:column;
+        flex-direction:row;
         align-items:stretch;
+        flex-wrap:wrap;
       }
       .spectrum-toolbar-main{
-        width:100%;
+        flex:1 1 520px;
         display:grid;
-        grid-template-columns:minmax(0,1fr) auto auto;
+        grid-template-columns:minmax(0,1fr) auto;
         align-items:center;
       }
       .spectrum-search{
         min-width:0;
       }
       .spectrum-toolbar-actions{
-        width:100%;
+        width:auto;
+        flex:0 0 auto;
         flex-wrap:nowrap;
         justify-content:flex-start;
         overflow-x:auto;
@@ -104,35 +106,147 @@
         flex:0 0 auto;
       }
       .spectrum-workbench{
-        display:flex;
-        flex-direction:column;
-        grid-template-columns:minmax(0,1fr);
-        grid-auto-rows:auto;
-      }
-      .spectrum-filter-panel{order:1}
-      .spectrum-gallery-panel{order:2}
-      .spectrum-detail-panel{
-        order:3;
-        grid-column:auto;
+        display:grid;
+        flex:1 1 0;
+        grid-template-columns:220px minmax(0,1fr);
+        grid-template-rows:minmax(0,1fr);
+        column-gap:14px;
+        row-gap:0;
+        height:auto;
         max-height:none;
+        min-height:0;
+        overflow:hidden;
+      }
+      .spectrum-workbench.is-detail-collapsed{
+        grid-template-columns:220px minmax(0,1fr);
+        column-gap:14px;
+        row-gap:0;
+      }
+      .spectrum-filter-panel{
+        order:initial;
+        grid-column:1;
+        grid-row:1;
+      }
+      .spectrum-gallery-panel{
+        order:initial;
+        grid-column:2;
+        grid-row:1;
+      }
+      .spectrum-detail-panel{
+        order:initial;
+        position:fixed;
+        inset:0;
+        z-index:1200;
+        grid-column:auto;
+        grid-row:auto;
+        width:100%;
+        height:100%;
+        max-height:none;
+        padding:18px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:auto;
+        background:rgba(31,42,36,.36);
+        opacity:1;
+        transform:none;
+        pointer-events:auto;
       }
       .spectrum-filter-panel,
-      .spectrum-gallery-panel,
-      .spectrum-detail-panel{
-        overflow:visible;
+      .spectrum-gallery-panel{
+        flex:0 0 auto;
+        width:100%;
+        height:100%;
+        max-width:100%;
+      }
+      .spectrum-filter-panel{
+        overflow:auto;
+      }
+      .spectrum-gallery-panel{
+        overflow:hidden;
       }
       .spectrum-gallery{
-        flex:0 1 auto;
-        height:auto;
-        overflow:visible;
+        flex:1 1 0;
+        height:0;
+        min-height:0;
+        overflow:auto;
+        padding-right:0;
       }
       .spectrum-detail-image{
         display:none;
       }
+      .spectrum-detail-panel .spectrum-detail-body,
+      .spectrum-detail-panel .spectrum-empty-state{
+        width:min(100%, 560px);
+        max-height:min(86vh, 720px);
+        overflow:auto;
+        border:1px solid var(--border, #dbe5f0);
+        border-radius:10px;
+        background:var(--surface, #fff);
+        box-shadow:0 24px 64px rgba(31,42,36,.22);
+      }
+      .spectrum-detail-panel .spectrum-empty-state{
+        padding:24px;
+      }
+      .spectrum-detail-panel .spectrum-detail-body{
+        padding:14px;
+      }
+      .spectrum-detail-panel > .spectrum-detail-modal-close{
+        position:absolute;
+        top:18px;
+        right:18px;
+      }
+      .spectrum-detail-modal-head{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:12px;
+        padding-bottom:12px;
+        border-bottom:1px solid var(--border, #dbe5f0);
+      }
+      .spectrum-detail-modal-title{
+        color:var(--text, #1f2937);
+        font-size:15px;
+        font-weight:900;
+        line-height:1.35;
+      }
+      .spectrum-detail-modal-subtitle{
+        max-width:420px;
+        margin-top:2px;
+        color:var(--muted, #64748b);
+        font-size:12px;
+        font-weight:700;
+        overflow:hidden;
+        white-space:nowrap;
+        text-overflow:ellipsis;
+      }
+      .spectrum-detail-modal-close{
+        display:grid;
+        flex:0 0 auto;
+      }
+      .spectrum-workbench.is-detail-collapsed .spectrum-detail-panel{
+        display:none;
+      }
       .spectrum-gallery-controls{
-        width:100%;
+        width:auto;
         justify-content:space-between;
         flex-wrap:wrap;
+      }
+      .spectrum-gallery-head{
+        align-items:center;
+        flex-wrap:nowrap;
+        padding-right:0;
+      }
+      .spectrum-detail-toggle{
+        margin-left:14px;
+        margin-right:10px;
+      }
+      .spectrum-gallery-title-row{
+        flex:1 1 auto;
+        min-width:0;
+      }
+      .spectrum-panel-title{
+        white-space:nowrap;
       }
     }
     @media (max-width: 980px){
@@ -176,9 +290,9 @@
         overflow:visible;
       }
       .spectrum-page{
-        height:auto;
-        min-height:auto;
-        overflow:visible;
+        height:calc(100dvh - 88px);
+        min-height:0;
+        overflow:hidden;
       }
       .spectrum-toolbar{
         align-items:flex-start;
@@ -187,17 +301,25 @@
       .spectrum-toolbar-row{
         width:100%;
         align-items:flex-start;
-        flex-direction:column;
+        flex-direction:row;
+        flex-wrap:wrap;
       }
       .spectrum-toolbar-main,
-      .spectrum-toolbar-actions,
       .spectrum-search{
         width:100%;
       }
       .spectrum-toolbar-main{
-        display:flex;
+        display:contents;
+      }
+      .spectrum-search{
+        flex:1 1 100%;
+      }
+      .spectrum-view-switch{
+        flex:0 0 auto;
       }
       .spectrum-toolbar-actions{
+        width:auto;
+        flex:0 0 auto;
         flex-wrap:wrap;
         overflow-x:visible;
       }
@@ -207,31 +329,96 @@
         align-items:start;
       }
       .spectrum-workbench{
-        grid-template-columns:1fr;
+        display:grid;
+        flex:1 1 0;
+        grid-template-columns:minmax(180px, 220px) minmax(0, 1fr);
+        grid-template-rows:minmax(0,1fr);
+        column-gap:14px;
+        row-gap:0;
+        height:auto;
+        max-height:none;
+        min-height:0;
+        overflow:hidden;
+      }
+      .spectrum-workbench.is-detail-collapsed{
+        grid-template-columns:minmax(180px, 220px) minmax(0, 1fr);
+        column-gap:14px;
+        row-gap:0;
+      }
+      .spectrum-filter-panel{
+        grid-column:1;
+        grid-row:1;
+      }
+      .spectrum-gallery-panel{
+        grid-column:2;
+        grid-row:1;
+      }
+      .spectrum-detail-panel{
+        position:fixed;
+        inset:0;
+        z-index:1200;
+        grid-column:auto;
+        grid-row:auto;
+        width:100%;
+        height:100%;
+        padding:14px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:auto;
+        background:rgba(31,42,36,.36);
       }
       .spectrum-filter-panel,
-      .spectrum-gallery-panel,
-      .spectrum-detail-panel{
-        overflow:visible;
+      .spectrum-gallery-panel{
+        flex:0 0 auto;
+        width:100%;
+        height:100%;
+        max-width:100%;
+      }
+      .spectrum-filter-panel{
+        overflow:auto;
+      }
+      .spectrum-gallery-panel{
+        overflow:hidden;
       }
       .spectrum-gallery{
-        flex:0 1 auto;
-        height:auto;
-        overflow:visible;
+        flex:1 1 0;
+        height:0;
+        min-height:0;
+        overflow:auto;
+        padding-right:0;
+      }
+      .spectrum-gallery-head{
+        align-items:center;
+        flex-wrap:nowrap;
+        padding-right:0;
+      }
+      .spectrum-detail-toggle{
+        margin-left:14px;
+        margin-right:10px;
+      }
+      .spectrum-gallery-title-row{
+        flex:1 1 auto;
+        min-width:0;
+      }
+      .spectrum-panel-title{
+        white-space:nowrap;
       }
       .spectrum-gallery.is-list .spectrum-card{
-        grid-template-columns:1fr;
+        grid-template-columns:132px minmax(0,1fr);
+        min-height:92px;
       }
       .spectrum-gallery.is-list .spectrum-card-image{
-        height:auto;
-        min-height:0;
-        aspect-ratio:1.9/1;
-        border-right:0;
-        border-bottom:1px solid #e7edf5;
+        height:100%;
+        min-height:92px;
+        aspect-ratio:auto;
+        border-right:1px solid #e7edf5;
+        border-bottom:0;
       }
       .spectrum-gallery.is-list .spectrum-card-body{
-        min-height:0;
+        min-height:92px;
         grid-template-columns:1fr;
+        padding:12px;
       }
       .spectrum-detail-form{
         grid-template-columns:1fr;
@@ -269,6 +456,59 @@
       }
       .spectrum-preview-card-meta{
         justify-content:flex-start;
+      }
+    }
+    @media (max-width: 420px){
+      .content{
+        padding:10px;
+      }
+      .spectrum-page{
+        height:calc(100dvh - 76px);
+      }
+      .spectrum-workbench{
+        grid-template-columns:160px minmax(0, 1fr);
+        column-gap:10px;
+        row-gap:0;
+      }
+      .spectrum-workbench.is-detail-collapsed{
+        grid-template-columns:160px minmax(0, 1fr);
+        column-gap:10px;
+        row-gap:0;
+      }
+      .spectrum-filter-panel,
+      .spectrum-gallery-panel,
+      .spectrum-detail-panel{
+        padding:10px;
+      }
+      .spectrum-gallery.is-list .spectrum-card{
+        grid-template-columns:104px minmax(0,1fr);
+      }
+      .spectrum-gallery.is-list .spectrum-card-image{
+        min-height:82px;
+        padding:6px;
+      }
+      .spectrum-gallery.is-list .spectrum-card-body{
+        min-height:82px;
+        padding:10px;
+      }
+      .spectrum-gallery.is-list .spectrum-card-title{
+        padding-right:0;
+        font-size:13px;
+      }
+      .spectrum-search{
+        height:auto;
+        min-height:44px;
+        flex-wrap:wrap;
+        padding:8px 8px 8px 12px;
+      }
+      .spectrum-search input{
+        flex:1 1 180px;
+      }
+      .spectrum-search-divider{
+        display:none;
+      }
+      .spectrum-search .spectrum-mode-switch{
+        margin-left:24px;
       }
     }
     .ai-box-scroll{

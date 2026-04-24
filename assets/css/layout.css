@@ -47,7 +47,7 @@
     }
     .top-visited-entry.is-active{
       border-color:#bcd3ff;
-      background:#fff;
+      background:var(--bg);
       box-shadow:0 1px 3px rgba(47,125,246,.08);
     }
     .top-visited-item{
@@ -136,7 +136,7 @@
       overflow:auto;
       padding:18px;
       scrollbar-width:none;
-      background:#fff;
+      background:var(--bg);
     }
     .content::-webkit-scrollbar{display:none}
     .page-section{display:none}

@@ -402,6 +402,9 @@
     const item = getActiveItem();
     if (!item) {
       refs.detailPanel.innerHTML = `
+        <button class="spectrum-detail-modal-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
         <div class="spectrum-empty-state spectrum-empty-state-compact">
           <div class="spectrum-empty-icon"><i class="ti ti-file-search" aria-hidden="true"></i></div>
           <div class="spectrum-empty-title">等待选择图谱</div>
@@ -416,6 +419,15 @@
         <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
       </button>
       <div class="spectrum-detail-body">
+        <div class="spectrum-detail-modal-head">
+          <div>
+            <div class="spectrum-detail-modal-title">图谱详情</div>
+            <div class="spectrum-detail-modal-subtitle">${utils.escapeHtml(item.title)}</div>
+          </div>
+          <button class="spectrum-detail-modal-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
         <form class="spectrum-detail-form" data-spectrum-detail-form>
           <input name="id" type="hidden" value="${utils.escapeHtml(item.id)}" />
           <label class="spectrum-detail-field spectrum-detail-field-full">
@@ -817,6 +829,12 @@
     });
 
     refs.detailPanel?.addEventListener('click', (event) => {
+      const closeButton = event.target.closest('[data-spectrum-detail-close]');
+      if (closeButton) {
+        setDetailCollapsed(true);
+        return;
+      }
+
       const tagAddButton = event.target.closest('[data-spectrum-tag-add]');
       if (tagAddButton) {
         const form = tagAddButton.closest('[data-spectrum-detail-form]');

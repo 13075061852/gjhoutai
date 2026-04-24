@@ -14,13 +14,14 @@
       gap:10px;
       padding:0 20px;
       background:var(--surface);
+      border-bottom:1px solid #edf2f7;
     }
     .top-visited{
       flex:1;
       min-width:0;
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:6px;
       overflow:auto hidden;
       scrollbar-width:none;
       padding:0 6px 0 0;
@@ -35,30 +36,31 @@
       flex:0 0 auto;
       display:inline-flex;
       align-items:center;
-      gap:2px;
+      gap:4px;
       border:1px solid transparent;
-      border-radius:10px;
+      border-radius:9px;
       background:transparent;
-      transition:background-color .18s ease, border-color .18s ease;
+      transition:background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
     }
     .top-visited-entry:hover{
-      border-color:#e2e8f0;
-      background:#f8fafc;
+      border-color:#dbe5f0;
+      background:#fbfdff;
     }
     .top-visited-entry.is-active{
-      border-color:#cbd5e1;
-      background:#f8fafc;
+      border-color:#bcd3ff;
+      background:#fff;
+      box-shadow:0 1px 3px rgba(47,125,246,.08);
     }
     .top-visited-item{
-      height:30px;
+      height:32px;
       flex:0 0 auto;
       border:0;
       background:transparent;
       color:#64748b;
-      border-radius:10px;
-      padding:0 6px 0 12px;
+      border-radius:8px;
+      padding:0 6px 0 13px;
       font-size:12px;
-      font-weight:600;
+      font-weight:750;
       cursor:pointer;
       white-space:nowrap;
       box-shadow:none;
@@ -69,23 +71,23 @@
       background:transparent;
     }
     .top-visited-item.is-active{
-      color:#0f172a;
+      color:#1d4ed8;
       box-shadow:none;
     }
     .top-visited-remove{
-      width:22px;
-      height:22px;
-      margin-right:6px;
+      width:20px;
+      height:20px;
+      margin-right:7px;
       border:0;
       border-radius:999px;
       background:transparent;
-      color:#94a3b8;
-      font-size:14px;
+      color:#9aa8bb;
+      font-size:13px;
       line-height:1;
       display:grid;
       place-items:center;
       cursor:pointer;
-      opacity:.7;
+      opacity:.58;
       transition:background-color .18s ease, color .18s ease, opacity .18s ease;
     }
     .top-visited-entry:hover .top-visited-remove{

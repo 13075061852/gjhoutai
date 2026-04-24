@@ -35,6 +35,7 @@
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
     refs.tagFilters = document.getElementById('spectrumTagFilters');
     refs.clearSelectedBtn = document.getElementById('spectrumClearSelectedBtn');
+    refs.deleteSelectedBtn = document.getElementById('spectrumDeleteSelectedBtn');
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
@@ -228,15 +229,39 @@
     render();
   };
 
+  const deleteSelectedItems = () => {
+    const ids = new Set(state.selectedIds);
+    if (!ids.size) return;
+
+    state.items = state.items.filter((entry) => !ids.has(entry.id));
+    ids.forEach((id) => delete state.edits[id]);
+    state.selectedIds.clear();
+    state.activeId = state.items[0]?.id || '';
+    state.compareOpen = false;
+    if (refs.previewDialog) closeImagePreview();
+    saveUploadedItems();
+    saveItemEdits();
+    render();
+  };
+
   const closeDeleteDialog = () => {
     refs.deleteDialog?.remove();
     refs.deleteDialog = null;
     refs.deleteTargetId = '';
+    refs.deleteMode = '';
   };
 
-  const openDeleteDialog = (id) => {
+  const openDeleteDialog = (id, mode = 'single') => {
     const item = state.items.find((entry) => entry.id === id);
-    if (!item) return;
+    const selectedCount = state.selectedIds.size;
+    if (mode === 'single' && !item) return;
+    if (mode === 'selected' && !selectedCount) return;
+
+    const title = mode === 'selected' ? '删除已选图片' : '删除图片';
+    const text = mode === 'selected'
+      ? `确定删除已选列表中的 ${selectedCount} 张图片吗？删除后无法在图谱库中恢复。`
+      : `确定删除“${utils.escapeHtml(item.title)}”吗？删除后无法在图谱库中恢复。`;
+    const confirmText = '确认删除';
 
     closeDeleteDialog();
     const dialog = document.createElement('div');
@@ -245,18 +270,19 @@
       <div class="spectrum-delete-card" role="dialog" aria-modal="true" aria-labelledby="spectrumDeleteTitle">
         <div class="spectrum-delete-icon"><i class="ti ti-trash" aria-hidden="true"></i></div>
         <div class="spectrum-delete-main">
-          <div class="spectrum-delete-title" id="spectrumDeleteTitle">删除图片</div>
-          <div class="spectrum-delete-text">确定删除“${utils.escapeHtml(item.title)}”吗？删除后无法在图谱库中恢复。</div>
+          <div class="spectrum-delete-title" id="spectrumDeleteTitle">${title}</div>
+          <div class="spectrum-delete-text">${text}</div>
         </div>
         <div class="spectrum-delete-actions">
           <button class="analysis-toolbar-btn" type="button" data-spectrum-delete-cancel>取消</button>
-          <button class="analysis-toolbar-btn spectrum-danger-btn" type="button" data-spectrum-delete-confirm>确认删除</button>
+          <button class="analysis-toolbar-btn spectrum-danger-btn" type="button" data-spectrum-delete-confirm>${confirmText}</button>
         </div>
       </div>
     `;
     document.body.appendChild(dialog);
     refs.deleteDialog = dialog;
     refs.deleteTargetId = id;
+    refs.deleteMode = mode;
   };
 
   const renderGallery = () => {
@@ -285,7 +311,7 @@
       const selected = state.selectedIds.has(item.id) ? ' is-selected' : '';
       const active = item.id === state.activeId ? ' is-active' : '';
       return `
-        <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
+        <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
           <div class="spectrum-card-image">
             <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" loading="lazy" />
           </div>
@@ -293,7 +319,10 @@
             <div class="spectrum-card-top">
               <div class="spectrum-card-title">${utils.escapeHtml(item.title)}</div>
             </div>
-            <div class="spectrum-card-meta">${utils.escapeHtml([item.category, item.date].filter(Boolean).join(' · '))}</div>
+            <div class="spectrum-card-meta">
+              ${item.spectrumType ? `<span class="spectrum-type-badge">${utils.escapeHtml(item.spectrumType)}</span>` : ''}
+              <span>${utils.escapeHtml([item.category, item.date].filter(Boolean).join(' · '))}</span>
+            </div>
             <div class="spectrum-card-tags">
               ${item.tags.slice(0, 3).map((tag) => `<span>${utils.escapeHtml(tag)}</span>`).join('')}
             </div>
@@ -478,10 +507,9 @@
           <div class="spectrum-preview-card-head">
             <div>
               <div class="spectrum-preview-card-title">${utils.escapeHtml(item.title)}</div>
-              <div class="spectrum-preview-card-code">${utils.escapeHtml(item.code)}</div>
             </div>
             <div class="spectrum-preview-card-meta">
-              <span>${utils.escapeHtml(item.spectrumType || '未识别类型')}</span>
+              <span class="spectrum-type-badge" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}">${utils.escapeHtml(item.spectrumType || '未识别类型')}</span>
               <span>${utils.escapeHtml(item.date || '-')}</span>
             </div>
           </div>
@@ -540,15 +568,17 @@
       reader.addEventListener('load', () => {
         const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const title = file.name.replace(/\.[^.]+$/, '') || file.name;
+        const inheritedCategory = state.category === '全部' ? '' : state.category;
+        const inheritedTags = state.tag === '全部' ? [] : [state.tag];
         const item = {
           id,
           code: `UPLOAD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
           title,
           spectrumType: getSpectrumTypeFromName(file.name),
-          category: '',
+          category: inheritedCategory,
           status: '',
           date: new Date().toISOString().slice(0, 10),
-          tags: [],
+          tags: inheritedTags,
           image: String(reader.result || ''),
           note: '',
           uploaded: true,
@@ -598,6 +628,10 @@
       state.selectedIds.clear();
       state.compareOpen = false;
       render();
+    });
+
+    refs.deleteSelectedBtn?.addEventListener('click', () => {
+      openDeleteDialog('', 'selected');
     });
 
     refs.categoryFilters?.addEventListener('click', (event) => {
@@ -689,8 +723,10 @@
         }
         if (event.target.closest('[data-spectrum-delete-confirm]')) {
           const id = refs.deleteTargetId;
+          const mode = refs.deleteMode;
           closeDeleteDialog();
-          deleteSpectrumItem(id);
+          if (mode === 'selected') deleteSelectedItems();
+          else deleteSpectrumItem(id);
           return;
         }
       }

@@ -32,6 +32,8 @@
       --control-muted:var(--muted-2);
       --control-shadow:0 1px 0 rgba(255,255,255,.7), 0 10px 22px rgba(15,23,42,.04);
       --control-shadow-hover:0 1px 0 rgba(255,255,255,.8), 0 12px 26px rgba(15,23,42,.06);
+      --scrollbar-thumb:rgba(255,255,255,.98);
+      --scrollbar-track:transparent;
     }
     body[data-theme="dark"]{
       --control-bg:#0f172a;
@@ -54,6 +56,24 @@
       font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       -webkit-font-smoothing:antialiased;
       overflow:hidden;
+    }
+    *{
+      scrollbar-width:thin;
+      scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+    *::-webkit-scrollbar{
+      width:10px;
+      height:10px;
+      background:transparent;
+    }
+    *::-webkit-scrollbar-track{
+      background:var(--scrollbar-track);
+    }
+    *::-webkit-scrollbar-thumb{
+      background:var(--scrollbar-thumb);
+      border-radius:999px;
+      border:2px solid transparent;
+      background-clip:padding-box;
     }
     .app{height:100vh}
     .shell{

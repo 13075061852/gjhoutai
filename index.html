@@ -48,7 +48,7 @@
             </button>
             <button class="nav-item" type="button" id="aiConfigNav" data-page="ai-config">
               <span class="nav-main">
-                <span class="nav-icon"><i class="ti ti-bolt" aria-hidden="true"></i></span>
+                <span class="nav-icon"><i class="ti ti-settings" aria-hidden="true"></i></span>
                 <span class="nav-text">AI配置</span>
               </span>
             </button>
@@ -155,6 +155,7 @@
 
       <main class="main">
         <header class="topbar">
+          <div class="top-visited" id="topVisitedPages" aria-label="常用页面"></div>
           <div class="top-actions">
             <button class="pill-btn primary" id="askAiToggle" type="button" aria-expanded="true" aria-label="收起 Gjun AI"><span>✦</span><strong>Gjun AI</strong></button>
             <button class="icon-btn" type="button" aria-label="账户">
@@ -313,23 +314,86 @@
           </section>
 
           <section class="dashboard analysis-page page-section" data-page-section="property-analysis">
-            <article class="panel analysis-panel">
-              <div class="panel-head panel-head-hero">
-                <div class="analysis-toolbar">
-                  <label class="analysis-search">
-                    <i class="ti ti-search" aria-hidden="true"></i>
-                    <input id="analysisSearchInput" type="search" placeholder="搜索当前 sheet ..." aria-label="搜索当前 sheet" />
-                  </label>
-                  <div class="analysis-sheet-tabs" id="analysisSheetTabs"></div>
+            <article class="analysis-filter-card">
+              <div class="analysis-filter-top">
+                <label class="analysis-search analysis-search-lg">
+                  <i class="ti ti-search" aria-hidden="true"></i>
+                  <input id="analysisSearchInput" type="search" placeholder="搜索型号、批次或指标..." aria-label="搜索型号、批次或指标" />
+                  <span class="analysis-search-mode" id="analysisSearchMode">
+                    <button class="analysis-search-mode-btn" type="button" data-search-mode="fuzzy">模糊查询</button>
+                    <button class="analysis-search-mode-btn" type="button" data-search-mode="exact">精准查询</button>
+                  </span>
+                  <div class="analysis-search-suggest" id="analysisSearchSuggest" hidden></div>
+                </label>
+
+                <div class="analysis-action-group">
+                  <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="analysisSelectAllBtn" type="button">
+                    <i class="ti ti-square-check" aria-hidden="true"></i>
+                    <span>全选</span>
+                  </button>
+                  <button class="analysis-toolbar-btn" id="analysisCompareBtn" type="button" disabled>
+                    <i class="ti ti-layout-columns" aria-hidden="true"></i>
+                    <span>对比</span>
+                  </button>
+                  <button class="analysis-toolbar-btn" id="analysisExportBtn" type="button">
+                    <i class="ti ti-download" aria-hidden="true"></i>
+                    <span>导出数据</span>
+                  </button>
                 </div>
               </div>
-              <div class="analysis-table-wrap" id="analysisTableWrap"></div>
-              <div class="analysis-pagination" id="analysisPagination">
-                <button class="analysis-page-btn" id="analysisPrevPageBtn" type="button">上一页</button>
-                <span class="analysis-page-info" id="analysisPageInfo">第 1 页 / 共 1 页</span>
-                <button class="analysis-page-btn" id="analysisNextPageBtn" type="button">下一页</button>
+
+              <div class="analysis-filter-bottom">
+                <div class="analysis-sheet-tabs" id="analysisSheetTabs"></div>
+                <div class="analysis-selection-meta" id="analysisSelectionMeta">已选 0 条</div>
               </div>
             </article>
+
+            <article class="panel analysis-panel">
+              <div class="analysis-panel-head">
+                <div class="analysis-panel-title-row">
+                  <div class="analysis-panel-title">物性数据列表</div>
+                  <div class="analysis-panel-count" id="analysisPanelCount">共 0 条</div>
+                </div>
+
+                <div class="analysis-panel-controls">
+                  <label class="analysis-select-field">
+                    <span>排序：</span>
+                    <select id="analysisSortSelect" aria-label="排序">
+                      <option value="default">默认排序</option>
+                      <option value="model-asc">型号升序</option>
+                      <option value="model-desc">型号降序</option>
+                      <option value="mfi-desc">熔指从高到低</option>
+                    </select>
+                  </label>
+
+                  <label class="analysis-select-field">
+                    <span>每页显示：</span>
+                    <select id="analysisPageSizeSelect" aria-label="每页显示条数">
+                      <option value="12" selected>12条</option>
+                      <option value="24">24条</option>
+                      <option value="48">48条</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="analysis-table-wrap" id="analysisTableWrap"></div>
+
+              <div class="analysis-panel-footer">
+                <div class="analysis-footer-total" id="analysisFooterTotal">共 0 条</div>
+
+                <div class="analysis-pagination" id="analysisPagination">
+                  <button class="analysis-page-btn" id="analysisPrevPageBtn" type="button" aria-label="上一页">
+                    <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                  </button>
+                  <div class="analysis-page-numbers" id="analysisPageNumbers"></div>
+                  <button class="analysis-page-btn" id="analysisNextPageBtn" type="button" aria-label="下一页">
+                    <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+            </article>
+
             <div class="bottom-space"></div>
           </section>
 

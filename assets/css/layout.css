@@ -15,11 +15,92 @@
       padding:0 20px;
       background:var(--surface);
     }
-    .top-actions{
-      margin-left:auto;
+    .top-visited{
+      flex:1;
+      min-width:0;
       display:flex;
       align-items:center;
       gap:8px;
+      overflow:auto hidden;
+      scrollbar-width:none;
+      padding:0 6px 0 0;
+    }
+    .top-visited::-webkit-scrollbar{display:none}
+    .top-visited-empty{
+      color:var(--muted-2);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .top-visited-entry{
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      gap:2px;
+      border:1px solid transparent;
+      border-radius:10px;
+      background:transparent;
+      transition:background-color .18s ease, border-color .18s ease;
+    }
+    .top-visited-entry:hover{
+      border-color:#e2e8f0;
+      background:#f8fafc;
+    }
+    .top-visited-entry.is-active{
+      border-color:#cbd5e1;
+      background:#f8fafc;
+    }
+    .top-visited-item{
+      height:30px;
+      flex:0 0 auto;
+      border:0;
+      background:transparent;
+      color:#64748b;
+      border-radius:10px;
+      padding:0 6px 0 12px;
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+      white-space:nowrap;
+      box-shadow:none;
+      transition:color .18s ease, background-color .18s ease, border-color .18s ease;
+    }
+    .top-visited-item:hover{
+      color:#0f172a;
+      background:transparent;
+    }
+    .top-visited-item.is-active{
+      color:#0f172a;
+      box-shadow:none;
+    }
+    .top-visited-remove{
+      width:22px;
+      height:22px;
+      margin-right:6px;
+      border:0;
+      border-radius:999px;
+      background:transparent;
+      color:#94a3b8;
+      font-size:14px;
+      line-height:1;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+      opacity:.7;
+      transition:background-color .18s ease, color .18s ease, opacity .18s ease;
+    }
+    .top-visited-entry:hover .top-visited-remove{
+      opacity:1;
+    }
+    .top-visited-remove:hover{
+      background:#e2e8f0;
+      color:#475569;
+    }
+    .top-actions{
+      margin-left:12px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex:0 0 auto;
     }
     .pill-btn,.icon-btn,.time-chip{
       height:38px;
@@ -52,7 +133,7 @@
       flex:1;
       min-height:0;
       overflow:auto;
-      padding:22px 24px 24px;
+      padding:18px;
       scrollbar-width:none;
       background:#fff;
     }

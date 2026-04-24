@@ -8,6 +8,7 @@
   let assistantFullscreenExitTimer = null;
   let collapsedNavFlyout = null;
   let collapsedNavFlyoutTimer = null;
+  const MAX_RECENT_PAGES = 8;
 
   const clearCollapsedNavFlyoutTimer = () => {
     if (collapsedNavFlyoutTimer) {
@@ -200,6 +201,57 @@
     };
   };
 
+  const getRecentPages = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(constants.NAV_RECENT_PAGES_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string' && item) : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const saveRecentPages = (pages) => {
+    localStorage.setItem(constants.NAV_RECENT_PAGES_KEY, JSON.stringify(pages.slice(0, MAX_RECENT_PAGES)));
+  };
+
+  const removeRecentPage = (pageId) => {
+    const recentPages = getRecentPages().filter((item) => item !== pageId);
+    saveRecentPages(recentPages);
+    return recentPages;
+  };
+
+  const trackRecentPage = (pageId) => {
+    const recentPages = getRecentPages().filter((item) => item !== pageId);
+    recentPages.unshift(pageId);
+    saveRecentPages(recentPages);
+    return recentPages;
+  };
+
+  const renderRecentPages = (activePageId) => {
+    if (!refs.topVisitedPages) return;
+
+    const recentPages = getRecentPages()
+      .filter((pageId) => constants.PAGE_DEFS[pageId] || document.querySelector(`[data-page="${pageId}"]`))
+      .slice(0, MAX_RECENT_PAGES);
+
+    if (!recentPages.length) {
+      refs.topVisitedPages.innerHTML = '<div class="top-visited-empty">最近打开的页面会显示在这里</div>';
+      return;
+    }
+
+    refs.topVisitedPages.innerHTML = recentPages.map((pageId) => {
+      const active = pageId === activePageId ? ' is-active' : '';
+      const button = document.querySelector(`[data-page="${pageId}"]`);
+      const label = getPageDefinition(pageId, getNavLabel(button)).title || getNavLabel(button) || pageId;
+      return `
+        <div class="top-visited-entry${active}">
+          <button class="top-visited-item${active}" type="button" data-visited-page="${pageId}">${label}</button>
+          <button class="top-visited-remove" type="button" data-remove-visited-page="${pageId}" aria-label="移除 ${label}">×</button>
+        </div>
+      `;
+    }).join('');
+  };
+
   const setActiveNavPage = (pageId) => {
     refs.navPageButtons.forEach((button) => {
       button.classList.toggle('active', button.dataset.page === pageId);
@@ -218,7 +270,7 @@
   };
 
   const showPage = (pageId, options = {}) => {
-    const { scrollTop = true } = options;
+    const { scrollTop = true, trackRecent = true } = options;
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
@@ -241,6 +293,10 @@
 
     setActiveNavPage(pageId);
     localStorage.setItem(constants.NAV_PAGE_KEY, pageId);
+    if (trackRecent) {
+      trackRecentPage(pageId);
+    }
+    renderRecentPages(pageId);
 
     if (scrollTop) {
       requestAnimationFrame(() => {
@@ -355,6 +411,22 @@
 
     refs.placeholderBackBtn?.addEventListener('click', () => showPage('ai-config'));
     refs.placeholderOpenBtn?.addEventListener('click', () => showPage('dashboard'));
+    refs.topVisitedPages?.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-remove-visited-page]');
+      if (removeButton) {
+        const pageId = removeButton.getAttribute('data-remove-visited-page') || '';
+        if (pageId) {
+          removeRecentPage(pageId);
+          renderRecentPages(localStorage.getItem(constants.NAV_PAGE_KEY) || '');
+        }
+        return;
+      }
+
+      const button = event.target.closest('[data-visited-page]');
+      if (!button) return;
+      const pageId = button.getAttribute('data-visited-page') || '';
+      if (pageId) showPage(pageId, { trackRecent: false });
+    });
 
     const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
     showPage(savedPage, { scrollTop: false });

@@ -6,6 +6,86 @@
 
   const { refs, constants } = App;
   let assistantFullscreenExitTimer = null;
+  let collapsedNavFlyout = null;
+  let collapsedNavFlyoutTimer = null;
+
+  const clearCollapsedNavFlyoutTimer = () => {
+    if (collapsedNavFlyoutTimer) {
+      window.clearTimeout(collapsedNavFlyoutTimer);
+      collapsedNavFlyoutTimer = null;
+    }
+  };
+
+  const removeCollapsedNavFlyout = () => {
+    clearCollapsedNavFlyoutTimer();
+    if (!collapsedNavFlyout) return;
+    collapsedNavFlyout.remove();
+    collapsedNavFlyout = null;
+  };
+
+  const scheduleCollapsedNavFlyoutClose = () => {
+    clearCollapsedNavFlyoutTimer();
+    collapsedNavFlyoutTimer = window.setTimeout(() => {
+      removeCollapsedNavFlyout();
+    }, 120);
+  };
+
+  const isSidebarCollapsed = () => refs.shell?.classList.contains('sidebar-collapsed');
+
+  const createCollapsedNavFlyout = (groupToggle, group) => {
+    const subitems = [...group.querySelectorAll('.nav-subitem[data-page]')];
+    if (!subitems.length || !isSidebarCollapsed()) return;
+
+    removeCollapsedNavFlyout();
+
+    const triggerRect = groupToggle.getBoundingClientRect();
+    const flyout = document.createElement('div');
+    flyout.className = 'sidebar-flyout';
+
+    const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
+    const itemsHtml = subitems.map((item) => {
+      const pageId = item.dataset.page || '';
+      const active = pageId === currentPage ? ' is-active' : '';
+      const label = (item.textContent || '').trim();
+      return `<button class="sidebar-flyout-item${active}" type="button" data-page="${pageId}">${label}</button>`;
+    }).join('');
+
+    flyout.innerHTML = `
+      <div class="sidebar-flyout-card">
+        <div class="sidebar-flyout-items">${itemsHtml}</div>
+      </div>
+    `;
+
+    flyout.style.top = `${Math.max(12, triggerRect.top)}px`;
+    flyout.style.left = `${triggerRect.right + 12}px`;
+
+    flyout.addEventListener('mouseenter', () => {
+      clearCollapsedNavFlyoutTimer();
+    });
+
+    flyout.addEventListener('mouseleave', () => {
+      scheduleCollapsedNavFlyoutClose();
+    });
+
+    flyout.addEventListener('click', (event) => {
+      const button = event.target.closest('.sidebar-flyout-item[data-page]');
+      if (!button) return;
+      const pageId = button.dataset.page;
+      if (!pageId) return;
+      removeCollapsedNavFlyout();
+      showPage(pageId);
+    });
+
+    document.body.appendChild(flyout);
+    collapsedNavFlyout = flyout;
+
+    const flyoutRect = flyout.getBoundingClientRect();
+    const viewportBottom = window.innerHeight - 12;
+    if (flyoutRect.bottom > viewportBottom) {
+      const adjustedTop = Math.max(12, viewportBottom - flyoutRect.height);
+      flyout.style.top = `${adjustedTop}px`;
+    }
+  };
 
   const syncSidebarCollapsedAttr = (collapsed) => {
     document.documentElement.dataset.sidebarCollapsed = collapsed ? '1' : '0';
@@ -50,6 +130,9 @@
   const setAssistantCollapsed = (collapsed) => {
     if (!refs.shell) return;
     clearAssistantFullscreenExitTimer();
+    if (!collapsed) {
+      removeCollapsedNavFlyout();
+    }
     if (collapsed) {
       refs.shell.classList.remove('assistant-fullscreen');
       refs.shell.classList.remove('assistant-fullscreen-open');
@@ -65,6 +148,7 @@
   const setAssistantFullscreen = (fullscreen) => {
     if (!refs.shell) return;
     clearAssistantFullscreenExitTimer();
+    removeCollapsedNavFlyout();
 
     if (fullscreen) {
       refs.shell.classList.remove('assistant-collapsed');
@@ -145,6 +229,7 @@
     refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
     refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
+    removeCollapsedNavFlyout();
 
     if (!isAiPage && !isAnalysisPage) {
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
@@ -183,6 +268,9 @@
     if (refs.sidebarToggle) {
       refs.sidebarToggle.addEventListener('click', () => {
         const collapsed = refs.shell?.classList.toggle('sidebar-collapsed');
+        if (!collapsed) {
+          removeCollapsedNavFlyout();
+        }
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, collapsed ? '1' : '0');
         syncSidebarCollapsedAttr(Boolean(collapsed));
         updateSidebarToggle(Boolean(collapsed));
@@ -195,6 +283,7 @@
         event.preventDefault();
         event.stopPropagation();
         refs.shell.classList.remove('sidebar-collapsed');
+        removeCollapsedNavFlyout();
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');
         syncSidebarCollapsedAttr(false);
         updateSidebarToggle(false);
@@ -209,6 +298,29 @@
         if (!group) return;
         const expanded = group.classList.toggle('expanded');
         groupToggle.setAttribute('aria-expanded', String(expanded));
+      });
+
+      const group = groupToggle.closest('.nav-group');
+      if (!group) return;
+
+      groupToggle.addEventListener('mouseenter', () => {
+        if (!isSidebarCollapsed()) return;
+        createCollapsedNavFlyout(groupToggle, group);
+      });
+
+      groupToggle.addEventListener('mouseleave', () => {
+        if (!isSidebarCollapsed()) return;
+        scheduleCollapsedNavFlyoutClose();
+      });
+
+      groupToggle.addEventListener('focus', () => {
+        if (!isSidebarCollapsed()) return;
+        createCollapsedNavFlyout(groupToggle, group);
+      });
+
+      group.addEventListener('mouseleave', () => {
+        if (!isSidebarCollapsed()) return;
+        scheduleCollapsedNavFlyoutClose();
       });
     });
 
@@ -247,6 +359,19 @@
     const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
     showPage(savedPage, { scrollTop: false });
     restoreLayoutState();
+
+    window.addEventListener('resize', removeCollapsedNavFlyout);
+    window.addEventListener('scroll', removeCollapsedNavFlyout, true);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        removeCollapsedNavFlyout();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!collapsedNavFlyout) return;
+      if (event.target.closest('.sidebar-flyout') || event.target.closest('.nav-group')) return;
+      removeCollapsedNavFlyout();
+    });
   };
 
   App.navigation = {

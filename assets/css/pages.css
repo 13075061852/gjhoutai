@@ -318,7 +318,6 @@
       margin-top:20px;
     }
     .analysis-page{
-      display:flex;
       flex-direction:column;
       gap:16px;
       width:100%;
@@ -682,10 +681,17 @@
     .analysis-table td:last-child{
       border-right:none;
     }
-    .analysis-table td span{
+    .analysis-table td .analysis-cell{
       display:block;
       overflow:hidden;
       text-overflow:ellipsis;
+    }
+    .analysis-cell-main{
+      color:inherit;
+    }
+    .analysis-cell-avg{
+      color:#ec4899;
+      font-weight:600;
     }
     .analysis-empty{
       padding:24px;

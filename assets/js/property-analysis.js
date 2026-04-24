@@ -43,6 +43,97 @@
     return text.length > 120 ? `${text.slice(0, 117)}...` : text;
   };
 
+  const flattenValueParts = (value) => {
+    if (value == null || value === '') return [];
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => flattenValueParts(item));
+    }
+
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    const normalizedText = text.trim();
+    return normalizedText ? [normalizedText] : [];
+  };
+
+  const formatCellValue = (value, columnIndex) => {
+    const fallbackText = summarizeValue(value);
+    if (columnIndex < 3) return fallbackText;
+
+    const parts = flattenValueParts(value);
+    if (!parts.length) return fallbackText;
+
+    const wrappedText = parts.map((part) => `[${part}]`).join(' ');
+    return wrappedText.length > 120 ? `${wrappedText.slice(0, 117)}...` : wrappedText;
+  };
+
+  const parseNumericValue = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+
+    const normalized = text.replace(/,/g, '');
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const getValuePrecision = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const text = String(value);
+      if (!text.includes('.')) return 0;
+      return text.split('.')[1].length;
+    }
+
+    const text = String(value ?? '').trim().replace(/,/g, '');
+    if (!text.includes('.')) return 0;
+    return text.split('.')[1].length;
+  };
+
+  const formatAverageValue = (values) => {
+    if (!values.length) return '';
+
+    const total = values.reduce((sum, item) => sum + item.value, 0);
+    const average = total / values.length;
+    const maxPrecision = values.reduce((result, item) => Math.max(result, item.precision), 0);
+    const precision = maxPrecision > 0 ? Math.min(Math.max(maxPrecision, 2), 4) : 0;
+
+    if (precision === 0) return String(Math.round(average));
+    return average.toFixed(precision).replace(/\.?0+$/, '');
+  };
+
+  const getCellDisplayData = (value, columnIndex) => {
+    const text = formatCellValue(value, columnIndex);
+    const result = {
+      text,
+      html: `<span class="analysis-cell-main">${escapeHtml(text)}</span>`,
+    };
+
+    if (columnIndex < 3 || !Array.isArray(value) || value.length < 2) {
+      return result;
+    }
+
+    const numericValues = value
+      .map((item) => ({
+        value: parseNumericValue(item),
+        precision: getValuePrecision(item),
+      }))
+      .filter((item) => item.value != null);
+
+    if (numericValues.length < 2) {
+      return result;
+    }
+
+    const averageText = formatAverageValue(numericValues);
+    if (!averageText) {
+      return result;
+    }
+
+    result.text = `${text} (${averageText})`;
+    result.html = `<span class="analysis-cell-main">${escapeHtml(text)}</span> <span class="analysis-cell-avg">(${escapeHtml(averageText)})</span>`;
+    return result;
+  };
+
   const getSheetNames = (data) => {
     const sheetNames = Array.isArray(data?.project?.sheetNames) ? data.project.sheetNames : [];
     const fallbackNames = Object.keys(data?.sheets?.raw || {});
@@ -135,9 +226,9 @@
             <tbody>
               ${rows.map((row) => `
                 <tr>
-                  ${columns.map((column) => {
-                    const text = summarizeValue(row[column]);
-                    return `<td><span title="${escapeHtml(text)}">${escapeHtml(text)}</span></td>`;
+                  ${columns.map((column, columnIndex) => {
+                    const cell = getCellDisplayData(row[column], columnIndex);
+                    return `<td><span class="analysis-cell" title="${escapeHtml(cell.text)}">${cell.html}</span></td>`;
                   }).join('')}
                 </tr>
               `).join('')}

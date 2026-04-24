@@ -397,6 +397,90 @@
             <div class="bottom-space"></div>
           </section>
 
+          <section class="dashboard spectrum-page page-section" data-page-section="spectrum-analysis">
+            <article class="spectrum-toolbar">
+              <div class="spectrum-toolbar-row">
+                <div class="spectrum-toolbar-main">
+                  <label class="spectrum-search">
+                    <i class="ti ti-search" aria-hidden="true"></i>
+                    <input id="spectrumSearchInput" type="search" placeholder="搜索图谱编号、名称、分类、标签..." aria-label="搜索图谱" />
+                  </label>
+                  <div class="spectrum-mode-switch" aria-label="图谱类型模式">
+                    <button class="spectrum-mode-btn is-active" type="button" data-spectrum-mode="ALL">ALL</button>
+                    <button class="spectrum-mode-btn" type="button" data-spectrum-mode="DSC">DSC</button>
+                    <button class="spectrum-mode-btn" type="button" data-spectrum-mode="TGA">TGA</button>
+                  </div>
+                  <div class="spectrum-view-switch" aria-label="视图切换">
+                    <button class="spectrum-icon-btn is-active" type="button" data-spectrum-view="grid" aria-label="网格视图" title="网格视图">
+                      <i class="ti ti-layout-grid" aria-hidden="true"></i>
+                    </button>
+                    <button class="spectrum-icon-btn" type="button" data-spectrum-view="list" aria-label="列表视图" title="列表视图">
+                      <i class="ti ti-list" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="spectrum-toolbar-actions">
+                  <button class="analysis-toolbar-btn" id="spectrumUploadBtn" type="button">
+                    <i class="ti ti-upload" aria-hidden="true"></i>
+                    <span>上传图谱</span>
+                  </button>
+                  <button class="analysis-toolbar-btn" id="spectrumCompareBtn" type="button" disabled>
+                    <i class="ti ti-columns-3" aria-hidden="true"></i>
+                    <span>对比</span>
+                  </button>
+                  <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="spectrumSendAiBtn" type="button" disabled>
+                    <i class="ti ti-sparkles" aria-hidden="true"></i>
+                    <span>发送 AI</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="spectrum-toolbar-tags" aria-label="标签筛选">
+                <span class="spectrum-toolbar-label">标签</span>
+                <div class="spectrum-tag-cloud" id="spectrumTagFilters"></div>
+              </div>
+              <input id="spectrumUploadInput" type="file" accept="image/*" multiple hidden />
+            </article>
+
+            <div class="spectrum-workbench">
+              <aside class="spectrum-filter-panel" aria-label="图谱筛选">
+                <div class="spectrum-filter-block">
+                  <div class="spectrum-filter-label">分类</div>
+                  <div class="spectrum-filter-list" id="spectrumCategoryFilters"></div>
+                </div>
+                <div class="spectrum-selected-block">
+                  <div class="spectrum-selected-head">
+                    <div class="spectrum-filter-label">已选列表</div>
+                    <button class="spectrum-link-btn" id="spectrumClearSelectedBtn" type="button">清空</button>
+                  </div>
+                  <div class="spectrum-selected-list" id="spectrumSelectedList"></div>
+                </div>
+              </aside>
+
+              <section class="spectrum-gallery-panel">
+                <div class="spectrum-gallery-head">
+                  <div class="spectrum-gallery-title-row">
+                    <div class="spectrum-panel-title">图谱库</div>
+                    <div class="spectrum-muted" id="spectrumGalleryCount">共 0 张，已选 0 张</div>
+                  </div>
+                  <label class="analysis-select-field">
+                    <span>排序：</span>
+                    <select id="spectrumSortSelect" aria-label="图谱排序">
+                      <option value="date-desc">最近上传</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="spectrum-gallery" id="spectrumGallery"></div>
+                <div class="spectrum-compare-strip" id="spectrumCompareStrip" hidden></div>
+              </section>
+
+              <aside class="spectrum-detail-panel" id="spectrumDetailPanel" aria-label="图谱详情"></aside>
+            </div>
+
+            <div class="bottom-space"></div>
+          </section>
+
           <section class="dashboard page-section" data-page-section="placeholder">
             <div class="placeholder-page">
               <div class="placeholder-card">
@@ -488,6 +572,7 @@
   <script src="./assets/js/app-state.js"></script>
   <script src="./assets/js/navigation.js"></script>
   <script src="./assets/js/property-analysis.js"></script>
+  <script src="./assets/js/spectrum-analysis.js"></script>
   <script src="./assets/js/config.js"></script>
   <script src="./assets/js/chat.js"></script>
   <script src="./assets/js/app.js"></script>

@@ -73,6 +73,8 @@
       .config-layout{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .spectrum-workbench{grid-template-columns:200px minmax(0,1fr)}
+      .spectrum-detail-panel{grid-column:1 / -1;max-height:none}
     }
     @media (max-width: 980px){
       .sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);box-shadow:12px 0 28px rgba(0,0,0,.12)}
@@ -113,6 +115,91 @@
         min-height:auto;
         max-height:none;
         overflow:visible;
+      }
+      .spectrum-page{
+        height:auto;
+        min-height:auto;
+        overflow:visible;
+      }
+      .spectrum-toolbar{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .spectrum-toolbar-row{
+        width:100%;
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .spectrum-toolbar-main,
+      .spectrum-toolbar-actions,
+      .spectrum-search{
+        width:100%;
+      }
+      .spectrum-toolbar-tags{
+        width:100%;
+        grid-template-columns:1fr;
+        align-items:start;
+      }
+      .spectrum-workbench{
+        grid-template-columns:1fr;
+      }
+      .spectrum-filter-panel,
+      .spectrum-gallery-panel,
+      .spectrum-detail-panel{
+        overflow:visible;
+      }
+      .spectrum-gallery{
+        flex:0 1 auto;
+        height:auto;
+        overflow:visible;
+      }
+      .spectrum-gallery.is-list .spectrum-card{
+        grid-template-columns:1fr;
+      }
+      .spectrum-gallery.is-list .spectrum-card-image{
+        height:auto;
+        min-height:0;
+        aspect-ratio:1.9/1;
+        border-right:0;
+        border-bottom:1px solid #e7edf5;
+      }
+      .spectrum-gallery.is-list .spectrum-card-body{
+        min-height:0;
+        grid-template-columns:1fr;
+      }
+      .spectrum-detail-form{
+        grid-template-columns:1fr;
+      }
+      .spectrum-detail-actions{
+        justify-content:stretch;
+      }
+      .spectrum-detail-actions .analysis-toolbar-btn{
+        flex:1 1 0;
+        justify-content:center;
+      }
+      .spectrum-preview-dialog{
+        grid-template-columns:1fr;
+        grid-template-rows:auto minmax(0,1fr);
+        gap:12px;
+        padding:14px;
+      }
+      .spectrum-preview-rail{
+        flex-direction:row;
+        overflow:auto hidden;
+        max-height:132px;
+      }
+      .spectrum-preview-thumb{
+        flex:0 0 132px;
+      }
+      .spectrum-preview-card{
+        height:min(100%, 78vh);
+      }
+      .spectrum-preview-card-head{
+        flex-direction:column;
+        gap:8px;
+      }
+      .spectrum-preview-card-meta{
+        justify-content:flex-start;
       }
     }
     .ai-box-scroll{

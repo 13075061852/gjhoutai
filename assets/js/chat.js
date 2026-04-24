@@ -517,6 +517,24 @@
     requestAnimationFrame(() => refs.chatInput?.focus());
   };
 
+  const draftPrompt = (prompt, options = {}) => {
+    const value = String(prompt || '').trim();
+    if (!value || !refs.chatInput) return;
+
+    if (options.newConversation && !isFreshSession()) {
+      createNewConversation();
+    }
+
+    refs.chatInput.value = value;
+    refs.chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    App.navigation?.setAssistantCollapsed?.(false);
+    requestAnimationFrame(() => {
+      refs.chatInput?.focus();
+      const length = refs.chatInput.value.length;
+      refs.chatInput.setSelectionRange?.(length, length);
+    });
+  };
+
   const consumeChatCompletionStream = async (response, onDelta) => {
     if (!response.body) return false;
 
@@ -778,6 +796,7 @@
     renderChat,
     sendChatMessage,
     renderFullscreenSidebar,
+    draftPrompt,
   };
 })();
 

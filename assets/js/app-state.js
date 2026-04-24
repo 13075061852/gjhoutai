@@ -17,6 +17,7 @@
     groupToggles: qsa('[data-toggle="group"]'),
     aiPageSection: qs('[data-page-section="ai-config"]'),
     propertyAnalysisPageSection: qs('[data-page-section="property-analysis"]'),
+    spectrumAnalysisPageSection: qs('[data-page-section="spectrum-analysis"]'),
     placeholderPageSection: qs('[data-page-section="placeholder"]'),
     placeholderEyebrow: byId('placeholderEyebrow'),
     placeholderTitle: byId('placeholderTitle'),
@@ -170,8 +171,8 @@
       },
       'spectrum-analysis': {
         title: '图谱分析',
-        eyebrow: '功能开发中',
-        desc: '图谱分析页面暂未接入，后续会在这里展示图谱识别、峰值解析和结果判读。',
+        eyebrow: '当前可用',
+        desc: '图谱分析页面用于管理图谱图片、分类标签、图谱查看、多图对比，并可把图片上下文发送到右侧 Gjun AI。',
       },
       'permission-management': {
         title: '权限管理',

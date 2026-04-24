@@ -574,6 +574,13 @@
     return '【已请求接入数据】当前页面没有可接入的数据表，请切换到物性分析或图谱分析页面。';
   };
 
+  const getAttachedDataFile = (prompt) => {
+    if (!state.dataAttachmentEnabled) return null;
+    const pageId = getActivePageId();
+    if (pageId === 'property-analysis') return App.propertyAnalysis?.getAiDataFile?.(prompt) || null;
+    return null;
+  };
+
   const getContextMessages = (config, prompt) => {
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     const attachedDataContext = prompt ? getAttachedDataContext(prompt) : '';
@@ -604,14 +611,40 @@
     return messages;
   };
 
+  const encodeTextAsDataUrl = (text, mimeType = 'text/plain') => {
+    const safeMimeType = String(mimeType || 'text/plain').split(';')[0] || 'text/plain';
+    const bytes = new TextEncoder().encode(String(text || ''));
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return `data:${safeMimeType};base64,${btoa(binary)}`;
+  };
+
+  const normalizeFileAttachments = (files) => (Array.isArray(files) ? files.map((file) => {
+    const content = String(file?.content || '');
+    const filename = String(file?.filename || 'data.txt').trim() || 'data.txt';
+    const mimeType = String(file?.mimeType || 'text/plain');
+    if (!content) return null;
+    return {
+      type: 'file',
+      file: {
+        filename,
+        file_data: encodeTextAsDataUrl(content, mimeType),
+      },
+    };
+  }).filter(Boolean) : []);
+
   const toApiMessage = (message, options = {}) => {
     const images = normalizeImages(message.images);
     const content = String(options.content ?? message.content ?? '');
-    if (message.role === 'user' && images.length) {
+    const files = normalizeFileAttachments(options.files);
+    if (message.role === 'user' && (images.length || files.length)) {
       return {
         role: 'user',
         content: [
           { type: 'text', text: content },
+          ...files,
           ...images.map((image) => ({
             type: 'image_url',
             image_url: image.image_url,
@@ -638,6 +671,23 @@
       '【回答要求】',
       '必须优先使用上面的后台数据表回答用户问题。',
       '如果问题中的型号/批次在表格里没有完全匹配，请明确说未找到完全匹配，并列出表格中的相近型号/批次。',
+      '禁止把表格里的材料型号解释成服务器、网络设备或其他外部产品型号。',
+    ].join('\n');
+  };
+
+  const buildUserPromptWithFile = (prompt, dataFile) => {
+    if (!dataFile) return prompt;
+    return [
+      '【用户问题】',
+      prompt,
+      '',
+      `【后台已上传文件】${dataFile.filename}`,
+      '该文件是物性分析页面的完整表格数据，UTF-8 编码，TSV 格式，包含全部工作表、全部分类、全部列和全部行。',
+      '请打开并读取该文件后回答问题。',
+      '',
+      '【回答要求】',
+      '必须优先使用附件表格数据回答。',
+      '如果问题中的型号/批次在附件里没有完全匹配，请明确说未找到完全匹配，并列出附件中的相近型号/批次。',
       '禁止把表格里的材料型号解释成服务器、网络设备或其他外部产品型号。',
     ].join('\n');
   };
@@ -766,7 +816,8 @@
     let streamedImages = [];
 
     try {
-      const attachedDataContext = getAttachedDataContext(prompt);
+      const attachedDataFile = getAttachedDataFile(prompt);
+      const attachedDataContext = attachedDataFile ? '' : getAttachedDataContext(prompt);
       const requestMessages = state.chatHistory
         .slice(0, pendingIndex)
         .filter((item) => item.role === 'user' || item.role === 'assistant')
@@ -775,8 +826,9 @@
           const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
           return toApiMessage(item, {
             content: isCurrentUserMessage
-              ? buildUserPromptWithData(item.content, attachedDataContext)
+              ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
               : item.content,
+            files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
           });
         });
 
@@ -792,11 +844,14 @@
           temperature: config.temperature,
           max_tokens: config.maxTokens,
           modalities: wantsImages ? ['image', 'text'] : undefined,
-          stream: wantsImages ? false : streamEnabled,
+          stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
         }),
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+      }
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
       const shouldStream = !wantsImages && streamEnabled && response.body && contentType.includes('text/event-stream');
 

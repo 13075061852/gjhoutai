@@ -604,6 +604,17 @@
     ].filter(Boolean).join('\n');
   };
 
+  const getAiDataFile = (question = '') => {
+    const content = getFullAiContext(question);
+    if (!content) return null;
+
+    return {
+      filename: `property-analysis-data-${new Date().toISOString().slice(0, 10)}.txt`,
+      mimeType: 'text/plain',
+      content,
+    };
+  };
+
   const buildTable = (rows, columns) => {
     if (!rows.length || !columns.length) {
       return '<div class="analysis-empty">暂无符合条件的数据，请调整筛选条件后重试。</div>';
@@ -992,5 +1003,6 @@
     render,
     getAiContext,
     getFullAiContext,
+    getAiDataFile,
   };
 })();

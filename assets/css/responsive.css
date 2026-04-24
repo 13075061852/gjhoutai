@@ -73,8 +73,67 @@
       .config-layout{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .spectrum-workbench{grid-template-columns:200px minmax(0,1fr)}
-      .spectrum-detail-panel{grid-column:1 / -1;max-height:none}
+      .spectrum-page{
+        height:auto;
+        min-height:auto;
+        overflow:visible;
+      }
+      .spectrum-toolbar-row{
+        flex-direction:column;
+        align-items:stretch;
+      }
+      .spectrum-toolbar-main{
+        width:100%;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto auto;
+        align-items:center;
+      }
+      .spectrum-search{
+        min-width:0;
+      }
+      .spectrum-toolbar-actions{
+        width:100%;
+        flex-wrap:nowrap;
+        justify-content:flex-start;
+        overflow-x:auto;
+        padding-bottom:2px;
+        scrollbar-width:none;
+      }
+      .spectrum-toolbar-actions::-webkit-scrollbar{display:none}
+      .spectrum-toolbar-actions .analysis-toolbar-btn{
+        flex:0 0 auto;
+      }
+      .spectrum-workbench{
+        display:flex;
+        flex-direction:column;
+        grid-template-columns:minmax(0,1fr);
+        grid-auto-rows:auto;
+      }
+      .spectrum-filter-panel{order:1}
+      .spectrum-gallery-panel{order:2}
+      .spectrum-detail-panel{
+        order:3;
+        grid-column:auto;
+        max-height:none;
+      }
+      .spectrum-filter-panel,
+      .spectrum-gallery-panel,
+      .spectrum-detail-panel{
+        overflow:visible;
+      }
+      .spectrum-gallery{
+        flex:0 1 auto;
+        height:auto;
+        overflow:visible;
+      }
+      .spectrum-detail-image{
+        display:none;
+      }
+      .spectrum-gallery-controls{
+        width:100%;
+        justify-content:space-between;
+        flex-wrap:wrap;
+      }
     }
     @media (max-width: 980px){
       .sidebar{position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);box-shadow:12px 0 28px rgba(0,0,0,.12)}
@@ -135,6 +194,13 @@
       .spectrum-search{
         width:100%;
       }
+      .spectrum-toolbar-main{
+        display:flex;
+      }
+      .spectrum-toolbar-actions{
+        flex-wrap:wrap;
+        overflow-x:visible;
+      }
       .spectrum-toolbar-tags{
         width:100%;
         grid-template-columns:1fr;
@@ -169,6 +235,9 @@
       }
       .spectrum-detail-form{
         grid-template-columns:1fr;
+      }
+      .spectrum-detail-image{
+        display:none;
       }
       .spectrum-detail-actions{
         justify-content:stretch;

@@ -8,6 +8,8 @@
   const STORAGE_KEY = 'gjh-spectrum-user-images-v2';
   const EDIT_STORAGE_KEY = 'gjh-spectrum-edits-v2';
   const EDITABLE_FIELDS = ['title', 'category', 'date', 'tags', 'note'];
+  const DELETE_ANIMATION_MS = 240;
+  const DETAIL_ANIMATION_MS = 520;
 
   const state = {
     items: [],
@@ -20,8 +22,8 @@
     mode: 'ALL',
     view: 'grid',
     sort: 'date-desc',
-    compareOpen: false,
     editingId: '',
+    detailCollapsed: false,
   };
 
   const refs = {};
@@ -30,7 +32,7 @@
     refs.searchInput = document.getElementById('spectrumSearchInput');
     refs.uploadBtn = document.getElementById('spectrumUploadBtn');
     refs.uploadInput = document.getElementById('spectrumUploadInput');
-    refs.compareBtn = document.getElementById('spectrumCompareBtn');
+    refs.printBtn = document.getElementById('spectrumPrintBtn');
     refs.sendAiBtn = document.getElementById('spectrumSendAiBtn');
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
     refs.tagFilters = document.getElementById('spectrumTagFilters');
@@ -39,10 +41,11 @@
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
+    refs.toggleDetailBtn = document.getElementById('spectrumToggleDetailBtn');
     refs.gallery = document.getElementById('spectrumGallery');
+    refs.workbench = refs.gallery?.closest('.spectrum-workbench');
     refs.galleryPanel = refs.gallery?.closest('.spectrum-gallery-panel');
     refs.detailPanel = document.getElementById('spectrumDetailPanel');
-    refs.compareStrip = document.getElementById('spectrumCompareStrip');
     refs.viewButtons = document.querySelectorAll('[data-spectrum-view]');
     refs.modeButtons = document.querySelectorAll('[data-spectrum-mode]');
   };
@@ -51,6 +54,13 @@
     const baseName = String(name || '').replace(/\.[^.]*$/, '').trim().toUpperCase();
     const suffix = baseName.slice(-3);
     return suffix === 'DSC' || suffix === 'TGA' ? suffix : '';
+  };
+
+  const getUploadTitle = (file) => file.name.replace(/\.[^.]+$/, '') || file.name;
+
+  const findItemByTitle = (title) => {
+    const normalized = String(title || '').trim().toLowerCase();
+    return state.items.find((item) => String(item.title || '').trim().toLowerCase() === normalized);
   };
 
   const applyItemEdits = (item) => {
@@ -214,34 +224,58 @@
     render();
   };
 
-  const deleteSpectrumItem = (id) => {
-    const item = state.items.find((entry) => entry.id === id);
-    if (!item) return;
+  const commitDeleteItems = (ids) => {
+    const targets = new Set(ids);
+    if (!targets.size) return;
 
-    state.items = state.items.filter((entry) => entry.id !== id);
-    state.selectedIds.delete(id);
-    delete state.edits[id];
+    state.items = state.items.filter((entry) => !targets.has(entry.id));
+    targets.forEach((id) => {
+      state.selectedIds.delete(id);
+      delete state.edits[id];
+    });
     state.activeId = state.items[0]?.id || '';
-    state.compareOpen = state.selectedIds.size >= 2 && state.compareOpen;
     if (refs.previewDialog) closeImagePreview();
     saveUploadedItems();
     saveItemEdits();
     render();
   };
 
-  const deleteSelectedItems = () => {
-    const ids = new Set(state.selectedIds);
-    if (!ids.size) return;
+  const animateDeleteItems = (ids, onDone) => {
+    const targets = [...new Set(ids)].filter(Boolean);
+    if (!targets.length) return;
 
-    state.items = state.items.filter((entry) => !ids.has(entry.id));
-    ids.forEach((id) => delete state.edits[id]);
-    state.selectedIds.clear();
-    state.activeId = state.items[0]?.id || '';
-    state.compareOpen = false;
-    if (refs.previewDialog) closeImagePreview();
-    saveUploadedItems();
-    saveItemEdits();
-    render();
+    const escapeSelectorValue = (value) => window.CSS?.escape ? window.CSS.escape(value) : String(value).replace(/["\\]/g, '\\$&');
+    const selector = targets.map((id) => {
+      const escapedId = escapeSelectorValue(id);
+      return `[data-spectrum-id="${escapedId}"], [data-spectrum-selected-item="${escapedId}"]`;
+    }).join(', ');
+    const nodes = selector ? [...document.querySelectorAll(selector)] : [];
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (!nodes.length || reducedMotion) {
+      onDone();
+      return;
+    }
+
+    nodes.forEach((node) => {
+      node.classList.add('is-deleting');
+      node.setAttribute('aria-hidden', 'true');
+    });
+    window.setTimeout(onDone, DELETE_ANIMATION_MS);
+  };
+
+  const deleteSpectrumItem = (id) => {
+    const item = state.items.find((entry) => entry.id === id);
+    if (!item) return;
+
+    animateDeleteItems([id], () => commitDeleteItems([id]));
+  };
+
+  const deleteSelectedItems = () => {
+    const ids = [...state.selectedIds];
+    if (!ids.length) return;
+
+    animateDeleteItems(ids, () => commitDeleteItems(ids));
   };
 
   const closeDeleteDialog = () => {
@@ -284,6 +318,38 @@
     refs.deleteTargetId = id;
     refs.deleteMode = mode;
   };
+
+  const openUploadConflictDialog = (fileName) => new Promise((resolve) => {
+    refs.uploadConflictDialog?.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'spectrum-delete-dialog spectrum-upload-conflict-dialog';
+    dialog.innerHTML = `
+      <div class="spectrum-delete-card spectrum-upload-conflict-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadConflictTitle">
+        <div class="spectrum-delete-icon spectrum-upload-conflict-icon"><i class="ti ti-file-alert" aria-hidden="true"></i></div>
+        <div class="spectrum-delete-main">
+          <div class="spectrum-delete-title" id="spectrumUploadConflictTitle">发现同名图片</div>
+          <div class="spectrum-delete-text">“${utils.escapeHtml(fileName)}” 已存在，是否覆盖现有图片？选择跳过将保留原图片。</div>
+        </div>
+        <div class="spectrum-delete-actions">
+          <button class="analysis-toolbar-btn" type="button" data-spectrum-upload-skip>跳过</button>
+          <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-upload-overwrite>覆盖</button>
+        </div>
+      </div>
+    `;
+    const finish = (action) => {
+      dialog.remove();
+      refs.uploadConflictDialog = null;
+      refs.uploadConflictResolver = null;
+      resolve(action);
+    };
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog || event.target.closest('[data-spectrum-upload-skip]')) finish('skip');
+      if (event.target.closest('[data-spectrum-upload-overwrite]')) finish('overwrite');
+    });
+    refs.uploadConflictResolver = finish;
+    document.body.appendChild(dialog);
+    refs.uploadConflictDialog = dialog;
+  });
 
   const renderGallery = () => {
     const items = getFilteredItems();
@@ -403,38 +469,102 @@
     `;
   };
 
-  const renderCompareStrip = () => {
-    const selected = getSelectedItems();
-    refs.compareStrip.hidden = !state.compareOpen || selected.length < 2;
+  const updateActions = () => {
+    const selectedCount = state.selectedIds.size;
+    if (refs.printBtn) refs.printBtn.disabled = selectedCount < 1;
+    if (refs.sendAiBtn) refs.sendAiBtn.disabled = selectedCount < 1 && !state.activeId;
+  };
 
-    if (refs.compareStrip.hidden) {
-      refs.compareStrip.innerHTML = '';
+  const updateDetailCollapsed = () => {
+    refs.workbench?.classList.toggle('is-detail-collapsed', state.detailCollapsed);
+    if (!refs.toggleDetailBtn) return;
+
+    refs.toggleDetailBtn.setAttribute('aria-expanded', String(!state.detailCollapsed));
+    refs.toggleDetailBtn.classList.toggle('is-collapsed', state.detailCollapsed);
+    const icon = refs.toggleDetailBtn.querySelector('.ti');
+    const label = refs.toggleDetailBtn.querySelector('span');
+    if (icon) icon.className = `ti ${state.detailCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}`;
+    if (label) label.textContent = state.detailCollapsed ? '展开详情' : '收起详情';
+  };
+
+  const setDetailCollapsed = (collapsed) => {
+    if (!refs.detailPanel) {
+      state.detailCollapsed = collapsed;
+      updateDetailCollapsed();
       return;
     }
 
-    refs.compareStrip.innerHTML = `
-      <div class="spectrum-compare-head">
-        <div>
-          <strong>对比视图</strong>
-          <span>已选择 ${selected.length} 张图谱，支持同步发送给右侧 AI。</span>
-        </div>
-        <button class="spectrum-link-btn" type="button" data-spectrum-close-compare>收起</button>
-      </div>
-      <div class="spectrum-compare-grid">
-        ${selected.map((item) => `
-          <div class="spectrum-compare-item">
-            <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
-            <div>${utils.escapeHtml([item.title, item.date].filter(Boolean).join(' · '))}</div>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    window.clearTimeout(refs.detailCollapseTimer);
+    state.detailCollapsed = collapsed;
+    if (!collapsed) refs.detailPanel.hidden = false;
+    updateDetailCollapsed();
+
+    if (collapsed) {
+      refs.detailCollapseTimer = window.setTimeout(() => {
+        if (state.detailCollapsed && refs.detailPanel) refs.detailPanel.hidden = true;
+      }, DETAIL_ANIMATION_MS);
+    }
   };
 
-  const updateActions = () => {
-    const selectedCount = state.selectedIds.size;
-    refs.compareBtn.disabled = selectedCount < 2;
-    refs.sendAiBtn.disabled = selectedCount < 1 && !state.activeId;
+  const printSelectedList = () => {
+    const items = getSelectedItems();
+    if (!items.length) return;
+
+    const title = '已选图谱打印列表';
+    const opened = window.open('', '_blank');
+    if (!opened) return;
+
+    const cards = items.map((item, index) => `
+      <article class="print-card" aria-label="${utils.escapeHtml(`${index + 1}. ${item.title}`)}">
+        <div class="print-image-wrap">
+          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+        </div>
+        <div class="print-meta">
+          <strong>${utils.escapeHtml(item.title)}</strong>
+          <span>${utils.escapeHtml([item.spectrumType, item.category, item.date].filter(Boolean).join(' · '))}</span>
+        </div>
+      </article>
+    `).join('');
+
+    opened.document.write(`<!doctype html>
+      <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <title>${utils.escapeHtml(title)}</title>
+          <style>
+            *{box-sizing:border-box}
+            html,body{margin:0;padding:0;background:#fff}
+            .print-grid{display:block}
+            .print-card{height:100vh;break-after:page;page-break-after:always;padding:9mm 18mm 11mm;display:flex;flex-direction:column}
+            .print-card:last-child{break-after:auto;page-break-after:auto}
+            .print-image-wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center}
+            img{width:100%;height:100%;object-fit:contain;display:block}
+            .print-meta{flex:0 0 auto;border-top:1px solid #e5ebf3;margin-top:8mm;padding-top:4mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12mm;color:#0f172a}
+            strong{font-size:13px;line-height:1.35;font-weight:800}
+            span{font-size:11px;color:#64748b;font-weight:700;white-space:nowrap}
+            @page{size:A4 landscape;margin:0}
+            @media print{
+              .print-card{height:100vh}
+            }
+          </style>
+        </head>
+        <body>
+          <main class="print-grid">${cards}</main>
+          <script>
+            const images = [...document.images];
+            Promise.all(images.map((img) => img.complete ? Promise.resolve() : new Promise((resolve) => {
+              img.addEventListener('load', resolve, { once: true });
+              img.addEventListener('error', resolve, { once: true });
+            }))).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+              }, 120);
+            });
+          <\/script>
+        </body>
+      </html>`);
+    opened.document.close();
   };
 
   const render = () => {
@@ -442,15 +572,13 @@
     renderGallery();
     renderDetail();
     renderSelectedList();
-    renderCompareStrip();
     updateActions();
+    updateDetailCollapsed();
   };
 
-  const buildAiPrompt = (items, mode) => {
+  const buildAiPrompt = (items) => {
     const targetItems = items.length ? items : [getActiveItem()].filter(Boolean);
-    const intro = mode === 'compare'
-      ? `请对比以下 ${targetItems.length} 张图谱，重点说明差异点、异常区域、可能原因和建议结论。`
-      : '请分析这张图谱，重点说明图谱特征、异常点、建议标签和后续处理建议。';
+    const intro = '请分析以下图谱，重点说明图谱特征、异常点、建议标签和后续处理建议。';
     const lines = targetItems.map((item, index) => [
       `${index + 1}. ${item.title}`,
       `编号：${item.code}`,
@@ -462,8 +590,8 @@
     return `${intro}\n\n${lines.join('\n\n')}\n\n图片已在图谱分析页面选中，请结合图谱图片和上述业务信息给出结论。`;
   };
 
-  const sendToAi = (items, mode) => {
-    const prompt = buildAiPrompt(items, mode);
+  const sendToAi = (items) => {
+    const prompt = buildAiPrompt(items);
     App.chat?.draftPrompt?.(prompt);
   };
 
@@ -559,37 +687,63 @@
     render();
   };
 
-  const uploadSpectrumFiles = (fileList) => {
+  const readFileAsDataUrl = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result || '')));
+    reader.addEventListener('error', () => resolve(''));
+    reader.readAsDataURL(file);
+  });
+
+  const uploadSpectrumFiles = async (fileList) => {
     const files = [...(fileList || [])].filter((file) => file.type.startsWith('image/'));
     if (!files.length) return;
 
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.addEventListener('load', () => {
-        const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const title = file.name.replace(/\.[^.]+$/, '') || file.name;
+    for (const file of files) {
+      const title = getUploadTitle(file);
+      const existing = findItemByTitle(title);
+      if (existing) {
+        const action = await openUploadConflictDialog(file.name);
+        if (action === 'skip') continue;
+      }
+
+      const image = await readFileAsDataUrl(file);
+      if (!image) continue;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const spectrumType = getSpectrumTypeFromName(file.name);
+      if (existing) {
+        const index = state.items.findIndex((item) => item.id === existing.id);
+        if (index < 0) continue;
+        state.items[index] = {
+          ...state.items[index],
+          title,
+          spectrumType,
+          image,
+          uploaded: true,
+        };
+        state.activeId = existing.id;
+      } else {
         const inheritedCategory = state.category === '全部' ? '' : state.category;
         const inheritedTags = state.tag === '全部' ? [] : [state.tag];
         const item = {
-          id,
-          code: `UPLOAD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+          id: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          code: `UPLOAD-${today.replace(/-/g, '')}`,
           title,
-          spectrumType: getSpectrumTypeFromName(file.name),
+          spectrumType,
           category: inheritedCategory,
           status: '',
-          date: new Date().toISOString().slice(0, 10),
+          date: today,
           tags: inheritedTags,
-          image: String(reader.result || ''),
+          image,
           note: '',
           uploaded: true,
         };
         state.items.unshift(item);
-        state.activeId = id;
-        saveUploadedItems();
-        render();
-      });
-      reader.readAsDataURL(file);
-    });
+        state.activeId = item.id;
+      }
+      saveUploadedItems();
+      render();
+    }
   };
 
   const bindEvents = () => {
@@ -625,9 +779,8 @@
     });
 
     refs.clearSelectedBtn?.addEventListener('click', () => {
-      state.selectedIds.clear();
-      state.compareOpen = false;
-      render();
+    state.selectedIds.clear();
+    render();
     });
 
     refs.deleteSelectedBtn?.addEventListener('click', () => {
@@ -688,7 +841,7 @@
       const aiButton = event.target.closest('[data-spectrum-ai]');
       if (aiButton) {
         const item = state.items.find((entry) => entry.id === aiButton.getAttribute('data-spectrum-ai'));
-        if (item) sendToAi([item], 'single');
+        if (item) sendToAi([item]);
         return;
       }
 
@@ -745,6 +898,12 @@
     });
 
     document.addEventListener('keydown', (event) => {
+      if (refs.uploadConflictDialog && event.key === 'Escape') {
+        refs.uploadConflictResolver?.('skip');
+        refs.uploadConflictResolver = null;
+        return;
+      }
+
       if (refs.deleteDialog && event.key === 'Escape') {
         closeDeleteDialog();
         return;
@@ -786,21 +945,15 @@
       }
     });
 
-    refs.compareBtn?.addEventListener('click', () => {
-      state.compareOpen = true;
-      renderCompareStrip();
+    refs.toggleDetailBtn?.addEventListener('click', () => {
+      setDetailCollapsed(!state.detailCollapsed);
     });
 
-    refs.compareStrip?.addEventListener('click', (event) => {
-      if (event.target.closest('[data-spectrum-close-compare]')) {
-        state.compareOpen = false;
-        renderCompareStrip();
-      }
-    });
+    refs.printBtn?.addEventListener('click', printSelectedList);
 
     refs.sendAiBtn?.addEventListener('click', () => {
       const selected = getSelectedItems();
-      sendToAi(selected.length ? selected : [getActiveItem()].filter(Boolean), selected.length > 1 ? 'compare' : 'single');
+      sendToAi(selected.length ? selected : [getActiveItem()].filter(Boolean));
     });
 
     refs.uploadBtn?.addEventListener('click', () => refs.uploadInput?.click());

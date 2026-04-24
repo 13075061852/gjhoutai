@@ -425,9 +425,9 @@
                     <i class="ti ti-upload" aria-hidden="true"></i>
                     <span>上传图谱</span>
                   </button>
-                  <button class="analysis-toolbar-btn" id="spectrumCompareBtn" type="button" disabled>
-                    <i class="ti ti-columns-3" aria-hidden="true"></i>
-                    <span>对比</span>
+                  <button class="analysis-toolbar-btn" id="spectrumPrintBtn" type="button" disabled>
+                    <i class="ti ti-printer" aria-hidden="true"></i>
+                    <span>打印列表</span>
                   </button>
                   <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="spectrumSendAiBtn" type="button" disabled>
                     <i class="ti ti-sparkles" aria-hidden="true"></i>
@@ -467,15 +467,19 @@
                     <div class="spectrum-panel-title">图谱库</div>
                     <div class="spectrum-muted" id="spectrumGalleryCount">共 0 张，已选 0 张</div>
                   </div>
-                  <label class="analysis-select-field">
-                    <span>排序：</span>
-                    <select id="spectrumSortSelect" aria-label="图谱排序">
-                      <option value="date-desc">最近上传</option>
-                    </select>
-                  </label>
+                  <div class="spectrum-gallery-controls">
+                    <label class="analysis-select-field">
+                      <select id="spectrumSortSelect" aria-label="图谱排序">
+                        <option value="date-desc">最近上传</option>
+                      </select>
+                    </label>
+                    <button class="spectrum-detail-toggle" id="spectrumToggleDetailBtn" type="button" aria-expanded="true">
+                      <i class="ti ti-layout-sidebar-right-collapse" aria-hidden="true"></i>
+                      <span>收起详情</span>
+                    </button>
+                  </div>
                 </div>
                 <div class="spectrum-gallery" id="spectrumGallery"></div>
-                <div class="spectrum-compare-strip" id="spectrumCompareStrip" hidden></div>
               </section>
 
               <aside class="spectrum-detail-panel" id="spectrumDetailPanel" aria-label="图谱详情"></aside>

@@ -116,7 +116,7 @@
     }
     .brand{
       display:grid;
-      grid-template-columns:32px minmax(0,1fr);
+      grid-template-columns:44px minmax(0,1fr);
       align-items:center;
       column-gap:8px;
       width:100%;

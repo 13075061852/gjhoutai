@@ -100,6 +100,15 @@
     if (label) label.textContent = collapsed ? '展开侧边栏' : '收起侧边栏';
   };
 
+  const runSidebarTransition = () => {
+    if (!refs.shell) return;
+    refs.shell.classList.add('sidebar-transitioning');
+    window.clearTimeout(refs.sidebarTransitionTimer);
+    refs.sidebarTransitionTimer = window.setTimeout(() => {
+      refs.shell?.classList.remove('sidebar-transitioning');
+    }, 520);
+  };
+
   const updateAssistantToggle = () => {
     if (!refs.askAiToggle || !refs.shell) return;
     const collapsed = refs.shell.classList.contains('assistant-collapsed');
@@ -178,7 +187,7 @@
       updateAssistantFullscreenToggle();
       window.GJHApp?.chat?.renderChat?.();
       assistantFullscreenExitTimer = null;
-    }, 420);
+    }, 560);
   };
 
   const toggleAssistantFullscreen = () => {
@@ -325,6 +334,7 @@
   const bindNavigation = () => {
     if (refs.sidebarToggle) {
       refs.sidebarToggle.addEventListener('click', () => {
+        runSidebarTransition();
         const collapsed = refs.shell?.classList.toggle('sidebar-collapsed');
         if (!collapsed) {
           removeCollapsedNavFlyout();
@@ -340,6 +350,7 @@
         if (!refs.shell?.classList.contains('sidebar-collapsed')) return;
         event.preventDefault();
         event.stopPropagation();
+        runSidebarTransition();
         refs.shell.classList.remove('sidebar-collapsed');
         removeCollapsedNavFlyout();
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');

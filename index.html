@@ -32,7 +32,7 @@
   <title>塑料粒子测试分析平台</title>
   <link rel="icon" type="image/png" href="./logo.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
-  <link rel="stylesheet" href="./assets/css/styles.css?v=20260425-chat-theme" />
+  <link rel="stylesheet" href="./assets/css/styles.css?v=20260425-read-status-time" />
 </head>
 <body>
   <div class="app">
@@ -433,13 +433,11 @@
                 </div>
 
                 <div class="analysis-panel-controls">
-                  <div class="analysis-import-status" id="analysisImportStatus">读取中</div>
+                  <div class="analysis-import-status is-loading" id="analysisImportStatus">读取中</div>
                   <label class="analysis-select-field">
                     <select id="analysisSortSelect" aria-label="排序">
-                      <option value="default">默认排序</option>
-                      <option value="model-asc">型号升序</option>
-                      <option value="model-desc">型号降序</option>
-                      <option value="mfi-desc">熔指从高到低</option>
+                      <option value="forward">正序</option>
+                      <option value="backward">反序</option>
                     </select>
                   </label>
 
@@ -677,16 +675,16 @@
       </aside>
     </div>
   </div>
-  <script src="./assets/js/app-state.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/custom-select.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/navigation.js?v=20260425-ai-json-context"></script>
+  <script src="./assets/js/app-state.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/custom-select.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/navigation.js?v=20260425-read-status-duration"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="./assets/js/property-analysis.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/spectrum-analysis.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/theme-settings.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/config.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/chat.js?v=20260425-ai-json-context"></script>
-  <script src="./assets/js/app.js?v=20260425-ai-json-context"></script>
+  <script src="./assets/js/property-analysis.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/spectrum-analysis.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/theme-settings.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/config.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/chat.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/app.js?v=20260425-read-status-duration"></script>
 </body>
 </html>
 

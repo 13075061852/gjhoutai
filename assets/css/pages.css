@@ -588,6 +588,30 @@
       font-weight:700;
       white-space:nowrap;
       line-height:1;
+      gap:7px;
+    }
+    .analysis-import-status.is-loading::before{
+      content:"";
+      width:12px;
+      height:12px;
+      border-radius:999px;
+      border:2px solid currentColor;
+      border-right-color:transparent;
+      opacity:.75;
+      animation:analysis-status-spin .8s linear infinite;
+    }
+    .analysis-import-status.is-success{
+      color:var(--accent);
+      border-color:color-mix(in srgb, var(--accent) 24%, var(--border));
+      background:var(--accent-soft);
+    }
+    .analysis-import-status.is-error{
+      color:#dc2626;
+      border-color:rgba(239,68,68,.28);
+      background:rgba(239,68,68,.08);
+    }
+    @keyframes analysis-status-spin{
+      to{transform:rotate(360deg)}
     }
     .analysis-panel{
       padding:0;
@@ -665,7 +689,7 @@
       background-repeat:no-repeat;
     }
     #analysisSortSelect{
-      width:128px;
+      width:78px;
     }
     #analysisPageSizeSelect{
       width:86px;
@@ -3989,6 +4013,17 @@
     .shell.assistant-fullscreen .tiny-btn{
       border-radius:999px;
       background:var(--surface);
+    }
+    .shell.assistant-fullscreen .tiny-btn.is-active,
+    .shell.assistant-fullscreen .data-attach-btn.is-active{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#fff;
+    }
+    .shell.assistant-fullscreen .tiny-btn.is-active:hover,
+    .shell.assistant-fullscreen .data-attach-btn.is-active:hover{
+      filter:brightness(1.03);
+      color:#fff;
     }
     .shell.assistant-fullscreen .send-btn{
       min-width:44px;

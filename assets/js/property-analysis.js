@@ -76,7 +76,7 @@
     query: '',
     page: 1,
     pageSize: PAGE_SIZE_DEFAULT,
-    sort: 'default',
+    sort: 'forward',
     searchMode: 'fuzzy',
     searchSuggestions: [],
     suggestionIndex: -1,
@@ -387,9 +387,29 @@
     return `https://${config.bucket}.${endpoint}/${encodeOssObjectKey(objectKey)}`;
   };
 
-  const setUploadStatus = (message) => {
+  const formatDuration = (startTime) => {
+    const duration = Math.max(0, performance.now() - startTime);
+    if (duration < 1000) return `${Math.round(duration)}ms`;
+    return `${(duration / 1000).toFixed(2).replace(/\.?0+$/, '')}s`;
+  };
+
+  const getStatusTone = (message, explicitTone = '') => {
+    if (explicitTone) return explicitTone;
+    const text = String(message || '');
+    if (/中|解析|上传/.test(text)) return 'loading';
+    if (/成功/.test(text)) return 'success';
+    if (/失败|错误/.test(text)) return 'error';
+    return '';
+  };
+
+  const setUploadStatus = (message, tone = '') => {
     state.uploadStatusText = message || '未上传';
-    if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
+    if (!refs.importStatus) return;
+    const statusTone = getStatusTone(state.uploadStatusText, tone);
+    refs.importStatus.textContent = state.uploadStatusText;
+    refs.importStatus.classList.toggle('is-loading', statusTone === 'loading');
+    refs.importStatus.classList.toggle('is-success', statusTone === 'success');
+    refs.importStatus.classList.toggle('is-error', statusTone === 'error');
   };
 
   const arrayBufferToBase64 = (buffer) => {
@@ -729,26 +749,7 @@
   const sortRows = (rows) => {
     const nextRows = [...rows];
 
-    if (state.sort === 'model-asc') {
-      nextRows.sort((left, right) => String(left.型号 || '').localeCompare(String(right.型号 || ''), 'zh-CN'));
-      return nextRows;
-    }
-
-    if (state.sort === 'model-desc') {
-      nextRows.sort((left, right) => String(right.型号 || '').localeCompare(String(left.型号 || ''), 'zh-CN'));
-      return nextRows;
-    }
-
-    if (state.sort === 'mfi-desc') {
-      nextRows.sort((left, right) => {
-        const a = getMetricValue(left, '熔指') ?? Number.NEGATIVE_INFINITY;
-        const b = getMetricValue(right, '熔指') ?? Number.NEGATIVE_INFINITY;
-        return b - a;
-      });
-      return nextRows;
-    }
-
-    return nextRows;
+    return state.sort === 'backward' ? nextRows.reverse() : nextRows;
   };
 
   const paginateRows = (rows) => {
@@ -796,6 +797,15 @@
   const isAllFilteredSelected = (rows) => {
     if (!rows.length) return false;
     return rows.every((row) => state.selectedKeys.has(row.__rowKey));
+  };
+
+  const getModelTypeCount = (rows) => {
+    const models = new Set();
+    rows.forEach((row) => {
+      const model = String(row?.型号 ?? '').trim();
+      if (model) models.add(model);
+    });
+    return models.size;
   };
 
   const updateToolbarState = (filteredRows) => {
@@ -1176,7 +1186,8 @@
     }
     renderSuggestions();
 
-    const totalText = `共 ${filteredRows.length} 条`;
+    const modelTypeCount = getModelTypeCount(filteredRows);
+    const totalText = `共 ${filteredRows.length} 条 / ${modelTypeCount} 种型号`;
     if (refs.panelCount) refs.panelCount.textContent = totalText;
     if (refs.footerTotal) refs.footerTotal.textContent = totalText;
     if (refs.pagination) refs.pagination.hidden = !hasFilteredRows;
@@ -1267,7 +1278,9 @@
   };
 
   const loadData = async (options = {}) => {
+    const startedAt = performance.now();
     try {
+      setUploadStatus('读取中', 'loading');
       const ossConfig = getOssConfig();
       const shouldReadOss = hasOssReadConfig(ossConfig);
       const dataUrl = shouldReadOss
@@ -1283,7 +1296,7 @@
         source: shouldReadOss ? 'oss' : 'default',
         fileName: shouldReadOss ? ossConfig.objectKey : '',
       });
-      setUploadStatus('读取成功');
+      setUploadStatus(`读取成功 ${formatDuration(startedAt)}`, 'success');
     } catch (error) {
       state.data = null;
       state.dataSource = 'default';
@@ -1386,7 +1399,7 @@
     });
 
     refs.sortSelect?.addEventListener('change', (event) => {
-      state.sort = event.target.value || 'default';
+      state.sort = event.target.value === 'backward' ? 'backward' : 'forward';
       state.page = 1;
       render();
     });

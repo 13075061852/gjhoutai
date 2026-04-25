@@ -111,6 +111,7 @@
     CHAT_STORAGE_KEY: 'openrouter-ai-chat-v1',
     CHAT_SESSIONS_KEY: 'openrouter-ai-chat-sessions-v1',
     CHAT_ACTIVE_SESSION_KEY: 'openrouter-ai-chat-active-session-v1',
+    CHAT_DATA_ATTACHMENT_KEY: 'openrouter-ai-chat-data-attachment-v1',
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     PROPERTY_ANALYSIS_DATA_URL: './assets/data/测试数据.json',
     DEFAULT_CONFIG: {

@@ -799,6 +799,14 @@
     );
   };
 
+  const saveDataAttachmentState = () => {
+    utils.writeJson(constants.CHAT_DATA_ATTACHMENT_KEY, Boolean(state.dataAttachmentEnabled));
+  };
+
+  const loadDataAttachmentState = () => {
+    state.dataAttachmentEnabled = Boolean(utils.readJson(constants.CHAT_DATA_ATTACHMENT_KEY, false));
+  };
+
   const sendChatMessage = async () => {
     if (state.chatBusy) return;
     const config = App.config.getFormConfig();
@@ -934,6 +942,7 @@
   const bindChat = () => {
     refs.assistantDataToggleBtn?.addEventListener('click', () => {
       state.dataAttachmentEnabled = !state.dataAttachmentEnabled;
+      saveDataAttachmentState();
       renderDataAttachmentState();
     });
 
@@ -1004,6 +1013,7 @@
   };
 
   const init = () => {
+    loadDataAttachmentState();
     const loaded = loadChatState();
     state.chatSessions = loaded.sessions;
     state.chatSessionId = loaded.activeId;

@@ -664,10 +664,6 @@
               <i class="ti ti-device-floppy" aria-hidden="true"></i>
               <span>保存信息</span>
             </button>
-            <button class="analysis-toolbar-btn" type="button" data-spectrum-ai="${utils.escapeHtml(item.id)}">
-              <i class="ti ti-sparkles" aria-hidden="true"></i>
-              <span>让 AI 分析</span>
-            </button>
             <button class="analysis-toolbar-btn spectrum-danger-btn" type="button" data-spectrum-delete="${utils.escapeHtml(item.id)}">
               <i class="ti ti-trash" aria-hidden="true"></i>
               <span>删除图片</span>
@@ -779,21 +775,6 @@
     updateDetailCollapsed();
   };
 
-  const buildAiPrompt = (items) => {
-    const targetItems = items.length ? items : [getActiveItem()].filter(Boolean);
-    const intro = '请分析以下图谱，重点说明图谱特征、异常点、建议标签和后续处理建议。';
-    const lines = targetItems.map((item, index) => [
-      `${index + 1}. ${item.title}`,
-      `编号：${item.code}`,
-      `类型：${item.spectrumType || '未识别'}`,
-      `分类：${item.category}`,
-      `标签：${item.tags.join('、')}`,
-      `备注：${item.note}`,
-    ].join('\n'));
-
-    return `${intro}\n\n${lines.join('\n\n')}\n\n图谱图片会随消息一并发送；如果模型不支持视觉输入，请先基于文件名、类型、分类、标签和备注给出可执行分析。`;
-  };
-
   const getAiItems = () => {
     const selected = getSelectedItems();
     return selected.length ? selected : [getActiveItem()].filter(Boolean);
@@ -839,15 +820,6 @@
     }
 
     return lines.join('\n');
-  };
-
-  const sendToAi = (items) => {
-    const targetItems = items.length ? items : getAiItems();
-    const prompt = buildAiPrompt(targetItems);
-    App.chat?.draftPrompt?.(prompt, {
-      newConversation: true,
-      images: getAiImages(targetItems),
-    });
   };
 
   const closeImagePreview = () => {
@@ -1109,13 +1081,6 @@
       const previewButton = event.target.closest('[data-spectrum-preview]');
       if (previewButton) {
         openImagePreview(previewButton.getAttribute('data-spectrum-preview'));
-        return;
-      }
-
-      const aiButton = event.target.closest('[data-spectrum-ai]');
-      if (aiButton) {
-        const item = state.items.find((entry) => entry.id === aiButton.getAttribute('data-spectrum-ai'));
-        if (item) sendToAi([item]);
         return;
       }
 

@@ -4416,14 +4416,12 @@
       background:var(--surface);
       border-color:var(--border);
     }
-    body:not([data-theme="dark"]) .analysis-filter-card,
-    body:not([data-theme="dark"]) .analysis-panel{
-      border-color:var(--border-2);
-    }
     body:not([data-theme="dark"]) .content,
     body:not([data-theme="dark"]) .dashboard,
     body:not([data-theme="dark"]) .spectrum-page,
-    body:not([data-theme="dark"]) .analysis-page,
+    body:not([data-theme="dark"]) .analysis-page{
+      background:var(--bg);
+    }
     body:not([data-theme="dark"]) .assistant-body{
       background:var(--chat-bg);
     }
@@ -4447,11 +4445,6 @@
     body:not([data-theme="dark"]) .ai-message:not(.user){
       background:var(--surface);
       border-color:var(--border);
-    }
-    body:not([data-theme="dark"]) .analysis-toolbar-btn,
-    body:not([data-theme="dark"]) .analysis-search{
-      border-color:var(--border-2);
-      color:var(--text);
     }
     body:not([data-theme="dark"]) .analysis-select-field select{
       background-color:var(--surface);
@@ -4488,9 +4481,8 @@
     body:not([data-theme="dark"]) .spectrum-card:hover,
     body:not([data-theme="dark"]) .spectrum-filter-btn:hover,
     body:not([data-theme="dark"]) .analysis-toolbar-btn:hover:not(:disabled){
-      border-color:var(--accent);
+      border-color:var(--border-2);
       background:var(--surface-2);
-      color:var(--text);
     }
     body:not([data-theme="dark"]) .spectrum-card.is-selected,
     body:not([data-theme="dark"]) .spectrum-card.is-selected:hover{
@@ -4599,11 +4591,11 @@
     }
     body:not([data-theme="dark"]) .analysis-table-scroll{
       background:var(--surface);
-      border-color:var(--border-2);
-      scrollbar-color:var(--border-2) transparent;
+      border-color:var(--border);
+      scrollbar-color:var(--scrollbar-thumb) transparent;
     }
     body:not([data-theme="dark"]) .analysis-table-scroll::-webkit-scrollbar-thumb{
-      background:var(--border-2);
+      background:var(--scrollbar-thumb);
     }
     body:not([data-theme="dark"]) .analysis-table th,
     body:not([data-theme="dark"]) .analysis-table td{
@@ -4612,11 +4604,11 @@
       background:var(--surface);
     }
     body:not([data-theme="dark"]) .analysis-table th{
-      background:var(--surface-3);
+      background:var(--surface-2);
       color:var(--text);
     }
     body:not([data-theme="dark"]) .analysis-table td{
-      color:var(--text);
+      color:var(--text-2);
     }
     body:not([data-theme="dark"]) .analysis-table tbody tr:hover td{
       background:var(--surface-2);

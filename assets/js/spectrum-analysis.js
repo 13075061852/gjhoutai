@@ -799,6 +799,8 @@
     return selected.length ? selected : [getActiveItem()].filter(Boolean);
   };
 
+  const getSelectedAiItems = () => getSelectedItems();
+
   const getAiImages = (items) => items
     .filter((item) => String(item?.image || '').trim())
     .slice(0, 4)
@@ -810,7 +812,7 @@
     }));
 
   const getAiContext = () => {
-    const items = getAiItems();
+    const items = getSelectedAiItems();
     const filtered = getFilteredItems();
     const lines = [
       '【当前图谱分析上下文】',
@@ -822,6 +824,11 @@
       `标签筛选：${state.tag}`,
       `关键词：${state.query.trim() || '无'}`,
     ];
+
+    if (!items.length) {
+      lines.push('当前图谱分析页面没有选中图谱。请提示用户先选择需要上传给 AI 的图谱图片，再发送问题。');
+      return lines.join('\n');
+    }
 
     if (items.length) {
       lines.push('待分析图谱：');
@@ -1266,5 +1273,6 @@
     init,
     getAiContext,
     getAiImages: () => getAiImages(getAiItems()),
+    getSelectedAiImages: () => getAiImages(getSelectedAiItems()),
   };
 })();

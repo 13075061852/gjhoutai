@@ -564,7 +564,9 @@
 
     const pageId = getActivePageId();
     if (pageId === 'property-analysis') {
-      return App.propertyAnalysis?.getFullAiContext?.(prompt) || '【已请求接入数据】物性分析数据尚未加载完成。';
+      return App.propertyAnalysis?.getSelectedAiContext?.(prompt)
+        || App.propertyAnalysis?.getAiContext?.()
+        || '【已请求接入数据】物性分析数据尚未加载完成。';
     }
 
     if (pageId === 'spectrum-analysis') {
@@ -577,8 +579,19 @@
   const getAttachedDataFile = (prompt) => {
     if (!state.dataAttachmentEnabled) return null;
     const pageId = getActivePageId();
-    if (pageId === 'property-analysis') return App.propertyAnalysis?.getAiDataFile?.(prompt) || null;
+    if (pageId === 'property-analysis') {
+      // OpenRouter rejects text/plain file attachments for some models/routes.
+      // Keep selected table data in the message text instead of sending it as a file.
+      return null;
+    }
     return null;
+  };
+
+  const getAttachedDataImages = () => {
+    if (!state.dataAttachmentEnabled) return [];
+    const pageId = getActivePageId();
+    if (pageId === 'spectrum-analysis') return normalizeImages(App.spectrumAnalysis?.getSelectedAiImages?.() || []);
+    return [];
   };
 
   const getContextMessages = (config, prompt) => {
@@ -625,7 +638,10 @@
     const content = String(file?.content || '');
     const filename = String(file?.filename || 'data.txt').trim() || 'data.txt';
     const mimeType = String(file?.mimeType || 'text/plain');
+    const normalizedMimeType = mimeType.split(';')[0].trim().toLowerCase();
+    const isSupportedFileType = normalizedMimeType === 'application/pdf';
     if (!content) return null;
+    if (!isSupportedFileType) return null;
     return {
       type: 'file',
       file: {
@@ -636,7 +652,7 @@
   }).filter(Boolean) : []);
 
   const toApiMessage = (message, options = {}) => {
-    const images = normalizeImages(message.images);
+    const images = normalizeImages(options.images || message.images);
     const content = String(options.content ?? message.content ?? '');
     const files = normalizeFileAttachments(options.files);
     if (message.role === 'user' && (images.length || files.length)) {
@@ -682,12 +698,12 @@
       prompt,
       '',
       `【后台已上传文件】${dataFile.filename}`,
-      '该文件是物性分析页面的完整表格数据，UTF-8 编码，TSV 格式，包含全部工作表、全部分类、全部列和全部行。',
+      '该文件是物性分析页面当前选中的表格数据，UTF-8 编码，TSV 格式，只包含用户已选中的数据行。',
       '请打开并读取该文件后回答问题。',
       '',
       '【回答要求】',
-      '必须优先使用附件表格数据回答。',
-      '如果问题中的型号/批次在附件里没有完全匹配，请明确说未找到完全匹配，并列出附件中的相近型号/批次。',
+      '必须优先使用附件中的已选表格数据回答。',
+      '如果问题中的型号/批次在附件里没有完全匹配，请明确说未找到完全匹配，并列出附件已选数据中的相近型号/批次。',
       '禁止把表格里的材料型号解释成服务器、网络设备或其他外部产品型号。',
     ].join('\n');
   };
@@ -776,8 +792,10 @@
       enabled
         ? '已开启：发送问题时会在后台携带当前分析页数据'
         : pageId === 'property-analysis'
-          ? '开启后会在后台携带物性分析完整表格数据'
-          : '开启后会在后台携带当前分析页数据'
+          ? '开启后会在后台携带物性分析已选表格数据'
+          : pageId === 'spectrum-analysis'
+            ? '开启后会在后台携带图谱分析已选图片和说明'
+            : '开启后会在后台携带当前分析页已选数据'
     );
   };
 
@@ -785,7 +803,10 @@
     if (state.chatBusy) return;
     const config = App.config.getFormConfig();
     const prompt = (refs.chatInput?.value || '').trim();
-    const attachedImages = pendingDraftImages.slice(0, 4);
+    const attachedImages = [
+      ...pendingDraftImages,
+      ...getAttachedDataImages(),
+    ].slice(0, 4);
     if (!prompt) return;
     if (!config.apiKey) {
       pushChatMessage('assistant', '请先在 AI 配置里填入 OpenRouter API 密钥，然后再发送消息。');
@@ -817,7 +838,7 @@
 
     try {
       const attachedDataFile = getAttachedDataFile(prompt);
-      const attachedDataContext = attachedDataFile ? '' : getAttachedDataContext(prompt);
+      const attachedDataContext = getAttachedDataContext(prompt);
       const requestMessages = state.chatHistory
         .slice(0, pendingIndex)
         .filter((item) => item.role === 'user' || item.role === 'assistant')
@@ -829,6 +850,7 @@
               ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
               : item.content,
             files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
+            images: isCurrentUserMessage ? attachedImages : item.images,
           });
         });
 

@@ -829,6 +829,31 @@
     return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
   };
 
+  const formatSelectedRowsTableForAi = (sheetName, rows, columns) => {
+    const visibleColumns = columns.filter((column) => column !== '__rowKey');
+    const payload = {
+      source: 'property-analysis',
+      sheetName: sheetName || '',
+      selectedCount: rows.length,
+      columns: visibleColumns.map((column) => ({
+        key: column,
+        label: formatHeader(column),
+      })),
+      rows: rows.map((row, index) => {
+        const values = {};
+        visibleColumns.forEach((column) => {
+          values[formatHeader(column)] = row[column] ?? '';
+        });
+        return {
+          index: index + 1,
+          values,
+        };
+      }),
+    };
+
+    return JSON.stringify(payload, null, 2);
+  };
+
   const summarizeMetric = (rows, key) => {
     const values = rows
       .map((row) => getMetricValue(row, key))
@@ -858,8 +883,7 @@
     const sheetName = getActiveSheet(state.data);
     const { filteredRows, columns } = getVisibleRows();
     const selectedRows = getSelectedRowsForActiveSheet();
-    const targetRows = selectedRows.length ? selectedRows : filteredRows;
-    const targetLabel = selectedRows.length ? '已选数据' : '当前筛选结果';
+    const targetRows = selectedRows;
     const metrics = [
       '熔指',
       '拉伸强度[Mpa]',
@@ -876,8 +900,13 @@
       `查询词：${state.query.trim() || '无'}`,
       `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}`,
       `排序：${state.sort}`,
-      `数据范围：共 ${filteredRows.length} 条筛选结果，当前工作表已选 ${selectedRows.length} 条；当前上下文使用${targetLabel} ${targetRows.length} 条。`,
+      `数据范围：共 ${filteredRows.length} 条筛选结果，当前工作表已选 ${selectedRows.length} 条；当前上下文只使用已选数据 ${targetRows.length} 条。`,
     ];
+
+    if (!selectedRows.length) {
+      lines.push('当前物性分析页面没有选中行。请先在表格中点击选择需要分析的数据行，再发送问题。');
+      return lines.join('\n');
+    }
 
     if (metrics.length) {
       lines.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
@@ -980,12 +1009,47 @@
     ].filter(Boolean).join('\n');
   };
 
+  const getSelectedAiContext = (question = '') => {
+    if (!state.data) return '';
+
+    const sheetName = getActiveSheet(state.data);
+    const selectedRows = getSelectedRowsForActiveSheet();
+    const { filteredRows, columns } = getVisibleRows();
+
+    if (!selectedRows.length) {
+      return [
+        '【已请求接入：物性分析已选数据】',
+        `当前工作表：${sheetName || '未选择'}`,
+        `当前筛选结果：${filteredRows.length} 条`,
+        '当前没有选中任何物性数据行。请提示用户先在物性分析表格中点击选择需要上传给 AI 的数据。',
+      ].join('\n');
+    }
+
+    const questionTerms = extractQuestionTerms(question);
+    const matchedRows = selectedRows
+      .filter((row) => rowMatchesTerms(row, questionTerms))
+      .slice(0, 30);
+
+    return [
+      '【已后台接入：物性分析已选数据】',
+      '以下数据来自物性分析页面当前选中的表格行，只包含用户选中的数据。请优先基于这些已选数据回答，不要要求用户重新粘贴表格。',
+      '重要规则：如果用户问题里出现型号或批次，必须先在下方已选数据字段中匹配。没有完全匹配时，要明确说明“未找到完全匹配”，再列出已选数据中的相近匹配；不要按外部常识解释为服务器、网络设备或其他无关产品。',
+      `当前页面状态：工作表=${sheetName || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
+      `已选数据行数：${selectedRows.length}`,
+      questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
+      matchedRows.length ? `已选数据中的问题相关匹配行：\n${summarizeRowsForAi(matchedRows, columns, 30).join('\n')}` : '已选数据中的问题相关匹配行：未匹配到完全或相近行，请基于全部已选数据继续查找并说明。',
+      '已选数据 JSON：',
+      formatSelectedRowsTableForAi(sheetName, selectedRows, columns),
+    ].filter(Boolean).join('\n');
+  };
+
   const getAiDataFile = (question = '') => {
-    const content = getFullAiContext(question);
+    if (!getSelectedRowsForActiveSheet().length) return null;
+    const content = getSelectedAiContext(question);
     if (!content) return null;
 
     return {
-      filename: `property-analysis-data-${new Date().toISOString().slice(0, 10)}.txt`,
+      filename: `property-analysis-selected-data-${new Date().toISOString().slice(0, 10)}.txt`,
       mimeType: 'text/plain',
       content,
     };
@@ -1430,6 +1494,7 @@
     parseExcelWorkbook,
     getAiContext,
     getFullAiContext,
+    getSelectedAiContext,
     getAiDataFile,
   };
 })();

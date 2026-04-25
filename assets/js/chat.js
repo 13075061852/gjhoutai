@@ -715,6 +715,7 @@
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let finished = false;
+    let receivedDelta = false;
 
     const processBlock = (block) => {
       const dataLines = [];
@@ -733,7 +734,10 @@
       try {
         const payload = JSON.parse(data);
         const delta = payload?.choices?.[0]?.delta?.content ?? payload?.choices?.[0]?.message?.content ?? '';
-        if (delta) onDelta(delta, payload);
+        if (delta) {
+          receivedDelta = true;
+          onDelta(delta, payload);
+        }
       } catch (error) {
         // Ignore malformed heartbeat/control frames and keep streaming.
       }
@@ -760,7 +764,7 @@
       if (!finished) processBlock(part);
     });
 
-    return true;
+    return receivedDelta;
   };
 
   const pushChatMessage = (role, content, images = []) => {
@@ -816,8 +820,8 @@
       ...getAttachedDataImages(),
     ].slice(0, 4);
     if (!prompt) return;
-    if (!config.apiKey) {
-      pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，然后再发送消息。');
+    if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
+      pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，或切换到 LM Studio 本地模型。');
       return;
     }
 
@@ -840,7 +844,8 @@
     if (refs.chatInput) refs.chatInput.value = '';
     pushChatMessage('assistant', '正在思考...');
     const pendingIndex = state.chatHistory.length - 1;
-    const streamEnabled = Boolean(config.streamEnabled);
+    const isLmStudioProvider = config.aiProvider === 'lmstudio';
+    const streamEnabled = isLmStudioProvider || Boolean(config.streamEnabled);
     let streamedContent = '';
     let streamedImages = [];
 
@@ -883,10 +888,14 @@
         throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
       }
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      const shouldStream = !wantsImages && streamEnabled && response.body && contentType.includes('text/event-stream');
+      const shouldStream = !wantsImages
+        && !attachedDataFile
+        && streamEnabled
+        && response.body
+        && (isLmStudioProvider || contentType.includes('text/event-stream'));
 
       if (shouldStream) {
-        await consumeChatCompletionStream(response, (delta) => {
+        const didStream = await consumeChatCompletionStream(response, (delta) => {
           streamedContent += delta;
           state.chatHistory[pendingIndex] = {
             role: 'assistant',
@@ -898,6 +907,9 @@
           saveChatState();
           renderChatMessages();
         });
+        if (!didStream) {
+          throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
+        }
       } else {
         const data = await response.json();
         streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';

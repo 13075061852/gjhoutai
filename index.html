@@ -198,16 +198,34 @@
                         <h2>模型与接口</h2>
                       </div>
                     </div>
-                    <a class="panel-help" href="https://openrouter.ai/docs/api/api-reference/models/get-models" target="_blank" rel="noreferrer">如何获取 API 密钥?</a>
+                    <a class="panel-help" id="aiProviderHelp" href="https://openrouter.ai/docs/api/api-reference/models/get-models" target="_blank" rel="noreferrer">如何获取 API 密钥?</a>
                   </div>
                   <div class="form-grid">
-                      <div class="field full">
+                      <div class="field full" id="aiProviderField">
+                        <label>
+                          <span class="field-label-main">
+                            <i class="field-label-icon ti ti-plug-connected" aria-hidden="true"></i>
+                            <span>接入来源</span>
+                          </span>
+                        </label>
+                        <div class="provider-segment" role="radiogroup" aria-label="AI 接入来源">
+                          <label class="provider-option">
+                            <input id="aiProviderOpenRouter" name="aiProvider" type="radio" value="openrouter" checked />
+                            <span>OpenRouter</span>
+                          </label>
+                          <label class="provider-option">
+                            <input id="aiProviderLmStudio" name="aiProvider" type="radio" value="lmstudio" />
+                            <span>LM Studio 本地模型</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="field full" id="apiKeyField">
                         <label class="field-label-row" for="openrouterApiKey">
                           <span class="field-label-main">
                             <i class="field-label-icon ti ti-lock" aria-hidden="true"></i>
-                            <span>OpenRouter API 密钥</span>
+                            <span id="apiKeyLabelText">OpenRouter API 密钥</span>
                           </span>
-                          <span class="field-label-note">私密存储，安全加密</span>
+                          <span class="field-label-note" id="apiKeyNoteText">私密存储，安全加密</span>
                         </label>
                         <div class="password-row">
                           <input id="openrouterApiKey" name="openrouterApiKey" type="password" placeholder="sk-or-..." autocomplete="off" />

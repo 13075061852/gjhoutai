@@ -6,6 +6,10 @@
 
   const { refs, constants, utils } = App;
   let usdToCny = 6.838833;
+  const PROVIDER_OPENROUTER = 'openrouter';
+  const PROVIDER_LM_STUDIO = 'lmstudio';
+  let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
+  const providerDrafts = {};
 
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
@@ -55,44 +59,183 @@
     return stripped || fallback;
   };
 
-  const getFormConfig = () => ({
-    apiKey: (refs.openrouterApiKey?.value || '').trim(),
-    baseUrl: utils.normalizeBaseUrl(refs.openrouterBaseUrl?.value || constants.DEFAULT_BASE_URL),
-    appTitle: (refs.appTitle?.value || constants.DEFAULT_CONFIG.appTitle || '').trim(),
-    httpReferer: (refs.httpReferer?.value || '').trim(),
-    modelChoice: refs.modelSelect?.value || constants.DEFAULT_CONFIG.modelChoice,
-    systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
-    temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
-    maxTokens: Number(refs.maxTokens?.value ?? constants.DEFAULT_CONFIG.maxTokens),
-    streamEnabled: Boolean(refs.streamEnabled?.checked),
-    jsonMode: Boolean(refs.jsonMode?.checked),
-    logEnabled: Boolean(refs.logEnabled?.checked),
-    ossBucket: (refs.ossBucket?.value || '').trim(),
-    ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
-    ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
-    ossAccessKeyId: (refs.ossAccessKeyId?.value || '').trim(),
-    ossAccessKeySecret: (refs.ossAccessKeySecret?.value || '').trim(),
-    ossExcelBackupPrefix: (refs.ossExcelBackupPrefix?.value || '').trim().replace(/^\/+/, ''),
-  });
+  const isLmStudioProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_LM_STUDIO;
+
+  const normalizeProvider = (provider) => (
+    isLmStudioProvider(provider) ? PROVIDER_LM_STUDIO : PROVIDER_OPENROUTER
+  );
+
+  const getAiProvider = () => {
+    const checked = Array.from(refs.aiProviderInputs || []).find((input) => input.checked);
+    return normalizeProvider(checked?.value || activeProvider || constants.DEFAULT_CONFIG.aiProvider);
+  };
+
+  const getProviderDefaults = (provider = getAiProvider()) => (isLmStudioProvider(provider)
+    ? {
+        baseUrl: constants.DEFAULT_LM_STUDIO_BASE_URL,
+        appTitle: 'LM Studio',
+        modelChoice: '',
+      }
+    : {
+        baseUrl: constants.DEFAULT_BASE_URL,
+        appTitle: 'OpenRouter',
+        modelChoice: constants.DEFAULT_CONFIG.modelChoice,
+      });
+
+  const normalizeLmStudioBaseUrl = (value) => {
+    const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_LM_STUDIO_BASE_URL);
+    return /\/v1$/i.test(normalized) ? normalized : `${normalized}/v1`;
+  };
+
+  const normalizeProviderBaseUrl = (provider, value) => (
+    isLmStudioProvider(provider) ? normalizeLmStudioBaseUrl(value) : utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL)
+  );
+
+  const makeProviderDraft = (provider, config = {}) => {
+    const normalizedProvider = normalizeProvider(provider);
+    const defaults = getProviderDefaults(normalizedProvider);
+    const baseUrl = config.baseUrl || defaults.baseUrl;
+    return {
+      apiKey: isLmStudioProvider(normalizedProvider) ? '' : String(config.apiKey || '').trim(),
+      baseUrl: normalizeProviderBaseUrl(normalizedProvider, baseUrl),
+      appTitle: String(config.appTitle || defaults.appTitle || '').trim(),
+      modelChoice: String(config.modelChoice || config.model || defaults.modelChoice || '').trim(),
+    };
+  };
+
+  const ensureProviderDrafts = () => {
+    providerDrafts[PROVIDER_OPENROUTER] = {
+      ...makeProviderDraft(PROVIDER_OPENROUTER),
+      ...(providerDrafts[PROVIDER_OPENROUTER] || {}),
+    };
+    providerDrafts[PROVIDER_LM_STUDIO] = {
+      ...makeProviderDraft(PROVIDER_LM_STUDIO),
+      ...(providerDrafts[PROVIDER_LM_STUDIO] || {}),
+      apiKey: '',
+      appTitle: 'LM Studio',
+    };
+  };
+
+  const inferProviderFromConfig = (config = {}) => {
+    if (config.aiProvider) return normalizeProvider(config.aiProvider);
+    return /localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\./i.test(String(config.baseUrl || ''))
+      ? PROVIDER_LM_STUDIO
+      : PROVIDER_OPENROUTER;
+  };
+
+  const readProviderFields = (provider = activeProvider) => {
+    const normalizedProvider = normalizeProvider(provider);
+    const defaults = getProviderDefaults(normalizedProvider);
+    const rawBaseUrl = refs.openrouterBaseUrl?.value || defaults.baseUrl;
+    return {
+      apiKey: isLmStudioProvider(normalizedProvider) ? '' : (refs.openrouterApiKey?.value || '').trim(),
+      baseUrl: normalizeProviderBaseUrl(normalizedProvider, rawBaseUrl),
+      appTitle: isLmStudioProvider(normalizedProvider)
+        ? 'LM Studio'
+        : (refs.appTitle?.value || defaults.appTitle || '').trim(),
+      modelChoice: refs.modelSelect?.value || providerDrafts[normalizedProvider]?.modelChoice || defaults.modelChoice,
+    };
+  };
+
+  const storeActiveProviderDraft = () => {
+    ensureProviderDrafts();
+    providerDrafts[activeProvider] = {
+      ...providerDrafts[activeProvider],
+      ...readProviderFields(activeProvider),
+    };
+  };
+
+  const setProviderRadio = (provider) => {
+    const normalizedProvider = normalizeProvider(provider);
+    if (refs.aiProviderOpenRouter) refs.aiProviderOpenRouter.checked = normalizedProvider === PROVIDER_OPENROUTER;
+    if (refs.aiProviderLmStudio) refs.aiProviderLmStudio.checked = normalizedProvider === PROVIDER_LM_STUDIO;
+  };
+
+  const ensureModelOption = (modelChoice, label = '') => {
+    if (!refs.modelSelect || !modelChoice) return;
+    const existing = Array.from(refs.modelSelect.options).find((option) => option.value === modelChoice);
+    if (existing) return;
+    const option = document.createElement('option');
+    option.value = modelChoice;
+    option.textContent = label || `${modelChoice}（已保存）`;
+    option.dataset.category = '已保存模型';
+    refs.modelSelect.appendChild(option);
+  };
+
+  const applyProviderDraft = (provider) => {
+    ensureProviderDrafts();
+    activeProvider = normalizeProvider(provider);
+    const draft = providerDrafts[activeProvider];
+    setProviderRadio(activeProvider);
+    if (refs.openrouterApiKey) refs.openrouterApiKey.value = draft.apiKey || '';
+    if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = draft.baseUrl || getProviderDefaults(activeProvider).baseUrl;
+    if (refs.appTitle) refs.appTitle.value = draft.appTitle || getProviderDefaults(activeProvider).appTitle;
+    if (refs.modelSelect) {
+      if (isLmStudioProvider(activeProvider) && !draft.modelChoice) {
+        setLmStudioModelPlaceholder();
+      } else {
+        ensureModelOption(draft.modelChoice);
+        refs.modelSelect.value = draft.modelChoice || getProviderDefaults(activeProvider).modelChoice;
+      }
+    }
+    syncProviderUi();
+    syncModelState();
+    syncPreview();
+  };
+
+  const getFormConfig = () => {
+    activeProvider = getAiProvider();
+    storeActiveProviderDraft();
+    const aiProvider = activeProvider;
+    const activeDraft = providerDrafts[aiProvider] || makeProviderDraft(aiProvider);
+    return {
+      aiProvider,
+      apiKey: activeDraft.apiKey,
+      baseUrl: activeDraft.baseUrl,
+      appTitle: activeDraft.appTitle,
+      httpReferer: (refs.httpReferer?.value || '').trim(),
+      modelChoice: activeDraft.modelChoice,
+      openrouterConfig: { ...providerDrafts[PROVIDER_OPENROUTER] },
+      lmStudioConfig: { ...providerDrafts[PROVIDER_LM_STUDIO], apiKey: '', appTitle: 'LM Studio' },
+      systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
+      temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
+      maxTokens: Number(refs.maxTokens?.value ?? constants.DEFAULT_CONFIG.maxTokens),
+      streamEnabled: Boolean(refs.streamEnabled?.checked),
+      jsonMode: Boolean(refs.jsonMode?.checked),
+      logEnabled: Boolean(refs.logEnabled?.checked),
+      ossBucket: (refs.ossBucket?.value || '').trim(),
+      ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
+      ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
+      ossAccessKeyId: (refs.ossAccessKeyId?.value || '').trim(),
+      ossAccessKeySecret: (refs.ossAccessKeySecret?.value || '').trim(),
+      ossExcelBackupPrefix: (refs.ossExcelBackupPrefix?.value || '').trim().replace(/^\/+/, ''),
+    };
+  };
 
   const setFormConfig = (config) => {
     const next = { ...constants.DEFAULT_CONFIG, ...config };
-    if (refs.openrouterApiKey) refs.openrouterApiKey.value = next.apiKey || '';
-    if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = next.baseUrl || constants.DEFAULT_BASE_URL;
-    if (refs.appTitle) refs.appTitle.value = next.appTitle || constants.DEFAULT_CONFIG.appTitle;
+    const provider = inferProviderFromConfig(next);
+    providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next.openrouterConfig || {});
+    providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next.lmStudioConfig || {});
+    if (!next.openrouterConfig && !isLmStudioProvider(provider)) {
+      providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next);
+    }
+    if (!next.lmStudioConfig && isLmStudioProvider(provider)) {
+      providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next);
+    }
+    activeProvider = provider;
+    setProviderRadio(activeProvider);
+    const activeDraft = providerDrafts[activeProvider];
+    if (refs.openrouterApiKey) refs.openrouterApiKey.value = activeDraft.apiKey || '';
+    if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = activeDraft.baseUrl || getProviderDefaults(activeProvider).baseUrl;
+    if (refs.appTitle) refs.appTitle.value = activeDraft.appTitle || getProviderDefaults(activeProvider).appTitle;
     if (refs.httpReferer) refs.httpReferer.value = next.httpReferer || '';
     if (refs.modelSelect) {
-      const modelChoice = next.modelChoice || next.model || constants.DEFAULT_CONFIG.modelChoice;
-      const existing = Array.from(refs.modelSelect.options).find((option) => option.value === modelChoice);
-      if (!existing) {
-        const option = document.createElement('option');
-        option.value = modelChoice;
-        option.textContent = `${modelChoice}（已保存）`;
-        option.dataset.category = '已保存模型';
-        refs.modelSelect.appendChild(option);
-      }
+      const modelChoice = activeDraft.modelChoice;
+      ensureModelOption(modelChoice);
       refs.modelSelect.value = modelChoice;
     }
+    syncProviderUi();
     if (refs.systemPrompt) refs.systemPrompt.value = next.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     if (refs.temperature) refs.temperature.value = String(next.temperature ?? constants.DEFAULT_CONFIG.temperature);
     if (refs.maxTokens) refs.maxTokens.value = String(next.maxTokens ?? constants.DEFAULT_CONFIG.maxTokens);
@@ -135,7 +278,41 @@
 
   const syncModelProviderField = () => {
     if (!refs.appTitle) return;
+    if (isLmStudioProvider(getAiProvider())) {
+      refs.appTitle.value = 'LM Studio';
+      return;
+    }
     refs.appTitle.value = getModelProviderLabel(getResolvedModel());
+  };
+
+  const syncProviderUi = () => {
+    const provider = getAiProvider();
+    const isLocal = isLmStudioProvider(provider);
+    const defaults = getProviderDefaults(provider);
+
+    if (refs.apiKeyLabelText) {
+      refs.apiKeyLabelText.textContent = isLocal ? 'LM Studio API 密钥（可选）' : 'OpenRouter API 密钥';
+    }
+    if (refs.apiKeyNoteText) {
+      refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '私密存储，安全加密';
+    }
+    if (refs.openrouterApiKey) {
+      refs.openrouterApiKey.placeholder = isLocal ? '可留空' : 'sk-or-...';
+    }
+    if (refs.apiKeyField) {
+      refs.apiKeyField.hidden = isLocal;
+    }
+    if (refs.aiProviderHelp) {
+      refs.aiProviderHelp.hidden = isLocal;
+    }
+    if (refs.openrouterBaseUrl && !refs.openrouterBaseUrl.value.trim()) {
+      refs.openrouterBaseUrl.value = defaults.baseUrl;
+    }
+    if (refs.appTitle && isLocal) {
+      refs.appTitle.value = defaults.appTitle;
+    } else if (refs.appTitle && !refs.appTitle.value.trim()) {
+      refs.appTitle.value = defaults.appTitle;
+    }
   };
 
   const syncApiKeyToggleIcon = () => {
@@ -167,15 +344,21 @@
         config.logEnabled ? 'log' : 'no-log',
       ].join(' / ');
     }
+    const isLocal = isLmStudioProvider(config.aiProvider);
+    const isAiReady = isLocal ? Boolean(resolvedModel) : Boolean(config.apiKey);
     if (refs.previewPrompt) {
-      refs.previewPrompt.textContent = config.apiKey
+      refs.previewPrompt.textContent = isAiReady
         ? `已准备使用 ${resolvedModel || '未选择的模型'} 调用 ${baseUrl}/chat/completions。导入/导出均使用 UTF-8。`
-        : '当前还没有填写 API 密钥。先保存配置，再用“加载模型列表”或“检测配置”验证 OpenRouter 接入。';
+        : (isLocal
+          ? '当前还没有选择本地模型。请先在 LM Studio 加载模型，再刷新模型列表。'
+          : '当前还没有填写 API 密钥。先保存配置，再用“加载模型列表”或“检测配置”验证 OpenRouter 接入。');
     }
     if (refs.previewStatusText) {
-      refs.previewStatusText.textContent = config.apiKey
+      refs.previewStatusText.textContent = isAiReady
         ? `配置已就绪，模型为 ${resolvedModel || '未选择'}，保存后即可接入。`
-        : '当前还没有保存过配置，先填写 API 密钥和模型 ID，然后点击保存。';
+        : (isLocal
+          ? '本地模型配置未完成，请先选择 LM Studio 已加载的模型。'
+          : '当前还没有保存过配置，先填写 API 密钥和模型 ID，然后点击保存。');
     }
   };
 
@@ -347,6 +530,24 @@
 
   const isSlowOrFreeModelLike = (valueOrItem) => isSlowModelLike(valueOrItem) || isFreeModelLike(valueOrItem);
 
+  const isInvalidLmStudioChatModel = (valueOrItem) => {
+    const raw = typeof valueOrItem === 'string'
+      ? valueOrItem
+      : [
+          valueOrItem?.id,
+          valueOrItem?.name,
+          valueOrItem?.type,
+          valueOrItem?.object,
+        ].filter(Boolean).join(' ');
+    const text = String(raw || '').toLowerCase();
+    return !text
+      || text.includes('embedding')
+      || text.includes('embed')
+      || text.includes('rerank')
+      || text.includes('text-embedding')
+      || text.includes('nomic-embed');
+  };
+
   const supportsImageOutput = (valueOrItem) => {
     const raw = typeof valueOrItem === 'string'
       ? valueOrItem
@@ -395,6 +596,10 @@
 
   const getModelTriggerLabel = () => {
     if (!refs.modelSelect) return constants.DEFAULT_CONFIG.modelChoice;
+    if (isLmStudioProvider(getAiProvider()) && !refs.modelSelect.value) {
+      const placeholder = Array.from(refs.modelSelect.options).find((option) => option.value === '');
+      return (placeholder?.textContent || '请先在 LM Studio 加载本地模型').trim();
+    }
     const match = Array.from(refs.modelSelect.options).find((option) => option.value === refs.modelSelect.value);
     const parts = splitModelLabel(match?.textContent || refs.modelSelect.value || constants.DEFAULT_CONFIG.modelChoice);
     return parts.title || refs.modelSelect.value || constants.DEFAULT_CONFIG.modelChoice;
@@ -413,6 +618,7 @@
   const syncModelDropdown = () => {
     if (!refs.modelDropdown || !refs.modelSelectPanel || !refs.modelSelectTriggerLabel) return;
     const currentValue = refs.modelSelect?.value || constants.DEFAULT_CONFIG.modelChoice;
+    const isLocal = isLmStudioProvider(getAiProvider());
     refs.modelSelectTriggerLabel.textContent = getModelTriggerLabel();
 
     const options = getModelOptions();
@@ -444,6 +650,7 @@
     refs.modelSelectPanel.innerHTML = Array.from(grouped.entries()).map(([provider, items]) => {
       const rows = items.map((option) => {
         const isActive = option.value === currentValue;
+        const showSubline = !isLocal && (option.pricingLabel || option.contextLabel);
         return `
           <button
             type="button"
@@ -453,10 +660,10 @@
             data-model-value="${option.value}">
             <span class="model-dropdown-option-body">
               <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
-              <span class="model-dropdown-option-subline">
+              ${showSubline ? `<span class="model-dropdown-option-subline">
                 <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
                 ${option.contextLabel ? `<span class="model-dropdown-option-context">${utils.escapeHtml(option.contextLabel)}</span>` : ''}
-              </span>
+              </span>` : ''}
             </span>
             <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
           </button>
@@ -527,15 +734,33 @@
     syncModelDropdown();
   };
 
+  const setLmStudioModelPlaceholder = () => {
+    if (!refs.modelSelect) return;
+    refs.modelSelect.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = '请先在 LM Studio 加载本地模型';
+    option.dataset.category = '本地模型';
+    refs.modelSelect.appendChild(option);
+    refs.modelSelect.value = '';
+    syncModelState();
+    syncPreview();
+  };
+
   const fetchModels = async () => {
     const config = getFormConfig();
+    const isLocal = isLmStudioProvider(config.aiProvider);
+    if (isLocal && refs.openrouterBaseUrl) {
+      refs.openrouterBaseUrl.value = config.baseUrl;
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      setStatus('正在加载 OpenRouter 官方模型列表…', 'success');
-      const response = await fetch(`${config.baseUrl}/models?output_modalities=text,image`, {
+      setStatus(isLocal ? '正在加载 LM Studio 本地模型列表…' : '正在加载 OpenRouter 官方模型列表…', 'success');
+      const modelsUrl = isLocal ? `${config.baseUrl}/models` : `${config.baseUrl}/models?output_modalities=text,image`;
+      const response = await fetch(modelsUrl, {
         method: 'GET',
         headers: getRequestHeaders(config),
         cache: 'no-store',
@@ -543,9 +768,15 @@
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
-      const models = Array.isArray(payload?.data)
-        ? payload.data
-          .filter((item) => item && typeof item.id === 'string' && item.id.includes('/'))
+      const rawModels = Array.isArray(payload?.data)
+        ? payload.data.filter((item) => item && typeof item.id === 'string')
+        : [];
+      const models = isLocal
+        ? rawModels
+          .filter((item) => !isInvalidLmStudioChatModel(item))
+          .sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))
+        : rawModels
+          .filter((item) => item.id.includes('/'))
           .filter((item) => !isSlowOrFreeModelLike(item))
           .sort((a, b) => {
             const rankA = getProviderSortRank(a.id);
@@ -555,16 +786,38 @@
             const providerB = String(b.id || '').split('/')[0] || '';
             if (providerA !== providerB) return providerA.localeCompare(providerB);
             return (b.created || 0) - (a.created || 0);
-          })
-        : [];
-      if (refs.modelSelect && isSlowOrFreeModelLike(getResolvedModel()) && models.length) {
+          });
+      const savedModelChoice = providerDrafts[config.aiProvider]?.modelChoice || getResolvedModel();
+      if (refs.modelSelect && !isLocal && isSlowOrFreeModelLike(savedModelChoice) && models.length) {
         refs.modelSelect.value = models[0].id;
       }
       buildModelSelect(models);
-      setStatus(`已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
-      if (config.logEnabled) saveLog({ type: 'models', at: new Date().toISOString(), count: models.length || 0 });
+      if (isLocal && refs.modelSelect && models.length) {
+        const hasSavedLocalModel = models.some((item) => item.id === savedModelChoice);
+        refs.modelSelect.value = hasSavedLocalModel ? savedModelChoice : models[0].id;
+        providerDrafts[PROVIDER_LM_STUDIO] = {
+          ...providerDrafts[PROVIDER_LM_STUDIO],
+          modelChoice: refs.modelSelect.value,
+        };
+        syncModelState();
+        syncPreview();
+      } else if (isLocal && refs.modelSelect && !models.length) {
+        setLmStudioModelPlaceholder();
+      } else if (!isLocal && refs.modelSelect) {
+        providerDrafts[PROVIDER_OPENROUTER] = {
+          ...providerDrafts[PROVIDER_OPENROUTER],
+          modelChoice: refs.modelSelect.value,
+        };
+      }
+      setStatus(isLocal
+        ? `已加载 LM Studio 本地模型列表：${models.length || 0} 项`
+        : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
+      if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
     } catch (error) {
-      setStatus(`模型加载失败：${error?.message || '未知错误'}`, 'warn');
+      if (isLocal) setLmStudioModelPlaceholder();
+      setStatus(isLocal
+        ? `本地模型加载失败：请确认 LM Studio 已启动并加载模型（${error?.message || '未知错误'}）`
+        : `模型加载失败：${error?.message || '未知错误'}`, 'warn');
     } finally {
       clearTimeout(timeout);
     }
@@ -573,7 +826,7 @@
   const testConfig = async () => {
     const config = getFormConfig();
     const model = getResolvedModel();
-    if (!config.apiKey) {
+    if (!isLmStudioProvider(config.aiProvider) && !config.apiKey) {
       setStatus('请先填写 API Key 再测试接入。', 'warn');
       return;
     }
@@ -658,9 +911,35 @@
   };
 
   const syncConfigBindings = () => {
+    document.querySelectorAll('.provider-segment').forEach((segment) => {
+      segment.addEventListener('click', (event) => {
+        const option = event.target.closest('.provider-option');
+        if (!option || !segment.contains(option)) return;
+        event.preventDefault();
+        const input = option.querySelector('input[name="aiProvider"]');
+        if (!input) return;
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    Array.from(refs.aiProviderInputs || []).forEach((input) => {
+      input.addEventListener('change', () => {
+        const nextProvider = normalizeProvider(input.value);
+        if (nextProvider === activeProvider) {
+          setProviderRadio(activeProvider);
+          return;
+        }
+        storeActiveProviderDraft();
+        applyProviderDraft(nextProvider);
+        fetchModels();
+      });
+    });
+
     if (refs.modelSelect) {
       refs.modelSelect.addEventListener('change', () => {
         syncModelState();
+        storeActiveProviderDraft();
         syncPreview();
       });
     }
@@ -680,11 +959,23 @@
       refs.ossExcelBackupPrefix,
     ]
       .filter(Boolean)
-      .forEach((input) => input.addEventListener('input', syncPreview));
+      .forEach((input) => input.addEventListener('input', () => {
+        syncProviderUi();
+        storeActiveProviderDraft();
+        syncPreview();
+      }));
 
     refs.temperature?.addEventListener('input', () => {
       syncTemperatureLabel();
       syncPreview();
+    });
+
+    refs.openrouterBaseUrl?.addEventListener('blur', () => {
+      if (!isLmStudioProvider(getAiProvider())) return;
+      refs.openrouterBaseUrl.value = normalizeLmStudioBaseUrl(refs.openrouterBaseUrl.value);
+      storeActiveProviderDraft();
+      syncPreview();
+      fetchModels();
     });
 
     [refs.streamEnabled, refs.jsonMode, refs.logEnabled]
@@ -695,7 +986,7 @@
       event.preventDefault();
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
-      if (!config.apiKey && !hasOssConfig) {
+      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig) {
         setStatus('请先填写 OpenRouter API 密钥或 OSS 数据源配置', 'warn');
         return;
       }

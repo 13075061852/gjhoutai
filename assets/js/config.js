@@ -750,6 +750,8 @@
   const fetchModels = async () => {
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
+    const requestedProvider = config.aiProvider;
+    const isStaleProviderRequest = () => getAiProvider() !== requestedProvider;
     if (isLocal && refs.openrouterBaseUrl) {
       refs.openrouterBaseUrl.value = config.baseUrl;
     }
@@ -771,6 +773,7 @@
       const rawModels = Array.isArray(payload?.data)
         ? payload.data.filter((item) => item && typeof item.id === 'string')
         : [];
+      if (isStaleProviderRequest()) return;
       const models = isLocal
         ? rawModels
           .filter((item) => !isInvalidLmStudioChatModel(item))
@@ -814,6 +817,7 @@
         : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
     } catch (error) {
+      if (isStaleProviderRequest()) return;
       if (isLocal) setLmStudioModelPlaceholder();
       setStatus(isLocal
         ? `本地模型加载失败：请确认 LM Studio 已启动并加载模型（${error?.message || '未知错误'}）`

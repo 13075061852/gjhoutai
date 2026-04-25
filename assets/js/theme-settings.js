@@ -7,7 +7,9 @@
   const THEME_ID_KEY = 'gjh-theme-id-v1';
   const THEME_VARS_KEY = 'gjh-theme-vars-v1';
   const THEME_MODE_KEY = 'gjh-theme-mode-v1';
+  const FONT_VARS_KEY = 'gjh-font-vars-v1';
   const DEFAULT_THEME_ID = 'white';
+  const DEFAULT_FONT_ID = 'system';
 
   const themes = [
     {
@@ -331,13 +333,68 @@
   ];
 
   const themeVarNames = [...new Set(themes.flatMap((theme) => Object.keys(theme.vars)))];
+  const fontPresets = [
+    {
+      id: 'system',
+      name: '系统默认',
+      tone: '均衡清晰',
+      sample: '320G6-N11 数据分析',
+      family: '"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+    },
+    {
+      id: 'microsoft-yahei',
+      name: '微软雅黑',
+      tone: '稳重办公',
+      sample: '图谱分析 · 批量标签',
+      family: '"Microsoft YaHei", "Segoe UI", "PingFang SC", sans-serif',
+    },
+    {
+      id: 'kaiti',
+      name: '楷体',
+      tone: '雅致文档',
+      sample: '物性数据列表 361 条',
+      family: '"KaiTi", "STKaiti", "Kaiti SC", "楷体", serif',
+    },
+    {
+      id: 'source-han',
+      name: '思源黑体',
+      tone: '专业阅读',
+      sample: '拉伸强度 冲击强度',
+      family: '"Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
+    },
+    {
+      id: 'serif',
+      name: '宋体正文',
+      tone: '传统文档',
+      sample: '订单管理与客户档案',
+      family: '"SimSun", "Songti SC", "Noto Serif CJK SC", serif',
+    },
+    {
+      id: 'mono',
+      name: '等宽数据',
+      tone: '数字对齐',
+      sample: 'A506202 25.57 MPa',
+      family: '"Cascadia Mono", "Consolas", "SFMono-Regular", "Microsoft YaHei", monospace',
+    },
+  ];
 
   const refs = {
     grid: document.getElementById('themePresetGrid'),
+    fontGrid: document.getElementById('fontPresetGrid'),
     resetBtn: document.getElementById('themeResetBtn'),
   };
 
   const getTheme = (id) => themes.find((theme) => theme.id === id) || themes.find((theme) => theme.id === DEFAULT_THEME_ID) || themes[0];
+  const getFontPreset = (id) => fontPresets.find((font) => font.id === id) || fontPresets.find((font) => font.id === DEFAULT_FONT_ID) || fontPresets[0];
+
+  const readSavedFont = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FONT_VARS_KEY) || 'null');
+      return saved && typeof saved === 'object' ? saved : null;
+    } catch {
+      return null;
+    }
+  };
 
   const applyTheme = (theme) => {
     themeVarNames.forEach((key) => {
@@ -367,34 +424,75 @@
     }
   };
 
-  const render = () => {
-    if (!refs.grid) return;
+  const applyFont = (font) => {
+    document.documentElement.style.setProperty('--app-font-family', font.family);
+    document.documentElement.dataset.fontPreset = font.id;
+  };
 
-    const activeId = getTheme(localStorage.getItem(THEME_ID_KEY)).id;
-    refs.grid.innerHTML = themes.map((theme) => {
-      const isActive = theme.id === activeId;
-      return `
-        <button class="theme-card${isActive ? ' is-active' : ''}" type="button" data-theme-preset="${theme.id}">
-          <span class="theme-card-check"><i class="ti ti-check" aria-hidden="true"></i></span>
-          <span class="theme-card-head">
-            <span>
-              <strong>${theme.name}</strong>
-              <em>${theme.tone}</em>
+  const saveFont = (font) => {
+    try {
+      localStorage.setItem(FONT_VARS_KEY, JSON.stringify({
+        id: font.id,
+        family: font.family,
+      }));
+    } catch (error) {
+      console.warn('[theme-settings] Failed to save font:', error);
+    }
+  };
+
+  const render = () => {
+    if (refs.grid) {
+      const activeId = getTheme(localStorage.getItem(THEME_ID_KEY)).id;
+      refs.grid.innerHTML = themes.map((theme) => {
+        const isActive = theme.id === activeId;
+        return `
+          <button class="theme-card${isActive ? ' is-active' : ''}" type="button" data-theme-preset="${theme.id}">
+            <span class="theme-card-check"><i class="ti ti-check" aria-hidden="true"></i></span>
+            <span class="theme-card-head">
+              <span>
+                <strong>${theme.name}</strong>
+                <em>${theme.tone}</em>
+              </span>
             </span>
-          </span>
-          <span class="theme-card-swatches" aria-hidden="true">
-            ${theme.swatches.map((color) => `<span style="background:${color}"></span>`).join('')}
-          </span>
-          <span class="theme-card-desc">${theme.desc}</span>
-        </button>
-      `;
-    }).join('');
+            <span class="theme-card-swatches" aria-hidden="true">
+              ${theme.swatches.map((color) => `<span style="background:${color}"></span>`).join('')}
+            </span>
+            <span class="theme-card-desc">${theme.desc}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    if (refs.fontGrid) {
+      const savedFont = readSavedFont();
+      const activeFontId = getFontPreset(savedFont?.id).id;
+      refs.fontGrid.innerHTML = fontPresets.map((font) => {
+        const isActive = font.id === activeFontId;
+        return `
+          <button class="font-card${isActive ? ' is-active' : ''}" type="button" data-font-preset="${font.id}" style='--font-preview:${font.family}'>
+            <span class="font-card-check"><i class="ti ti-check" aria-hidden="true"></i></span>
+            <span class="font-card-head">
+              <strong>${font.name}</strong>
+              <em>${font.tone}</em>
+            </span>
+            <span class="font-card-sample">${font.sample}</span>
+          </button>
+        `;
+      }).join('');
+    }
   };
 
   const setTheme = (id) => {
     const theme = getTheme(id);
     applyTheme(theme);
     saveTheme(theme);
+    render();
+  };
+
+  const setFont = (id) => {
+    const font = getFontPreset(id);
+    applyFont(font);
+    saveFont(font);
     render();
   };
 
@@ -405,16 +503,27 @@
       setTheme(button.getAttribute('data-theme-preset'));
     });
 
+    refs.fontGrid?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-font-preset]');
+      if (!button) return;
+      setFont(button.getAttribute('data-font-preset'));
+    });
+
     refs.resetBtn?.addEventListener('click', () => {
       setTheme(DEFAULT_THEME_ID);
+      setFont(DEFAULT_FONT_ID);
     });
   };
 
   const init = () => {
     const savedId = localStorage.getItem(THEME_ID_KEY);
     const theme = getTheme(savedId);
+    const savedFont = readSavedFont();
+    const font = getFontPreset(savedFont?.id);
     applyTheme(theme);
+    applyFont(font);
     saveTheme(theme);
+    saveFont(font);
     render();
     bind();
   };
@@ -422,6 +531,8 @@
   App.themeSettings = {
     init,
     setTheme,
+    setFont,
     themes,
+    fontPresets,
   };
 })();

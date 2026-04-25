@@ -16,6 +16,13 @@
             root.style.setProperty(key, savedThemeVars[key]);
           });
         }
+        try {
+          var savedFontVars = JSON.parse(localStorage.getItem('gjh-font-vars-v1') || 'null');
+          if (savedFontVars && savedFontVars.family) {
+            root.style.setProperty('--app-font-family', savedFontVars.family);
+            root.dataset.fontPreset = savedFontVars.id || 'system';
+          }
+        } catch (fontError) {}
         root.dataset.colorTheme = localStorage.getItem('gjh-theme-id-v1') || 'white';
       } catch (error) {
         // Ignore storage access failures and fall back to the default expanded state.
@@ -468,6 +475,10 @@
                       <button class="spectrum-action-btn spectrum-action-danger" id="spectrumDeleteSelectedBtn" type="button">删除</button>
                     </div>
                   </div>
+                  <div class="spectrum-batch-tags" aria-label="批量写入标签">
+                    <input id="spectrumBatchTagInput" type="text" placeholder="批量标签，逗号分隔" />
+                    <button class="spectrum-action-btn" id="spectrumBatchTagBtn" type="button" disabled>写入</button>
+                  </div>
                   <div class="spectrum-selected-list" id="spectrumSelectedList"></div>
                 </div>
               </aside>
@@ -509,6 +520,16 @@
               </section>
 
               <section class="theme-grid" id="themePresetGrid" aria-label="主题色列表"></section>
+              <section class="font-settings-panel" aria-labelledby="fontSettingsTitle">
+                <div class="font-settings-head">
+                  <div>
+                    <div class="theme-settings-kicker">全局字体</div>
+                    <h2 id="fontSettingsTitle">字体样式</h2>
+                    <p>选择系统界面使用的字体风格，影响导航、表格、卡片和表单文字。</p>
+                  </div>
+                </div>
+                <div class="font-preset-grid" id="fontPresetGrid" aria-label="全局字体列表"></div>
+              </section>
             </div>
           </section>
 

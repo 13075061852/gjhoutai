@@ -7,9 +7,12 @@
   const { utils } = App;
   const STORAGE_KEY = 'gjh-spectrum-user-images-v2';
   const EDIT_STORAGE_KEY = 'gjh-spectrum-edits-v2';
+  const FILTER_STORAGE_KEY = 'gjh-spectrum-filter-state-v1';
+  const IMAGE_DB_NAME = 'gjh-spectrum-images-db';
+  const IMAGE_DB_VERSION = 1;
+  const IMAGE_STORE_NAME = 'images';
   const EDITABLE_FIELDS = ['title', 'category', 'date', 'tags', 'note'];
   const DELETE_ANIMATION_MS = 240;
-  const DETAIL_ANIMATION_MS = 520;
 
   const state = {
     items: [],
@@ -27,6 +30,7 @@
   };
 
   const refs = {};
+  let imageDbPromise = null;
 
   const initRefs = () => {
     refs.searchInput = document.getElementById('spectrumSearchInput');
@@ -37,6 +41,8 @@
     refs.tagFilters = document.getElementById('spectrumTagFilters');
     refs.clearSelectedBtn = document.getElementById('spectrumClearSelectedBtn');
     refs.deleteSelectedBtn = document.getElementById('spectrumDeleteSelectedBtn');
+    refs.batchTagInput = document.getElementById('spectrumBatchTagInput');
+    refs.batchTagBtn = document.getElementById('spectrumBatchTagBtn');
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
@@ -70,21 +76,125 @@
     };
   };
 
-  const loadItems = () => {
+  const openImageDb = () => {
+    if (!window.indexedDB) return Promise.resolve(null);
+    if (imageDbPromise) return imageDbPromise;
+
+    imageDbPromise = new Promise((resolve) => {
+      const request = window.indexedDB.open(IMAGE_DB_NAME, IMAGE_DB_VERSION);
+      request.addEventListener('upgradeneeded', () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) {
+          db.createObjectStore(IMAGE_STORE_NAME);
+        }
+      });
+      request.addEventListener('success', () => resolve(request.result));
+      request.addEventListener('error', () => {
+        console.warn('[spectrum-analysis] Failed to open image storage:', request.error);
+        resolve(null);
+      });
+    });
+
+    return imageDbPromise;
+  };
+
+  const runImageStore = async (mode, handler) => {
+    const db = await openImageDb();
+    if (!db) return null;
+
+    return new Promise((resolve) => {
+      try {
+        const transaction = db.transaction(IMAGE_STORE_NAME, mode);
+        const store = transaction.objectStore(IMAGE_STORE_NAME);
+        const request = handler(store);
+        request.addEventListener('success', () => resolve(request.result));
+        request.addEventListener('error', () => {
+          console.warn('[spectrum-analysis] Image storage request failed:', request.error);
+          resolve(null);
+        });
+      } catch (error) {
+        console.warn('[spectrum-analysis] Image storage transaction failed:', error);
+        resolve(null);
+      }
+    });
+  };
+
+  const getStoredImage = (id) => runImageStore('readonly', (store) => store.get(id));
+
+  const putStoredImage = async (id, image) => {
+    const result = await runImageStore('readwrite', (store) => store.put(image, id));
+    return result !== null;
+  };
+
+  const deleteStoredImages = (ids) => {
+    ids.forEach((id) => {
+      runImageStore('readwrite', (store) => store.delete(id));
+    });
+  };
+
+  const toStoredItem = (item) => {
+    const stored = { ...item };
+    if (stored.imageStored) delete stored.image;
+    return stored;
+  };
+
+  const hydrateUploadedItem = async (item) => {
+    const next = { ...item };
+    if (next.image) {
+      const saved = await putStoredImage(next.id, next.image);
+      next.imageStored = saved;
+      return next;
+    }
+
+    if (next.imageStored) {
+      const image = await getStoredImage(next.id);
+      if (typeof image === 'string' && image) {
+        next.image = image;
+        return next;
+      }
+      next.imageStored = false;
+    }
+
+    return next;
+  };
+
+  const loadItems = async () => {
     const edits = utils.readJson(EDIT_STORAGE_KEY, {});
     state.edits = edits && typeof edits === 'object' && !Array.isArray(edits) ? edits : {};
     const uploaded = utils.readJson(STORAGE_KEY, []);
-    state.items = (Array.isArray(uploaded) ? uploaded : []).map(applyItemEdits);
+    const hydrated = await Promise.all((Array.isArray(uploaded) ? uploaded : []).map(hydrateUploadedItem));
+    state.items = hydrated
+      .filter((item) => item.image)
+      .map(applyItemEdits);
+    loadFilterState();
+    validateFilterState();
     state.activeId = state.items[0]?.id || '';
+    saveUploadedItems();
   };
 
   const saveUploadedItems = () => {
-    const uploaded = state.items.filter((item) => item.uploaded);
-    utils.writeJson(STORAGE_KEY, uploaded);
+    const uploaded = state.items.filter((item) => item.uploaded).map(toStoredItem);
+    if (!utils.writeJson(STORAGE_KEY, uploaded)) {
+      console.warn('[spectrum-analysis] Failed to save uploaded image metadata. Browser storage may be full.');
+    }
   };
 
   const saveItemEdits = () => {
     utils.writeJson(EDIT_STORAGE_KEY, state.edits);
+  };
+
+  const loadFilterState = () => {
+    const saved = utils.readJson(FILTER_STORAGE_KEY, {});
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+    state.category = String(saved.category || '全部');
+    state.tag = String(saved.tag || '全部');
+  };
+
+  const saveFilterState = () => {
+    utils.writeJson(FILTER_STORAGE_KEY, {
+      category: state.category || '全部',
+      tag: state.tag || '全部',
+    });
   };
 
   const getEditableSnapshot = (item) => EDITABLE_FIELDS.reduce((snapshot, field) => {
@@ -96,6 +206,18 @@
     .split(/[，,]/)
     .map((tag) => tag.trim())
     .filter(Boolean);
+
+  const mergeTags = (currentTags, addedTags) => {
+    const merged = [...(Array.isArray(currentTags) ? currentTags : [])];
+    const existing = new Set(merged.map((tag) => tag.toLowerCase()));
+    addedTags.forEach((tag) => {
+      const key = tag.toLowerCase();
+      if (existing.has(key)) return;
+      merged.push(tag);
+      existing.add(key);
+    });
+    return merged;
+  };
 
   const syncTagValue = (form) => {
     const tags = [...form.querySelectorAll('[data-spectrum-tag-chip]')]
@@ -125,14 +247,29 @@
 
   const uniqueValues = (getter) => [...new Set(state.items.flatMap((item) => getter(item)).filter(Boolean))];
 
+  const validateFilterState = () => {
+    const categories = new Set(['全部', ...uniqueValues((item) => [item.category])]);
+    const tags = new Set(['全部', ...uniqueValues((item) => item.tags)]);
+    if (!categories.has(state.category)) state.category = '全部';
+    if (!tags.has(state.tag)) state.tag = '全部';
+    saveFilterState();
+  };
+
   const matchesFilter = (item) => {
+    return matchesSearchAndMode(item)
+      && matchesCategory(item)
+      && matchesTag(item);
+  };
+
+  const matchesSearchAndMode = (item) => {
     const query = state.query.trim().toLowerCase();
     const text = [item.code, item.title, item.category, item.tags.join(' ')].filter(Boolean).join(' ').toLowerCase();
     return (!query || text.includes(query))
-      && (state.mode === 'ALL' || item.spectrumType === state.mode)
-      && (state.category === '全部' || item.category === state.category)
-      && (state.tag === '全部' || item.tags.includes(state.tag));
+      && (state.mode === 'ALL' || item.spectrumType === state.mode);
   };
+
+  const matchesCategory = (item) => state.category === '全部' || item.category === state.category;
+  const matchesTag = (item) => state.tag === '全部' || item.tags.includes(state.tag);
 
   const getFilteredItems = () => {
     const items = state.items.filter(matchesFilter);
@@ -141,8 +278,32 @@
     });
   };
 
-  const getActiveItem = () => state.items.find((item) => item.id === state.activeId) || state.items[0] || null;
+  const syncActiveWithFilteredItems = () => {
+    const filtered = getFilteredItems();
+    if (filtered.some((item) => item.id === state.activeId)) return filtered;
+    state.activeId = filtered[0]?.id || '';
+    return filtered;
+  };
+
+  const getActiveItem = () => state.items.find((item) => item.id === state.activeId) || null;
   const getSelectedItems = () => state.items.filter((item) => state.selectedIds.has(item.id));
+
+  const syncModeButtons = () => {
+    refs.modeButtons.forEach((button) => {
+      button.classList.toggle('is-active', (button.getAttribute('data-spectrum-mode') || 'ALL') === state.mode);
+    });
+  };
+
+  const revealItemInGallery = (item) => {
+    state.query = '';
+    state.mode = 'ALL';
+    state.category = item?.category || '全部';
+    state.tag = '全部';
+    state.activeId = item?.id || state.activeId;
+    if (refs.searchInput) refs.searchInput.value = '';
+    syncModeButtons();
+    saveFilterState();
+  };
 
   const renderFilterButton = (value, activeValue, count, attr) => {
     const active = value === activeValue ? ' is-active' : '';
@@ -163,14 +324,20 @@
   const renderFilters = () => {
     const categories = ['全部', ...uniqueValues((item) => [item.category])];
     const tags = ['全部', ...uniqueValues((item) => item.tags)];
+    const itemsInSearchAndMode = state.items.filter(matchesSearchAndMode);
+    const itemsInCategory = itemsInSearchAndMode.filter(matchesCategory);
 
     if (refs.categoryFilters) refs.categoryFilters.innerHTML = categories.map((category) => {
-      const count = category === '全部' ? state.items.length : state.items.filter((item) => item.category === category).length;
+      const count = category === '全部'
+        ? itemsInSearchAndMode.length
+        : itemsInSearchAndMode.filter((item) => item.category === category).length;
       return renderFilterButton(category, state.category, count, 'data-spectrum-category');
     }).join('');
 
     if (refs.tagFilters) refs.tagFilters.innerHTML = tags.map((tag) => {
-      const count = tag === '全部' ? state.items.length : state.items.filter((item) => item.tags.includes(tag)).length;
+      const count = tag === '全部'
+        ? itemsInCategory.length
+        : itemsInCategory.filter((item) => item.tags.includes(tag)).length;
       const active = tag === state.tag ? ' is-active' : '';
       return `<button class="spectrum-tag-filter${active}" type="button" data-spectrum-tag="${utils.escapeHtml(tag)}">${utils.escapeHtml(tag)} <span>${count}</span></button>`;
     }).join('');
@@ -232,6 +399,7 @@
       state.selectedIds.delete(id);
       delete state.edits[id];
     });
+    deleteStoredImages(targets);
     state.activeId = state.items[0]?.id || '';
     if (refs.previewDialog) closeImagePreview();
     saveUploadedItems();
@@ -275,6 +443,26 @@
     if (!ids.length) return;
 
     animateDeleteItems(ids, () => commitDeleteItems(ids));
+  };
+
+  const applyBatchTagsToSelected = () => {
+    const tags = normalizeTags(refs.batchTagInput?.value || '');
+    const selectedIds = new Set(state.selectedIds);
+    if (!tags.length || !selectedIds.size) return;
+
+    let uploadedChanged = false;
+    state.items = state.items.map((item) => {
+      if (!selectedIds.has(item.id)) return item;
+      const next = { ...item, tags: mergeTags(item.tags, tags) };
+      state.edits[next.id] = getEditableSnapshot(next);
+      if (next.uploaded) uploadedChanged = true;
+      return next;
+    });
+
+    if (refs.batchTagInput) refs.batchTagInput.value = '';
+    saveItemEdits();
+    if (uploadedChanged) saveUploadedItems();
+    render();
   };
 
   const closeDeleteDialog = () => {
@@ -327,11 +515,11 @@
         <div class="spectrum-delete-icon spectrum-upload-conflict-icon"><i class="ti ti-file-alert" aria-hidden="true"></i></div>
         <div class="spectrum-delete-main">
           <div class="spectrum-delete-title" id="spectrumUploadConflictTitle">发现同名图片</div>
-          <div class="spectrum-delete-text">“${utils.escapeHtml(fileName)}” 已存在，是否覆盖现有图片？选择跳过将保留原图片。</div>
+          <div class="spectrum-delete-text">“${utils.escapeHtml(fileName)}” 已存在。本次选择将应用到当前批次所有同名图片：跳过会保留原图片，覆盖会替换原图片。</div>
         </div>
         <div class="spectrum-delete-actions">
-          <button class="analysis-toolbar-btn" type="button" data-spectrum-upload-skip>跳过</button>
-          <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-upload-overwrite>覆盖</button>
+          <button class="analysis-toolbar-btn" type="button" data-spectrum-upload-skip>全部跳过</button>
+          <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-upload-overwrite>全部覆盖</button>
         </div>
       </div>
     `;
@@ -351,16 +539,17 @@
   });
 
   const renderGallery = () => {
-    const items = getFilteredItems();
+    const items = syncActiveWithFilteredItems();
     const selectedCount = state.selectedIds.size;
     refs.galleryCount.textContent = `共 ${items.length} 张，已选 ${selectedCount} 张`;
     refs.gallery.className = `spectrum-gallery is-${state.view}`;
 
     if (!items.length) {
-      const emptyTitle = state.mode === 'ALL' ? '暂无图谱文件' : `暂无 ${state.mode} 图谱文件`;
-      const emptyText = state.mode === 'ALL'
-        ? '拖拽图片到这里，或点击“上传图谱”添加你的文件。'
-        : `当前模式只显示文件名以 ${state.mode} 结尾的图片，可切换 ALL 查看全部。`;
+      const hasFilter = Boolean(state.query.trim()) || state.mode !== 'ALL' || state.category !== '全部' || state.tag !== '全部';
+      const emptyTitle = hasFilter ? '没有匹配的图谱' : '暂无图谱文件';
+      const emptyText = hasFilter
+        ? '请调整搜索关键词、分类、标签或图谱类型后再查看。'
+        : '拖拽图片到这里，或点击“上传图谱”添加你的文件。';
       refs.gallery.className = 'spectrum-gallery is-empty';
       refs.gallery.innerHTML = `
           <div class="spectrum-empty-state">
@@ -375,6 +564,10 @@
     refs.gallery.innerHTML = items.map((item) => {
       const selected = state.selectedIds.has(item.id) ? ' is-selected' : '';
       const active = item.id === state.activeId ? ' is-active' : '';
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      const tagChips = tags.slice(0, 3)
+        .map((tag) => `<span title="${utils.escapeHtml(tag)}">${utils.escapeHtml(tag)}</span>`);
+      if (tags.length > 3) tagChips.push(`<span title="还有 ${tags.length - 3} 个标签">+${tags.length - 3}</span>`);
       return `
         <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
           <div class="spectrum-card-image">
@@ -389,7 +582,7 @@
               <span>${utils.escapeHtml([item.category, item.date].filter(Boolean).join(' · '))}</span>
             </div>
             <div class="spectrum-card-tags">
-              ${item.tags.slice(0, 3).map((tag) => `<span>${utils.escapeHtml(tag)}</span>`).join('')}
+              ${tagChips.join('')}
             </div>
           </div>
         </article>
@@ -483,6 +676,7 @@
   const updateActions = () => {
     const selectedCount = state.selectedIds.size;
     if (refs.printBtn) refs.printBtn.disabled = selectedCount < 1;
+    if (refs.batchTagBtn) refs.batchTagBtn.disabled = selectedCount < 1;
   };
 
   const updateDetailCollapsed = () => {
@@ -504,16 +698,9 @@
       return;
     }
 
-    window.clearTimeout(refs.detailCollapseTimer);
     state.detailCollapsed = collapsed;
-    if (!collapsed) refs.detailPanel.hidden = false;
+    refs.detailPanel.hidden = false;
     updateDetailCollapsed();
-
-    if (collapsed) {
-      refs.detailCollapseTimer = window.setTimeout(() => {
-        if (state.detailCollapsed && refs.detailPanel) refs.detailPanel.hidden = true;
-      }, DETAIL_ANIMATION_MS);
-    }
   };
 
   const printSelectedList = () => {
@@ -578,6 +765,7 @@
   };
 
   const render = () => {
+    syncActiveWithFilteredItems();
     renderFilters();
     renderGallery();
     renderDetail();
@@ -753,12 +941,15 @@
     const files = [...(fileList || [])].filter((file) => file.type.startsWith('image/'));
     if (!files.length) return;
 
+    let conflictAction = '';
     for (const file of files) {
       const title = getUploadTitle(file);
       const existing = findItemByTitle(title);
       if (existing) {
-        const action = await openUploadConflictDialog(file.name);
-        if (action === 'skip') continue;
+        if (!conflictAction) {
+          conflictAction = await openUploadConflictDialog(file.name);
+        }
+        if (conflictAction === 'skip') continue;
       }
 
       const image = await readFileAsDataUrl(file);
@@ -767,6 +958,7 @@
       const today = new Date().toISOString().slice(0, 10);
       const spectrumType = getSpectrumTypeFromName(file.name);
       if (existing) {
+        const imageStored = await putStoredImage(existing.id, image);
         const index = state.items.findIndex((item) => item.id === existing.id);
         if (index < 0) continue;
         state.items[index] = {
@@ -774,14 +966,17 @@
           title,
           spectrumType,
           image,
+          imageStored,
           uploaded: true,
         };
-        state.activeId = existing.id;
+        revealItemInGallery(state.items[index]);
       } else {
         const inheritedCategory = state.category === '全部' ? '' : state.category;
         const inheritedTags = state.tag === '全部' ? [] : [state.tag];
+        const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const imageStored = await putStoredImage(id, image);
         const item = {
-          id: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          id,
           code: `UPLOAD-${today.replace(/-/g, '')}`,
           title,
           spectrumType,
@@ -790,11 +985,12 @@
           date: today,
           tags: inheritedTags,
           image,
+          imageStored,
           note: '',
           uploaded: true,
         };
         state.items.unshift(item);
-        state.activeId = item.id;
+        revealItemInGallery(item);
       }
       saveUploadedItems();
       render();
@@ -804,8 +1000,7 @@
   const bindEvents = () => {
     refs.searchInput?.addEventListener('input', () => {
       state.query = refs.searchInput.value || '';
-      renderGallery();
-      updateActions();
+      render();
     });
 
     refs.sortSelect?.addEventListener('change', () => {
@@ -824,11 +1019,7 @@
     refs.modeButtons.forEach((button) => {
       button.addEventListener('click', () => {
         state.mode = button.getAttribute('data-spectrum-mode') || 'ALL';
-        refs.modeButtons.forEach((item) => item.classList.toggle('is-active', item === button));
-        const visibleItems = getFilteredItems();
-        if (!visibleItems.some((item) => item.id === state.activeId)) {
-          state.activeId = visibleItems[0]?.id || '';
-        }
+        syncModeButtons();
         render();
       });
     });
@@ -842,10 +1033,18 @@
       openDeleteDialog('', 'selected');
     });
 
+    refs.batchTagBtn?.addEventListener('click', applyBatchTagsToSelected);
+    refs.batchTagInput?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      applyBatchTagsToSelected();
+    });
+
     refs.categoryFilters?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-spectrum-category]');
       if (!button) return;
       state.category = button.getAttribute('data-spectrum-category') || '全部';
+      saveFilterState();
       render();
     });
 
@@ -853,6 +1052,7 @@
       const button = event.target.closest('[data-spectrum-tag]');
       if (!button) return;
       state.tag = button.getAttribute('data-spectrum-tag') || '全部';
+      saveFilterState();
       render();
     });
 
@@ -1041,11 +1241,18 @@
     });
   };
 
-  const init = () => {
+  const init = async () => {
     initRefs();
     if (!refs.gallery) return;
-    loadItems();
     bindEvents();
+    refs.gallery.innerHTML = `
+      <div class="spectrum-empty-state">
+        <div class="spectrum-empty-icon"><i class="ti ti-loader-2" aria-hidden="true"></i></div>
+        <div class="spectrum-empty-title">正在加载图谱</div>
+        <div class="spectrum-empty-text">正在读取本地保存的图片。</div>
+      </div>
+    `;
+    await loadItems();
     render();
   };
 

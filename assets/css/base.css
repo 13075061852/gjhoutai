@@ -34,6 +34,7 @@
       --control-shadow-hover:none;
       --scrollbar-thumb:rgba(156,163,175,.9);
       --scrollbar-track:transparent;
+      --app-font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
     body[data-theme="dark"]{
       --control-bg:#0f172a;
@@ -53,7 +54,7 @@
       margin:0;
       background:var(--bg);
       color:var(--text);
-      font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family:var(--app-font-family);
       -webkit-font-smoothing:antialiased;
       overflow:hidden;
     }

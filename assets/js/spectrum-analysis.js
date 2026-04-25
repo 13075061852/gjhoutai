@@ -249,7 +249,8 @@
 
   const validateFilterState = () => {
     const categories = new Set(['全部', ...uniqueValues((item) => [item.category])]);
-    const tags = new Set(['全部', ...uniqueValues((item) => item.tags)]);
+    const categoryItems = state.items.filter((item) => state.category === '全部' || item.category === state.category);
+    const tags = new Set(['全部', ...categoryItems.flatMap((item) => item.tags).filter(Boolean)]);
     if (!categories.has(state.category)) state.category = '全部';
     if (!tags.has(state.tag)) state.tag = '全部';
     saveFilterState();
@@ -323,9 +324,13 @@
 
   const renderFilters = () => {
     const categories = ['全部', ...uniqueValues((item) => [item.category])];
-    const tags = ['全部', ...uniqueValues((item) => item.tags)];
     const itemsInSearchAndMode = state.items.filter(matchesSearchAndMode);
     const itemsInCategory = itemsInSearchAndMode.filter(matchesCategory);
+    const tags = ['全部', ...new Set(itemsInCategory.flatMap((item) => item.tags).filter(Boolean))];
+    if (!tags.includes(state.tag)) {
+      state.tag = '全部';
+      saveFilterState();
+    }
 
     if (refs.categoryFilters) refs.categoryFilters.innerHTML = categories.map((category) => {
       const count = category === '全部'
@@ -1044,6 +1049,7 @@
       const button = event.target.closest('[data-spectrum-category]');
       if (!button) return;
       state.category = button.getAttribute('data-spectrum-category') || '全部';
+      state.tag = '全部';
       saveFilterState();
       render();
     });

@@ -68,9 +68,13 @@
       margin:0;
     }
     :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
+    @media (max-width: 1320px){
+      .config-form{grid-template-columns:1fr}
+    }
     @media (max-width: 1200px){
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}
+      .config-form{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .spectrum-page{
@@ -254,7 +258,11 @@
       .assistant{display:none}
       .dashboard{min-width:0}
       .content{padding:16px}
+      .config-form{
+        grid-template-columns:1fr;
+      }
       .form-grid{grid-template-columns:1fr}
+      .oss-config-grid{grid-template-columns:1fr}
       .config-layout{grid-template-columns:1fr}
       .placeholder-card{padding:20px}
       .analysis-filter-card,
@@ -467,6 +475,25 @@
     @media (max-width: 420px){
       .content{
         padding:10px;
+      }
+      .config-module{
+        padding:18px;
+        border-radius:16px;
+      }
+      .config-module-head{
+        flex-direction:column;
+        gap:10px;
+      }
+      .config-module h2{
+        font-size:17px;
+      }
+      .config-actions-panel{
+        padding:14px;
+      }
+      .config-actions-panel .action-buttons,
+      .config-actions-panel .save-btn,
+      .config-actions-panel .outline-btn{
+        width:100%;
       }
       .theme-settings-head{
         padding:16px;

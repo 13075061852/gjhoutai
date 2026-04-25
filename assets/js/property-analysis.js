@@ -498,7 +498,7 @@
   const uploadPropertyDataToOss = async (data, sourceFile, onProgress) => {
     const config = getOssConfig();
     if (!hasOssWriteConfig(config)) {
-      throw new Error('请先在 AI 配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
+      throw new Error('请先在配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
     }
 
     const jsonText = JSON.stringify(data, null, 2);

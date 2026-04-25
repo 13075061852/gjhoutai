@@ -210,9 +210,9 @@
         desc: '这里可以切换系统主色、背景层级和控件强调色，并把选择保存在本地。',
       },
       'ai-config': {
-        title: 'AI配置中心',
+        title: '配置中心',
         eyebrow: '当前可用',
-        desc: '这里可以配置 OpenRouter 的 API Key、模型 ID 和调用参数。支持导入、导出与本地保存。',
+        desc: '这里可以配置 OpenRouter 接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
       },
     },
   };

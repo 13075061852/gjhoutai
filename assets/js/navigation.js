@@ -594,7 +594,7 @@
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
       if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
       if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;
-      if (refs.placeholderBackBtn) refs.placeholderBackBtn.textContent = '返回 AI 配置';
+      if (refs.placeholderBackBtn) refs.placeholderBackBtn.textContent = '返回配置中心';
       if (refs.placeholderOpenBtn) refs.placeholderOpenBtn.textContent = '查看仪表盘';
     }
 

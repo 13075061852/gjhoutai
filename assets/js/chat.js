@@ -555,7 +555,7 @@
   const getProjectContext = () => [
     '【项目背景】',
     '你正在广俊塑料科技后台管理系统中工作。',
-    '项目当前包含物性分析、图谱分析、主题设置和 OpenRouter AI 配置中心。',
+    '项目当前包含物性分析、图谱分析、主题设置和配置中心。',
     '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
   ].join('\n');
 
@@ -817,7 +817,7 @@
     ].slice(0, 4);
     if (!prompt) return;
     if (!config.apiKey) {
-      pushChatMessage('assistant', '请先在 AI 配置里填入 OpenRouter API 密钥，然后再发送消息。');
+      pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，然后再发送消息。');
       return;
     }
 

@@ -64,7 +64,7 @@
             <button class="nav-item" type="button" id="aiConfigNav" data-page="ai-config">
               <span class="nav-main">
                 <span class="nav-icon"><i class="ti ti-settings" aria-hidden="true"></i></span>
-                <span class="nav-text">AI配置</span>
+                <span class="nav-text">配置中心</span>
               </span>
             </button>
           </div>
@@ -187,30 +187,20 @@
 
         <div class="content">
           <section class="dashboard ai-config page-section active" data-page-section="ai-config">
-            <div class="hero config-hero">
-              <div class="config-hero-left">
-                <div class="config-hero-icon" aria-hidden="true">AI</div>
-                <div class="config-hero-copy">
-                <h1>AI 配置中心</h1>
-                <p>配置 AI 模型与参数，开启智能分析之旅</p>
-                </div>
-              </div>
-              <div class="hero-actions">
-                <span class="status-pill success" id="configStatus">本地配置：未保存</span>
-              </div>
-            </div>
-
             <div class="config-layout">
-              <div class="config-column">
-                <article class="panel config-card">
-                  <div class="panel-head panel-head-hero">
-                    <div class="panel-head-left">
-                      <span class="panel-title">OpenRouter 接入配置</span>
-                      <a class="panel-help" href="https://openrouter.ai/docs/api/api-reference/models/get-models" target="_blank" rel="noreferrer">如何获取 API 密钥?</a>
+              <form class="config-form" id="aiConfigForm">
+                <article class="panel config-module config-module-ai">
+                  <div class="config-module-head">
+                    <div class="config-module-title">
+                      <span class="config-module-icon"><i class="ti ti-cpu-2" aria-hidden="true"></i></span>
+                      <div>
+                        <div class="config-module-kicker">AI 接入</div>
+                        <h2>模型与接口</h2>
+                      </div>
                     </div>
+                    <a class="panel-help" href="https://openrouter.ai/docs/api/api-reference/models/get-models" target="_blank" rel="noreferrer">如何获取 API 密钥?</a>
                   </div>
-                  <form class="config-form" id="aiConfigForm">
-                    <div class="form-grid">
+                  <div class="form-grid">
                       <div class="field full">
                         <label class="field-label-row" for="openrouterApiKey">
                           <span class="field-label-main">
@@ -235,7 +225,6 @@
                             </span>
                           </label>
                           <input id="openrouterBaseUrl" name="openrouterBaseUrl" type="url" value="https://openrouter.ai/api/v1" />
-                          <small>OpenRouter API 的基础访问地址。</small>
                         </div>
                         <div class="field">
                           <label for="modelSelectTrigger">
@@ -257,7 +246,6 @@
                             <option value="deepseek/deepseek-chat">deepseek/deepseek-chat</option>
                             </select>
                           </div>
-                          <small>选择默认使用的 AI 模型。</small>
                         </div>
                         <div class="field">
                           <label for="appTitle">
@@ -267,13 +255,26 @@
                             </span>
                           </label>
                           <input id="appTitle" name="appTitle" type="text" value="OpenRouter" readonly />
-                          <small>当前接入的模型提供商。</small>
                         </div>
                       </div>
                       <div class="field full hidden-field">
                         <label for="httpReferer">HTTP-Referer <span>可选</span></label>
                         <input id="httpReferer" name="httpReferer" type="url" placeholder="https://example.com" />
                       </div>
+                    </div>
+                </article>
+
+                <article class="panel config-module config-module-assistant">
+                  <div class="config-module-head">
+                    <div class="config-module-title">
+                      <span class="config-module-icon"><i class="ti ti-message-2-cog" aria-hidden="true"></i></span>
+                      <div>
+                        <div class="config-module-kicker">助手行为</div>
+                        <h2>提示词与生成参数</h2>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-grid">
                       <div class="field full">
                         <div class="field-header-row">
                           <label class="field-label-row" for="systemPrompt">
@@ -310,37 +311,35 @@
                           <label class="switch"><input id="logEnabled" name="logEnabled" type="checkbox" checked />保存本地调用日志</label>
                         </div>
                       </div>
-                      <div class="field full oss-config-block">
-                        <div class="field-header-row">
-                          <label class="field-label-row" for="ossBucket">
-                            <span class="field-label-main">
-                              <i class="field-label-icon ti ti-cloud-data-connection" aria-hidden="true"></i>
-                              <span>阿里云 OSS 数据源</span>
-                            </span>
-                          </label>
+                    </div>
+                </article>
+
+                <article class="panel config-module config-module-data oss-config-block">
+                  <div class="config-module-head">
+                    <div class="config-module-title">
+                      <span class="config-module-icon"><i class="ti ti-cloud-data-connection" aria-hidden="true"></i></span>
+                      <div>
+                        <div class="config-module-kicker">数据源</div>
+                        <h2>阿里云 OSS 数据同步</h2>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-grid oss-config-grid">
+                        <div class="field">
+                          <label for="ossBucket">Bucket</label>
+                          <input id="ossBucket" name="ossBucket" type="text" value="gjhoutai" placeholder="gjhoutai" autocomplete="off" />
                         </div>
-                        <div class="form-grid form-grid-3">
-                          <div class="field">
-                            <label for="ossBucket">Bucket</label>
-                            <input id="ossBucket" name="ossBucket" type="text" value="gjhoutai" placeholder="gjhoutai" autocomplete="off" />
-                            <small>公共读取的 OSS Bucket 名称。</small>
-                          </div>
-                          <div class="field">
-                            <label for="ossEndpoint">Endpoint</label>
-                            <input id="ossEndpoint" name="ossEndpoint" type="text" value="oss-cn-shanghai.aliyuncs.com" placeholder="oss-cn-shanghai.aliyuncs.com" autocomplete="off" />
-                            <small>填写地域 Endpoint，不带 Bucket。</small>
-                          </div>
-                          <div class="field">
-                            <label for="ossObjectKey">JSON 路径</label>
-                            <input id="ossObjectKey" name="ossObjectKey" type="text" value="测试数据.json" placeholder="测试数据.json" autocomplete="off" />
-                            <small>Excel 解析后覆盖写入的 JSON 对象路径。</small>
-                          </div>
+                        <div class="field">
+                          <label for="ossEndpoint">Endpoint</label>
+                          <input id="ossEndpoint" name="ossEndpoint" type="text" value="oss-cn-shanghai.aliyuncs.com" placeholder="oss-cn-shanghai.aliyuncs.com" autocomplete="off" />
                         </div>
-                        <div class="form-grid form-grid-3">
+                        <div class="field">
+                          <label for="ossObjectKey">JSON 路径</label>
+                          <input id="ossObjectKey" name="ossObjectKey" type="text" value="测试数据.json" placeholder="测试数据.json" autocomplete="off" />
+                        </div>
                           <div class="field">
                             <label for="ossAccessKeyId">AccessKey ID</label>
                             <input id="ossAccessKeyId" name="ossAccessKeyId" type="text" placeholder="LTAI..." autocomplete="off" />
-                            <small>仅保存在本地浏览器，用于上传覆盖 JSON。</small>
                           </div>
                           <div class="field">
                             <label for="ossAccessKeySecret">AccessKey Secret</label>
@@ -350,33 +349,28 @@
                                 <i class="oss-secret-toggle-icon ti ti-eye" aria-hidden="true"></i>
                               </button>
                             </div>
-                            <small>建议使用仅允许写入该 JSON 路径的 RAM 子账号。</small>
                           </div>
                           <div class="field">
                             <label for="ossExcelBackupPrefix">Excel 备份路径 <span>可选</span></label>
                             <input id="ossExcelBackupPrefix" name="ossExcelBackupPrefix" type="text" placeholder="property-analysis/uploads/" autocomplete="off" />
-                            <small>留空则只更新 JSON，不上传 Excel 原文件。</small>
                           </div>
                         </div>
-                      </div>
-                    </div>
-
-                    <div class="action-bar">
-                      <div class="action-buttons">
-                        <button class="save-btn" type="submit">
-                          <i class="ti ti-device-floppy" aria-hidden="true"></i>
-                          <span>保存配置</span>
-                        </button>
-                        <button class="ghost-btn outline-btn" type="button" id="testConfigBtn">
-                          <i class="ti ti-refresh" aria-hidden="true"></i>
-                          <span>检测配置</span>
-                        </button>
-                      </div>
-                      <div class="action-note success-note">配置仅保存在本地浏览器；OSS 密钥只用于上传覆盖数据 JSON</div>
-                    </div>
-                  </form>
                 </article>
-              </div>
+
+                <div class="action-bar config-actions-panel">
+                  <div class="action-buttons">
+                    <button class="save-btn" type="submit">
+                      <i class="ti ti-device-floppy" aria-hidden="true"></i>
+                      <span>保存配置</span>
+                    </button>
+                    <button class="ghost-btn outline-btn" type="button" id="testConfigBtn">
+                      <i class="ti ti-refresh" aria-hidden="true"></i>
+                      <span>检测配置</span>
+                    </button>
+                  </div>
+                  <div class="action-note success-note" id="configStatus">本地配置：未保存</div>
+                </div>
+              </form>
             </div>
 
             <input id="configFileInput" type="file" accept="application/json,.json" hidden />
@@ -591,9 +585,9 @@
               <div class="placeholder-card">
                 <span class="placeholder-eyebrow" id="placeholderEyebrow">功能开发中</span>
                 <h2 class="placeholder-title" id="placeholderTitle">请选择左侧功能</h2>
-                <p class="placeholder-desc" id="placeholderDesc">点击一个导航项后，这里会展示对应页面。当前只有 AI 配置中心是完整可用的，其它模块先以占位页提示“功能开发中”。</p>
+                <p class="placeholder-desc" id="placeholderDesc">点击一个导航项后，这里会展示对应页面。当前配置中心是完整可用的，其它模块先以占位页提示“功能开发中”。</p>
                 <div class="placeholder-actions">
-                  <button class="ghost-btn" type="button" id="placeholderBackBtn">返回 AI 配置</button>
+                  <button class="ghost-btn" type="button" id="placeholderBackBtn">返回配置中心</button>
                   <button class="accent-btn" type="button" id="placeholderOpenBtn">继续浏览</button>
                 </div>
               </div>

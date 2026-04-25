@@ -11,7 +11,7 @@
 - 左侧业务导航
 - 中间主内容区
 - 右侧 AI 聊天区
-- OpenRouter AI 配置中心
+- 配置中心
 
 ## 目录结构
 
@@ -43,11 +43,11 @@
 - `assets/css/base.css`：全局变量、基础重置、通用按钮和基础排版。
 - `assets/css/sidebar.css`：侧边栏相关样式。
 - `assets/css/layout.css`：整体布局、顶部栏、主内容区。
-- `assets/css/pages.css`：页面内容、AI 配置中心、占位页、聊天面板等样式。
+- `assets/css/pages.css`：页面内容、配置中心、占位页、聊天面板等样式。
 - `assets/css/responsive.css`：响应式适配与折叠态样式。
 - `assets/js/app-state.js`：共享 DOM 引用、常量、状态和通用工具。
 - `assets/js/navigation.js`：侧边栏折叠、页面切换、导航状态恢复。
-- `assets/js/config.js`：AI 配置表单、预览、保存、导入、导出、模型检测。
+- `assets/js/config.js`：配置中心表单、预览、保存、导入、导出、模型检测。
 - `assets/js/chat.js`：聊天消息渲染、发送、历史记录读写。
 - `assets/js/app.js`：启动入口，只负责按顺序初始化模块。
 
@@ -69,4 +69,3 @@
 - 公共样式优先放入 `base.css` 或 `layout.css`。
 - 页面专属样式放入 `pages.css`。
 - 业务逻辑按模块拆分到 `assets/js/` 下的新文件中。
-

@@ -60,6 +60,10 @@
     selectAllBtn: document.getElementById('analysisSelectAllBtn'),
     compareBtn: document.getElementById('analysisCompareBtn'),
     exportBtn: document.getElementById('analysisExportBtn'),
+    importExcelBtn: document.getElementById('analysisImportExcelBtn'),
+    exportJsonBtn: document.getElementById('analysisExportJsonBtn'),
+    excelInput: document.getElementById('analysisExcelInput'),
+    importStatus: document.getElementById('analysisImportStatus'),
     panelCount: document.getElementById('analysisPanelCount'),
     footerTotal: document.getElementById('analysisFooterTotal'),
     selectionMeta: document.getElementById('analysisSelectionMeta'),
@@ -80,6 +84,8 @@
     suggestionOpen: false,
     compareOnly: false,
     selectedKeys: new Set(),
+    dataSource: 'default',
+    sourceFileName: '',
   };
 
   const escapeHtml = (value) => utils.escapeHtml(value);
@@ -130,6 +136,348 @@
 
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const normalizeCellValue = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value.trim();
+    return value;
+  };
+
+  const isBlankCell = (value) => {
+    const normalized = normalizeCellValue(value);
+    return normalized == null || normalized === '';
+  };
+
+  const normalizeHeaderName = (value, index) => {
+    const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return text || `_empty_${index + 1}`;
+  };
+
+  const formatDateValue = (value) => {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
+    return `${value.getFullYear()}/${value.getMonth() + 1}/${value.getDate()}`;
+  };
+
+  const normalizeParsedValue = (value, key = '') => {
+    const normalized = normalizeCellValue(value);
+    if (normalized === '') return '';
+
+    if (normalized instanceof Date) return formatDateValue(normalized);
+
+    if (typeof normalized === 'number' || typeof normalized === 'boolean') return normalized;
+
+    const text = String(normalized).trim();
+    if (!text) return '';
+
+    if (key === '测试温度') {
+      const temperature = parseNumericValue(text.replace(/[℃°]/g, ''));
+      return temperature == null ? text : temperature;
+    }
+
+    const numeric = parseNumericValue(text);
+    return numeric == null ? text : numeric;
+  };
+
+  const isLikelyDateFormat = (format) => {
+    const text = String(format || '').toLowerCase();
+    if (!text) return false;
+    return /(^|[^a-z])([ymd]{1,4})([^a-z]|$)/.test(text)
+      || text.includes('年')
+      || text.includes('月')
+      || text.includes('日');
+  };
+
+  const formatExcelDateCode = (serial) => {
+    if (!window.XLSX?.SSF?.parse_date_code) return '';
+    const parsed = window.XLSX.SSF.parse_date_code(serial);
+    if (!parsed || !parsed.y || !parsed.m || !parsed.d) return '';
+    return `${parsed.y}/${parsed.m}/${parsed.d}`;
+  };
+
+  const getWorksheetCellValue = (worksheet, rowIndex, columnIndex) => {
+    const address = window.XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
+    const cell = worksheet[address];
+    if (!cell) return '';
+
+    if (cell.v instanceof Date) {
+      return formatDateValue(cell.v);
+    }
+
+    if (typeof cell.v === 'number' && isLikelyDateFormat(cell.z || cell.w)) {
+      const dateText = formatExcelDateCode(cell.v);
+      if (dateText) return dateText;
+    }
+
+    return cell.v ?? '';
+  };
+
+  const getWorksheetRows = (worksheet) => {
+    const range = window.XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    const rows = [];
+
+    for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+      const row = [];
+      let hasValue = false;
+
+      for (let columnIndex = range.s.c; columnIndex <= range.e.c; columnIndex += 1) {
+        const value = getWorksheetCellValue(worksheet, rowIndex, columnIndex);
+        row.push(value);
+        if (!isBlankCell(value)) hasValue = true;
+      }
+
+      if (hasValue) rows.push(row);
+    }
+
+    return rows;
+  };
+
+  const isRepeatedHeaderValue = (value, header) => {
+    if (isBlankCell(value)) return false;
+    return String(value).replace(/\s+/g, ' ').trim() === String(header || '').trim();
+  };
+
+  const compactParsedRow = (row) => {
+    const next = {};
+    Object.entries(row).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        if (!value.length) return;
+        next[key] = value.length === 1 ? value[0] : value;
+        return;
+      }
+
+      if (!hasMeaningfulValue(value)) return;
+      next[key] = value;
+    });
+    return next;
+  };
+
+  const parseWorksheetRows = (rows) => {
+    if (!Array.isArray(rows) || !rows.length) return [];
+
+    const headers = (rows[0] || []).map((value, index) => normalizeHeaderName(value, index));
+    const records = [];
+    let current = null;
+
+    const flush = () => {
+      if (!current) return;
+      const row = compactParsedRow(current);
+      if (hasMeaningfulValue(row.型号) || hasMeaningfulValue(row.批次)) {
+        records.push(row);
+      }
+      current = null;
+    };
+
+    rows.slice(1).forEach((sourceRow) => {
+      if (!Array.isArray(sourceRow) || sourceRow.every(isBlankCell)) return;
+
+      const model = normalizeParsedValue(sourceRow[0], headers[0]);
+      const batch = normalizeParsedValue(sourceRow[1], headers[1]);
+      const temperature = normalizeParsedValue(sourceRow[2], headers[2]);
+      const startsRecord = [model, batch, temperature].some((value) => hasMeaningfulValue(value));
+
+      if (startsRecord) {
+        flush();
+        current = {};
+        if (hasMeaningfulValue(model)) current[headers[0]] = model;
+        if (hasMeaningfulValue(batch)) current[headers[1]] = batch;
+        if (hasMeaningfulValue(temperature)) current[headers[2]] = temperature;
+      }
+
+      if (!current) return;
+
+      headers.forEach((header, columnIndex) => {
+        if (columnIndex < 3 || isPlaceholderColumn(header)) return;
+
+        const cellValue = sourceRow[columnIndex];
+        if (isBlankCell(cellValue) || isRepeatedHeaderValue(cellValue, header)) return;
+
+        const parsedValue = normalizeParsedValue(cellValue, header);
+        if (!hasMeaningfulValue(parsedValue)) return;
+
+        if (!Array.isArray(current[header])) current[header] = [];
+        current[header].push(parsedValue);
+      });
+    });
+
+    flush();
+    return records;
+  };
+
+  const parseExcelWorkbook = async (file) => {
+    if (!window.XLSX) {
+      throw new Error('Excel解析库未加载，请检查网络后重试。');
+    }
+
+    const buffer = await file.arrayBuffer();
+    const workbook = window.XLSX.read(buffer, {
+      type: 'array',
+      cellDates: true,
+      raw: true,
+    });
+
+    const sheetNames = workbook.SheetNames || [];
+    const raw = {};
+
+    sheetNames.forEach((sheetName) => {
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = getWorksheetRows(worksheet);
+      raw[sheetName] = parseWorksheetRows(rows);
+    });
+
+    const activeSheetName = sheetNames.find((name) => normalizeRows(raw[name]).length) || sheetNames[0] || '';
+
+    return {
+      project: {
+        file: {
+          name: file.name,
+          size: file.size,
+        },
+        sheetNames,
+        activeSheetName,
+        exportedAt: new Date().toISOString(),
+      },
+      sheets: {
+        raw,
+        merged: JSON.parse(JSON.stringify(raw)),
+      },
+      currentView: {
+        processedData: activeSheetName ? normalizeRows(raw[activeSheetName]) : [],
+        compareItems: [],
+        pagination: {
+          currentPage: 1,
+          pageSize: state.pageSize,
+        },
+        config: {
+          parser: 'browser-xlsx',
+          encoding: 'utf-8',
+        },
+      },
+    };
+  };
+
+  const getOssConfig = () => {
+    const config = App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG || {};
+    const bucket = String(config.ossBucket || '').trim();
+    const endpoint = String(config.ossEndpoint || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    const objectKey = String(config.ossObjectKey || '').trim().replace(/^\/+/, '');
+    return {
+      bucket,
+      endpoint,
+      objectKey,
+      accessKeyId: String(config.ossAccessKeyId || '').trim(),
+      accessKeySecret: String(config.ossAccessKeySecret || '').trim(),
+      excelBackupPrefix: String(config.ossExcelBackupPrefix || '').trim().replace(/^\/+/, ''),
+    };
+  };
+
+  const hasOssReadConfig = (config) => Boolean(config.bucket && config.endpoint && config.objectKey);
+
+  const hasOssWriteConfig = (config) => Boolean(
+    config.bucket && config.endpoint && config.objectKey && config.accessKeyId && config.accessKeySecret
+  );
+
+  const encodeOssObjectKey = (objectKey) => String(objectKey || '')
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+
+  const getOssObjectUrl = (config, objectKey = config.objectKey) => {
+    const endpoint = String(config.endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    return `https://${config.bucket}.${endpoint}/${encodeOssObjectKey(objectKey)}`;
+  };
+
+  const arrayBufferToBase64 = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+  };
+
+  const hmacSha1Base64 = async (secret, message) => {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-1' },
+      false,
+      ['sign']
+    );
+    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+    return arrayBufferToBase64(signature);
+  };
+
+  const utf8ToBase64 = (value) => {
+    const bytes = new TextEncoder().encode(value);
+    let binary = '';
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+  };
+
+  const postOssObject = async ({ config, objectKey, body, contentType }) => {
+    const policy = {
+      expiration: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      conditions: [
+        ['eq', '$key', objectKey],
+        ['content-length-range', 0, 100 * 1024 * 1024],
+      ],
+    };
+    const encodedPolicy = utf8ToBase64(JSON.stringify(policy));
+    const signature = await hmacSha1Base64(config.accessKeySecret, encodedPolicy);
+    const formData = new FormData();
+
+    formData.append('key', objectKey);
+    formData.append('OSSAccessKeyId', config.accessKeyId);
+    formData.append('policy', encodedPolicy);
+    formData.append('Signature', signature);
+    formData.append('success_action_status', '200');
+    formData.append('Content-Type', contentType);
+    formData.append('file', body);
+
+    const response = await fetch(`https://${config.bucket}.${config.endpoint}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`OSS上传失败：HTTP ${response.status}${text ? ` ${text.slice(0, 120)}` : ''}`);
+    }
+  };
+
+  const buildExcelBackupKey = (prefix, fileName) => {
+    const safePrefix = String(prefix || '').replace(/^\/+/, '').replace(/\/?$/, '/');
+    const baseName = String(fileName || 'property-data.xlsx').replace(/[\\/:*?"<>|]/g, '_');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return `${safePrefix}${stamp}-${baseName}`;
+  };
+
+  const uploadPropertyDataToOss = async (data, sourceFile) => {
+    const config = getOssConfig();
+    if (!hasOssWriteConfig(config)) {
+      throw new Error('请先在 AI 配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
+    }
+
+    const jsonText = JSON.stringify(data, null, 2);
+    await postOssObject({
+      config,
+      objectKey: config.objectKey,
+      body: new Blob([jsonText], { type: 'application/json;charset=utf-8' }),
+      contentType: 'application/json;charset=utf-8',
+    });
+
+    if (config.excelBackupPrefix && sourceFile) {
+      await postOssObject({
+        config,
+        objectKey: buildExcelBackupKey(config.excelBackupPrefix, sourceFile.name),
+        body: sourceFile,
+        contentType: sourceFile.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    }
   };
 
   const getPrecision = (value) => {
@@ -446,6 +794,22 @@
       refs.selectAllBtn.querySelector('span').textContent = allSelected ? '取消全选' : '全选';
     }
 
+    if (refs.exportJsonBtn) {
+      refs.exportJsonBtn.disabled = !state.data;
+    }
+
+    if (refs.importStatus) {
+      const sheetCount = getSheetNames(state.data).length;
+      const rowCount = Object.values(state.data?.sheets?.raw || {})
+        .reduce((sum, rows) => sum + normalizeRows(rows).length, 0);
+      if (state.dataSource === 'oss') {
+        refs.importStatus.textContent = `OSS数据：${sheetCount} 个表 / ${rowCount} 条`;
+      } else if (state.dataSource === 'excel') {
+        refs.importStatus.textContent = `已解析：${state.sourceFileName || 'Excel'}，${sheetCount} 个表 / ${rowCount} 条`;
+      } else {
+        refs.importStatus.textContent = `默认数据：${sheetCount} 个表 / ${rowCount} 条`;
+      }
+    }
   };
 
   const getSelectedRowsForActiveSheet = () => {
@@ -772,6 +1136,48 @@
     downloadBlob(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }), fileName);
   };
 
+  const exportCurrentJson = () => {
+    if (!state.data) return;
+
+    const fileBase = state.sourceFileName
+      ? state.sourceFileName.replace(/\.[^.]+$/, '')
+      : '物性分析数据';
+    const fileName = `${fileBase}-${new Date().toISOString().slice(0, 10)}.json`;
+    downloadBlob(
+      new Blob([JSON.stringify(state.data, null, 2)], { type: 'application/json;charset=utf-8;' }),
+      fileName
+    );
+  };
+
+  const setAnalysisData = (data, options = {}) => {
+    state.data = data;
+    state.dataSource = options.source || 'default';
+    state.sourceFileName = options.fileName || data?.project?.file?.name || '';
+    state.activeSheet = getActiveSheet(data);
+    state.query = '';
+    state.page = 1;
+    state.compareOnly = false;
+    state.selectedKeys.clear();
+    if (refs.searchInput) refs.searchInput.value = '';
+    render();
+  };
+
+  const importExcelFile = async (file) => {
+    if (!file) return;
+
+    try {
+      if (refs.importStatus) refs.importStatus.textContent = `正在解析：${file.name}`;
+      const parsed = await parseExcelWorkbook(file);
+      if (refs.importStatus) refs.importStatus.textContent = `正在同步OSS：${file.name}`;
+      await uploadPropertyDataToOss(parsed, file);
+      await loadData({ bustCache: true });
+      if (refs.importStatus) refs.importStatus.textContent = `已同步OSS：${file.name}`;
+    } catch (error) {
+      if (refs.importStatus) refs.importStatus.textContent = `解析失败：${error?.message || '文件格式错误'}`;
+      console.error('[property-analysis] Failed to parse Excel:', error);
+    }
+  };
+
   const toggleSelectAllFiltered = () => {
     const { filteredRows } = getVisibleRows();
     const shouldSelect = !isAllFilteredSelected(filteredRows);
@@ -798,17 +1204,30 @@
     render();
   };
 
-  const loadData = async () => {
+  const loadData = async (options = {}) => {
     try {
-      const response = await fetch(encodeURI(constants.PROPERTY_ANALYSIS_DATA_URL), { cache: 'no-store' });
+      const ossConfig = getOssConfig();
+      const shouldReadOss = hasOssReadConfig(ossConfig);
+      const dataUrl = shouldReadOss
+        ? getOssObjectUrl(ossConfig)
+        : encodeURI(constants.PROPERTY_ANALYSIS_DATA_URL);
+      const url = options.bustCache
+        ? `${dataUrl}${dataUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        : dataUrl;
+      if (refs.importStatus) {
+        refs.importStatus.textContent = shouldReadOss ? '正在读取 OSS 数据' : '正在读取默认数据';
+      }
+      const response = await fetch(url, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      state.data = await response.json();
-      state.activeSheet = getActiveSheet(state.data);
-      state.page = 1;
-      render();
+      setAnalysisData(await response.json(), {
+        source: shouldReadOss ? 'oss' : 'default',
+        fileName: shouldReadOss ? ossConfig.objectKey : '',
+      });
     } catch (error) {
       state.data = null;
+      state.dataSource = 'default';
+      state.sourceFileName = '';
 
       if (refs.sheetTabs) refs.sheetTabs.innerHTML = '';
       if (refs.panel) refs.panel.hidden = true;
@@ -818,6 +1237,7 @@
       if (refs.panelCount) refs.panelCount.textContent = '共 0 条';
       if (refs.footerTotal) refs.footerTotal.textContent = '共 0 条';
       if (refs.selectionMeta) refs.selectionMeta.textContent = '已选 0 条';
+      if (refs.importStatus) refs.importStatus.textContent = '数据加载失败';
       if (refs.pagination) refs.pagination.hidden = true;
 
       console.error('[property-analysis] Failed to load data:', error);
@@ -973,6 +1393,17 @@
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);
     refs.compareBtn?.addEventListener('click', toggleCompareMode);
     refs.exportBtn?.addEventListener('click', exportCurrentSheet);
+    refs.exportJsonBtn?.addEventListener('click', exportCurrentJson);
+    refs.importExcelBtn?.addEventListener('click', () => {
+      if (!refs.excelInput) return;
+      refs.excelInput.value = '';
+      refs.excelInput.click();
+    });
+    refs.excelInput?.addEventListener('change', () => {
+      const file = refs.excelInput?.files?.[0];
+      importExcelFile(file);
+      if (refs.excelInput) refs.excelInput.value = '';
+    });
 
     document.addEventListener('click', (event) => {
       const target = event.target;
@@ -1001,6 +1432,7 @@
     init,
     loadData,
     render,
+    parseExcelWorkbook,
     getAiContext,
     getFullAiContext,
     getAiDataFile,

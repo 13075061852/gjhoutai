@@ -67,6 +67,12 @@
     streamEnabled: Boolean(refs.streamEnabled?.checked),
     jsonMode: Boolean(refs.jsonMode?.checked),
     logEnabled: Boolean(refs.logEnabled?.checked),
+    ossBucket: (refs.ossBucket?.value || '').trim(),
+    ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
+    ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
+    ossAccessKeyId: (refs.ossAccessKeyId?.value || '').trim(),
+    ossAccessKeySecret: (refs.ossAccessKeySecret?.value || '').trim(),
+    ossExcelBackupPrefix: (refs.ossExcelBackupPrefix?.value || '').trim().replace(/^\/+/, ''),
   });
 
   const setFormConfig = (config) => {
@@ -93,6 +99,12 @@
     if (refs.streamEnabled) refs.streamEnabled.checked = Boolean(next.streamEnabled);
     if (refs.jsonMode) refs.jsonMode.checked = Boolean(next.jsonMode);
     if (refs.logEnabled) refs.logEnabled.checked = Boolean(next.logEnabled);
+    if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
+    if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
+    if (refs.ossObjectKey) refs.ossObjectKey.value = next.ossObjectKey || '';
+    if (refs.ossAccessKeyId) refs.ossAccessKeyId.value = next.ossAccessKeyId || '';
+    if (refs.ossAccessKeySecret) refs.ossAccessKeySecret.value = next.ossAccessKeySecret || '';
+    if (refs.ossExcelBackupPrefix) refs.ossExcelBackupPrefix.value = next.ossExcelBackupPrefix || '';
     syncModelProviderField();
     syncModelState();
     syncTemperatureLabel();
@@ -164,6 +176,16 @@
       refs.previewStatusText.textContent = config.apiKey
         ? `配置已就绪，模型为 ${resolvedModel || '未选择'}，保存后即可接入。`
         : '当前还没有保存过配置，先填写 API 密钥和模型 ID，然后点击保存。';
+    }
+  };
+
+  const syncOssSecretToggleIcon = () => {
+    if (!refs.ossSecretToggle) return;
+    const isVisible = refs.ossAccessKeySecret?.type === 'text';
+    const icon = refs.ossSecretToggle.querySelector('.oss-secret-toggle-icon');
+    if (icon) {
+      icon.classList.toggle('ti-eye', !isVisible);
+      icon.classList.toggle('ti-eye-off', isVisible);
     }
   };
 
@@ -643,7 +665,20 @@
       });
     }
 
-    [refs.openrouterApiKey, refs.openrouterBaseUrl, refs.appTitle, refs.httpReferer, refs.systemPrompt, refs.maxTokens]
+    [
+      refs.openrouterApiKey,
+      refs.openrouterBaseUrl,
+      refs.appTitle,
+      refs.httpReferer,
+      refs.systemPrompt,
+      refs.maxTokens,
+      refs.ossBucket,
+      refs.ossEndpoint,
+      refs.ossObjectKey,
+      refs.ossAccessKeyId,
+      refs.ossAccessKeySecret,
+      refs.ossExcelBackupPrefix,
+    ]
       .filter(Boolean)
       .forEach((input) => input.addEventListener('input', syncPreview));
 
@@ -659,8 +694,9 @@
     refs.aiConfigForm?.addEventListener('submit', (event) => {
       event.preventDefault();
       const config = getFormConfig();
-      if (!config.apiKey) {
-        setStatus('请先填写 OpenRouter API 密钥', 'warn');
+      const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
+      if (!config.apiKey && !hasOssConfig) {
+        setStatus('请先填写 OpenRouter API 密钥或 OSS 数据源配置', 'warn');
         return;
       }
       persistConfig(config);
@@ -677,6 +713,17 @@
       );
       refs.apiKeyToggle.classList.toggle('is-visible', refs.openrouterApiKey.type === 'text');
       syncApiKeyToggleIcon();
+    });
+
+    refs.ossSecretToggle?.addEventListener('click', () => {
+      if (!refs.ossAccessKeySecret) return;
+      refs.ossAccessKeySecret.type = refs.ossAccessKeySecret.type === 'password' ? 'text' : 'password';
+      refs.ossSecretToggle.setAttribute(
+        'aria-label',
+        refs.ossAccessKeySecret.type === 'password' ? '显示 OSS 密钥' : '隐藏 OSS 密钥',
+      );
+      refs.ossSecretToggle.classList.toggle('is-visible', refs.ossAccessKeySecret.type === 'text');
+      syncOssSecretToggleIcon();
     });
 
     refs.modelSelectTrigger?.addEventListener('click', () => {
@@ -760,6 +807,7 @@
     }
 
     syncApiKeyToggleIcon();
+    syncOssSecretToggleIcon();
     syncTemperatureLabel();
     syncPreview();
     fetchUsdToCnyRate().finally(() => fetchModels());

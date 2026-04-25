@@ -562,6 +562,27 @@
       font-weight:700;
       white-space:nowrap;
     }
+    .analysis-status-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex:0 0 auto;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .analysis-import-status{
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid #e6edf5;
+      border-radius:8px;
+      background:#fff;
+      color:#63758f;
+      display:inline-flex;
+      align-items:center;
+      font-size:12px;
+      font-weight:700;
+      white-space:nowrap;
+    }
     .analysis-panel{
       padding:0;
       overflow:hidden;
@@ -4407,6 +4428,7 @@
     body:not([data-theme="dark"]) .spectrum-batch-tags input,
     body:not([data-theme="dark"]) .spectrum-search,
     body:not([data-theme="dark"]) .analysis-toolbar-btn,
+    body:not([data-theme="dark"]) .analysis-import-status,
     body:not([data-theme="dark"]) .sidebar-search,
     body:not([data-theme="dark"]) .chat-input,
     body:not([data-theme="dark"]) .ai-message:not(.user){
@@ -4673,6 +4695,7 @@
     body[data-theme="dark"] .analysis-search-suggest-item,
     body[data-theme="dark"] .analysis-search-mode-btn,
     body[data-theme="dark"] .analysis-toolbar-btn,
+    body[data-theme="dark"] .analysis-import-status,
     body[data-theme="dark"] .analysis-sheet-tab,
     body[data-theme="dark"] .analysis-page-btn,
     body[data-theme="dark"] .analysis-page-number,
@@ -4800,6 +4823,7 @@
     body[data-theme="dark"] .analysis-footer-total,
     body[data-theme="dark"] .analysis-select-field,
     body[data-theme="dark"] .analysis-selection-meta,
+    body[data-theme="dark"] .analysis-import-status,
     body[data-theme="dark"] .analysis-search,
     body[data-theme="dark"] .analysis-search-suggest-type,
     body[data-theme="dark"] .spectrum-muted,

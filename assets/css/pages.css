@@ -571,7 +571,7 @@
       justify-content:flex-end;
     }
     .analysis-import-status{
-      min-height:30px;
+      height:34px;
       padding:0 10px;
       border:1px solid #e6edf5;
       border-radius:8px;
@@ -579,9 +579,11 @@
       color:#63758f;
       display:inline-flex;
       align-items:center;
+      justify-content:center;
       font-size:12px;
       font-weight:700;
       white-space:nowrap;
+      line-height:1;
     }
     .analysis-panel{
       padding:0;
@@ -598,11 +600,12 @@
       display:none;
     }
     .analysis-panel-head{
-      padding:12px 14px 6px;
+      min-height:58px;
+      padding:10px 14px;
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:12px;
+      gap:14px;
       flex-wrap:wrap;
     }
     .analysis-panel-title-row{
@@ -610,6 +613,7 @@
       align-items:baseline;
       gap:12px;
       flex-wrap:wrap;
+      min-width:0;
     }
     .analysis-panel-title{
       color:#243247;
@@ -628,6 +632,8 @@
       align-items:center;
       gap:10px;
       flex-wrap:wrap;
+      justify-content:flex-end;
+      margin-left:auto;
     }
     .analysis-select-field{
       display:inline-flex;

@@ -322,17 +322,17 @@
                         <div class="form-grid form-grid-3">
                           <div class="field">
                             <label for="ossBucket">Bucket</label>
-                            <input id="ossBucket" name="ossBucket" type="text" placeholder="gjh-data" autocomplete="off" />
+                            <input id="ossBucket" name="ossBucket" type="text" value="gjhoutai" placeholder="gjhoutai" autocomplete="off" />
                             <small>公共读取的 OSS Bucket 名称。</small>
                           </div>
                           <div class="field">
                             <label for="ossEndpoint">Endpoint</label>
-                            <input id="ossEndpoint" name="ossEndpoint" type="text" placeholder="oss-cn-hangzhou.aliyuncs.com" autocomplete="off" />
+                            <input id="ossEndpoint" name="ossEndpoint" type="text" value="oss-cn-shanghai.aliyuncs.com" placeholder="oss-cn-shanghai.aliyuncs.com" autocomplete="off" />
                             <small>填写地域 Endpoint，不带 Bucket。</small>
                           </div>
                           <div class="field">
                             <label for="ossObjectKey">JSON 路径</label>
-                            <input id="ossObjectKey" name="ossObjectKey" type="text" placeholder="property-analysis/测试数据.json" autocomplete="off" />
+                            <input id="ossObjectKey" name="ossObjectKey" type="text" value="测试数据.json" placeholder="测试数据.json" autocomplete="off" />
                             <small>Excel 解析后覆盖写入的 JSON 对象路径。</small>
                           </div>
                         </div>
@@ -405,10 +405,6 @@
                     <i class="ti ti-layout-columns" aria-hidden="true"></i>
                     <span>对比</span>
                   </button>
-                  <button class="analysis-toolbar-btn" id="analysisExportBtn" type="button">
-                    <i class="ti ti-download" aria-hidden="true"></i>
-                    <span>导出数据</span>
-                  </button>
                   <button class="analysis-toolbar-btn" id="analysisImportExcelBtn" type="button">
                     <i class="ti ti-file-spreadsheet" aria-hidden="true"></i>
                     <span>解析Excel</span>
@@ -423,7 +419,6 @@
               <div class="analysis-filter-bottom">
                 <div class="analysis-sheet-tabs" id="analysisSheetTabs"></div>
                 <div class="analysis-status-row">
-                  <div class="analysis-import-status" id="analysisImportStatus">默认数据</div>
                   <div class="analysis-selection-meta" id="analysisSelectionMeta">已选 0 条</div>
                 </div>
               </div>
@@ -438,8 +433,8 @@
                 </div>
 
                 <div class="analysis-panel-controls">
+                  <div class="analysis-import-status" id="analysisImportStatus">读取中</div>
                   <label class="analysis-select-field">
-                    <span>排序：</span>
                     <select id="analysisSortSelect" aria-label="排序">
                       <option value="default">默认排序</option>
                       <option value="model-asc">型号升序</option>
@@ -449,7 +444,6 @@
                   </label>
 
                   <label class="analysis-select-field">
-                    <span>每页显示：</span>
                     <select id="analysisPageSizeSelect" aria-label="每页显示条数">
                       <option value="15" selected>15条</option>
                       <option value="25">25条</option>

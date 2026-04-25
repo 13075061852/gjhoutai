@@ -59,7 +59,6 @@
     pageNumbers: document.getElementById('analysisPageNumbers'),
     selectAllBtn: document.getElementById('analysisSelectAllBtn'),
     compareBtn: document.getElementById('analysisCompareBtn'),
-    exportBtn: document.getElementById('analysisExportBtn'),
     importExcelBtn: document.getElementById('analysisImportExcelBtn'),
     exportJsonBtn: document.getElementById('analysisExportJsonBtn'),
     excelInput: document.getElementById('analysisExcelInput'),
@@ -86,6 +85,7 @@
     selectedKeys: new Set(),
     dataSource: 'default',
     sourceFileName: '',
+    uploadStatusText: '读取中',
   };
 
   const escapeHtml = (value) => utils.escapeHtml(value);
@@ -387,6 +387,11 @@
     return `https://${config.bucket}.${endpoint}/${encodeOssObjectKey(objectKey)}`;
   };
 
+  const setUploadStatus = (message) => {
+    state.uploadStatusText = message || '未上传';
+    if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
+  };
+
   const arrayBufferToBase64 = (buffer) => {
     const bytes = new Uint8Array(buffer);
     let binary = '';
@@ -418,7 +423,7 @@
     return btoa(binary);
   };
 
-  const postOssObject = async ({ config, objectKey, body, contentType }) => {
+  const postOssObject = async ({ config, objectKey, body, contentType, onProgress }) => {
     const policy = {
       expiration: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       conditions: [
@@ -438,15 +443,29 @@
     formData.append('Content-Type', contentType);
     formData.append('file', body);
 
-    const response = await fetch(`https://${config.bucket}.${config.endpoint}`, {
-      method: 'POST',
-      body: formData,
-    });
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://${config.bucket}.${config.endpoint}`);
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`OSS上传失败：HTTP ${response.status}${text ? ` ${text.slice(0, 120)}` : ''}`);
-    }
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable || typeof onProgress !== 'function') return;
+        const percent = Math.min(99, Math.max(1, Math.round((event.loaded / event.total) * 100)));
+        onProgress(percent);
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          if (typeof onProgress === 'function') onProgress(100);
+          resolve();
+          return;
+        }
+        reject(new Error(`OSS上传失败：HTTP ${xhr.status}${xhr.responseText ? ` ${xhr.responseText.slice(0, 120)}` : ''}`));
+      };
+
+      xhr.onerror = () => reject(new Error('OSS上传失败：网络错误'));
+      xhr.onabort = () => reject(new Error('OSS上传失败：请求已取消'));
+      xhr.send(formData);
+    });
   };
 
   const buildExcelBackupKey = (prefix, fileName) => {
@@ -456,7 +475,7 @@
     return `${safePrefix}${stamp}-${baseName}`;
   };
 
-  const uploadPropertyDataToOss = async (data, sourceFile) => {
+  const uploadPropertyDataToOss = async (data, sourceFile, onProgress) => {
     const config = getOssConfig();
     if (!hasOssWriteConfig(config)) {
       throw new Error('请先在 AI 配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
@@ -468,6 +487,7 @@
       objectKey: config.objectKey,
       body: new Blob([jsonText], { type: 'application/json;charset=utf-8' }),
       contentType: 'application/json;charset=utf-8',
+      onProgress,
     });
 
     if (config.excelBackupPrefix && sourceFile) {
@@ -476,6 +496,9 @@
         objectKey: buildExcelBackupKey(config.excelBackupPrefix, sourceFile.name),
         body: sourceFile,
         contentType: sourceFile.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        onProgress: (percent) => {
+          if (typeof onProgress === 'function') onProgress(percent);
+        },
       });
     }
   };
@@ -798,18 +821,7 @@
       refs.exportJsonBtn.disabled = !state.data;
     }
 
-    if (refs.importStatus) {
-      const sheetCount = getSheetNames(state.data).length;
-      const rowCount = Object.values(state.data?.sheets?.raw || {})
-        .reduce((sum, rows) => sum + normalizeRows(rows).length, 0);
-      if (state.dataSource === 'oss') {
-        refs.importStatus.textContent = `OSS数据：${sheetCount} 个表 / ${rowCount} 条`;
-      } else if (state.dataSource === 'excel') {
-        refs.importStatus.textContent = `已解析：${state.sourceFileName || 'Excel'}，${sheetCount} 个表 / ${rowCount} 条`;
-      } else {
-        refs.importStatus.textContent = `默认数据：${sheetCount} 个表 / ${rowCount} 条`;
-      }
-    }
+    if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
   };
 
   const getSelectedRowsForActiveSheet = () => {
@@ -1120,22 +1132,6 @@
     URL.revokeObjectURL(url);
   };
 
-  const exportCurrentSheet = () => {
-    const { filteredRows, columns } = getVisibleRows();
-    if (!filteredRows.length || !columns.length) return;
-
-    const header = columns.map((column) => `"${formatHeader(column).replace(/"/g, '""')}"`).join(',');
-    const lines = filteredRows.map((row) => columns.map((column) => {
-      const value = row[column];
-      const text = Array.isArray(value) ? value.join(' / ') : valueToText(value);
-      return `"${String(text).replace(/"/g, '""')}"`;
-    }).join(','));
-
-    const csvText = ['\uFEFF' + header, ...lines].join('\r\n');
-    const fileName = `${state.activeSheet || '物性分析'}-${new Date().toISOString().slice(0, 10)}.csv`;
-    downloadBlob(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }), fileName);
-  };
-
   const exportCurrentJson = () => {
     if (!state.data) return;
 
@@ -1166,14 +1162,16 @@
     if (!file) return;
 
     try {
-      if (refs.importStatus) refs.importStatus.textContent = `正在解析：${file.name}`;
+      setUploadStatus('解析中');
       const parsed = await parseExcelWorkbook(file);
-      if (refs.importStatus) refs.importStatus.textContent = `正在同步OSS：${file.name}`;
-      await uploadPropertyDataToOss(parsed, file);
+      setUploadStatus('上传中 0%');
+      await uploadPropertyDataToOss(parsed, file, (percent) => {
+        setUploadStatus(`上传中 ${percent}%`);
+      });
       await loadData({ bustCache: true });
-      if (refs.importStatus) refs.importStatus.textContent = `已同步OSS：${file.name}`;
+      setUploadStatus('已同步成功');
     } catch (error) {
-      if (refs.importStatus) refs.importStatus.textContent = `解析失败：${error?.message || '文件格式错误'}`;
+      setUploadStatus(`同步失败：${error?.message || '文件格式错误'}`);
       console.error('[property-analysis] Failed to parse Excel:', error);
     }
   };
@@ -1214,9 +1212,6 @@
       const url = options.bustCache
         ? `${dataUrl}${dataUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
         : dataUrl;
-      if (refs.importStatus) {
-        refs.importStatus.textContent = shouldReadOss ? '正在读取 OSS 数据' : '正在读取默认数据';
-      }
       const response = await fetch(url, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -1224,6 +1219,7 @@
         source: shouldReadOss ? 'oss' : 'default',
         fileName: shouldReadOss ? ossConfig.objectKey : '',
       });
+      setUploadStatus('读取成功');
     } catch (error) {
       state.data = null;
       state.dataSource = 'default';
@@ -1237,7 +1233,7 @@
       if (refs.panelCount) refs.panelCount.textContent = '共 0 条';
       if (refs.footerTotal) refs.footerTotal.textContent = '共 0 条';
       if (refs.selectionMeta) refs.selectionMeta.textContent = '已选 0 条';
-      if (refs.importStatus) refs.importStatus.textContent = '数据加载失败';
+      setUploadStatus('读取失败');
       if (refs.pagination) refs.pagination.hidden = true;
 
       console.error('[property-analysis] Failed to load data:', error);
@@ -1392,7 +1388,6 @@
 
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);
     refs.compareBtn?.addEventListener('click', toggleCompareMode);
-    refs.exportBtn?.addEventListener('click', exportCurrentSheet);
     refs.exportJsonBtn?.addEventListener('click', exportCurrentJson);
     refs.importExcelBtn?.addEventListener('click', () => {
       if (!refs.excelInput) return;

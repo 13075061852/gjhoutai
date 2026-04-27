@@ -560,6 +560,10 @@
       padding:10px 14px;
       border-bottom:1px solid #edf2f7;
     }
+    .cutout-preview-head > div{
+      min-width:0;
+      flex:1 1 auto;
+    }
     .cutout-preview-title{
       color:#243247;
       font-size:16px;
@@ -567,7 +571,6 @@
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
-      max-width:min(56vw, 720px);
     }
     .cutout-preview-subtitle{
       margin-top:3px;

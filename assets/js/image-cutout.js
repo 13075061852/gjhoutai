@@ -81,6 +81,15 @@
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
 
+  const getCleanFileName = (fileName) => {
+    const rawName = String(fileName || 'cutout').trim() || 'cutout';
+    const extensionMatch = rawName.match(/(\.[^./\\]+)$/);
+    const extension = extensionMatch ? extensionMatch[1] : '';
+    const baseName = extension ? rawName.slice(0, -extension.length) : rawName;
+    const cleanBaseName = baseName.replace(/(?:-(?:confirmed|transparent))+$/gi, '') || 'cutout';
+    return `${cleanBaseName}${extension}`;
+  };
+
   const applyPreviewTransform = () => {
     if (!refs.previewCanvas) return;
     refs.previewCanvas.style.transform = `translate3d(${state.previewPanX}px, ${state.previewPanY}px, 0) scale(${state.previewZoom})`;
@@ -207,8 +216,7 @@
       syncActionButtons();
     }
     const dataUrl = state.outputCanvas.toDataURL('image/png');
-    const baseName = (state.fileName || 'cutout').replace(/\.[^.]+$/, '');
-    const fileName = `${baseName}-confirmed.png`;
+    const fileName = getCleanFileName(state.fileName);
     const imageStored = await putStoredImage(dataUrl);
     if (!imageStored) {
       setStatus('确认结果保存失败，本地存储不可用', 'error');
@@ -315,7 +323,7 @@
     if (!dataUrl) return;
     const image = new Image();
     image.addEventListener('load', () => {
-      state.fileName = fileName || '已保存图片';
+      state.fileName = getCleanFileName(fileName || '已保存图片');
       state.sourceImage = image;
       state.sourceCanvas.width = image.naturalWidth || image.width;
       state.sourceCanvas.height = image.naturalHeight || image.height;
@@ -680,9 +688,8 @@
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const baseName = (state.fileName || 'cutout').replace(/\.[^.]+$/, '');
       link.href = url;
-      link.download = `${baseName}-transparent.png`;
+      link.download = getCleanFileName(state.fileName);
       document.body.appendChild(link);
       link.click();
       link.remove();

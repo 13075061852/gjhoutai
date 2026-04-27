@@ -107,6 +107,19 @@
     if (label) label.textContent = collapsed ? '展开侧边栏' : '收起侧边栏';
   };
 
+  const updateMobileMenuToggle = () => {
+    if (!refs.mobileMenuBtn || !refs.shell) return;
+    const open = refs.shell.classList.contains('sidebar-open');
+    refs.mobileMenuBtn.setAttribute('aria-expanded', String(open));
+    refs.mobileMenuBtn.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+  };
+
+  const setMobileSidebarOpen = (open) => {
+    if (!refs.shell) return;
+    refs.shell.classList.toggle('sidebar-open', Boolean(open));
+    updateMobileMenuToggle();
+  };
+
   const runSidebarTransition = () => {
     if (!refs.shell) return;
     const animations = window.App?.animations;
@@ -638,6 +651,7 @@
     syncSidebarCollapsedAttr(sidebarCollapsed);
     syncAssistantCollapsedAttr(assistantCollapsed);
     syncAssistantFullscreenAttr(false);
+    setMobileSidebarOpen(false);
     updateSidebarToggle(sidebarCollapsed);
     updateAssistantToggle();
     updateAssistantFullscreenToggle();
@@ -672,6 +686,10 @@
           ?? requestAnimationFrame(() => refs.sidebarSearchInput?.focus());
       });
     }
+
+    refs.mobileMenuBtn?.addEventListener('click', () => {
+      setMobileSidebarOpen(!refs.shell?.classList.contains('sidebar-open'));
+    });
 
     refs.groupToggles.forEach((groupToggle) => {
       groupToggle.addEventListener('click', () => {
@@ -731,7 +749,10 @@
     refs.navPageButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const pageId = button.dataset.page;
-        if (pageId) showPage(pageId);
+        if (pageId) {
+          showPage(pageId);
+          setMobileSidebarOpen(false);
+        }
       });
     });
 
@@ -766,9 +787,17 @@
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         removeCollapsedNavFlyout();
+        setMobileSidebarOpen(false);
       }
     });
     document.addEventListener('click', (event) => {
+      if (refs.shell?.classList.contains('sidebar-open')) {
+        const target = event.target;
+        if (!target.closest('.sidebar') && !target.closest('#mobileMenuBtn')) {
+          setMobileSidebarOpen(false);
+        }
+      }
+
       if (!collapsedNavFlyout) return;
       if (event.target.closest('.sidebar-flyout') || event.target.closest('.nav-group')) return;
       removeCollapsedNavFlyout();

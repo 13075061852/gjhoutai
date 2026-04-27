@@ -8,6 +8,7 @@
 
   const refs = {
     shell: byId('shell'),
+    mobileMenuBtn: byId('mobileMenuBtn'),
     sidebarToggle: byId('sidebarToggle'),
     askAiToggle: byId('askAiToggle'),
     topVisitedPages: byId('topVisitedPages'),

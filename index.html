@@ -32,7 +32,7 @@
   <title>塑料粒子测试分析平台</title>
   <link rel="icon" type="image/png" href="./logo.png" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
-  <link rel="stylesheet" href="./assets/css/styles.css?v=20260425-read-status-time" />
+  <link rel="stylesheet" href="./assets/css/styles.css?v=20260427-table-wrap-padding" />
 </head>
 <body>
   <div class="app">
@@ -113,6 +113,7 @@
               <div class="nav-children">
                 <button class="nav-subitem" type="button" data-page="property-analysis">物性分析</button>
                 <button class="nav-subitem" type="button" data-page="spectrum-analysis">图谱分析</button>
+                <button class="nav-subitem" type="button" data-page="image-cutout">抠图助手</button>
               </div>
             </div>
             <button class="nav-item" type="button" data-page="supplier-archive">
@@ -158,7 +159,7 @@
             <button class="nav-item" type="button" data-page="theme-settings">
               <span class="nav-main">
                 <span class="nav-icon"><i class="ti ti-palette" aria-hidden="true"></i></span>
-                <span class="nav-text">主题色设置</span>
+                <span class="nav-text">主题设置</span>
               </span>
             </button>
           </div>
@@ -319,7 +320,7 @@
                       </div>
                       <div class="field hidden-field">
                         <label for="maxTokens">Max Tokens <span>输出长度</span></label>
-                        <input id="maxTokens" name="maxTokens" type="number" min="64" step="64" value="1024" />
+                        <input id="maxTokens" name="maxTokens" type="number" min="64" step="64" value="4096" />
                       </div>
                       <div class="field full hidden-field">
                         <label>调用选项 <span>可同时开启</span></label>
@@ -570,12 +571,111 @@
             <div class="bottom-space"></div>
           </section>
 
+          <section class="dashboard image-cutout-page page-section" data-page-section="image-cutout">
+            <article class="cutout-toolbar">
+              <div class="cutout-toolbar-main">
+                <div class="cutout-title-block">
+                  <h1>抠图助手</h1>
+                </div>
+              </div>
+              <div class="cutout-actions">
+                <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="cutoutUploadBtn" type="button">
+                  <i class="ti ti-upload" aria-hidden="true"></i>
+                  <span>上传图片</span>
+                </button>
+                <button class="analysis-toolbar-btn" id="cutoutDownloadBtn" type="button" disabled>
+                  <i class="ti ti-download" aria-hidden="true"></i>
+                  <span>下载PNG</span>
+                </button>
+              </div>
+              <input id="cutoutUploadInput" type="file" accept="image/*" hidden />
+            </article>
+
+            <div class="cutout-workbench">
+              <aside class="cutout-control-panel" aria-label="抠图控制">
+                <section class="cutout-panel-block">
+                  <div class="cutout-panel-title">背景识别</div>
+                  <label class="cutout-range-field" for="cutoutTolerance">
+                    <span>容差</span>
+                    <strong id="cutoutToleranceValue">34</strong>
+                  </label>
+                  <input id="cutoutTolerance" type="range" min="8" max="96" value="34" />
+                  <label class="cutout-range-field" for="cutoutFeather">
+                    <span>边缘柔化</span>
+                    <strong id="cutoutFeatherValue">10</strong>
+                  </label>
+                  <input id="cutoutFeather" type="range" min="0" max="36" value="10" />
+                  <label class="cutout-toggle-field" for="cutoutProtection">
+                    <span>主体保护</span>
+                    <input id="cutoutProtection" type="checkbox" checked />
+                    <em aria-hidden="true"></em>
+                  </label>
+                </section>
+
+                <section class="cutout-panel-block">
+                  <div class="cutout-panel-title">裁剪</div>
+                  <div class="cutout-crop-grid">
+                    <label>X<input id="cutoutCropX" type="number" min="0" value="0" /></label>
+                    <label>Y<input id="cutoutCropY" type="number" min="0" value="0" /></label>
+                    <label>宽<input id="cutoutCropW" type="number" min="1" value="0" /></label>
+                    <label>高<input id="cutoutCropH" type="number" min="1" value="0" /></label>
+                  </div>
+                  <div class="cutout-crop-actions">
+                    <button class="analysis-toolbar-btn" id="cutoutAutoCropBtn" type="button" disabled>
+                      <i class="ti ti-crop" aria-hidden="true"></i>
+                      <span>自动裁剪</span>
+                    </button>
+                    <button class="analysis-toolbar-btn" id="cutoutApplyCropBtn" type="button" disabled>
+                      <i class="ti ti-check" aria-hidden="true"></i>
+                      <span>手动裁剪</span>
+                    </button>
+                    <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="cutoutConfirmCropBtn" type="button" disabled>
+                      <i class="ti ti-checks" aria-hidden="true"></i>
+                      <span>确认裁剪</span>
+                    </button>
+                    <button class="analysis-toolbar-btn" id="cutoutUndoBtn" type="button" disabled>
+                      <i class="ti ti-arrow-back-up" aria-hidden="true"></i>
+                      <span>上一步</span>
+                    </button>
+                    <button class="analysis-toolbar-btn" id="cutoutRestoreBtn" type="button" disabled>
+                      <i class="ti ti-restore" aria-hidden="true"></i>
+                      <span>复原</span>
+                    </button>
+                  </div>
+                </section>
+              </aside>
+
+              <section class="cutout-canvas-panel">
+                <div class="cutout-preview-head">
+                  <div>
+                    <div class="cutout-preview-title" id="cutoutPreviewTitle">预览区</div>
+                    <div class="cutout-preview-subtitle" id="cutoutPreviewSubtitle">上传图片后可抠出透明图层并裁剪</div>
+                  </div>
+                  <button class="cutout-reset-btn" id="cutoutResetBtn" type="button" disabled>
+                    <i class="ti ti-refresh" aria-hidden="true"></i>
+                    <span>重置</span>
+                  </button>
+                </div>
+                <div class="cutout-preview-frame" id="cutoutPreviewFrame">
+                  <canvas id="cutoutPreviewCanvas" aria-label="抠图预览"></canvas>
+                  <div class="cutout-crop-box" id="cutoutCropBox" hidden></div>
+                  <div class="cutout-empty" id="cutoutEmpty">
+                    <i class="ti ti-photo-up" aria-hidden="true"></i>
+                    <span>拖入或上传图片开始处理</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="bottom-space"></div>
+          </section>
+
           <section class="dashboard theme-settings-page page-section" data-page-section="theme-settings">
             <div class="theme-settings-shell">
               <section class="theme-settings-head">
                 <div>
                   <div class="theme-settings-kicker">系统管理</div>
-                  <h1>主题色设置</h1>
+                  <h1>主题设置</h1>
                   <p>切换系统主色、背景层级和控件强调色，适配不同办公环境下的阅读习惯。</p>
                 </div>
                 <button class="theme-reset-btn" id="themeResetBtn" type="button">
@@ -693,8 +793,10 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="./assets/js/property-analysis.js?v=20260425-read-status-duration"></script>
   <script src="./assets/js/spectrum-analysis.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/image-cutout.js?v=20260427-balanced-protection-mask"></script>
   <script src="./assets/js/theme-settings.js?v=20260425-read-status-duration"></script>
   <script src="./assets/js/config.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/agent-butler.js?v=20260427-agent-butler"></script>
   <script src="./assets/js/chat.js?v=20260425-read-status-duration"></script>
   <script src="./assets/js/app.js?v=20260425-read-status-duration"></script>
 </body>

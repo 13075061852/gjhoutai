@@ -303,6 +303,32 @@
         max-height:none;
         overflow:visible;
       }
+      .image-cutout-page{
+        height:auto;
+        min-height:auto;
+        overflow:visible;
+      }
+      .cutout-toolbar{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .cutout-actions{
+        width:100%;
+        justify-content:flex-start;
+      }
+      .cutout-workbench{
+        grid-template-columns:1fr;
+        overflow:visible;
+      }
+      .cutout-control-panel{
+        overflow:visible;
+      }
+      .cutout-canvas-panel{
+        min-height:560px;
+      }
+      .cutout-preview-title{
+        max-width:64vw;
+      }
       .spectrum-page{
         height:calc(100dvh - 88px);
         min-height:0;
@@ -503,6 +529,23 @@
       }
       .theme-card{
         min-height:174px;
+      }
+      .cutout-actions .analysis-toolbar-btn{
+        flex:1 1 128px;
+        justify-content:center;
+        padding-left:10px;
+        padding-right:10px;
+      }
+      .cutout-preview-head{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .cutout-preview-title{
+        max-width:100%;
+        white-space:normal;
+      }
+      .cutout-canvas-panel{
+        min-height:420px;
       }
       .spectrum-page{
         height:calc(100dvh - 76px);

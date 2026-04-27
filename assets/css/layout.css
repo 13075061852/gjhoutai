@@ -217,6 +217,7 @@
     .page-section.active{display:block}
     .page-section.active.analysis-page{display:flex}
     .page-section.active.spectrum-page{display:flex}
+    .page-section.active.image-cutout-page{display:flex}
     .dashboard{
       width:100%;
       min-width:0;

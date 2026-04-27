@@ -18,6 +18,7 @@
     aiPageSection: qs('[data-page-section="ai-config"]'),
     propertyAnalysisPageSection: qs('[data-page-section="property-analysis"]'),
     spectrumAnalysisPageSection: qs('[data-page-section="spectrum-analysis"]'),
+    imageCutoutPageSection: qs('[data-page-section="image-cutout"]'),
     themeSettingsPageSection: qs('[data-page-section="theme-settings"]'),
     placeholderPageSection: qs('[data-page-section="placeholder"]'),
     placeholderEyebrow: byId('placeholderEyebrow'),
@@ -131,7 +132,7 @@
       modelChoice: 'openai/gpt-4o-mini',
       systemPrompt: '你是一个专业、简洁的企业 AI 助手，擅长分析问题、提炼结论并给出可执行建议。',
       temperature: 0.7,
-      maxTokens: 1024,
+      maxTokens: 4096,
       streamEnabled: true,
       jsonMode: false,
       logEnabled: true,
@@ -203,6 +204,11 @@
         eyebrow: '当前可用',
         desc: '图谱分析页面用于管理图谱图片、分类标签、图谱查看、多图对比，并可把图片上下文发送到右侧 Gjun AI。',
       },
+      'image-cutout': {
+        title: '抠图助手',
+        eyebrow: '当前可用',
+        desc: '抠图助手支持上传图片、识别边缘背景并生成透明 PNG，也可以裁剪透明背景或输入自定义裁剪区域。',
+      },
       'permission-management': {
         title: '权限管理',
         eyebrow: '功能开发中',
@@ -214,7 +220,7 @@
         desc: '审计日志页面暂未接入，后续会记录关键操作、配置变更和访问历史。',
       },
       'theme-settings': {
-        title: '主题色设置',
+        title: '主题设置',
         eyebrow: '当前可用',
         desc: '这里可以切换系统主色、背景层级和控件强调色，并把选择保存在本地。',
       },

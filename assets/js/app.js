@@ -11,6 +11,7 @@
     App.themeSettings?.init();
     App.propertyAnalysis?.init();
     App.spectrumAnalysis?.init();
+    App.imageCutout?.init();
     App.config?.init();
     App.chat?.init();
   };

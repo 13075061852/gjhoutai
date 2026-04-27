@@ -822,6 +822,104 @@
     return lines.join('\n');
   };
 
+  const normalizeAgentText = (value) => String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const extractAgentTerms = (question = '') => {
+    const text = String(question || '');
+    const terms = [
+      ...(text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || []),
+      ...(text.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+    ];
+    return [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 2))];
+  };
+
+  const getItemSearchText = (item) => normalizeAgentText([
+    item?.title,
+    item?.code,
+    item?.spectrumType,
+    item?.category,
+    item?.status,
+    item?.date,
+    item?.note,
+    ...(Array.isArray(item?.tags) ? item.tags : []),
+  ].filter(Boolean).join(' '));
+
+  const scoreAgentItem = (item, terms) => {
+    if (!terms.length) return 0;
+    const itemText = getItemSearchText(item);
+    return terms.reduce((score, term) => {
+      const normalizedTerm = normalizeAgentText(term);
+      if (!normalizedTerm) return score;
+      if (itemText.includes(normalizedTerm)) return score + 3;
+      if (normalizedTerm.length >= 4 && itemText.includes(normalizedTerm.slice(0, Math.max(3, Math.floor(normalizedTerm.length * 0.7))))) return score + 1;
+      return score;
+    }, 0);
+  };
+
+  const formatAgentItems = (items, limit = 8) => items.slice(0, limit).map((item, index) => (
+    `${index + 1}. ${item.title || item.code || '未命名图谱'}；类型=${item.spectrumType || '-'}；分类=${item.category || '-'}；标签=${Array.isArray(item.tags) && item.tags.length ? item.tags.join('、') : '-'}；日期=${item.date || '-'}；备注=${item.note || '-'}`
+  ));
+
+  const getAgentItems = (question = '', options = {}) => {
+    const selected = getSelectedItems();
+    if (selected.length) return { items: selected.slice(0, 8), reason: '使用当前已选图谱' };
+
+    const terms = extractAgentTerms(question);
+    const scored = state.items
+      .map((item) => ({ item, score: scoreAgentItem(item, terms) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
+    if (scored.length) return { items: scored.slice(0, 8), reason: '根据问题关键词匹配图谱库' };
+
+    const active = getActiveItem();
+    if (active) return { items: [active], reason: '未命中关键词，使用当前激活图谱' };
+
+    const filtered = getFilteredItems();
+    return {
+      items: filtered.slice(0, 8),
+      reason: options.forceCurrentPage ? '使用当前图谱筛选结果' : '提供图谱库概览',
+    };
+  };
+
+  const getAgentContext = (question = '', options = {}) => {
+    const filtered = getFilteredItems();
+    const { items, reason } = getAgentItems(question, options);
+    const lines = [
+      '【图谱分析检索结果】',
+      `命中原因：${reason}`,
+      `图谱总数：${state.items.length}；当前筛选后：${filtered.length}；已选图谱：${state.selectedIds.size}。`,
+      `类型模式：${state.mode}；分类筛选：${state.category}；标签筛选：${state.tag}；关键词：${state.query.trim() || '无'}。`,
+    ];
+
+    if (!items.length) {
+      lines.push('当前没有可检索的图谱数据。');
+    } else {
+      lines.push('相关图谱元数据（最多 8 张）：', ...formatAgentItems(items, 8));
+    }
+
+    return {
+      title: '图谱分析',
+      reason,
+      content: lines.join('\n'),
+      score: options.forceCurrentPage ? 8 : (items.length ? 6 : 0),
+      stats: {
+        selected: state.selectedIds.size,
+        matched: items.length,
+        filtered: filtered.length,
+      },
+    };
+  };
+
+  const getAgentImages = (question = '', options = {}) => {
+    const shouldAttach = options.forceCurrentPage || /(?:图谱|图片|图像|曲线|谱图|分析这张|看这张|当前图)/.test(String(question || ''));
+    if (!shouldAttach) return [];
+    return getAiImages(getAgentItems(question, options).items).slice(0, 4);
+  };
+
   const closeImagePreview = () => {
     refs.previewDialog?.remove();
     refs.previewDialog = null;
@@ -1239,5 +1337,7 @@
     getAiContext,
     getAiImages: () => getAiImages(getAiItems()),
     getSelectedAiImages: () => getAiImages(getSelectedAiItems()),
+    getAgentContext,
+    getAgentImages,
   };
 })();

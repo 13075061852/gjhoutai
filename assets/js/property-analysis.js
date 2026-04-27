@@ -1065,6 +1065,133 @@
     };
   };
 
+  const normalizeAgentText = (value) => String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const extractAgentTerms = (question = '') => {
+    const text = String(question || '');
+    const terms = [
+      ...(text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || []),
+      ...(text.match(/[\u4e00-\u9fa5]{2,}/g) || []),
+    ];
+    return [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 2))];
+  };
+
+  const getRowSearchText = (row) => normalizeAgentText(Object.entries(row || {})
+    .filter(([key]) => key !== '__rowKey')
+    .map(([key, value]) => `${formatHeader(key)} ${Array.isArray(value) ? value.join(' ') : valueToText(value)}`)
+    .join(' '));
+
+  const scoreAgentRow = (row, terms) => {
+    if (!terms.length) return 0;
+    const rowText = getRowSearchText(row);
+    return terms.reduce((score, term) => {
+      const normalizedTerm = normalizeAgentText(term);
+      if (!normalizedTerm) return score;
+      if (rowText.includes(normalizedTerm)) return score + 3;
+      if (normalizedTerm.length >= 4 && rowText.includes(normalizedTerm.slice(0, Math.max(3, Math.floor(normalizedTerm.length * 0.7))))) return score + 1;
+      return score;
+    }, 0);
+  };
+
+  const getMetricSummaryForAgent = (rows) => [
+    '熔指',
+    '拉伸强度[Mpa]',
+    '断裂伸长率[%]',
+    '弯曲强度[Mpa]',
+    '弯曲模量[Mpa]',
+    '冲击强度[Mpa]',
+    '灰份',
+  ].map((key) => summarizeMetric(rows, key)).filter(Boolean);
+
+  const getAgentContext = (question = '', options = {}) => {
+    if (!state.data) {
+      return {
+        title: '物性分析',
+        reason: '物性分析数据尚未加载完成',
+        content: '【物性分析】数据尚未加载完成，暂时无法检索物性表格。',
+        score: 0,
+      };
+    }
+
+    const activeSheet = getActiveSheet(state.data);
+    const sheetNames = getSheetNames(state.data);
+    const visible = getVisibleRows();
+    const selectedRows = getSelectedRowsForActiveSheet();
+    const terms = extractAgentTerms(question);
+    const scoredRows = [];
+
+    sheetNames.forEach((sheetName) => {
+      const rows = getRowsForSheet(sheetName);
+      const columns = getColumns(rows);
+      rows.forEach((row) => {
+        const score = scoreAgentRow(row, terms);
+        if (score > 0) scoredRows.push({ sheetName, row, columns, score });
+      });
+    });
+
+    scoredRows.sort((a, b) => b.score - a.score);
+    const strongMatches = scoredRows.filter((item) => item.score >= 3).slice(0, 30);
+    const similarMatches = scoredRows.filter((item) => item.score > 0 && item.score < 3).slice(0, 20);
+    const fallbackRows = selectedRows.length
+      ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
+      : visible.filteredRows.slice(0, 20).map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
+    const rowsForSummary = strongMatches.length
+      ? strongMatches.map((item) => item.row)
+      : selectedRows.length
+        ? selectedRows
+        : visible.filteredRows.slice(0, 30);
+    const metrics = getMetricSummaryForAgent(rowsForSummary);
+    const sections = [
+      '【物性分析检索结果】',
+      `命中原因：${terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
+      `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
+      `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
+    ];
+
+    if (metrics.length) sections.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
+
+    const appendRows = (title, items, limit) => {
+      if (!items.length) return;
+      const grouped = items.reduce((map, item) => {
+        const key = item.sheetName || activeSheet || '未命名工作表';
+        if (!map.has(key)) map.set(key, { columns: item.columns, rows: [] });
+        map.get(key).rows.push(item.row);
+        return map;
+      }, new Map());
+      sections.push(title);
+      grouped.forEach((group, sheetName) => {
+        sections.push(`### ${sheetName}`);
+        sections.push(...summarizeRowsForAi(group.rows, group.columns, limit));
+      });
+    };
+
+    appendRows('强匹配数据（最多 30 行）：', strongMatches, 30);
+    appendRows('相近匹配数据（最多 20 行）：', similarMatches, 20);
+    if (!strongMatches.length && !similarMatches.length) {
+      appendRows(selectedRows.length ? '当前已选数据：' : '当前筛选数据预览：', fallbackRows, 20);
+    }
+
+    return {
+      title: '物性分析',
+      reason: strongMatches.length || similarMatches.length
+        ? '匹配到物性型号/批次/指标数据'
+        : selectedRows.length
+          ? '未命中关键词，使用当前已选物性数据'
+          : '未命中关键词，使用当前筛选物性数据预览',
+      content: sections.join('\n'),
+      score: options.forceCurrentPage ? 9 : 7,
+      stats: {
+        strongMatches: strongMatches.length,
+        similarMatches: similarMatches.length,
+        selectedRows: selectedRows.length,
+        filteredRows: visible.filteredRows.length,
+      },
+    };
+  };
+
   const buildTable = (rows, columns) => {
     if (!rows.length || !columns.length) {
       return '<div class="analysis-empty">暂无符合条件的数据，请调整筛选条件后重试。</div>';
@@ -1509,5 +1636,6 @@
     getFullAiContext,
     getSelectedAiContext,
     getAiDataFile,
+    getAgentContext,
   };
 })();

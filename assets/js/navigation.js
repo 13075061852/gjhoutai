@@ -577,6 +577,7 @@
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
     const isSpectrumPage = pageId === 'spectrum-analysis';
+    const isImageCutoutPage = pageId === 'image-cutout';
     const isThemeSettingsPage = pageId === 'theme-settings';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
@@ -585,12 +586,13 @@
     refs.aiPageSection?.classList.toggle('active', isAiPage);
     refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
     refs.spectrumAnalysisPageSection?.classList.toggle('active', isSpectrumPage);
+    refs.imageCutoutPageSection?.classList.toggle('active', isImageCutoutPage);
     refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isThemeSettingsPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isThemeSettingsPage) {
+    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage) {
       if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
       if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
       if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;

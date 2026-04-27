@@ -8,6 +8,7 @@
   const NEW_CONVERSATION_TITLE = '新建对话';
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
+  let streamRenderTimer = 0;
 
   const nowIso = () => new Date().toISOString();
 
@@ -19,12 +20,33 @@
   const normalizeMessage = (message) => ({
     role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
     content: String(message?.content || ''),
-    images: Array.isArray(message?.images) ? message.images.map((item) => ({
-      type: String(item?.type || 'image_url'),
-      image_url: {
-        url: String(item?.image_url?.url || item?.url || ''),
-      },
-    })).filter((item) => item.image_url.url) : [],
+    images: Array.isArray(message?.images) ? message.images.map((item) => {
+      const type = String(item?.type || 'image_url') === 'image_note' ? 'image_note' : String(item?.type || 'image_url');
+      const rawUrl = String(item?.image_url?.url || item?.url || '');
+      const isPersistedDataImage = rawUrl.startsWith('data:image/');
+      if (type === 'image_note' || isPersistedDataImage) {
+        return {
+          type: 'image_note',
+          image_url: { url: '' },
+          label: String(item?.label || '已附带图片（历史图片已清理）'),
+        };
+      }
+      return {
+        type,
+        image_url: { url: rawUrl },
+        preview_url: rawUrl.startsWith('data:image/') ? '' : String(item?.preview_url || item?.previewUrl || rawUrl),
+        label: String(item?.label || ''),
+      };
+    }).filter((item) => item.type === 'image_note' || item.image_url.url) : [],
+    tokenUsage: message?.tokenUsage && typeof message.tokenUsage === 'object' ? {
+      promptTokens: Number(message.tokenUsage.promptTokens || 0),
+      completionTokens: Number(message.tokenUsage.completionTokens || 0),
+      totalTokens: Number(message.tokenUsage.totalTokens || 0),
+      contextLength: Number(message.tokenUsage.contextLength || 0),
+      remainingContext: Number(message.tokenUsage.remainingContext || 0),
+      estimated: Boolean(message.tokenUsage.estimated),
+      model: String(message.tokenUsage.model || ''),
+    } : null,
   });
 
   const deriveSessionTitle = (messages) => {
@@ -112,17 +134,22 @@
 
   const saveChatState = () => {
     const activeSession = getActiveSession();
+    const stripPersistedImages = (message) => {
+      const images = Array.isArray(message.images) ? message.images : [];
+      if (!images.length) return [];
+      return [{
+        type: 'image_note',
+        image_url: { url: '' },
+        label: `已附带 ${images.length} 张图片（仅本轮发送，不保存原图）`,
+      }];
+    };
     const sessionsToSave = state.chatSessions.map((session) => ({
       id: session.id,
       title: session.title,
       messages: session.messages.map((item) => ({
         ...item,
-        images: Array.isArray(item.images) ? item.images.map((image) => ({
-          type: String(image?.type || 'image_url'),
-          image_url: {
-            url: String(image?.image_url?.url || image?.url || ''),
-          },
-        })).filter((image) => image.image_url.url) : [],
+        images: stripPersistedImages(item),
+        tokenUsage: item.tokenUsage || null,
       })),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
@@ -130,7 +157,7 @@
 
     utils.writeJson(constants.CHAT_SESSIONS_KEY, sessionsToSave);
     utils.writeJson(constants.CHAT_ACTIVE_SESSION_KEY, activeSession?.id || '');
-    utils.writeJson(constants.CHAT_STORAGE_KEY, activeSession?.messages || []);
+    utils.writeJson(constants.CHAT_STORAGE_KEY, sessionsToSave.find((session) => session.id === activeSession?.id)?.messages || []);
   };
 
   const loadChatState = () => {
@@ -165,22 +192,46 @@
     return { sessions: [session], activeId: session.id };
   };
 
+  const isChatNearBottom = () => {
+    if (!refs.chatMessages) return true;
+    const distance = refs.chatMessages.scrollHeight - refs.chatMessages.scrollTop - refs.chatMessages.clientHeight;
+    return distance < 96;
+  };
+
   const scrollChatToBottom = () => {
     if (!refs.chatMessages) return;
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const lastMessage = refs.chatMessages?.lastElementChild;
-        if (lastMessage?.scrollIntoView) {
-          lastMessage.scrollIntoView({ block: 'end', inline: 'nearest' });
-          return;
-        }
-        refs.chatMessages.scrollTop = refs.chatMessages.scrollHeight;
-      });
+      refs.chatMessages.scrollTop = refs.chatMessages.scrollHeight;
     });
   };
 
-  const renderChatMessages = () => {
+  const formatNumber = (value) => {
+    const number = Number(value || 0);
+    return Number.isFinite(number) ? number.toLocaleString('zh-CN') : '0';
+  };
+
+  const renderTokenUsage = (usage) => {
+    if (!usage || !Number(usage.totalTokens)) return '';
+    const contextLength = Number(usage.contextLength || 0);
+    const remaining = Number(usage.remainingContext || 0);
+    const contextText = contextLength
+      ? `剩余上下文 ${formatNumber(Math.max(0, remaining))} / ${formatNumber(contextLength)}`
+      : '上下文上限未知';
+    const estimateText = usage.estimated ? '估算' : '接口返回';
+    return `
+      <div class="ai-token-meta" title="Token ${estimateText}。输入包含系统提示词、聊天历史、管家检索上下文和当前问题。">
+        <span>本轮 ${formatNumber(usage.totalTokens)} tokens</span>
+        <span>输入 ${formatNumber(usage.promptTokens)}</span>
+        <span>输出 ${formatNumber(usage.completionTokens)}</span>
+        <span>${contextText}</span>
+        <span>${estimateText}</span>
+      </div>
+    `;
+  };
+
+  const renderChatMessages = (options = {}) => {
     if (!refs.chatMessages) return;
+    const shouldStickToBottom = options.forceScroll || (options.autoScroll !== false && isChatNearBottom());
     const intro = refs.chatIntroText;
     const items = state.chatHistory;
 
@@ -188,12 +239,17 @@
       ? items.map((item) => {
           const images = Array.isArray(item.images) && item.images.length
             ? `<div class="ai-message-images">${item.images.map((image) => {
+                if (image?.type === 'image_note') {
+                  return `<div class="ai-image-note">${utils.escapeHtml(image.label || '已附带图片')}</div>`;
+                }
                 const imageUrl = String(image?.image_url?.url || image?.url || '').trim();
                 if (!imageUrl) return '';
-                return `<img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" loading="lazy" />`;
+                const previewUrl = String(image?.preview_url || image?.previewUrl || imageUrl).trim();
+                return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" loading="lazy" /></button>`;
               }).join('')}</div>`
             : '';
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}</div>`;
+          const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}${tokenMeta}</div>`;
         }).join('')
       : '';
 
@@ -205,7 +261,31 @@
         : '先保存 OpenRouter 配置，然后就可以在这里直接发起分析。';
     }
 
-    scrollChatToBottom();
+    if (shouldStickToBottom) scrollChatToBottom();
+  };
+
+  const closeChatImagePreview = () => {
+    document.querySelector('.chat-image-preview')?.remove();
+  };
+
+  const openChatImagePreview = (imageUrl) => {
+    const url = String(imageUrl || '').trim();
+    if (!url) return;
+    closeChatImagePreview();
+    const preview = document.createElement('div');
+    preview.className = 'chat-image-preview';
+    preview.innerHTML = `
+      <button class="chat-image-preview-close" type="button" aria-label="关闭图片预览">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+      <img src="${utils.escapeHtml(url)}" alt="图片预览" />
+    `;
+    preview.addEventListener('click', (event) => {
+      if (event.target === preview || event.target.closest('.chat-image-preview-close')) {
+        closeChatImagePreview();
+      }
+    });
+    document.body.appendChild(preview);
   };
 
   const mountConversationMenu = () => {
@@ -487,9 +567,8 @@
   };
 
   const renderChat = () => {
-    renderChatMessages();
+    renderChatMessages({ forceScroll: true });
     updateHeaderState();
-    scrollChatToBottom();
   };
   const setActiveSession = (sessionId) => {
     const session = state.chatSessions.find((item) => item.id === sessionId);
@@ -523,6 +602,7 @@
     image_url: {
       url: String(item?.image_url?.url || item?.url || ''),
     },
+    preview_url: String(item?.preview_url || item?.previewUrl || item?.image_url?.url || item?.url || ''),
   })).filter((item) => item.image_url.url) : []);
 
   const draftPrompt = (prompt, options = {}) => {
@@ -533,7 +613,7 @@
       createNewConversation();
     }
 
-    pendingDraftImages = normalizeImages(options.images).slice(0, 4);
+    pendingDraftImages = normalizeImages(options.images).slice(0, 1);
     refs.chatInput.value = value;
     refs.chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     App.navigation?.setAssistantCollapsed?.(false);
@@ -555,14 +635,20 @@
   const getProjectContext = () => [
     '【项目背景】',
     '你正在广俊塑料科技后台管理系统中工作。',
-    '项目当前包含物性分析、图谱分析、主题设置和配置中心。',
+    '项目当前包含物性分析、图谱分析、抠图助手、主题设置和配置中心。',
     '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
   ].join('\n');
 
   const getAttachedDataContext = (prompt) => {
-    if (!state.dataAttachmentEnabled) return '';
-
     const pageId = getActivePageId();
+    if (App.agentButler?.buildContext) {
+      return App.agentButler.buildContext({
+        question: prompt,
+        activePageId: pageId,
+        forceCurrentPage: Boolean(state.dataAttachmentEnabled),
+      });
+    }
+
     if (pageId === 'property-analysis') {
       return App.propertyAnalysis?.getSelectedAiContext?.(prompt)
         || App.propertyAnalysis?.getAiContext?.()
@@ -587,11 +673,92 @@
     return null;
   };
 
-  const getAttachedDataImages = () => {
-    if (!state.dataAttachmentEnabled) return [];
+  const getAttachedDataImages = (prompt) => {
     const pageId = getActivePageId();
+    if (App.agentButler?.getImages) {
+      return normalizeImages(App.agentButler.getImages({
+        question: prompt,
+        activePageId: pageId,
+        forceCurrentPage: Boolean(state.dataAttachmentEnabled),
+      }) || []);
+    }
+
     if (pageId === 'spectrum-analysis') return normalizeImages(App.spectrumAnalysis?.getSelectedAiImages?.() || []);
     return [];
+  };
+
+  const loadImageForCompression = (url) => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(image), { once: true });
+    image.addEventListener('error', () => reject(new Error('图片读取失败')), { once: true });
+    image.src = url;
+  });
+
+  const canvasToDataUrl = (canvas, mimeType, quality) => new Promise((resolve) => {
+    if (canvas.toBlob) {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          resolve(canvas.toDataURL(mimeType, quality));
+          return;
+        }
+        const reader = new FileReader();
+        reader.addEventListener('load', () => resolve(String(reader.result || '')), { once: true });
+        reader.addEventListener('error', () => resolve(canvas.toDataURL(mimeType, quality)), { once: true });
+        reader.readAsDataURL(blob);
+      }, mimeType, quality);
+      return;
+    }
+    resolve(canvas.toDataURL(mimeType, quality));
+  });
+
+  const compressImageForAi = async (image, options = {}) => {
+    const sourceUrl = String(image?.image_url?.url || image?.url || '').trim();
+    if (!sourceUrl || !sourceUrl.startsWith('data:image/')) return image;
+
+    try {
+      const img = await loadImageForCompression(sourceUrl);
+      const maxSize = Number(options.maxSize || 1200);
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+      if (!width || !height) return image;
+
+      const scale = Math.min(1, maxSize / Math.max(width, height));
+      const targetWidth = Math.max(1, Math.round(width * scale));
+      const targetHeight = Math.max(1, Math.round(height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return image;
+
+      const preserveAlpha = Boolean(options.preserveAlpha);
+      const mimeType = preserveAlpha ? 'image/webp' : 'image/jpeg';
+      if (!preserveAlpha) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+      }
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      const compressedUrl = await canvasToDataUrl(canvas, mimeType, preserveAlpha ? 0.82 : 0.78);
+      if (!compressedUrl || compressedUrl.length >= sourceUrl.length) return image;
+
+      return {
+        type: 'image_url',
+        image_url: { url: compressedUrl },
+        preview_url: String(image?.preview_url || image?.previewUrl || sourceUrl),
+      };
+    } catch (error) {
+      console.warn('[chat] Failed to compress image before AI upload:', error);
+      return image;
+    }
+  };
+
+  const compressImagesForAi = async (images, options = {}) => {
+    const normalized = normalizeImages(images).slice(0, 1);
+    const activePageId = getActivePageId();
+    const preserveAlpha = activePageId === 'image-cutout' || /(?:透明|抠图|去背|png)/.test(String(options.prompt || ''));
+    const maxSize = activePageId === 'image-cutout' ? 768 : 768;
+    return Promise.all(normalized.map((image) => compressImageForAi(image, { maxSize, preserveAlpha })));
   };
 
   const getContextMessages = (config, prompt) => {
@@ -675,8 +842,80 @@
     };
   };
 
+  const estimateTextTokens = (text) => {
+    const value = String(text || '');
+    if (!value) return 0;
+    const cjkCount = (value.match(/[\u4e00-\u9fff]/g) || []).length;
+    const otherCount = Math.max(0, value.length - cjkCount);
+    return Math.max(1, Math.ceil(cjkCount / 1.7 + otherCount / 4));
+  };
+
+  const messageContentToText = (content) => {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      if (part.type === 'text') return part.text || '';
+      if (part.type === 'image_url') return '[image]';
+      if (part.type === 'file') return `[file:${part.file?.filename || ''}]`;
+      return JSON.stringify(part);
+    }).join('\n');
+  };
+
+  const estimateMessagesTokens = (messages) => {
+    const list = Array.isArray(messages) ? messages : [];
+    return list.reduce((sum, message) => {
+      const contentText = messageContentToText(message?.content);
+      const imageCount = Array.isArray(message?.content)
+        ? message.content.filter((part) => part?.type === 'image_url').length
+        : 0;
+      const fileCount = Array.isArray(message?.content)
+        ? message.content.filter((part) => part?.type === 'file').length
+        : 0;
+      return sum + 4 + estimateTextTokens(message?.role || '') + estimateTextTokens(contentText) + imageCount * 800 + fileCount * 300;
+    }, 3);
+  };
+
+  const getSelectedModelContextLength = () => {
+    const model = App.config.getResolvedModel();
+    const option = Array.from(refs.modelSelect?.options || []).find((item) => item.value === model);
+    const value = Number.parseInt(option?.dataset?.contextLength || '', 10);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+
+  const normalizeApiUsage = (usage) => {
+    if (!usage || typeof usage !== 'object') return null;
+    const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? usage.input_tokens ?? 0);
+    const completionTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? usage.output_tokens ?? 0);
+    const totalTokens = Number(usage.total_tokens ?? usage.totalTokens ?? (promptTokens + completionTokens));
+    if (!promptTokens && !completionTokens && !totalTokens) return null;
+    return { promptTokens, completionTokens, totalTokens };
+  };
+
+  const buildTokenUsageMeta = ({ apiUsage, requestMessages, completionText, model }) => {
+    const normalized = normalizeApiUsage(apiUsage);
+    const estimatedPromptTokens = estimateMessagesTokens(requestMessages);
+    const estimatedCompletionTokens = estimateTextTokens(completionText);
+    const promptTokens = normalized?.promptTokens || estimatedPromptTokens;
+    const completionTokens = normalized?.completionTokens || estimatedCompletionTokens;
+    const totalTokens = normalized?.totalTokens || (promptTokens + completionTokens);
+    const contextLength = getSelectedModelContextLength();
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      contextLength,
+      remainingContext: contextLength ? Math.max(0, contextLength - totalTokens) : 0,
+      estimated: !normalized,
+      model: model || '',
+    };
+  };
+
   const buildUserPromptWithData = (prompt, attachedDataContext) => {
     if (!attachedDataContext) return prompt;
+    if (App.agentButler?.buildAgentPrompt) {
+      return App.agentButler.buildAgentPrompt(prompt, attachedDataContext);
+    }
     return [
       '【用户问题】',
       prompt,
@@ -767,11 +1006,42 @@
     return receivedDelta;
   };
 
+  const scheduleStreamRender = (pendingIndex, content) => {
+    if (streamRenderTimer) return;
+    streamRenderTimer = window.setTimeout(() => {
+      streamRenderTimer = 0;
+      state.chatHistory[pendingIndex] = {
+        role: 'assistant',
+        content: content || '正在思考...',
+        images: [],
+      };
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      renderChatMessages({ autoScroll: true });
+    }, 120);
+  };
+
+  const flushStreamRender = (pendingIndex, content) => {
+    if (streamRenderTimer) {
+      window.clearTimeout(streamRenderTimer);
+      streamRenderTimer = 0;
+    }
+    state.chatHistory[pendingIndex] = {
+      role: 'assistant',
+      content: content || '正在思考...',
+      images: [],
+    };
+    const session = getActiveSession();
+    if (session) session.updatedAt = nowIso();
+    saveChatState();
+    renderChatMessages({ autoScroll: true });
+  };
+
   const pushChatMessage = (role, content, images = []) => {
     const session = getActiveSession();
     if (!session) return;
 
-    session.messages.push({ role, content, images: normalizeImages(images).slice(0, 4) });
+    session.messages.push({ role, content, images: normalizeImages(images).slice(0, 1) });
     session.updatedAt = nowIso();
     if (role === 'user') {
       session.title = deriveSessionTitle(session.messages);
@@ -786,7 +1056,7 @@
     if (!refs.assistantDataToggleBtn) return;
     const enabled = Boolean(state.dataAttachmentEnabled);
     const pageId = getActivePageId();
-    const label = enabled ? '已接入数据' : '接入数据';
+    const label = enabled ? '本页' : '全局';
 
     refs.assistantDataToggleBtn.textContent = label;
     refs.assistantDataToggleBtn.classList.toggle('is-active', enabled);
@@ -794,12 +1064,14 @@
     refs.assistantDataToggleBtn.setAttribute(
       'title',
       enabled
-        ? '已开启：发送问题时会在后台携带当前分析页数据'
+        ? '本页模式：管家会强制优先携带当前页面数据'
         : pageId === 'property-analysis'
-          ? '开启后会在后台携带物性分析已选表格数据'
+          ? '全局模式：管家会自动检索当前页和相关模块数据'
           : pageId === 'spectrum-analysis'
-            ? '开启后会在后台携带图谱分析已选图片和说明'
-            : '开启后会在后台携带当前分析页已选数据'
+            ? '全局模式：管家会自动检索当前页和相关模块数据'
+            : pageId === 'image-cutout'
+              ? '全局模式：管家会自动检索当前页和相关模块数据'
+              : '全局模式：管家会自动检索项目内相关数据'
     );
   };
 
@@ -815,10 +1087,6 @@
     if (state.chatBusy) return;
     const config = App.config.getFormConfig();
     const prompt = (refs.chatInput?.value || '').trim();
-    const attachedImages = [
-      ...pendingDraftImages,
-      ...getAttachedDataImages(),
-    ].slice(0, 4);
     if (!prompt) return;
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
       pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，或切换到 LM Studio 本地模型。');
@@ -831,9 +1099,23 @@
       return;
     }
     const selectedModelOption = Array.from(refs.modelSelect?.options || []).find((option) => option.value === model);
+    const inputModalities = JSON.parse(selectedModelOption?.dataset?.inputModalities || '[]');
     const outputModalities = JSON.parse(selectedModelOption?.dataset?.outputModalities || '[]');
-    const supportsImages = Array.isArray(outputModalities) && outputModalities.includes('image');
-    const wantsImages = supportsImages && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+    const modelCategory = String(selectedModelOption?.dataset?.category || '');
+    const supportsImageInput = (Array.isArray(inputModalities) && inputModalities.includes('image'))
+      || modelCategory.includes('图像')
+      || /(?:vision|visual|image|vl|multimodal)/i.test(model);
+    const supportsImageOutput = Array.isArray(outputModalities) && outputModalities.includes('image');
+    const rawAttachedImages = supportsImageInput
+      ? [
+          ...pendingDraftImages,
+          ...getAttachedDataImages(prompt),
+        ].slice(0, 1)
+      : [];
+    const attachedImages = supportsImageInput
+      ? await compressImagesForAi(rawAttachedImages, { prompt })
+      : [];
+    const wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
 
     state.chatBusy = true;
     if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
@@ -848,6 +1130,9 @@
     const streamEnabled = isLmStudioProvider || Boolean(config.streamEnabled);
     let streamedContent = '';
     let streamedImages = [];
+    let apiUsage = null;
+    let apiMessages = [];
+    let finishReason = '';
 
     try {
       const attachedDataFile = getAttachedDataFile(prompt);
@@ -866,18 +1151,19 @@
             images: isCurrentUserMessage ? attachedImages : item.images,
           });
         });
+      apiMessages = [
+        ...getContextMessages(config, ''),
+        ...requestMessages,
+      ];
 
       const response = await fetch(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config.getRequestHeaders(config),
         body: JSON.stringify({
           model,
-          messages: [
-            ...getContextMessages(config, ''),
-            ...requestMessages,
-          ],
+          messages: apiMessages,
           temperature: config.temperature,
-          max_tokens: config.maxTokens,
+          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
           modalities: wantsImages ? ['image', 'text'] : undefined,
           stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
         }),
@@ -897,22 +1183,17 @@
       if (shouldStream) {
         const didStream = await consumeChatCompletionStream(response, (delta) => {
           streamedContent += delta;
-          state.chatHistory[pendingIndex] = {
-            role: 'assistant',
-            content: streamedContent || '正在思考...',
-            images: [],
-          };
-          const session = getActiveSession();
-          if (session) session.updatedAt = nowIso();
-          saveChatState();
-          renderChatMessages();
+          scheduleStreamRender(pendingIndex, streamedContent);
         });
         if (!didStream) {
           throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
         }
+        flushStreamRender(pendingIndex, streamedContent);
       } else {
         const data = await response.json();
         streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+        finishReason = String(data?.choices?.[0]?.finish_reason || '');
+        apiUsage = data?.usage || null;
         streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
           ? data.choices[0].message.images.map((image) => ({
               type: String(image?.type || 'image_url'),
@@ -925,14 +1206,26 @@
 
       state.chatHistory[pendingIndex] = {
         role: 'assistant',
-        content: streamedContent || '我暂时没有返回内容。',
+        content: finishReason === 'length'
+          ? `${streamedContent || '我暂时没有返回内容。'}\n\n【提示】本次回答达到模型输出上限，内容可能未完整结束。可以继续追问“继续”。`
+          : streamedContent || '我暂时没有返回内容。',
         images: streamedImages,
+        tokenUsage: buildTokenUsageMeta({
+          apiUsage,
+          requestMessages: apiMessages,
+          completionText: streamedContent,
+          model,
+        }),
       };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       saveChatState();
       renderChat();
     } catch (error) {
+      if (streamRenderTimer) {
+        window.clearTimeout(streamRenderTimer);
+        streamRenderTimer = 0;
+      }
       const currentContent = String(state.chatHistory[pendingIndex]?.content || '').trim();
       const fallbackMessage = `发送失败：${error?.message || '网络或权限错误'}`;
       state.chatHistory[pendingIndex] = {
@@ -1004,6 +1297,12 @@
       }
     });
 
+    refs.chatMessages?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-chat-image-preview]');
+      if (!button) return;
+      openChatImagePreview(button.getAttribute('data-chat-image-preview'));
+    });
+
     document.addEventListener('pointerdown', (event) => {
       if (!refs.conversationMenuPanel || refs.conversationMenuPanel.hidden) return;
       if (refs.conversationMenuPanel.contains(event.target) || refs.conversationMenuBtn?.contains(event.target)) return;
@@ -1020,7 +1319,10 @@
     });
 
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeConversationMenu();
+      if (event.key === 'Escape') {
+        closeConversationMenu();
+        closeChatImagePreview();
+      }
     });
   };
 

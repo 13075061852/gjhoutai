@@ -199,7 +199,10 @@
       lmStudioConfig: { ...providerDrafts[PROVIDER_LM_STUDIO], apiKey: '', appTitle: 'LM Studio' },
       systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
       temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
-      maxTokens: Number(refs.maxTokens?.value ?? constants.DEFAULT_CONFIG.maxTokens),
+      maxTokens: Math.max(
+        Number(refs.maxTokens?.value ?? constants.DEFAULT_CONFIG.maxTokens),
+        constants.DEFAULT_CONFIG.maxTokens
+      ),
       streamEnabled: Boolean(refs.streamEnabled?.checked),
       jsonMode: Boolean(refs.jsonMode?.checked),
       logEnabled: Boolean(refs.logEnabled?.checked),
@@ -707,6 +710,7 @@
       option.dataset.pricing = JSON.stringify(item?.pricing || {});
       option.dataset.category = getModelCategoryLabel(item);
       option.dataset.contextLength = String(item?.context_length ?? '');
+      option.dataset.inputModalities = JSON.stringify(item?.architecture?.input_modalities || []);
       option.dataset.outputModalities = JSON.stringify(item?.output_modalities || []);
       refs.modelSelect.appendChild(option);
     };

@@ -27,10 +27,14 @@
     sort: 'date-desc',
     editingId: '',
     detailCollapsed: false,
+    detailAutoCompact: false,
+    detailModalOpen: false,
   };
 
   const refs = {};
   let imageDbPromise = null;
+  let detailResizeObserver = null;
+  const DETAIL_AUTO_COLLAPSE_WIDTH = 1260;
 
   const initRefs = () => {
     refs.searchInput = document.getElementById('spectrumSearchInput');
@@ -275,7 +279,17 @@
   const getFilteredItems = () => {
     const items = state.items.filter(matchesFilter);
     return items.sort((a, b) => {
-      return b.date.localeCompare(a.date);
+      const byDateDesc = () => String(b.date || '').localeCompare(String(a.date || ''));
+      const byTitleAsc = () => String(a.title || a.code || '').localeCompare(String(b.title || b.code || ''), 'zh-Hans-CN', { numeric: true });
+      const byCategoryAsc = () => String(a.category || '').localeCompare(String(b.category || ''), 'zh-Hans-CN', { numeric: true }) || byTitleAsc();
+      const byTypeAsc = () => String(a.spectrumType || '').localeCompare(String(b.spectrumType || ''), 'zh-Hans-CN', { numeric: true }) || byTitleAsc();
+
+      if (state.sort === 'date-asc') return String(a.date || '').localeCompare(String(b.date || '')) || byTitleAsc();
+      if (state.sort === 'title-asc') return byTitleAsc();
+      if (state.sort === 'title-desc') return -byTitleAsc();
+      if (state.sort === 'category-asc') return byCategoryAsc();
+      if (state.sort === 'type-asc') return byTypeAsc();
+      return byDateDesc() || byTitleAsc();
     });
   };
 
@@ -374,10 +388,10 @@
     `).join('');
   };
 
-  const saveDetailForm = (form) => {
+  const saveDetailForm = (form, options = {}) => {
     const id = form.elements.id.value;
     const index = state.items.findIndex((item) => item.id === id);
-    if (index < 0) return;
+    if (index < 0) return null;
 
     const updates = {
       title: form.elements.title.value.trim(),
@@ -392,7 +406,8 @@
     state.activeId = id;
     saveItemEdits();
     if (state.items[index].uploaded) saveUploadedItems();
-    render();
+    if (!options.skipRender) render();
+    return state.items[index];
   };
 
   const commitDeleteItems = (ids) => {
@@ -422,7 +437,8 @@
       return `[data-spectrum-id="${escapedId}"], [data-spectrum-selected-item="${escapedId}"]`;
     }).join(', ');
     const nodes = selector ? [...document.querySelectorAll(selector)] : [];
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const animations = window.App?.animations;
+    const reducedMotion = animations?.prefersReducedMotion?.() ?? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
     if (!nodes.length || reducedMotion) {
       onDone();
@@ -430,10 +446,10 @@
     }
 
     nodes.forEach((node) => {
-      node.classList.add('is-deleting');
+      animations?.addClass?.(node, 'is-deleting') ?? node.classList.add('is-deleting');
       node.setAttribute('aria-hidden', 'true');
     });
-    window.setTimeout(onDone, DELETE_ANIMATION_MS);
+    animations?.delay?.(DELETE_ANIMATION_MS, onDone) ?? window.setTimeout(onDone, DELETE_ANIMATION_MS);
   };
 
   const deleteSpectrumItem = (id) => {
@@ -681,27 +697,168 @@
   };
 
   const updateDetailCollapsed = () => {
-    refs.workbench?.classList.toggle('is-detail-collapsed', state.detailCollapsed);
+    const animations = window.App?.animations;
+    animations?.setClass?.(refs.workbench, 'is-detail-collapsed', state.detailCollapsed)
+      ?? refs.workbench?.classList.toggle('is-detail-collapsed', state.detailCollapsed);
     if (!refs.toggleDetailBtn) return;
 
-    refs.toggleDetailBtn.setAttribute('aria-expanded', String(!state.detailCollapsed));
-    refs.toggleDetailBtn.classList.toggle('is-collapsed', state.detailCollapsed);
+    const detailVisible = state.detailModalOpen || !state.detailCollapsed;
+    refs.toggleDetailBtn.setAttribute('aria-expanded', String(detailVisible));
+    animations?.setClass?.(refs.toggleDetailBtn, 'is-collapsed', !detailVisible)
+      ?? refs.toggleDetailBtn.classList.toggle('is-collapsed', !detailVisible);
     const icon = refs.toggleDetailBtn.querySelector('.ti');
     const label = refs.toggleDetailBtn.querySelector('span');
-    if (icon) icon.className = `ti ${state.detailCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}`;
-    if (label) label.textContent = state.detailCollapsed ? '展开详情' : '收起详情';
+    if (icon) icon.className = `ti ${detailVisible ? 'ti-layout-sidebar-right-collapse' : 'ti-layout-sidebar-right-expand'}`;
+    if (label) label.textContent = detailVisible ? '\u6536\u8d77\u8be6\u60c5' : '\u5c55\u5f00\u8be6\u60c5';
   };
 
   const setDetailCollapsed = (collapsed) => {
     if (!refs.detailPanel) {
       state.detailCollapsed = collapsed;
+      state.detailModalOpen = false;
       updateDetailCollapsed();
       return;
     }
 
     state.detailCollapsed = collapsed;
+    if (!collapsed) state.detailModalOpen = false;
     refs.detailPanel.hidden = false;
     updateDetailCollapsed();
+  };
+
+  const openDetailModal = () => {
+    refs.detailModal?.remove();
+    let item = getActiveItem();
+    if (!item) {
+      item = getFilteredItems()[0] || null;
+      if (item) state.activeId = item.id;
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'spectrum-compact-detail-dialog';
+    modal.innerHTML = item ? `
+      <div class="spectrum-compact-detail-card" role="dialog" aria-modal="true" aria-labelledby="spectrumCompactDetailTitle">
+        <button class="spectrum-detail-modal-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+        <button class="spectrum-compact-detail-image" type="button" data-spectrum-preview="${utils.escapeHtml(item.id)}" aria-label="放大查看 ${utils.escapeHtml(item.title)}">
+          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+        </button>
+        <div class="spectrum-detail-modal-head">
+          <div>
+            <div class="spectrum-detail-modal-title" id="spectrumCompactDetailTitle">图谱详情</div>
+            <div class="spectrum-detail-modal-subtitle">${utils.escapeHtml(item.title)}</div>
+          </div>
+        </div>
+        <form class="spectrum-detail-form" data-spectrum-detail-form>
+          <input name="id" type="hidden" value="${utils.escapeHtml(item.id)}" />
+          <label class="spectrum-detail-field spectrum-detail-field-full">
+            <span>图谱名称</span>
+            <input name="title" type="text" value="${utils.escapeHtml(item.title)}" required />
+          </label>
+          <label class="spectrum-detail-field">
+            <span>分类</span>
+            <input name="category" type="text" value="${utils.escapeHtml(item.category || '')}" />
+          </label>
+          <label class="spectrum-detail-field">
+            <span>日期</span>
+            <input name="date" type="date" value="${utils.escapeHtml(item.date || '')}" />
+          </label>
+          <label class="spectrum-detail-field spectrum-detail-field-full">
+            <span>标签</span>
+            <input name="tags" type="hidden" value="${utils.escapeHtml(Array.isArray(item.tags) ? item.tags.join('，') : '')}" />
+            <div class="spectrum-detail-tag-editor">
+              <input type="text" data-spectrum-tag-input placeholder="输入标签后按回车添加" />
+              <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-tag-add>添加</button>
+            </div>
+            <div class="spectrum-detail-tag-list" data-spectrum-tag-list>
+              ${(Array.isArray(item.tags) ? item.tags : []).map((tag) => `
+                <button class="spectrum-detail-tag-chip" type="button" data-spectrum-tag-chip="${utils.escapeHtml(tag)}">
+                  <span>${utils.escapeHtml(tag)}</span>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              `).join('')}
+            </div>
+          </label>
+          <label class="spectrum-detail-field spectrum-detail-field-full">
+            <span>备注</span>
+            <textarea name="note" rows="4">${utils.escapeHtml(item.note || '')}</textarea>
+          </label>
+          <div class="spectrum-detail-actions">
+            <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="submit">
+              <i class="ti ti-device-floppy" aria-hidden="true"></i>
+              <span>保存信息</span>
+            </button>
+            <button class="analysis-toolbar-btn spectrum-danger-btn" type="button" data-spectrum-delete="${utils.escapeHtml(item.id)}">
+              <i class="ti ti-trash" aria-hidden="true"></i>
+              <span>删除图片</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    ` : `
+      <div class="spectrum-compact-detail-card" role="dialog" aria-modal="true" aria-labelledby="spectrumCompactDetailTitle">
+        <button class="spectrum-detail-modal-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+        <div class="spectrum-detail-modal-head">
+          <div>
+            <div class="spectrum-detail-modal-title" id="spectrumCompactDetailTitle">图谱详情</div>
+            <div class="spectrum-detail-modal-subtitle">等待选择图谱</div>
+          </div>
+        </div>
+        <div class="spectrum-empty-state spectrum-empty-state-compact">
+          <div class="spectrum-empty-icon"><i class="ti ti-file-search" aria-hidden="true"></i></div>
+          <div class="spectrum-empty-title">等待选择图谱</div>
+          <div class="spectrum-empty-text">上传并选择图谱后，这里会显示文件详情。</div>
+        </div>
+      </div>
+    `;
+
+    state.detailCollapsed = true;
+    state.detailModalOpen = true;
+    refs.detailModal = modal;
+    document.body.appendChild(modal);
+    updateDetailCollapsed();
+  };
+
+  const closeDetailModal = () => {
+    refs.detailModal?.remove();
+    refs.detailModal = null;
+    state.detailModalOpen = false;
+    state.detailCollapsed = true;
+    updateDetailCollapsed();
+  };
+
+  const isDetailCompactMode = () => {
+    if (!refs.workbench) return false;
+    const width = refs.workbench.getBoundingClientRect().width;
+    const detailWidth = refs.detailPanel?.getBoundingClientRect().width || 0;
+    const detailIsClipped = !state.detailCollapsed && detailWidth > 0 && detailWidth < 260;
+    return (width > 0 && width < DETAIL_AUTO_COLLAPSE_WIDTH) || detailIsClipped;
+  };
+
+  const syncDetailAutoCollapse = () => {
+    if (!refs.workbench) return;
+    const compact = isDetailCompactMode();
+    state.detailAutoCompact = compact;
+    window.App?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
+      ?? refs.workbench.classList.toggle('is-detail-auto-compact', compact);
+    if (compact && !state.detailCollapsed) setDetailCollapsed(true);
+    if (!compact && state.detailModalOpen) closeDetailModal();
+  };
+
+  const setupDetailAutoCollapse = () => {
+    syncDetailAutoCollapse();
+    if (!refs.workbench) return;
+
+    if (window.ResizeObserver) {
+      detailResizeObserver = new ResizeObserver(() => syncDetailAutoCollapse());
+      detailResizeObserver.observe(refs.workbench);
+      return;
+    }
+
+    window.addEventListener('resize', syncDetailAutoCollapse);
   };
 
   const printSelectedList = () => {
@@ -1087,7 +1244,7 @@
 
     refs.sortSelect?.addEventListener('change', () => {
       state.sort = refs.sortSelect.value || 'date-desc';
-      renderGallery();
+      render();
     });
 
     refs.viewButtons.forEach((button) => {
@@ -1155,9 +1312,15 @@
     });
 
     refs.detailPanel?.addEventListener('click', (event) => {
+      if (state.detailModalOpen && event.target === refs.detailPanel) {
+        closeDetailModal();
+        return;
+      }
+
       const closeButton = event.target.closest('[data-spectrum-detail-close]');
       if (closeButton) {
-        setDetailCollapsed(true);
+        if (state.detailModalOpen) closeDetailModal();
+        else setDetailCollapsed(true);
         return;
       }
 
@@ -1206,6 +1369,73 @@
     });
 
     document.addEventListener('click', (event) => {
+      if (!refs.detailModal) return;
+      if (event.target === refs.detailModal || event.target.closest('[data-spectrum-detail-close]')) {
+        closeDetailModal();
+        return;
+      }
+
+      const tagAddButton = event.target.closest('[data-spectrum-tag-add]');
+      if (tagAddButton && refs.detailModal.contains(tagAddButton)) {
+        const form = tagAddButton.closest('[data-spectrum-detail-form]');
+        if (form) addDetailTag(form);
+        return;
+      }
+
+      const tagChip = event.target.closest('[data-spectrum-tag-chip]');
+      if (tagChip && refs.detailModal.contains(tagChip)) {
+        const form = tagChip.closest('[data-spectrum-detail-form]');
+        tagChip.remove();
+        if (form) syncTagValue(form);
+        return;
+      }
+
+      const deleteButton = event.target.closest('[data-spectrum-delete]');
+      if (deleteButton && refs.detailModal.contains(deleteButton)) {
+        openDeleteDialog(deleteButton.getAttribute('data-spectrum-delete'));
+        return;
+      }
+
+      const previewButton = event.target.closest('[data-spectrum-preview]');
+      if (previewButton && refs.detailModal.contains(previewButton)) {
+        openImagePreview(previewButton.getAttribute('data-spectrum-preview'));
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (!refs.detailModal) return;
+      if (event.key === 'Escape') {
+        closeDetailModal();
+        return;
+      }
+      if (event.key !== 'Enter') return;
+      const input = event.target.closest('[data-spectrum-tag-input]');
+      if (!input || !refs.detailModal.contains(input)) return;
+      event.preventDefault();
+      const form = input.closest('[data-spectrum-detail-form]');
+      if (form) addDetailTag(form);
+    });
+
+    document.addEventListener('submit', (event) => {
+      if (!refs.detailModal) return;
+      const form = event.target.closest('[data-spectrum-detail-form]');
+      if (!form || !refs.detailModal.contains(form)) return;
+      event.preventDefault();
+      syncTagValue(form);
+      const updated = saveDetailForm(form, { skipRender: true });
+      if (!updated) return;
+      const subtitle = refs.detailModal.querySelector('.spectrum-detail-modal-subtitle');
+      const imageButton = refs.detailModal.querySelector('[data-spectrum-preview]');
+      const image = refs.detailModal.querySelector('.spectrum-compact-detail-image img');
+      if (subtitle) subtitle.textContent = updated.title;
+      if (imageButton) imageButton.setAttribute('aria-label', `放大查看 ${updated.title}`);
+      if (image) image.alt = updated.title;
+      renderGallery();
+      renderFilters();
+      updateActions();
+    });
+
+    document.addEventListener('click', (event) => {
       if (refs.deleteDialog) {
         if (event.target === refs.deleteDialog || event.target.closest('[data-spectrum-delete-cancel]')) {
           closeDeleteDialog();
@@ -1246,6 +1476,11 @@
         return;
       }
 
+      if (state.detailModalOpen && event.key === 'Escape') {
+        closeDetailModal();
+        return;
+      }
+
       if (!refs.previewDialog) return;
       if (event.key === 'Escape') {
         closeImagePreview();
@@ -1283,6 +1518,15 @@
     });
 
     refs.toggleDetailBtn?.addEventListener('click', () => {
+      const compact = isDetailCompactMode();
+      state.detailAutoCompact = compact;
+      window.App?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
+        ?? refs.workbench?.classList.toggle('is-detail-auto-compact', compact);
+      if (compact) {
+        if (state.detailModalOpen) closeDetailModal();
+        else openDetailModal();
+        return;
+      }
       setDetailCollapsed(!state.detailCollapsed);
     });
 
@@ -1321,6 +1565,7 @@
     initRefs();
     if (!refs.gallery) return;
     bindEvents();
+    setupDetailAutoCollapse();
     refs.gallery.innerHTML = `
       <div class="spectrum-empty-state">
         <div class="spectrum-empty-icon"><i class="ti ti-loader-2" aria-hidden="true"></i></div>

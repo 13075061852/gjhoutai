@@ -17,7 +17,7 @@
 
   const clearCollapsedNavFlyoutTimer = () => {
     if (collapsedNavFlyoutTimer) {
-      window.clearTimeout(collapsedNavFlyoutTimer);
+      window.App?.animations?.clearDelay?.(collapsedNavFlyoutTimer) ?? window.clearTimeout(collapsedNavFlyoutTimer);
       collapsedNavFlyoutTimer = null;
     }
   };
@@ -31,7 +31,9 @@
 
   const scheduleCollapsedNavFlyoutClose = () => {
     clearCollapsedNavFlyoutTimer();
-    collapsedNavFlyoutTimer = window.setTimeout(() => {
+    collapsedNavFlyoutTimer = window.App?.animations?.schedule?.(120, () => {
+      removeCollapsedNavFlyout();
+    }) ?? window.setTimeout(() => {
       removeCollapsedNavFlyout();
     }, 120);
   };
@@ -107,9 +109,12 @@
 
   const runSidebarTransition = () => {
     if (!refs.shell) return;
-    refs.shell.classList.add('sidebar-transitioning');
-    window.clearTimeout(refs.sidebarTransitionTimer);
-    refs.sidebarTransitionTimer = window.setTimeout(() => {
+    const animations = window.App?.animations;
+    animations?.addClass?.(refs.shell, 'sidebar-transitioning') ?? refs.shell.classList.add('sidebar-transitioning');
+    animations?.clearDelay?.(refs.sidebarTransitionTimer) ?? window.clearTimeout(refs.sidebarTransitionTimer);
+    refs.sidebarTransitionTimer = animations?.schedule?.(520, () => {
+      animations?.removeClass?.(refs.shell, 'sidebar-transitioning') ?? refs.shell?.classList.remove('sidebar-transitioning');
+    }) ?? window.setTimeout(() => {
       refs.shell?.classList.remove('sidebar-transitioning');
     }, 520);
   };
@@ -137,7 +142,7 @@
 
   const clearAssistantFullscreenExitTimer = () => {
     if (assistantFullscreenExitTimer) {
-      window.clearTimeout(assistantFullscreenExitTimer);
+      window.App?.animations?.clearDelay?.(assistantFullscreenExitTimer) ?? window.clearTimeout(assistantFullscreenExitTimer);
       assistantFullscreenExitTimer = null;
     }
   };
@@ -174,19 +179,23 @@
       localStorage.setItem(constants.ASSISTANT_STATE_KEY, '0');
       updateAssistantToggle();
       updateAssistantFullscreenToggle();
-      requestAnimationFrame(() => {
+      (window.App?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
         void refs.shell?.offsetWidth;
-        requestAnimationFrame(() => {
-          refs.shell?.classList.add('assistant-fullscreen-open');
-          window.GJHApp?.chat?.renderChat?.();
-        });
+        refs.shell?.classList.add('assistant-fullscreen-open');
+        window.GJHApp?.chat?.renderChat?.();
       });
       return;
     }
 
     refs.shell.classList.remove('assistant-fullscreen-open');
     syncAssistantFullscreenAttr(false);
-    assistantFullscreenExitTimer = window.setTimeout(() => {
+    assistantFullscreenExitTimer = window.App?.animations?.schedule?.(560, () => {
+      refs.shell?.classList.remove('assistant-fullscreen');
+      refs.shell?.classList.remove('assistant-fullscreen-open');
+      updateAssistantFullscreenToggle();
+      window.GJHApp?.chat?.renderChat?.();
+      assistantFullscreenExitTimer = null;
+    }) ?? window.setTimeout(() => {
       refs.shell?.classList.remove('assistant-fullscreen');
       refs.shell?.classList.remove('assistant-fullscreen-open');
       updateAssistantFullscreenToggle();
@@ -296,7 +305,7 @@
         entry.removeEventListener('transitionend', clearInlineMotion);
       };
       entry.addEventListener('transitionend', clearInlineMotion);
-      window.setTimeout(clearInlineMotion, 280);
+      window.App?.animations?.schedule?.(280, clearInlineMotion) ?? window.setTimeout(clearInlineMotion, 280);
     });
   };
 
@@ -311,7 +320,7 @@
     ghost.style.left = '-1000px';
     ghost.style.pointerEvents = 'none';
     document.body.appendChild(ghost);
-    window.setTimeout(() => ghost.remove(), 0);
+    window.App?.animations?.nextFrame?.(() => ghost.remove()) ?? window.setTimeout(() => ghost.remove(), 0);
     return ghost;
   };
 
@@ -385,7 +394,9 @@
     cleanupVisitedDrag();
     renderRecentPages(activePageId);
     suppressVisitedClick = true;
-    window.setTimeout(() => {
+    window.App?.animations?.schedule?.(0, () => {
+      suppressVisitedClick = false;
+    }) ?? window.setTimeout(() => {
       suppressVisitedClick = false;
     }, 0);
   };
@@ -396,7 +407,7 @@
 
     animateTopVisitedReorder(() => {
       refs.topVisitedPages.insertBefore(visitedDragPlaceholder, referenceEntry);
-      requestAnimationFrame(openVisitedPlaceholder);
+      window.App?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
     });
   };
 
@@ -466,7 +477,7 @@
         event.dataTransfer.setDragImage(ghost, Math.min(entryRect.width / 2, event.offsetX || entryRect.width / 2), Math.min(entryRect.height / 2, event.offsetY || entryRect.height / 2));
       }
 
-      requestAnimationFrame(() => {
+      (window.App?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
         animateTopVisitedReorder(() => {
           entry.remove();
         });
@@ -481,7 +492,7 @@
       });
       animateTopVisitedReorder(() => {
         refs.topVisitedPages.insertBefore(visitedDragPlaceholder, nextEntry || null);
-        requestAnimationFrame(openVisitedPlaceholder);
+        window.App?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
       });
     });
 
@@ -492,7 +503,10 @@
         visitedDragPlaceholder.style.width = '0px';
         visitedDragPlaceholder.style.opacity = '0';
         visitedDragPlaceholder.classList.remove('is-open');
-        window.setTimeout(() => {
+        window.App?.animations?.schedule?.(220, () => {
+          if (!draggedVisitedPageId || visitedDragPlaceholder?.classList.contains('is-open')) return;
+          visitedDragPlaceholder?.remove();
+        }) ?? window.setTimeout(() => {
           if (!draggedVisitedPageId || visitedDragPlaceholder?.classList.contains('is-open')) return;
           visitedDragPlaceholder?.remove();
         }, 220);
@@ -608,7 +622,7 @@
     renderRecentPages(pageId);
 
     if (scrollTop) {
-      requestAnimationFrame(() => {
+      (window.App?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
         const content = document.querySelector('.content');
         content?.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -654,7 +668,8 @@
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');
         syncSidebarCollapsedAttr(false);
         updateSidebarToggle(false);
-        requestAnimationFrame(() => refs.sidebarSearchInput?.focus());
+        window.App?.animations?.nextFrame?.(() => refs.sidebarSearchInput?.focus())
+          ?? requestAnimationFrame(() => refs.sidebarSearchInput?.focus());
       });
     }
 

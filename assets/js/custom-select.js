@@ -17,7 +17,7 @@
 
   const closeInstance = (instance) => {
     if (!instance) return;
-    instance.root.classList.remove('is-open');
+    window.App?.animations?.removeClass?.(instance.root, 'is-open') ?? instance.root.classList.remove('is-open');
     instance.trigger.setAttribute('aria-expanded', 'false');
     instance.menu.hidden = true;
     if (openInstance === instance) openInstance = null;
@@ -25,7 +25,7 @@
 
   const openSelect = (instance) => {
     if (openInstance && openInstance !== instance) closeInstance(openInstance);
-    instance.root.classList.add('is-open');
+    window.App?.animations?.addClass?.(instance.root, 'is-open') ?? instance.root.classList.add('is-open');
     instance.trigger.setAttribute('aria-expanded', 'true');
     instance.menu.hidden = false;
     openInstance = instance;

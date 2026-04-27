@@ -50,6 +50,16 @@
     }
     *{box-sizing:border-box}
     [hidden]{display:none!important}
+    html[data-reduced-motion="1"] *,
+    html[data-reduced-motion="1"] *::before,
+    html[data-reduced-motion="1"] *::after{
+      scroll-behavior:auto!important;
+      transition-duration:0.01ms!important;
+      transition-delay:0ms!important;
+      animation-duration:0.01ms!important;
+      animation-delay:0ms!important;
+      animation-iteration-count:1!important;
+    }
     html,body{height:100%}
     body{
       margin:0;

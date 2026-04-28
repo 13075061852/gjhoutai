@@ -17,6 +17,49 @@
     return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
 
+  const cloneActionInput = (input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+    try {
+      return JSON.parse(JSON.stringify(input));
+    } catch {
+      return {};
+    }
+  };
+
+  const normalizeSkillActions = (actions) => (Array.isArray(actions) ? actions.map((action, index) => {
+    const skillId = String(action?.skillId || '').trim();
+    const label = String(action?.label || '').trim();
+    if (!skillId || !label) return null;
+    return {
+      id: String(action?.id || `skill-action-${index}`),
+      label,
+      description: String(action?.description || '').trim(),
+      icon: String(action?.icon || 'ti-player-play').trim(),
+      variant: String(action?.variant || 'default').trim(),
+      skillId,
+      input: cloneActionInput(action?.input),
+      disabled: Boolean(action?.disabled),
+      consumesGroup: Boolean(action?.consumesGroup),
+    };
+  }).filter(Boolean) : []);
+
+  const normalizeCostUsage = (cost) => {
+    if (!cost || typeof cost !== 'object') return null;
+    const totalUsd = Number(cost.totalUsd ?? cost.usd ?? 0);
+    const totalCny = Number(cost.totalCny ?? cost.cny ?? 0);
+    if (!Number.isFinite(totalUsd) && !Number.isFinite(totalCny)) return null;
+    return {
+      totalUsd: Number.isFinite(totalUsd) ? totalUsd : 0,
+      totalCny: Number.isFinite(totalCny) ? totalCny : 0,
+      promptUsd: Number(cost.promptUsd || 0),
+      completionUsd: Number(cost.completionUsd || 0),
+      usdToCny: Number(cost.usdToCny || 0),
+      promptPricePerToken: Number(cost.promptPricePerToken || 0),
+      completionPricePerToken: Number(cost.completionPricePerToken || 0),
+      estimated: cost.estimated !== false,
+    };
+  };
+
   const normalizeMessage = (message) => ({
     role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
     content: String(message?.content || ''),
@@ -46,7 +89,9 @@
       remainingContext: Number(message.tokenUsage.remainingContext || 0),
       estimated: Boolean(message.tokenUsage.estimated),
       model: String(message.tokenUsage.model || ''),
+      cost: normalizeCostUsage(message.tokenUsage.cost),
     } : null,
+    actions: normalizeSkillActions(message?.actions),
   });
 
   const deriveSessionTitle = (messages) => {
@@ -150,6 +195,7 @@
         ...item,
         images: stripPersistedImages(item),
         tokenUsage: item.tokenUsage || null,
+        actions: normalizeSkillActions(item.actions),
       })),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
@@ -210,6 +256,33 @@
     return Number.isFinite(number) ? number.toLocaleString('zh-CN') : '0';
   };
 
+  const parseUsdPricing = (value) => {
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number : null;
+  };
+
+  const formatUsdCost = (value) => {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount)) return '$0.000000';
+    if (amount === 0) return '$0';
+    if (amount < 0.000001) return `<$0.000001`;
+    return `$${amount.toFixed(amount < 0.01 ? 6 : 4)}`;
+  };
+
+  const formatCnyCost = (value) => {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount)) return '¥0.0000';
+    if (amount === 0) return '¥0';
+    if (amount < 0.0001) return '<¥0.0001';
+    return `¥${amount.toFixed(amount < 0.1 ? 4 : 2)}`;
+  };
+
+  const formatCostLabel = (cost) => {
+    const normalized = normalizeCostUsage(cost);
+    if (!normalized) return '';
+    return `${formatCnyCost(normalized.totalCny)} / ${formatUsdCost(normalized.totalUsd)}`;
+  };
+
   const renderTokenUsage = (usage) => {
     if (!usage || !Number(usage.totalTokens)) return '';
     const contextLength = Number(usage.contextLength || 0);
@@ -218,13 +291,41 @@
       ? `剩余上下文 ${formatNumber(Math.max(0, remaining))} / ${formatNumber(contextLength)}`
       : '上下文上限未知';
     const estimateText = usage.estimated ? '估算' : '接口返回';
+    const costLabel = formatCostLabel(usage.cost);
+    const costTitle = usage.cost
+      ? `费用按当前模型 prompt/completion token 单价估算，汇率约 ${Number(usage.cost.usdToCny || 0).toFixed(4)}。`
+      : '当前模型没有价格信息，暂不能估算费用。';
     return `
       <div class="ai-token-meta" title="Token ${estimateText}。输入包含系统提示词、聊天历史、管家检索上下文和当前问题。">
         <span>本轮 ${formatNumber(usage.totalTokens)} tokens</span>
         <span>输入 ${formatNumber(usage.promptTokens)}</span>
         <span>输出 ${formatNumber(usage.completionTokens)}</span>
+        ${costLabel ? `<span title="${utils.escapeHtml(costTitle)}">费用 ${utils.escapeHtml(costLabel)}</span>` : ''}
         <span>${contextText}</span>
         <span>${estimateText}</span>
+      </div>
+    `;
+  };
+
+  const renderSkillActions = (actions, messageIndex) => {
+    const items = normalizeSkillActions(actions);
+    if (!items.length) return '';
+    return `
+      <div class="ai-skill-actions" aria-label="项目技能候选操作">
+        ${items.map((action, actionIndex) => `
+          <button
+            class="ai-skill-action ${action.variant === 'danger' ? 'is-danger' : ''}"
+            type="button"
+            data-chat-skill-action="${messageIndex}:${actionIndex}"
+            ${action.disabled ? 'disabled aria-disabled="true"' : ''}
+          >
+            <i class="ti ${utils.escapeHtml(action.icon)}" aria-hidden="true"></i>
+            <span>
+              <strong>${utils.escapeHtml(action.label)}</strong>
+              ${action.description ? `<em>${utils.escapeHtml(action.description)}</em>` : ''}
+            </span>
+          </button>
+        `).join('')}
       </div>
     `;
   };
@@ -236,7 +337,7 @@
     const items = state.chatHistory;
 
     refs.chatMessages.innerHTML = items.length
-      ? items.map((item) => {
+      ? items.map((item, messageIndex) => {
           const images = Array.isArray(item.images) && item.images.length
             ? `<div class="ai-message-images">${item.images.map((image) => {
                 if (image?.type === 'image_note') {
@@ -249,7 +350,8 @@
               }).join('')}</div>`
             : '';
           const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}${tokenMeta}</div>`;
+          const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}${actions}${tokenMeta}</div>`;
         }).join('')
       : '';
 
@@ -635,7 +737,7 @@
   const getProjectContext = () => [
     '【项目背景】',
     '你正在广俊塑料科技后台管理系统中工作。',
-    '项目当前包含物性分析、图谱分析、抠图助手、主题设置和配置中心。',
+    '项目当前包含物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板、主题设置和配置中心。',
     '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
   ].join('\n');
 
@@ -765,12 +867,24 @@
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     const attachedDataContext = prompt ? getAttachedDataContext(prompt) : '';
     const messages = [{ role: 'system', content: basePrompt }];
+    const skillProtocolContext = App.projectSkills?.getAiProtocolContext?.() || '';
+
+    if (skillProtocolContext) {
+      messages.push({
+        role: 'system',
+        content: [
+          getProjectContext(),
+          '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
+          '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
+          skillProtocolContext,
+        ].join('\n\n'),
+      });
+    }
 
     if (attachedDataContext) {
       messages.push({
         role: 'system',
         content: [
-          getProjectContext(),
           '如果后续消息中出现“后台接入数据”，必须优先依据该数据回答；不要忽略、不要改用外部常识。',
         ].filter(Boolean).join('\n\n'),
       });
@@ -883,6 +997,42 @@
     return Number.isFinite(value) && value > 0 ? value : 0;
   };
 
+  const getSelectedModelPricing = (model = '') => {
+    const option = Array.from(refs.modelSelect?.options || []).find((item) => item.value === model)
+      || Array.from(refs.modelSelect?.options || []).find((item) => item.value === App.config.getResolvedModel());
+    const raw = option?.dataset?.pricing || '';
+    if (!raw) return null;
+    try {
+      const pricing = JSON.parse(raw);
+      return pricing && typeof pricing === 'object' ? pricing : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const buildTokenCostMeta = ({ promptTokens, completionTokens, model }) => {
+    const pricing = getSelectedModelPricing(model);
+    const promptPrice = parseUsdPricing(pricing?.prompt);
+    const completionPrice = parseUsdPricing(pricing?.completion);
+    if (promptPrice == null || completionPrice == null) return null;
+
+    const promptUsd = promptTokens * promptPrice;
+    const completionUsd = completionTokens * completionPrice;
+    const totalUsd = promptUsd + completionUsd;
+    const usdToCny = Number(App.config?.getUsdToCnyRate?.() || 0);
+    const totalCny = Number.isFinite(usdToCny) && usdToCny > 0 ? totalUsd * usdToCny : 0;
+    return {
+      promptUsd,
+      completionUsd,
+      totalUsd,
+      totalCny,
+      usdToCny,
+      promptPricePerToken: promptPrice,
+      completionPricePerToken: completionPrice,
+      estimated: true,
+    };
+  };
+
   const normalizeApiUsage = (usage) => {
     if (!usage || typeof usage !== 'object') return null;
     const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? usage.input_tokens ?? 0);
@@ -908,7 +1058,16 @@
       remainingContext: contextLength ? Math.max(0, contextLength - totalTokens) : 0,
       estimated: !normalized,
       model: model || '',
+      cost: buildTokenCostMeta({ promptTokens, completionTokens, model }),
     };
+  };
+
+  const recordAiCall = (entry = {}) => {
+    try {
+      App.aiCallAnalysis?.record?.(entry);
+    } catch (error) {
+      console.warn('[chat] Failed to record AI call analysis:', error);
+    }
   };
 
   const buildUserPromptWithData = (prompt, attachedDataContext) => {
@@ -947,14 +1106,162 @@
     ].join('\n');
   };
 
+  const shouldSynthesizeSkillResult = (execution) => {
+    const skillId = String(execution?.skill?.id || '');
+    const result = execution?.result || {};
+    if (!result.ok || result.candidates?.length) return false;
+    return Boolean(result.data?.context)
+      || skillId === 'analysis.buildJointPackage'
+      || skillId === 'property.searchRows';
+  };
+
+  const buildSkillSynthesisPrompt = (prompt, execution) => {
+    const result = execution?.result || {};
+    const context = String(result.data?.context || '');
+    const details = Array.isArray(result.details) ? result.details.join('\n') : '';
+    return [
+      '【用户原始问题】',
+      prompt,
+      '',
+      '【已执行项目技能】',
+      `技能：${execution?.skill?.title || execution?.skill?.id || '-'}`,
+      `执行状态：${result.ok ? '完成' : '未完成'}`,
+      `执行消息：${result.message || '-'}`,
+      details ? `执行详情：\n${details}` : '',
+      '',
+      context ? `【技能返回的完整数据上下文】\n${context}` : '',
+      '',
+      '【回答要求】',
+      '请直接回答用户原始问题，给出分析结论、关键依据和必要建议。',
+      '不要再输出 gjhSkillCall JSON。',
+      '不要只复述“技能已执行”。',
+      '必须基于技能返回的数据上下文分析；数据不足时说明缺口。',
+    ].filter(Boolean).join('\n');
+  };
+
+  const synthesizeSkillResult = async ({ config, model, prompt, execution }) => {
+    const synthesisMessages = [
+      { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+      {
+        role: 'system',
+        content: [
+          getProjectContext(),
+          '你正在接收前端项目技能执行后的数据结果。你的任务是把这些结果转成用户真正想要的分析回答，而不是继续调用技能。',
+        ].join('\n\n'),
+      },
+      { role: 'user', content: buildSkillSynthesisPrompt(prompt, execution) },
+    ];
+
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      body: JSON.stringify({
+        model,
+        messages: synthesisMessages,
+        temperature: config.temperature,
+        max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+    }
+
+    const data = await response.json();
+    return {
+      content: data?.choices?.[0]?.message?.content?.trim() || '',
+      usage: data?.usage || null,
+      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
+      messages: synthesisMessages,
+    };
+  };
+
+  const runLocalSkillPlan = async (prompt, plan) => {
+    state.chatBusy = true;
+    if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
+    if (refs.chatInput) refs.chatInput.disabled = true;
+
+    pushChatMessage('user', prompt);
+    if (refs.chatInput) refs.chatInput.value = '';
+
+    try {
+      const execution = await App.projectSkills.executeSkill(plan.skillId, plan.input || {}, {
+        source: 'chat-natural-language',
+        prompt,
+      });
+      pushChatMessage(
+        'assistant',
+        App.projectSkills.formatSkillMessage(execution),
+        [],
+        App.projectSkills.getResultActions?.(execution) || []
+      );
+    } catch (error) {
+      pushChatMessage('assistant', `项目技能执行失败：${error?.message || '未知错误'}`);
+    } finally {
+      state.chatBusy = false;
+      if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
+      if (refs.chatInput) {
+        refs.chatInput.disabled = false;
+        refs.chatInput.focus();
+      }
+    }
+  };
+
+  const runChatSkillAction = async (messageIndex, actionIndex) => {
+    if (state.chatBusy) return;
+    const sourceMessage = state.chatHistory[messageIndex];
+    const action = normalizeSkillActions(sourceMessage?.actions)[actionIndex];
+    if (!sourceMessage || !action || action.disabled) return;
+
+    state.chatBusy = true;
+    if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
+    if (refs.chatInput) refs.chatInput.disabled = true;
+
+    const actions = normalizeSkillActions(sourceMessage.actions);
+    if (action.consumesGroup) {
+      sourceMessage.actions = actions.map((item) => ({ ...item, disabled: true }));
+    } else {
+      actions[actionIndex] = { ...actions[actionIndex], disabled: true };
+      sourceMessage.actions = actions;
+    }
+    saveChatState();
+    renderChatMessages({ autoScroll: false });
+
+    try {
+      const execution = await App.projectSkills.executeSkill(action.skillId, action.input || {}, {
+        source: 'chat-action-button',
+        prompt: action.label,
+      });
+      pushChatMessage(
+        'assistant',
+        App.projectSkills.formatSkillMessage(execution),
+        [],
+        App.projectSkills.getResultActions?.(execution) || []
+      );
+    } catch (error) {
+      pushChatMessage('assistant', `项目技能执行失败：${error?.message || '未知错误'}`);
+    } finally {
+      state.chatBusy = false;
+      if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
+      if (refs.chatInput) {
+        refs.chatInput.disabled = false;
+        refs.chatInput.focus();
+      }
+    }
+  };
+
   const consumeChatCompletionStream = async (response, onDelta) => {
-    if (!response.body) return false;
+    if (!response.body) return { receivedDelta: false, usage: null, finishReason: '' };
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let finished = false;
     let receivedDelta = false;
+    let streamUsage = null;
+    let streamFinishReason = '';
 
     const processBlock = (block) => {
       const dataLines = [];
@@ -973,6 +1280,8 @@
       try {
         const payload = JSON.parse(data);
         const delta = payload?.choices?.[0]?.delta?.content ?? payload?.choices?.[0]?.message?.content ?? '';
+        if (payload?.usage) streamUsage = payload.usage;
+        if (payload?.choices?.[0]?.finish_reason) streamFinishReason = String(payload.choices[0].finish_reason || '');
         if (delta) {
           receivedDelta = true;
           onDelta(delta, payload);
@@ -1003,7 +1312,7 @@
       if (!finished) processBlock(part);
     });
 
-    return receivedDelta;
+    return { receivedDelta, usage: streamUsage, finishReason: streamFinishReason };
   };
 
   const scheduleStreamRender = (pendingIndex, content) => {
@@ -1037,11 +1346,16 @@
     renderChatMessages({ autoScroll: true });
   };
 
-  const pushChatMessage = (role, content, images = []) => {
+  const pushChatMessage = (role, content, images = [], actions = []) => {
     const session = getActiveSession();
     if (!session) return;
 
-    session.messages.push({ role, content, images: normalizeImages(images).slice(0, 1) });
+    session.messages.push({
+      role,
+      content,
+      images: normalizeImages(images).slice(0, 1),
+      actions: normalizeSkillActions(actions),
+    });
     session.updatedAt = nowIso();
     if (role === 'user') {
       session.title = deriveSessionTitle(session.messages);
@@ -1085,9 +1399,10 @@
 
   const sendChatMessage = async () => {
     if (state.chatBusy) return;
-    const config = App.config.getFormConfig();
     const prompt = (refs.chatInput?.value || '').trim();
     if (!prompt) return;
+
+    const config = App.config.getFormConfig();
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
       pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，或切换到 LM Studio 本地模型。');
       return;
@@ -1133,10 +1448,15 @@
     let apiUsage = null;
     let apiMessages = [];
     let finishReason = '';
+    let attachedDataFile = null;
+    let attachedDataContext = '';
+    let usedStream = false;
+    const callStartedAt = nowIso();
+    const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
-      const attachedDataFile = getAttachedDataFile(prompt);
-      const attachedDataContext = getAttachedDataContext(prompt);
+      attachedDataFile = getAttachedDataFile(prompt);
+      attachedDataContext = getAttachedDataContext(prompt);
       const requestMessages = state.chatHistory
         .slice(0, pendingIndex)
         .filter((item) => item.role === 'user' || item.role === 'assistant')
@@ -1174,20 +1494,22 @@
         throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
       }
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      const shouldStream = !wantsImages
+      usedStream = !wantsImages
         && !attachedDataFile
         && streamEnabled
         && response.body
         && (isLmStudioProvider || contentType.includes('text/event-stream'));
 
-      if (shouldStream) {
-        const didStream = await consumeChatCompletionStream(response, (delta) => {
+      if (usedStream) {
+        const streamResult = await consumeChatCompletionStream(response, (delta) => {
           streamedContent += delta;
           scheduleStreamRender(pendingIndex, streamedContent);
         });
-        if (!didStream) {
+        if (!streamResult.receivedDelta) {
           throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
         }
+        apiUsage = streamResult.usage || apiUsage;
+        finishReason = streamResult.finishReason || finishReason;
         flushStreamRender(pendingIndex, streamedContent);
       } else {
         const data = await response.json();
@@ -1204,23 +1526,77 @@
           : [];
       }
 
+      const skillExecution = await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
+        source: 'assistant-skill-call',
+        prompt,
+      });
+      if (skillExecution) {
+        flushStreamRender(pendingIndex, '正在执行项目技能...');
+        if (shouldSynthesizeSkillResult(skillExecution)) {
+          try {
+            const synthesized = await synthesizeSkillResult({ config, model, prompt, execution: skillExecution });
+            streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
+            apiUsage = synthesized.usage || apiUsage;
+            finishReason = synthesized.finishReason || finishReason;
+            apiMessages = synthesized.messages || apiMessages;
+          } catch (error) {
+            streamedContent = [
+              App.projectSkills.formatSkillMessage(skillExecution),
+              '',
+              `【提示】技能结果已生成，但二次分析失败：${error?.message || '未知错误'}`,
+            ].join('\n');
+          }
+        } else {
+          streamedContent = App.projectSkills.formatSkillMessage(skillExecution);
+        }
+        streamedImages = [];
+      }
+      const skillActions = skillExecution
+        ? (App.projectSkills.getResultActions?.(skillExecution) || [])
+        : [];
+      const tokenUsage = buildTokenUsageMeta({
+        apiUsage,
+        requestMessages: apiMessages,
+        completionText: streamedContent,
+        model,
+      });
+
       state.chatHistory[pendingIndex] = {
         role: 'assistant',
         content: finishReason === 'length'
           ? `${streamedContent || '我暂时没有返回内容。'}\n\n【提示】本次回答达到模型输出上限，内容可能未完整结束。可以继续追问“继续”。`
           : streamedContent || '我暂时没有返回内容。',
         images: streamedImages,
-        tokenUsage: buildTokenUsageMeta({
-          apiUsage,
-          requestMessages: apiMessages,
-          completionText: streamedContent,
-          model,
-        }),
+        actions: normalizeSkillActions(skillActions),
+        tokenUsage,
       };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       saveChatState();
       renderChat();
+      recordAiCall({
+        source: 'chat',
+        provider: config.aiProvider,
+        model,
+        endpoint: `${config.baseUrl}/chat/completions`,
+        pageId: getActivePageId(),
+        sessionId: state.chatSessionId,
+        startedAt: callStartedAt,
+        endedAt: nowIso(),
+        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
+        status: 'success',
+        statusText: finishReason,
+        prompt,
+        responsePreview: streamedContent,
+        tokenUsage,
+        requestMeta: {
+          messages: apiMessages.length,
+          images: attachedImages.length,
+          files: attachedDataFile ? 1 : 0,
+          attachedData: Boolean(attachedDataContext || attachedDataFile),
+          stream: usedStream,
+        },
+      });
     } catch (error) {
       if (streamRenderTimer) {
         window.clearTimeout(streamRenderTimer);
@@ -1237,6 +1613,30 @@
       if (session) session.updatedAt = nowIso();
       saveChatState();
       renderChat();
+      recordAiCall({
+        source: 'chat',
+        provider: config.aiProvider,
+        model,
+        endpoint: `${config.baseUrl}/chat/completions`,
+        pageId: getActivePageId(),
+        sessionId: state.chatSessionId,
+        startedAt: callStartedAt,
+        endedAt: nowIso(),
+        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
+        status: 'failed',
+        error: error?.message || '网络或权限错误',
+        prompt,
+        responsePreview: currentContent,
+        requestMessages: apiMessages,
+        completionText: currentContent,
+        requestMeta: {
+          messages: apiMessages.length,
+          images: attachedImages.length,
+          files: attachedDataFile ? 1 : 0,
+          attachedData: Boolean(attachedDataContext || attachedDataFile),
+          stream: usedStream,
+        },
+      });
     } finally {
       state.chatBusy = false;
       if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
@@ -1298,7 +1698,21 @@
     });
 
     refs.chatMessages?.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-chat-image-preview]');
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const actionButton = target.closest('[data-chat-skill-action]');
+      if (actionButton) {
+        const [messageIndex, actionIndex] = String(actionButton.getAttribute('data-chat-skill-action') || '')
+          .split(':')
+          .map((value) => Number.parseInt(value, 10));
+        if (Number.isFinite(messageIndex) && Number.isFinite(actionIndex)) {
+          runChatSkillAction(messageIndex, actionIndex);
+        }
+        return;
+      }
+
+      const button = target.closest('[data-chat-image-preview]');
       if (!button) return;
       openChatImagePreview(button.getAttribute('data-chat-image-preview'));
     });

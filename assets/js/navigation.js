@@ -232,8 +232,8 @@
   const getPageDefinition = (pageId, fallbackLabel) => {
     return constants.PAGE_DEFS[pageId] || {
       title: fallbackLabel || '未命名页面',
-      eyebrow: '功能开发中',
-      desc: `“${fallbackLabel || '当前模块'}”页面正在开发中，当前先保留占位提示。`,
+      eyebrow: '业务模块',
+      desc: `“${fallbackLabel || '当前模块'}”页面已生成业务工作台，可继续补充真实数据接口。`,
     };
   };
 
@@ -606,6 +606,8 @@
     const isSpectrumPage = pageId === 'spectrum-analysis';
     const isImageCutoutPage = pageId === 'image-cutout';
     const isThemeSettingsPage = pageId === 'theme-settings';
+    const isProjectSkillPage = pageId === 'project-skills';
+    const isAiCallAnalysisPage = pageId === 'ai-call-analysis';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
     const def = getPageDefinition(pageId, label);
@@ -615,16 +617,17 @@
     refs.spectrumAnalysisPageSection?.classList.toggle('active', isSpectrumPage);
     refs.imageCutoutPageSection?.classList.toggle('active', isImageCutoutPage);
     refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage);
+    refs.projectSkillPageSection?.classList.toggle('active', isProjectSkillPage);
+    refs.aiCallAnalysisPageSection?.classList.toggle('active', isAiCallAnalysisPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isAiCallAnalysisPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage) {
-      if (refs.placeholderEyebrow) refs.placeholderEyebrow.textContent = def.eyebrow || '功能开发中';
-      if (refs.placeholderTitle) refs.placeholderTitle.textContent = def.title || label || '功能开发中';
-      if (refs.placeholderDesc) refs.placeholderDesc.textContent = def.desc || `“${label || def.title}”页面正在开发中。`;
-      if (refs.placeholderBackBtn) refs.placeholderBackBtn.textContent = '返回配置中心';
-      if (refs.placeholderOpenBtn) refs.placeholderOpenBtn.textContent = '查看仪表盘';
+    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isAiCallAnalysisPage) {
+      App.businessPages?.render?.(pageId, def);
+    }
+    if (isAiCallAnalysisPage) {
+      App.aiCallAnalysis?.render?.();
     }
 
     setActiveNavPage(pageId);
@@ -756,8 +759,6 @@
       });
     });
 
-    refs.placeholderBackBtn?.addEventListener('click', () => showPage('ai-config'));
-    refs.placeholderOpenBtn?.addEventListener('click', () => showPage('dashboard'));
     bindTopVisitedDragging();
     refs.topVisitedPages?.addEventListener('click', (event) => {
       if (suppressVisitedClick) return;

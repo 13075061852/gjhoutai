@@ -1077,6 +1077,307 @@
     return getAiImages(getAgentItems(question, options).items).slice(0, 4);
   };
 
+  const normalizeSkillText = (value) => String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const scoreSkillItem = (item, query) => {
+    const normalizedQuery = normalizeSkillText(query);
+    const text = getItemSearchText(item);
+    if (!normalizedQuery) return 0;
+    const exactValues = [item.id, item.code, item.title]
+      .map(normalizeSkillText)
+      .filter(Boolean);
+    if (exactValues.includes(normalizedQuery)) return 100;
+    if (exactValues.some((value) => value.includes(normalizedQuery) || normalizedQuery.includes(value))) return 80;
+
+    const terms = normalizedQuery.split(/[\s,，。;；]+/).filter((term) => term.length >= 2);
+    return terms.reduce((score, term) => {
+      if (text.includes(term)) return score + 12;
+      if (term.length >= 4 && text.includes(term.slice(0, Math.max(3, Math.floor(term.length * 0.7))))) return score + 4;
+      return score;
+    }, 0);
+  };
+
+  const toSkillItem = (item) => ({
+    id: item.id,
+    code: item.code || '',
+    title: item.title || '',
+    type: item.spectrumType || '',
+    category: item.category || '',
+    tags: Array.isArray(item.tags) ? item.tags : [],
+    date: item.date || '',
+    note: item.note || '',
+  });
+
+  const searchByAgent = ({ query = '', limit = 8 } = {}) => {
+    const normalizedLimit = Math.max(1, Math.min(20, Number.parseInt(limit, 10) || 8));
+    const entries = state.items
+      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+      .filter((entry) => entry.score > 0 || !String(query || '').trim())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, normalizedLimit)
+      .map((entry) => toSkillItem(entry.item));
+
+    return {
+      ok: true,
+      message: entries.length ? `已找到 ${entries.length} 张相关图谱。` : '未找到匹配的图谱。',
+      details: entries.map((item, index) => `${index + 1}. ${item.title || item.code}；类型=${item.type || '-'}；分类=${item.category || '-'}`),
+      data: { items: entries },
+      candidates: entries,
+    };
+  };
+
+  const resolveSkillTargets = ({ target = '', mode = 'query' } = {}) => {
+    if (mode === 'selected') return getSelectedItems();
+    if (mode === 'active') return [getActiveItem()].filter(Boolean);
+    if (mode === 'filtered') return getFilteredItems();
+
+    const query = String(target || '').trim();
+    if (!query) return [];
+
+    const exact = state.items.find((item) => [item.id, item.code, item.title]
+      .map((value) => normalizeSkillText(value))
+      .filter(Boolean)
+      .includes(normalizeSkillText(query)));
+    if (exact) return [exact];
+
+    return state.items
+      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
+  };
+
+  const resolveStrictSkillTargets = ({ target = '', mode = 'query' } = {}) => {
+    if (mode === 'selected') return getSelectedItems();
+    if (mode === 'active') return [getActiveItem()].filter(Boolean);
+    if (mode === 'filtered') return getFilteredItems();
+
+    const query = normalizeSkillText(target);
+    if (!query) return [];
+
+    return state.items.filter((item) => {
+      const values = [
+        item.id,
+        item.code,
+        item.title,
+        item.category,
+        item.note,
+        ...(Array.isArray(item.tags) ? item.tags : []),
+      ].map(normalizeSkillText).filter(Boolean);
+      return values.some((value) => value === query || value.includes(query));
+    });
+  };
+
+  const resolveCategorizeTargets = ({ target = '', mode = 'query' } = {}) => {
+    const strict = resolveStrictSkillTargets({ target, mode });
+    if (strict.length || mode !== 'query') return strict;
+
+    const query = String(target || '').trim();
+    if (!query) return [];
+
+    return state.items
+      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
+  };
+
+  const tagByAgent = ({ target = '', tags = [], mode = 'query' } = {}) => {
+    const normalizedTags = normalizeTags(Array.isArray(tags) ? tags.join('，') : tags);
+    if (!normalizedTags.length) {
+      return {
+        ok: false,
+        message: '请提供要写入的标签。',
+      };
+    }
+
+    const targets = resolveSkillTargets({ target, mode });
+    if (!targets.length) {
+      return {
+        ok: false,
+        message: target
+          ? `未找到匹配“${target}”的图谱，暂未写入标签。`
+          : '当前没有可写入标签的图谱。',
+        candidates: state.items.slice(0, 8).map(toSkillItem),
+      };
+    }
+
+    const targetIds = new Set(targets.map((item) => item.id));
+    let uploadedChanged = false;
+    let changedCount = 0;
+    let alreadyTaggedCount = 0;
+
+    state.items = state.items.map((item) => {
+      if (!targetIds.has(item.id)) return item;
+      const before = Array.isArray(item.tags) ? item.tags.length : 0;
+      const next = { ...item, tags: mergeTags(item.tags, normalizedTags) };
+      const after = next.tags.length;
+      if (after > before) changedCount += 1;
+      else alreadyTaggedCount += 1;
+      state.edits[next.id] = getEditableSnapshot(next);
+      if (next.uploaded) uploadedChanged = true;
+      return next;
+    });
+
+    saveItemEdits();
+    if (uploadedChanged) saveUploadedItems();
+    render();
+    App.projectSkills?.render?.();
+
+    const taggedItems = state.items.filter((item) => targetIds.has(item.id)).map(toSkillItem);
+    return {
+      ok: true,
+      message: `已为 ${taggedItems.length} 张图谱写入标签：${normalizedTags.join('、')}。`,
+      details: [
+        `新增标签图谱：${changedCount} 张`,
+        `原本已包含标签：${alreadyTaggedCount} 张`,
+        ...taggedItems.slice(0, 12).map((item, index) => `${index + 1}. ${item.title || item.code || item.id}；标签=${item.tags.join('、') || '-'}`),
+        taggedItems.length > 12 ? `还有 ${taggedItems.length - 12} 张未展开。` : '',
+      ].filter(Boolean),
+      data: {
+        updated: taggedItems.length,
+        changed: changedCount,
+        unchanged: alreadyTaggedCount,
+        tags: normalizedTags,
+        items: taggedItems,
+      },
+    };
+  };
+
+  const categorizeByAgent = ({ target = '', category = '', mode = 'query' } = {}) => {
+    const nextCategory = String(category || '').trim();
+    if (!nextCategory) {
+      return {
+        ok: false,
+        message: '请提供要整理到的新分类名称。',
+      };
+    }
+
+    const targets = resolveCategorizeTargets({ target, mode });
+    const candidates = target ? targets.map(toSkillItem) : [];
+    if (!targets.length) {
+      return {
+        ok: false,
+        message: target
+          ? `未找到匹配“${target}”的图谱，暂未更新分类。`
+          : '当前没有可更新分类的图谱。',
+        candidates,
+      };
+    }
+
+    const targetIds = new Set(targets.map((item) => item.id));
+    let uploadedChanged = false;
+    let changedCount = 0;
+    let unchangedCount = 0;
+
+    state.items = state.items.map((item) => {
+      if (!targetIds.has(item.id)) return item;
+      const before = String(item.category || '').trim();
+      const next = { ...item, category: nextCategory };
+      if (before === nextCategory) unchangedCount += 1;
+      else changedCount += 1;
+      state.edits[next.id] = getEditableSnapshot(next);
+      if (next.uploaded) uploadedChanged = true;
+      return next;
+    });
+
+    state.category = nextCategory;
+    state.tag = '全部';
+    saveItemEdits();
+    saveFilterState();
+    if (uploadedChanged) saveUploadedItems();
+    render();
+    App.projectSkills?.render?.();
+
+    const categorizedItems = state.items.filter((item) => targetIds.has(item.id)).map(toSkillItem);
+    return {
+      ok: true,
+      message: `已将 ${categorizedItems.length} 张图谱整理到分类：${nextCategory}。`,
+      details: [
+        `分类已更新：${changedCount} 张`,
+        `原本已在该分类：${unchangedCount} 张`,
+        ...categorizedItems.slice(0, 12).map((item, index) => `${index + 1}. ${item.title || item.code || item.id}；类型=${item.type || '-'}；分类=${item.category || '-'}`),
+        categorizedItems.length > 12 ? `还有 ${categorizedItems.length - 12} 张未展开。` : '',
+      ].filter(Boolean),
+      data: {
+        updated: categorizedItems.length,
+        changed: changedCount,
+        unchanged: unchangedCount,
+        category: nextCategory,
+        items: categorizedItems,
+      },
+    };
+  };
+
+  const deleteByAgent = ({ target = '', mode = 'target' } = {}) => {
+    const selected = getSelectedItems();
+    const active = getActiveItem();
+    let targets = [];
+
+    if (mode === 'selected') {
+      targets = selected;
+    } else if (mode === 'active') {
+      targets = active ? [active] : [];
+    } else {
+      const query = String(target || '').trim();
+      if (!query) {
+        return {
+          ok: false,
+          message: selected.length
+            ? '请说明要删除哪张图谱；如果要删除当前已选图谱，可以说“删除当前已选图谱”。'
+            : '请提供要删除的图谱名称、编号或先在图谱分析页选中目标图谱。',
+          candidates: selected.map(toSkillItem),
+        };
+      }
+
+      const scored = state.items
+        .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+      const topScore = scored[0]?.score || 0;
+      const topMatches = scored.filter((entry) => entry.score === topScore).map((entry) => entry.item);
+
+      if (!topMatches.length) {
+        return {
+          ok: false,
+          message: `未找到名称或编号匹配“${query}”的图谱。`,
+          candidates: state.items.slice(0, 8).map(toSkillItem),
+        };
+      }
+
+      if (topMatches.length > 1 && topScore < 100) {
+        return {
+          ok: false,
+          message: `“${query}”匹配到多张图谱。`,
+          candidates: topMatches.slice(0, 8).map(toSkillItem),
+        };
+      }
+
+      targets = [topMatches[0]];
+    }
+
+    if (!targets.length) {
+      return {
+        ok: false,
+        message: mode === 'selected' ? '当前没有已选图谱，无法删除。' : '当前没有可删除的图谱。',
+      };
+    }
+
+    const ids = [...new Set(targets.map((item) => item.id).filter(Boolean))];
+    const deleted = targets.map(toSkillItem);
+    commitDeleteItems(ids);
+    App.projectSkills?.render?.();
+    return {
+      ok: true,
+      message: `已删除 ${deleted.length} 张图谱。`,
+      details: deleted.map((item) => `${item.title || item.code || item.id}；类型=${item.type || '-'}；分类=${item.category || '-'}`),
+      data: { deleted: deleted.length, items: deleted },
+    };
+  };
+
   const closeImagePreview = () => {
     refs.previewDialog?.remove();
     refs.previewDialog = null;
@@ -1584,5 +1885,9 @@
     getSelectedAiImages: () => getAiImages(getSelectedAiItems()),
     getAgentContext,
     getAgentImages,
+    searchByAgent,
+    deleteByAgent,
+    tagByAgent,
+    categorizeByAgent,
   };
 })();

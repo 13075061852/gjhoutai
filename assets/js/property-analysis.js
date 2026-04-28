@@ -1133,11 +1133,11 @@
     });
 
     scoredRows.sort((a, b) => b.score - a.score);
-    const strongMatches = scoredRows.filter((item) => item.score >= 3).slice(0, 30);
-    const similarMatches = scoredRows.filter((item) => item.score > 0 && item.score < 3).slice(0, 20);
+    const strongMatches = scoredRows.filter((item) => item.score >= 3);
+    const similarMatches = scoredRows.filter((item) => item.score > 0 && item.score < 3);
     const fallbackRows = selectedRows.length
       ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
-      : visible.filteredRows.slice(0, 20).map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
+      : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
     const rowsForSummary = strongMatches.length
       ? strongMatches.map((item) => item.row)
       : selectedRows.length
@@ -1153,7 +1153,7 @@
 
     if (metrics.length) sections.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
 
-    const appendRows = (title, items, limit) => {
+    const appendRows = (title, items) => {
       if (!items.length) return;
       const grouped = items.reduce((map, item) => {
         const key = item.sheetName || activeSheet || '未命名工作表';
@@ -1163,15 +1163,15 @@
       }, new Map());
       sections.push(title);
       grouped.forEach((group, sheetName) => {
-        sections.push(`### ${sheetName}`);
-        sections.push(...summarizeRowsForAi(group.rows, group.columns, limit));
+        sections.push(`### ${sheetName}（${group.rows.length} 行）`);
+        sections.push(...summarizeRowsForAi(group.rows, group.columns, group.rows.length));
       });
     };
 
-    appendRows('强匹配数据（最多 30 行）：', strongMatches, 30);
-    appendRows('相近匹配数据（最多 20 行）：', similarMatches, 20);
+    appendRows(`强匹配数据（共 ${strongMatches.length} 行）：`, strongMatches);
+    appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches);
     if (!strongMatches.length && !similarMatches.length) {
-      appendRows(selectedRows.length ? '当前已选数据：' : '当前筛选数据预览：', fallbackRows, 20);
+      appendRows(selectedRows.length ? '当前已选数据：' : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`, fallbackRows);
     }
 
     return {

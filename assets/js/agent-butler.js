@@ -9,6 +9,8 @@
     'property-analysis': '物性分析',
     'spectrum-analysis': '图谱分析',
     'image-cutout': '抠图助手',
+    'project-skills': '技能面板',
+    'ai-call-analysis': 'AI调用分析面板',
     'theme-settings': '主题设置',
   };
 
@@ -37,8 +39,8 @@
     {
       id: 'project',
       label: '项目管家',
-      pages: ['ai-config', 'theme-settings'],
-      patterns: [/项目|后台|功能|页面|菜单|配置|主题|怎么用|能做什么|管家|agent|助手/],
+      pages: ['ai-config', 'project-skills', 'ai-call-analysis', 'theme-settings'],
+      patterns: [/项目|后台|功能|页面|菜单|配置|主题|技能|调用|执行|怎么用|能做什么|管家|agent|助手/],
     },
   ];
 
@@ -52,8 +54,10 @@
         '【项目管家知识】',
         '系统名称：广俊塑料科技后台管理系统。',
         `当前页面：${activePageLabel}`,
-        '已接入能力：配置中心、物性分析、图谱分析、抠图助手、主题设置、右侧 Gjun AI 聊天。',
+        '已接入能力：配置中心、物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板、主题设置、右侧 Gjun AI 聊天。',
         '数据分析能力：物性分析可读取 Excel/JSON 表格并检索型号、批次和指标；图谱分析可管理图谱图片、分类、标签和备注；抠图助手可上传图片、去除背景、裁剪并导出透明 PNG。',
+        '技能化操作：技能面板定义项目专属技能、输入输出规范和执行记录，右侧 Gjun AI 可按技能协议调用确定性的项目操作。',
+        'AI调用分析：AI调用分析面板记录模型、Token、费用、耗时、来源和成功失败状态，方便追踪成本。',
         '回答策略：优先结合当前页面、用户问题中的型号/批次/图谱/图片关键词，以及后台检索到的数据；没有命中数据时要明确说明未找到。',
         question ? `用户问题：${question}` : '',
       ].filter(Boolean).join('\n'),

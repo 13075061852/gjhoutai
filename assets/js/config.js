@@ -409,6 +409,7 @@
   };
 
   const loadSavedConfig = () => utils.readJson(constants.CONFIG_STORAGE_KEY, null);
+  const getUsdToCnyRate = () => usdToCny;
 
   const getModelOptions = () => {
     if (!refs.modelSelect) return [];
@@ -616,7 +617,27 @@
 
   const closeModelDropdown = () => setModelDropdownOpen(false);
 
-  const openModelDropdown = () => setModelDropdownOpen(true);
+  const scrollActiveModelIntoView = () => {
+    const panel = refs.modelSelectPanel;
+    const activeOption = panel?.querySelector('.model-dropdown-option.is-active');
+    if (!panel || !activeOption) return;
+
+    const maxPanelHeight = Number.parseFloat(window.getComputedStyle(panel).maxHeight);
+    const panelViewportHeight = Math.min(
+      panel.scrollHeight,
+      Number.isFinite(maxPanelHeight) ? maxPanelHeight : panel.clientHeight,
+    );
+    const panelRect = panel.getBoundingClientRect();
+    const activeRect = activeOption.getBoundingClientRect();
+    const activeTop = (activeRect.top - panelRect.top) + panel.scrollTop;
+    const nextScrollTop = activeTop - ((panelViewportHeight - activeRect.height) / 2);
+    panel.scrollTop = Math.max(0, nextScrollTop);
+  };
+
+  const openModelDropdown = () => {
+    setModelDropdownOpen(true);
+    requestAnimationFrame(() => requestAnimationFrame(scrollActiveModelIntoView));
+  };
 
   const syncModelDropdown = () => {
     if (!refs.modelDropdown || !refs.modelSelectPanel || !refs.modelSelectTriggerLabel) return;
@@ -845,6 +866,12 @@
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
+    const testMessages = [
+      { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+      { role: 'user', content: '请用一句话回复：连接测试通过。' },
+    ];
+    const callStartedAt = new Date().toISOString();
+    const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
       setStatus('正在测试聊天接入…', 'success');
@@ -854,10 +881,7 @@
         signal: controller.signal,
         body: JSON.stringify({
           model,
-          messages: [
-            { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
-            { role: 'user', content: '请用一句话回复：连接测试通过。' },
-          ],
+          messages: testMessages,
           temperature: 0.2,
           max_tokens: 32,
           stream: false,
@@ -869,8 +893,53 @@
       setStatus(answer
         ? `接入正常，AI 已返回：${answer.slice(0, 24)}${answer.length > 24 ? '…' : ''}`
         : '接入正常，AI 已返回结果。', 'success');
+      App.aiCallAnalysis?.record?.({
+        source: 'config-test',
+        provider: config.aiProvider,
+        model,
+        endpoint: `${config.baseUrl}/chat/completions`,
+        pageId: 'ai-config',
+        startedAt: callStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
+        status: 'success',
+        statusText: 'connection-ok',
+        prompt: '配置中心连接测试',
+        responsePreview: answer || '',
+        apiUsage: payload?.usage || null,
+        requestMessages: testMessages,
+        completionText: answer || '',
+        requestMeta: {
+          messages: testMessages.length,
+          images: 0,
+          files: 0,
+          attachedData: false,
+          stream: false,
+        },
+      });
     } catch (error) {
       setStatus(`测试失败：${error?.message || '网络或权限错误'}`, 'warn');
+      App.aiCallAnalysis?.record?.({
+        source: 'config-test',
+        provider: config.aiProvider,
+        model,
+        endpoint: `${config.baseUrl}/chat/completions`,
+        pageId: 'ai-config',
+        startedAt: callStartedAt,
+        endedAt: new Date().toISOString(),
+        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
+        status: 'failed',
+        error: error?.message || '网络或权限错误',
+        prompt: '配置中心连接测试',
+        requestMessages: testMessages,
+        requestMeta: {
+          messages: testMessages.length,
+          images: 0,
+          files: 0,
+          attachedData: false,
+          stream: false,
+        },
+      });
     } finally {
       clearTimeout(timeout);
     }
@@ -1124,6 +1193,7 @@
     persistConfig,
     getRequestHeaders,
     loadSavedConfig,
+    getUsdToCnyRate,
     buildModelSelect,
     fetchModels,
     testConfig,

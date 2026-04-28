@@ -13,6 +13,8 @@
     App.spectrumAnalysis?.init();
     App.imageCutout?.init();
     App.config?.init();
+    App.aiCallAnalysis?.init();
+    App.projectSkills?.init();
     App.chat?.init();
   };
 

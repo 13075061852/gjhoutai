@@ -76,6 +76,20 @@
       .config-layout{grid-template-columns:1fr}
       .config-form{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
+      .business-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .business-grid{grid-template-columns:1fr}
+      .biz-stat-strip,
+      .biz-dataflow{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .biz-dashboard-grid,
+      .biz-stock-layout,
+      .biz-production-layout,
+      .biz-permission-layout,
+      .biz-audit-layout,
+      .biz-invoice-layout,
+      .biz-formula-layout,
+      .biz-archive-layout{grid-template-columns:1fr}
+      .biz-today-list ol{grid-template-columns:1fr}
+      .biz-archive-layout .biz-table-panel{grid-column:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .spectrum-page{
         height:calc(100dvh - 88px);
@@ -318,6 +332,22 @@
       .oss-config-grid{grid-template-columns:1fr}
       .config-layout{grid-template-columns:1fr}
       .placeholder-card{padding:20px}
+      .business-lanes{
+        grid-template-columns:1fr;
+      }
+      .biz-kanban{
+        grid-template-columns:repeat(4, minmax(220px, 260px));
+      }
+      .biz-rhythm{
+        grid-template-columns:repeat(5, minmax(72px, 1fr));
+        overflow:auto;
+      }
+      .biz-profile{
+        grid-template-columns:1fr;
+      }
+      .biz-avatar{
+        grid-row:auto;
+      }
       .analysis-filter-card,
       .analysis-panel-head,
       .analysis-panel-footer{padding-left:16px;padding-right:16px}
@@ -341,9 +371,17 @@
       .analysis-panel-title{
         font-size:17px;
       }
-      .theme-settings-head{
-        flex-direction:column;
-        align-items:stretch;
+      .project-skill-workspace,
+      .ai-call-analysis-stats,
+      .ai-call-analysis-overview,
+      .ai-call-analysis-grid{
+        grid-template-columns:1fr;
+      }
+      .ai-call-analysis-actions{
+        justify-content:flex-start;
+      }
+      .ai-call-detail-grid{
+        grid-template-columns:1fr;
       }
       .theme-reset-btn{
         align-self:flex-start;
@@ -574,15 +612,13 @@
       .config-actions-panel .outline-btn{
         width:100%;
       }
-      .theme-settings-head{
-        padding:16px;
-      }
-      .theme-settings-head h1{
-        font-size:22px;
-      }
       .theme-card{
         min-height:174px;
       }
+      .business-kpi-grid{grid-template-columns:1fr}
+      .biz-stat-strip,
+      .biz-dataflow,
+      .biz-warehouse-map{grid-template-columns:1fr}
       .cutout-actions .analysis-toolbar-btn{
         flex:1 1 128px;
         justify-content:center;

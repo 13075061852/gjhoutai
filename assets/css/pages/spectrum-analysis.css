@@ -1596,3 +1596,29 @@
       background:#eff6ff;
       color:var(--accent);
     }
+    .spectrum-upload-issue-card{
+      width:min(520px,100%);
+    }
+    .spectrum-upload-issue-list{
+      max-height:240px;
+      overflow:auto;
+      margin:12px 0 0;
+      padding:0 0 0 20px;
+      color:#334155;
+      font-size:12px;
+      line-height:1.6;
+      font-weight:800;
+    }
+    .spectrum-upload-issue-list li + li{
+      margin-top:8px;
+    }
+    .spectrum-upload-issue-list span{
+      display:block;
+      overflow-wrap:anywhere;
+    }
+    .spectrum-upload-issue-list em{
+      display:block;
+      color:#dc2626;
+      font-style:normal;
+      font-weight:750;
+    }

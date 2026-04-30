@@ -339,6 +339,179 @@
       font-style:normal;
       font-weight:700;
     }
+    .ai-upload-auth{
+      margin-top:12px;
+      padding:12px;
+      border:1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+      border-radius:8px;
+      background:color-mix(in srgb, var(--accent-soft) 32%, var(--surface));
+      box-shadow:0 12px 26px rgba(37,99,235,.08);
+    }
+    .ai-upload-auth-head{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .ai-upload-auth-icon{
+      flex:0 0 auto;
+      width:34px;
+      height:34px;
+      display:grid;
+      place-items:center;
+      border-radius:8px;
+      background:var(--accent);
+      color:#fff;
+      font-size:18px;
+    }
+    .ai-upload-auth strong{
+      display:block;
+      color:var(--text);
+      font-size:13px;
+      line-height:1.35;
+      font-weight:850;
+    }
+    .ai-upload-auth em{
+      display:block;
+      margin-top:2px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+      font-style:normal;
+      font-weight:750;
+    }
+    .ai-upload-auth p{
+      margin:10px 0 0;
+      color:var(--text-2);
+      font-size:12.5px;
+      line-height:1.65;
+      font-weight:650;
+    }
+    .ai-upload-auth-list{
+      margin-top:10px;
+      padding:10px;
+      border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+      border-radius:8px;
+      background:color-mix(in srgb, var(--accent-soft) 24%, var(--surface));
+    }
+    .ai-upload-auth-list-title{
+      margin-bottom:8px;
+      color:var(--text);
+      font-size:12px;
+      font-weight:850;
+      line-height:1.35;
+    }
+    .ai-upload-auth-list ol{
+      display:grid;
+      gap:6px;
+      margin:0;
+      padding:0;
+      list-style:none;
+    }
+    .ai-upload-auth-list li{
+      display:grid;
+      grid-template-columns:22px minmax(0,1fr);
+      gap:8px;
+      align-items:start;
+      color:var(--text-2);
+      font-size:12px;
+      line-height:1.35;
+      font-weight:700;
+    }
+    .ai-upload-auth-list li > span{
+      display:grid;
+      place-items:center;
+      width:22px;
+      height:22px;
+      border-radius:999px;
+      background:var(--surface);
+      color:var(--accent);
+      font-size:11px;
+      font-weight:850;
+    }
+    .ai-upload-auth-list strong{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:var(--text);
+      font-size:12px;
+      line-height:1.35;
+      font-weight:800;
+    }
+    .ai-upload-auth-list em{
+      grid-column:2;
+      margin-top:-3px;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.35;
+      font-weight:700;
+    }
+    .ai-upload-auth-list .is-more{
+      display:block;
+      padding-left:30px;
+      color:var(--muted);
+      font-size:11.5px;
+      font-weight:750;
+    }
+    .ai-upload-auth-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      margin-top:12px;
+    }
+    .ai-upload-auth-btn{
+      min-height:40px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:12.5px;
+      font-weight:850;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      cursor:pointer;
+      transition:background .2s ease, border-color .2s ease, color .2s ease, transform .2s ease, opacity .2s ease;
+    }
+    .ai-upload-auth-btn.is-primary{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .ai-upload-auth-btn:hover:not(:disabled){
+      transform:translateY(-1px);
+      border-color:var(--border-2);
+      background:var(--surface-3);
+    }
+    .ai-upload-auth-btn.is-primary:hover:not(:disabled){
+      border-color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 88%, #000);
+    }
+    .ai-upload-auth-btn:focus-visible{
+      outline:3px solid var(--accent-soft);
+      outline-offset:2px;
+    }
+    .ai-upload-auth-btn:disabled{
+      cursor:not-allowed;
+      opacity:.58;
+      transform:none;
+    }
+    .ai-upload-auth.is-approved{
+      border-color:color-mix(in srgb, var(--success) 34%, var(--border));
+      background:color-mix(in srgb, rgba(22,163,74,.12) 52%, var(--surface));
+    }
+    .ai-upload-auth.is-cancelled{
+      border-color:color-mix(in srgb, var(--muted) 28%, var(--border));
+      background:var(--surface);
+      box-shadow:none;
+    }
+    @media (max-width:420px){
+      .ai-upload-auth-actions{
+        grid-template-columns:1fr;
+      }
+    }
     .chat-image-preview{
       position:fixed;
       inset:0;
@@ -421,4 +594,3 @@
       color:var(--text-2);
     }
     .bottom-space{height:8px}
-

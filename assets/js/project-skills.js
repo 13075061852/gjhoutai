@@ -8,9 +8,10 @@
   const HISTORY_KEY = 'gjh-project-skill-history-v1';
   const MAX_HISTORY = 18;
 
-  const PAGE_ALIASES = {
+  const EXTRA_PAGE_ALIASES = {
     配置中心: 'ai-config',
     ai配置: 'ai-config',
+    AI配置: 'ai-config',
     物性分析: 'property-analysis',
     物性: 'property-analysis',
     图谱分析: 'spectrum-analysis',
@@ -26,6 +27,31 @@
     费用分析: 'ai-call-analysis',
     主题设置: 'theme-settings',
     主题: 'theme-settings',
+    仪表盘: 'dashboard',
+    首页: 'dashboard',
+    订单管理: 'order-management',
+    订单: 'order-management',
+    开单打印: 'invoice-print',
+    开单: 'invoice-print',
+    销售库存: 'sales-stock',
+    库存: 'sales-stock',
+    配方管理: 'formula-management',
+    配方: 'formula-management',
+    生产计划: 'production-plan',
+    生产: 'production-plan',
+    供应商档案: 'supplier-archive',
+    供应商: 'supplier-archive',
+    客户档案: 'customer-archive',
+    客户: 'customer-archive',
+    人员档案: 'personnel-archive',
+    人员: 'personnel-archive',
+    数据源配置: 'data-source-config',
+    数据源: 'data-source-config',
+    权限管理: 'permission-management',
+    权限: 'permission-management',
+    审计日志: 'audit-log',
+    审计: 'audit-log',
+    日志: 'audit-log',
   };
 
   const nowText = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -194,11 +220,37 @@
     };
   };
 
+  const getPageAliasEntries = () => {
+    const fromPageDefs = Object.entries(constants.PAGE_DEFS || {}).flatMap(([pageId, def]) => {
+      const title = String(def?.title || '').trim();
+      return [
+        [pageId, pageId],
+        title ? [title, pageId] : null,
+      ].filter(Boolean);
+    });
+    return [
+      ...Object.entries(EXTRA_PAGE_ALIASES),
+      ...fromPageDefs,
+    ]
+      .map(([alias, pageId]) => [normalizeText(alias), pageId])
+      .filter(([alias, pageId]) => alias && pageId)
+      .sort((a, b) => b[0].length - a[0].length);
+  };
+
   const resolvePageId = (prompt) => {
     const text = normalizeText(prompt);
-    const exact = Object.entries(PAGE_ALIASES).find(([alias]) => text.includes(normalizeText(alias)));
+    const exact = getPageAliasEntries().find(([alias]) => text.includes(alias));
     return exact?.[1] || '';
   };
+
+  const hasOpenPageIntent = (prompt) => {
+    const text = String(prompt || '');
+    return /(?:打开|进入|切换到|跳转到|转到|去|查看).*(?:页面|面板|中心|档案|管理|计划|库存|日志|仪表盘|助手|分析|配置|主题|技能|调用|费用|订单|客户|供应商|人员|权限|审计|数据源|生产|配方|销售|开单|抠图|图谱|物性)/.test(text);
+  };
+
+  const getPageCatalog = () => Object.entries(constants.PAGE_DEFS || {})
+    .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
+    .join('；');
 
   const normalizeResult = (result, fallbackMessage = '技能已执行。') => {
     if (!result || typeof result !== 'object') {
@@ -442,18 +494,18 @@
       module: '图谱分析',
       icon: 'ti-photo-search',
       level: '查询型',
-      summary: '按标题、编号、分类、标签、DSC/TGA 类型或备注检索图谱元数据。',
-      inputSpec: '{ "query": "关键词", "limit": 8 }',
-      outputSpec: '{ "ok": true, "items": [{ "title": "...", "type": "DSC" }] }',
+      summary: '按标题、编号、分类、标签、DSC/TGA 类型或备注检索图谱，并返回可上传给视觉模型的图谱图片。',
+      inputSpec: '{ "query": "关键词", "limit": "可选，只有用户明确要求数量时才填写" }',
+      outputSpec: '{ "ok": true, "items": [{ "title": "...", "type": "DSC" }], "images": ["图谱图片"] }',
       examples: ['查找 320G6 的 DSC 图谱', '检索标签里有异常的 TGA 图片'],
       infer(prompt) {
         const text = String(prompt || '');
-        if (!/(?:查找|搜索|检索|找).*(?:图谱|谱图|图片|dsc|tga)|(?:图谱|谱图|图片|dsc|tga).*(?:查找|搜索|检索|找)/i.test(text)) return null;
+        if (!/(?:查找|搜索|检索|找|分析|对比|比较|查看|看).*(?:图谱|谱图|图片|曲线|dsc|tga)|(?:图谱|谱图|图片|曲线|dsc|tga).*(?:查找|搜索|检索|找|分析|对比|比较|查看|看)/i.test(text)) return null;
         const query = stripCommandNoise(text)
-          .replace(/(查找|搜索|检索|找|图谱|谱图|图片|图像|图谱库|里面|中的|一下|帮我|请)/g, ' ')
+          .replace(/(查找|搜索|检索|找|分析|对比|比较|查看|看|图谱|谱图|图片|图像|曲线|图谱库|里面|中的|一下|帮我|请)/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
-        return { skillId: this.id, confidence: 0.76, input: { query, limit: 8 } };
+        return { skillId: this.id, confidence: 0.76, input: { query } };
       },
       async handler(input = {}) {
         if (!App.spectrumAnalysis?.searchByAgent) {
@@ -508,7 +560,7 @@
       level: '上下文型',
       summary: '仅在用户明确要求跨模块/物性+图谱联合分析时，把相关数据整理成统一的 AI 分析上下文。',
       inputSpec: '{ "question": "用户问题", "forceCurrentPage": false }',
-      outputSpec: '{ "ok": true, "context": "...", "imageCount": 1 }',
+      outputSpec: '{ "ok": true, "context": "...", "images": ["图谱图片"], "imageCount": 1 }',
       examples: ['把当前型号的物性和图谱合成分析包', '生成 320G6-N11 的联合分析上下文'],
       infer(prompt) {
         const text = String(prompt || '');
@@ -533,7 +585,7 @@
           ok: true,
           message: '联合分析包已生成，可继续交给 AI 进行综合判断。',
           details: [`上下文长度：${context.length} 字符`, `可上传图片：${images.length} 张`],
-          data: { context, imageCount: images.length },
+          data: { context, images, imageCount: images.length },
         };
       },
     },
@@ -543,16 +595,16 @@
       module: '导航',
       icon: 'ti-route',
       level: '执行型',
-      summary: '根据自然语言跳转到配置中心、物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板或主题设置。',
+      summary: '根据自然语言跳转到系统内任意已注册页面，包括业务中心、基础数据、系统管理和 AI 功能页。',
       inputSpec: '{ "pageId": "spectrum-analysis" }',
       outputSpec: '{ "ok": true, "pageId": "spectrum-analysis" }',
-      examples: ['打开技能面板', '切换到图谱分析', '打开AI调用分析面板'],
+      examples: ['打开客户档案', '切换到图谱分析', '打开AI调用分析面板'],
       infer(prompt) {
         const text = String(prompt || '');
-        if (!/(?:打开|进入|切换到|跳转到|去).*(?:页面|面板|物性|图谱|抠图|配置|主题|技能|调用|费用|分析)/.test(text)) return null;
+        if (!hasOpenPageIntent(text)) return null;
         const pageId = resolvePageId(text);
         if (!pageId) return null;
-        return { skillId: this.id, confidence: 0.82, input: { pageId } };
+        return { skillId: this.id, confidence: 0.9, input: { pageId } };
       },
       async handler(input = {}) {
         const pageId = String(input.pageId || '').trim();
@@ -785,13 +837,18 @@
       '【项目技能调用协议】',
       '你是项目技能调度器：先理解用户真实意图，再从可用技能中选择最合适的技能和参数。',
       '当用户要求执行项目内操作、修改页面数据、整理/删除/归类/打标/跳转/查询项目数据时，优先调用项目技能，不要凭空声称已经操作。',
+      `用户要求打开、进入、切换或查看系统页面时，优先调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
       '如果需要让前端执行技能，只输出严格 JSON，不要混入解释、Markdown 或自然语言：',
       formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
       '技能执行后，前端会把执行结果回写给用户。',
       '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
-      '用户只问单个型号、批次或物性指标分析时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
+      '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。',
+      '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用 spectrum.searchImages；不要因为问题里有型号或系列号就改调 property.searchRows。',
+      '只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
       '物性数据默认上传所有符合条件的匹配行；只有用户明确说“前 N 条/只要 N 行/显示 N 个”等数量限制时，才限制上传数量。',
       '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
+      '凡是调用 spectrum.searchImages 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
+      '图谱图片默认上传所有符合条件的匹配图片；只有用户明确说“前 N 张/只要 N 张/显示 N 个”等数量限制时，才给 spectrum.searchImages 填写 limit。',
       '图谱数据处理按 CRUD 选择技能：查询用 spectrum.searchImages；新增待上传记录用 spectrum.createImageRecord；选择范围用 spectrum.selectImages；修改标题/分类/日期/备注/标签用 spectrum.updateImages 或专用标签/分类技能；删除用 spectrum.deleteImage。',
       '所有增删改都必须给出明确 target 或 mode。单个对象优先使用名称/编号精确匹配；用户说“当前选中”用 mode=selected，说“当前筛选/当前分类”用 mode=filtered。',
       '如果目标可能命中无关数据，先调用 spectrum.searchImages 或 spectrum.selectImages 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',

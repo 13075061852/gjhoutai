@@ -529,6 +529,14 @@
                     <i class="ti ti-upload" aria-hidden="true"></i>
                     <span>上传图谱</span>
                   </button>
+                  <button class="analysis-toolbar-btn" id="spectrumImportBtn" type="button">
+                    <i class="ti ti-package-import" aria-hidden="true"></i>
+                    <span>导入包</span>
+                  </button>
+                  <button class="analysis-toolbar-btn" id="spectrumExportBtn" type="button">
+                    <i class="ti ti-package-export" aria-hidden="true"></i>
+                    <span>导出包</span>
+                  </button>
                   <button class="analysis-toolbar-btn" id="spectrumPrintBtn" type="button" disabled>
                     <i class="ti ti-printer" aria-hidden="true"></i>
                     <span>打印列表</span>
@@ -541,6 +549,7 @@
                 <div class="spectrum-tag-cloud" id="spectrumTagFilters"></div>
               </div>
               <input id="spectrumUploadInput" type="file" accept="image/*" multiple hidden />
+              <input id="spectrumImportInput" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden />
             </article>
 
             <div class="spectrum-workbench">
@@ -798,8 +807,8 @@
                 <div class="footer-actions">
                   <div class="footer-actions-left">
                     <button class="tiny-btn data-attach-btn" type="button" id="assistantDataToggleBtn" aria-pressed="false">
-                      <i class="ti ti-world" aria-hidden="true"></i>
-                      <span>全局</span>
+                      <i class="ti ti-plug-off" aria-hidden="true"></i>
+                      <span>不接入</span>
                     </button>
                     <button class="tiny-btn" type="button" id="clearChatBtn">
                       <i class="ti ti-trash" aria-hidden="true"></i>
@@ -829,9 +838,10 @@
   <script src="./assets/js/custom-select.js?v=20260425-read-status-duration"></script>
   <script src="./assets/js/business-pages.js?v=20260427-business-pages"></script>
   <script src="./assets/js/navigation.js?v=20260425-read-status-duration"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="./assets/js/property-analysis.js?v=20260425-read-status-duration"></script>
-  <script src="./assets/js/spectrum-analysis.js?v=20260425-read-status-duration"></script>
+  <script src="./assets/js/spectrum-analysis.js?v=20260430-spectrum-package-import-export"></script>
   <script src="./assets/js/image-cutout.js?v=20260427-balanced-protection-mask"></script>
   <script src="./assets/js/theme-settings.js?v=20260425-read-status-duration"></script>
   <script src="./assets/js/config.js?v=20260425-read-status-duration"></script>

@@ -41,6 +41,9 @@
     refs.searchInput = document.getElementById('spectrumSearchInput');
     refs.uploadBtn = document.getElementById('spectrumUploadBtn');
     refs.uploadInput = document.getElementById('spectrumUploadInput');
+    refs.importBtn = document.getElementById('spectrumImportBtn');
+    refs.importInput = document.getElementById('spectrumImportInput');
+    refs.exportBtn = document.getElementById('spectrumExportBtn');
     refs.printBtn = document.getElementById('spectrumPrintBtn');
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
     refs.tagFilters = document.getElementById('spectrumTagFilters');
@@ -67,6 +70,74 @@
   };
 
   const getUploadTitle = (file) => file.name.replace(/\.[^.]+$/, '') || file.name;
+
+  const getFileBaseName = (name) => String(name || '').split('/').pop().replace(/\.[^.]+$/, '').trim();
+
+  const getPathFileName = (path) => String(path || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+
+  const getPathCategory = (path) => {
+    const parts = String(path || '').replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 2] : '';
+  };
+
+  const sanitizeArchiveSegment = (value, fallback = '未分类') => {
+    const text = String(value || '').trim()
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, ' ');
+    return text || fallback;
+  };
+
+  const getImageMimeFromName = (name) => {
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    const map = {
+      avif: 'image/avif',
+      bmp: 'image/bmp',
+      gif: 'image/gif',
+      heic: 'image/heic',
+      heif: 'image/heif',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      svg: 'image/svg+xml',
+      tif: 'image/tiff',
+      tiff: 'image/tiff',
+      webp: 'image/webp',
+    };
+    return map[ext] || 'image/png';
+  };
+
+  const getImageExtensionFromDataUrl = (dataUrl) => {
+    const mime = String(dataUrl || '').match(/^data:([^;]+);base64,/)?.[1] || 'image/png';
+    const map = {
+      'image/avif': '.avif',
+      'image/bmp': '.bmp',
+      'image/gif': '.gif',
+      'image/heic': '.heic',
+      'image/heif': '.heif',
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/svg+xml': '.svg',
+      'image/tiff': '.tif',
+      'image/webp': '.webp',
+    };
+    return map[mime.toLowerCase()] || '.png';
+  };
+
+  const isImageUploadFile = (file) => {
+    const type = String(file?.type || '').toLowerCase();
+    const name = String(file?.name || '').toLowerCase();
+    return type.startsWith('image/') || /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/.test(name);
+  };
+
+  const isImageArchivePath = (path) => /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i.test(String(path || ''));
+
+  const isZipUploadFile = (file) => {
+    const type = String(file?.type || '').toLowerCase();
+    const name = String(file?.name || '').toLowerCase();
+    return name.endsWith('.zip') || type === 'application/zip' || type === 'application/x-zip-compressed';
+  };
+
+  const getUploadIssueName = (file) => String(file?.name || '').trim() || '未命名文件';
 
   const findItemByTitle = (title) => {
     const normalized = String(title || '').trim().toLowerCase();
@@ -606,6 +677,78 @@
     refs.uploadConflictDialog = dialog;
   });
 
+  const openImportConflictDialog = (count) => new Promise((resolve) => {
+    refs.uploadConflictDialog?.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'spectrum-delete-dialog spectrum-upload-conflict-dialog';
+    dialog.innerHTML = `
+      <div class="spectrum-delete-card spectrum-upload-conflict-card" role="dialog" aria-modal="true" aria-labelledby="spectrumImportConflictTitle">
+        <div class="spectrum-delete-icon spectrum-upload-conflict-icon"><i class="ti ti-file-alert" aria-hidden="true"></i></div>
+        <div class="spectrum-delete-main">
+          <div class="spectrum-delete-title" id="spectrumImportConflictTitle">发现 ${count} 项同名冲突</div>
+          <div class="spectrum-delete-text">导入包中有 ${count} 张图片与当前图谱库同名。跳过会保留原图片，覆盖会替换原图片并更新分类和标签。</div>
+        </div>
+        <div class="spectrum-delete-actions">
+          <button class="analysis-toolbar-btn" type="button" data-spectrum-upload-skip>全部跳过</button>
+          <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-upload-overwrite>全部覆盖</button>
+        </div>
+      </div>
+    `;
+    const finish = (action) => {
+      dialog.remove();
+      refs.uploadConflictDialog = null;
+      refs.uploadConflictResolver = null;
+      resolve(action);
+    };
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog || event.target.closest('[data-spectrum-upload-skip]')) finish('skip');
+      if (event.target.closest('[data-spectrum-upload-overwrite]')) finish('overwrite');
+    });
+    refs.uploadConflictResolver = finish;
+    document.body.appendChild(dialog);
+    refs.uploadConflictDialog = dialog;
+  });
+
+  const openUploadIssueDialog = (issues) => {
+    const entries = Array.isArray(issues) ? issues.filter(Boolean) : [];
+    if (!entries.length) return;
+
+    refs.uploadIssueDialog?.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'spectrum-delete-dialog spectrum-upload-issue-dialog';
+    dialog.innerHTML = `
+      <div class="spectrum-delete-card spectrum-upload-issue-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadIssueTitle">
+        <div class="spectrum-delete-icon spectrum-upload-issue-icon"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+        <div class="spectrum-delete-main">
+          <div class="spectrum-delete-title" id="spectrumUploadIssueTitle">发现 ${entries.length} 张异常图片</div>
+          <div class="spectrum-delete-text">以下文件未能导入，请检查格式或文件是否损坏。</div>
+          <ol class="spectrum-upload-issue-list">
+            ${entries.map((item) => `
+              <li>
+                <span>${utils.escapeHtml(item.name || '未命名文件')}</span>
+                <em>${utils.escapeHtml(item.reason || '无法识别')}</em>
+              </li>
+            `).join('')}
+          </ol>
+        </div>
+        <div class="spectrum-delete-actions">
+          <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-upload-issue-close>知道了</button>
+        </div>
+      </div>
+    `;
+
+    const close = () => {
+      dialog.remove();
+      refs.uploadIssueDialog = null;
+    };
+
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog || event.target.closest('[data-spectrum-upload-issue-close]')) close();
+    });
+    refs.uploadIssueDialog = dialog;
+    document.body.appendChild(dialog);
+  };
+
   const renderGallery = () => {
     const items = syncActiveWithFilteredItems();
     const selectedCount = state.selectedIds.size;
@@ -988,12 +1131,14 @@
 
   const getAiImages = (items) => items
     .filter((item) => String(item?.image || '').trim())
-    .slice(0, 4)
     .map((item) => ({
       type: 'image_url',
       image_url: {
         url: item.image,
       },
+      preview_url: item.image,
+      label: item.title || item.code || '图谱图片',
+      meta: [item.spectrumType || item.type, item.category].filter(Boolean).join(' · '),
     }));
 
   const getAiContext = () => {
@@ -1069,7 +1214,7 @@
 
   const getAgentItems = (question = '', options = {}) => {
     const selected = getSelectedItems();
-    if (selected.length) return { items: selected.slice(0, 8), reason: '使用当前已选图谱' };
+    if (selected.length) return { items: selected, reason: '使用当前已选图谱' };
 
     const terms = extractAgentTerms(question);
     const scored = state.items
@@ -1077,14 +1222,14 @@
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((entry) => entry.item);
-    if (scored.length) return { items: scored.slice(0, 8), reason: '根据问题关键词匹配图谱库' };
+    if (scored.length) return { items: scored, reason: '根据问题关键词匹配图谱库' };
 
     const active = getActiveItem();
     if (active) return { items: [active], reason: '未命中关键词，使用当前激活图谱' };
 
     const filtered = getFilteredItems();
     return {
-      items: filtered.slice(0, 8),
+      items: filtered,
       reason: options.forceCurrentPage ? '使用当前图谱筛选结果' : '提供图谱库概览',
     };
   };
@@ -1121,7 +1266,7 @@
   const getAgentImages = (question = '', options = {}) => {
     const shouldAttach = options.forceCurrentPage || /(?:图谱|图片|图像|曲线|谱图|分析这张|看这张|当前图)/.test(String(question || ''));
     if (!shouldAttach) return [];
-    return getAiImages(getAgentItems(question, options).items).slice(0, 4);
+    return getAiImages(getAgentItems(question, options).items);
   };
 
   const normalizeSkillText = (value) => String(value ?? '')
@@ -1186,14 +1331,17 @@
     ].filter(Boolean).join('\n');
   };
 
-  const searchByAgent = ({ query = '', limit = 8 } = {}) => {
-    const normalizedLimit = Math.max(1, Math.min(20, Number.parseInt(limit, 10) || 8));
-    const entries = state.items
+  const searchByAgent = ({ query = '', limit = null } = {}) => {
+    const parsedLimit = Number.parseInt(limit, 10);
+    const hasExplicitLimit = Number.isFinite(parsedLimit) && parsedLimit > 0;
+    const scoredItems = state.items
       .map((item) => ({ item, score: scoreSkillItem(item, query) }))
       .filter((entry) => entry.score > 0 || !String(query || '').trim())
-      .sort((a, b) => b.score - a.score)
-      .slice(0, normalizedLimit)
-      .map((entry) => toSkillItem(entry.item));
+      .sort((a, b) => b.score - a.score);
+    const matchedItems = (hasExplicitLimit ? scoredItems.slice(0, parsedLimit) : scoredItems)
+      .map((entry) => entry.item);
+    const entries = matchedItems.map((item) => toSkillItem(item));
+    const images = getAiImages(matchedItems);
 
     return {
       ok: true,
@@ -1202,6 +1350,8 @@
       data: {
         items: entries,
         context: buildSpectrumContext('图谱库检索结果', entries, query ? `按关键词“${query}”检索` : '未提供关键词，返回图谱库概览'),
+        images,
+        imageCount: images.length,
       },
       candidates: entries,
     };
@@ -1788,9 +1938,275 @@
     reader.readAsDataURL(file);
   });
 
+  const dataUrlToBase64 = (dataUrl) => {
+    const match = String(dataUrl || '').match(/^data:[^;]+;base64,(.+)$/);
+    return match ? match[1] : '';
+  };
+
+  const normalizeImportTags = (value) => {
+    if (Array.isArray(value)) return value.map((tag) => String(tag || '').trim()).filter(Boolean);
+    return normalizeTags(value);
+  };
+
+  const normalizeZipPath = (path) => String(path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+
+  const getZipEntryMeta = (entryPath, metaByPath, metaByName) => {
+    const normalizedPath = normalizeZipPath(entryPath);
+    const fileName = getPathFileName(normalizedPath);
+    return metaByPath.get(normalizedPath.toLowerCase())
+      || metaByName.get(fileName.toLowerCase())
+      || metaByName.get(getFileBaseName(fileName).toLowerCase())
+      || {};
+  };
+
+  const buildImportMetadataMaps = async (zip) => {
+    const metaByPath = new Map();
+    const metaByName = new Map();
+    const tagsEntry = Object.values(zip.files).find((entry) => !entry.dir && getPathFileName(entry.name).toLowerCase() === 'tags.json');
+    if (!tagsEntry) return { metaByPath, metaByName };
+
+    const text = await tagsEntry.async('string');
+    const parsed = JSON.parse(text);
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.items)
+        ? parsed.items
+        : [];
+
+    entries.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      const path = normalizeZipPath(item.path || item.file || item.filePath || '');
+      const name = String(item.name || item.fileName || getPathFileName(path) || '').trim();
+      if (path) metaByPath.set(path.toLowerCase(), item);
+      if (name) {
+        metaByName.set(name.toLowerCase(), item);
+        metaByName.set(getFileBaseName(name).toLowerCase(), item);
+      }
+    });
+
+    return { metaByPath, metaByName };
+  };
+
+  const canDecodeImage = (dataUrl) => new Promise((resolve) => {
+    if (!dataUrl) {
+      resolve(false);
+      return;
+    }
+
+    const image = new Image();
+    image.addEventListener('load', () => {
+      resolve(Boolean(image.naturalWidth || image.width) && Boolean(image.naturalHeight || image.height));
+    }, { once: true });
+    image.addEventListener('error', () => resolve(false), { once: true });
+    image.src = dataUrl;
+  });
+
+  const downloadBlob = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const exportSpectrumPackage = async () => {
+    if (!window.JSZip) {
+      window.alert('ZIP 导出库尚未加载，请检查网络后重试。');
+      return;
+    }
+
+    const items = state.items.filter((item) => String(item?.image || '').trim());
+    if (!items.length) {
+      openUploadIssueDialog([{ name: '图谱库', reason: '当前没有可导出的图片' }]);
+      return;
+    }
+
+    const zip = new window.JSZip();
+    const usedPaths = new Set();
+    const tags = [];
+
+    items.forEach((item, index) => {
+      const category = sanitizeArchiveSegment(item.category || '未分类');
+      const sourceName = getPathFileName(item.title || item.code || `图谱-${index + 1}`);
+      const extension = getImageExtensionFromDataUrl(item.image);
+      const fileName = sanitizeArchiveSegment(/\.[^.]+$/.test(sourceName) ? sourceName : `${sourceName}${extension}`, `图谱-${index + 1}${extension}`);
+      const basePath = `${category}/${fileName}`;
+      let path = basePath;
+      let copyIndex = 2;
+      while (usedPaths.has(path.toLowerCase())) {
+        const extMatch = fileName.match(/(\.[^.]+)$/);
+        const ext = extMatch?.[1] || '.png';
+        const stem = fileName.slice(0, fileName.length - ext.length);
+        path = `${category}/${stem}-${copyIndex}${ext}`;
+        copyIndex += 1;
+      }
+      usedPaths.add(path.toLowerCase());
+
+      const base64 = dataUrlToBase64(item.image);
+      if (base64) zip.file(path, base64, { base64: true });
+      else zip.file(path, item.image);
+
+      tags.push({
+        name: getPathFileName(path),
+        path,
+        title: item.title || getFileBaseName(path),
+        category: item.category || '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        spectrumType: item.spectrumType || getSpectrumTypeFromName(item.title || item.code || path),
+        date: item.date || '',
+        note: item.note || '',
+      });
+    });
+
+    zip.file('tags.json', JSON.stringify(tags, null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `图谱库-${new Date().toISOString().slice(0, 10)}.zip`);
+  };
+
+  const importSpectrumPackage = async (file) => {
+    if (!file) return;
+    if (!window.JSZip) {
+      window.alert('ZIP 导入库尚未加载，请检查网络后重试。');
+      return;
+    }
+
+    const issues = [];
+    let zip;
+    try {
+      zip = await window.JSZip.loadAsync(file);
+    } catch (error) {
+      openUploadIssueDialog([{ name: getUploadIssueName(file), reason: '压缩包读取失败' }]);
+      return;
+    }
+
+    let metadata;
+    try {
+      metadata = await buildImportMetadataMaps(zip);
+    } catch (error) {
+      openUploadIssueDialog([{ name: 'tags.json', reason: 'JSON 格式错误或无法读取' }]);
+      return;
+    }
+
+    const imageEntries = Object.values(zip.files)
+      .filter((entry) => !entry.dir && isImageArchivePath(entry.name));
+
+    if (!imageEntries.length) {
+      openUploadIssueDialog([{ name: getUploadIssueName(file), reason: '压缩包内没有找到图片' }]);
+      return;
+    }
+
+    const plans = imageEntries.map((entry) => {
+      const path = normalizeZipPath(entry.name);
+      const meta = getZipEntryMeta(path, metadata.metaByPath, metadata.metaByName);
+      const fileName = getPathFileName(path);
+      const title = String(meta.title || getFileBaseName(fileName) || fileName).trim();
+      const category = String(meta.category || getPathCategory(path) || '').trim();
+      const existing = findItemByTitle(title);
+      return {
+        entry,
+        path,
+        fileName,
+        title,
+        category,
+        tags: normalizeImportTags(meta.tags),
+        spectrumType: normalizeSpectrumType(meta.spectrumType || meta.type, title || fileName),
+        date: normalizeSkillDate(meta.date) || new Date().toISOString().slice(0, 10),
+        note: String(meta.note || '').trim(),
+        existing,
+      };
+    });
+
+    const conflictCount = plans.filter((plan) => plan.existing).length;
+    const conflictAction = conflictCount ? await openImportConflictDialog(conflictCount) : 'overwrite';
+    let changed = false;
+    let editsChanged = false;
+
+    for (const plan of plans) {
+      if (plan.existing && conflictAction === 'skip') continue;
+
+      let image = '';
+      try {
+        const base64 = await plan.entry.async('base64');
+        image = `data:${getImageMimeFromName(plan.fileName)};base64,${base64}`;
+      } catch (error) {
+        issues.push({ name: plan.fileName, reason: '图片读取失败' });
+        continue;
+      }
+
+      const decoded = await canDecodeImage(image);
+      if (!decoded) {
+        issues.push({ name: plan.fileName, reason: '图片无法解析或文件已损坏' });
+        continue;
+      }
+
+      if (plan.existing) {
+        const imageStored = await putStoredImage(plan.existing.id, image);
+        const index = state.items.findIndex((item) => item.id === plan.existing.id);
+        if (index < 0) continue;
+        if (state.edits[plan.existing.id]) {
+          delete state.edits[plan.existing.id];
+          editsChanged = true;
+        }
+        state.items[index] = {
+          ...state.items[index],
+          title: plan.title,
+          spectrumType: plan.spectrumType,
+          category: plan.category,
+          date: plan.date,
+          tags: plan.tags,
+          note: plan.note,
+          image,
+          imageStored,
+          uploaded: true,
+        };
+        revealItemInGallery(state.items[index]);
+      } else {
+        const id = `import-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const imageStored = await putStoredImage(id, image);
+        const item = {
+          id,
+          code: `IMPORT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
+          title: plan.title,
+          spectrumType: plan.spectrumType,
+          category: plan.category,
+          status: '',
+          date: plan.date,
+          tags: plan.tags,
+          image,
+          imageStored,
+          note: plan.note,
+          uploaded: true,
+        };
+        state.items.unshift(item);
+        revealItemInGallery(item);
+      }
+      changed = true;
+    }
+
+    if (changed) {
+      if (editsChanged) saveItemEdits();
+      saveUploadedItems();
+      render();
+    }
+    openUploadIssueDialog(issues);
+  };
+
   const uploadSpectrumFiles = async (fileList) => {
-    const files = [...(fileList || [])].filter((file) => file.type.startsWith('image/'));
-    if (!files.length) return;
+    const selectedFiles = [...(fileList || [])];
+    if (!selectedFiles.length) return;
+
+    const issues = [];
+    const files = selectedFiles.filter((file) => {
+      if (isImageUploadFile(file)) return true;
+      issues.push({
+        name: getUploadIssueName(file),
+        reason: '不是支持的图片文件',
+      });
+      return false;
+    });
 
     let conflictAction = '';
     for (const file of files) {
@@ -1804,7 +2220,22 @@
       }
 
       const image = await readFileAsDataUrl(file);
-      if (!image) continue;
+      if (!image) {
+        issues.push({
+          name: getUploadIssueName(file),
+          reason: '文件读取失败',
+        });
+        continue;
+      }
+
+      const decoded = await canDecodeImage(image);
+      if (!decoded) {
+        issues.push({
+          name: getUploadIssueName(file),
+          reason: '图片无法解析或文件已损坏',
+        });
+        continue;
+      }
 
       const today = new Date().toISOString().slice(0, 10);
       const spectrumType = getSpectrumTypeFromName(file.name);
@@ -1846,6 +2277,8 @@
       saveUploadedItems();
       render();
     }
+
+    openUploadIssueDialog(issues);
   };
 
   const bindEvents = () => {
@@ -2083,6 +2516,12 @@
         return;
       }
 
+      if (refs.uploadIssueDialog && event.key === 'Escape') {
+        refs.uploadIssueDialog.remove();
+        refs.uploadIssueDialog = null;
+        return;
+      }
+
       if (refs.deleteDialog && event.key === 'Escape') {
         closeDeleteDialog();
         return;
@@ -2144,6 +2583,13 @@
 
     refs.printBtn?.addEventListener('click', printSelectedList);
 
+    refs.exportBtn?.addEventListener('click', exportSpectrumPackage);
+    refs.importBtn?.addEventListener('click', () => refs.importInput?.click());
+    refs.importInput?.addEventListener('change', () => {
+      importSpectrumPackage(refs.importInput.files?.[0]);
+      refs.importInput.value = '';
+    });
+
     refs.uploadBtn?.addEventListener('click', () => refs.uploadInput?.click());
     refs.uploadInput?.addEventListener('change', () => {
       uploadSpectrumFiles(refs.uploadInput.files);
@@ -2169,7 +2615,10 @@
     refs.galleryPanel?.addEventListener('drop', (event) => {
       event.preventDefault();
       refs.galleryPanel.classList.remove('is-drag-over');
-      uploadSpectrumFiles(event.dataTransfer.files);
+      const files = [...(event.dataTransfer.files || [])];
+      const zipFile = files.find(isZipUploadFile);
+      if (zipFile) importSpectrumPackage(zipFile);
+      else uploadSpectrumFiles(files);
     });
   };
 

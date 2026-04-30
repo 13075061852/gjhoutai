@@ -194,6 +194,11 @@
     if (value === 'openrouter') return 'OpenRouter';
     return provider || '未知供应商';
   };
+  const getModelDisplayName = (model) => {
+    const value = String(model || '未选择模型').trim();
+    const parts = value.split('/').map((item) => item.trim()).filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 1] : (value || '未选择模型');
+  };
   const getSourceLabel = (source) => ({
     chat: '右侧聊天',
     'config-test': '配置测试',
@@ -386,22 +391,81 @@
   };
   const getSuccessRate = (metric) => (metric.calls ? `${Math.round((metric.success / metric.calls) * 100)}%` : '-');
   const getAvgDuration = (metric) => (metric.calls ? formatDuration(metric.durationMs / metric.calls) : '-');
-  const renderBarChart = (buckets, valueKey = 'tokens') => {
-    const max = Math.max(...buckets.map((item) => Number(item[valueKey] || 0)), 1);
+  const buildTrendGeometry = (buckets, valueKey = 'tokens') => {
+    const width = 720;
+    const height = 210;
+    const padding = { top: 28, right: 44, bottom: 34, left: 44 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const values = buckets.map((item) => Number(item[valueKey] || 0));
+    const max = Math.max(...values, 1);
+    const step = buckets.length > 1 ? plotWidth / (buckets.length - 1) : plotWidth;
+    const points = buckets.map((item, index) => {
+      const value = Number(item[valueKey] || 0);
+      const x = padding.left + step * index;
+      const y = padding.top + (1 - value / max) * plotHeight;
+      const valueY = y <= padding.top + 18 ? y + 23 : y - 13;
+      return {
+        item,
+        value,
+        x,
+        y,
+        valueY,
+        xPercent: (x / width) * 100,
+        yPercent: (y / height) * 100,
+        valueYPercent: (valueY / height) * 100,
+      };
+    });
+    const linePath = points.map((point, index) => {
+      if (!index) return `M ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      const prev = points[index - 1];
+      const controlX = ((prev.x + point.x) / 2).toFixed(1);
+      return `C ${controlX} ${prev.y.toFixed(1)}, ${controlX} ${point.y.toFixed(1)}, ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+    }).join(' ');
+    const baseline = height - padding.bottom;
+    const areaPath = points.length
+      ? `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${baseline} L ${points[0].x.toFixed(1)} ${baseline} Z`
+      : '';
+    const gridPath = Array.from({ length: 4 }, (_, index) => {
+      const y = padding.top + (plotHeight / 3) * index;
+      return `M ${padding.left} ${y.toFixed(1)} H ${width - padding.right}`;
+    }).join(' ');
+    return { width, height, padding, points, linePath, areaPath, gridPath, max };
+  };
+
+  const renderTrendChart = (buckets, valueKey = 'tokens') => {
+    const geometry = buildTrendGeometry(buckets, valueKey);
+    const total = buckets.reduce((sum, item) => sum + Number(item[valueKey] || 0), 0);
+    const average = buckets.length ? Math.round(total / buckets.length) : 0;
+    const peak = buckets.reduce((best, item) => (Number(item[valueKey] || 0) > Number(best[valueKey] || 0) ? item : best), buckets[0] || {});
     return `
-      <div class="ai-call-bar-chart">
-        ${buckets.map((item) => {
-          const value = Number(item[valueKey] || 0);
-          return `
-            <div class="ai-call-bar-item" title="${esc(item.label)} · ${formatNumber(value)}">
-              <strong>${formatNumber(value)}</strong>
-              <div class="ai-call-bar-track">
-                <span style="height:${clampPercent((value / max) * 100)}"></span>
-              </div>
-              <em>${esc(item.label)}</em>
-            </div>
-          `;
-        }).join('')}
+      <div class="ai-call-trend-card">
+        <div class="ai-call-trend-summary" aria-label="周期摘要">
+          <span><b>${formatNumber(total)}</b><em>周期 Tokens</em></span>
+          <span><b>${formatNumber(average)}</b><em>日均 Tokens</em></span>
+          <span><b>${esc(peak?.label || '-')}</b><em>峰值 ${formatNumber(peak?.[valueKey] || 0)}</em></span>
+          <span><b>${esc(getSuccessRate(summarizeBuckets(buckets)))}</b><em>成功率</em></span>
+        </div>
+        <div class="ai-call-trend-visual">
+          <svg class="ai-call-trend-svg" viewBox="0 0 ${geometry.width} ${geometry.height}" preserveAspectRatio="none" role="img" aria-label="Token 使用趋势">
+            <defs>
+              <linearGradient id="aiCallTrendFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="currentColor" stop-opacity=".24"></stop>
+                <stop offset="100%" stop-color="currentColor" stop-opacity="0"></stop>
+              </linearGradient>
+            </defs>
+            <path class="ai-call-trend-grid" d="${geometry.gridPath}"></path>
+            <path class="ai-call-trend-area" d="${geometry.areaPath}"></path>
+            <path class="ai-call-trend-line" d="${geometry.linePath}"></path>
+          </svg>
+          <div class="ai-call-trend-markers" aria-hidden="true">
+            ${geometry.points.map((point) => `
+              <span class="ai-call-trend-value" style="left:${point.xPercent.toFixed(3)}%; top:${point.valueYPercent.toFixed(3)}%;">${formatNumber(point.value)}</span>
+              <span class="ai-call-trend-point" style="left:${point.xPercent.toFixed(3)}%; top:${point.yPercent.toFixed(3)}%;" title="${esc(point.item.label)} · ${formatNumber(point.value)} Tokens"></span>
+              <span class="ai-call-trend-axis" style="left:${point.xPercent.toFixed(3)}%;">${esc(point.item.label)}</span>
+            `).join('')}
+          </div>
+        </div>
       </div>
     `;
   };
@@ -426,16 +490,7 @@
             </button>
           `).join('')}
         </div>
-        ${renderBarChart(current.buckets, 'tokens')}
-        <div class="ai-call-period-foot">
-          <span>${formatNumber(current.total.calls)} 次调用</span>
-          <span>${formatNumber(current.total.tokens)} Tokens</span>
-          <span>${esc(formatCnyCost(current.total.cny))}</span>
-          <span>成功率 ${esc(getSuccessRate(current.total))}</span>
-          <span>输入 ${formatNumber(current.total.promptTokens)}</span>
-          <span>输出 ${formatNumber(current.total.completionTokens)}</span>
-          <span>均耗时 ${esc(getAvgDuration(current.total))}</span>
-        </div>
+        ${renderTrendChart(current.buckets, 'tokens')}
       </section>
     `;
   };
@@ -462,23 +517,48 @@
       if (new Date(item.at) > new Date(group.lastAt)) group.lastAt = item.at;
       groups.set(key, group);
     });
-    return [...groups.values()].sort((a, b) => b.tokens - a.tokens || b.calls - a.calls).slice(0, 8);
+    return [...groups.values()].sort((a, b) => b.tokens - a.tokens || b.calls - a.calls);
   };
+
+  const renderEmptyState = ({ icon = 'ti-database-off', title = '暂无数据', description = '', hints = [] } = {}) => `
+    <div class="ai-call-empty-state">
+      <span class="ai-call-empty-icon"><i class="ti ${esc(icon)}" aria-hidden="true"></i></span>
+      <strong>${esc(title)}</strong>
+      ${description ? `<p>${esc(description)}</p>` : ''}
+      ${hints.length ? `
+        <div class="ai-call-empty-hints" aria-label="建议操作">
+          ${hints.map((hint) => `<span>${esc(hint)}</span>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `;
 
   const renderModelSummary = (logs) => {
     const rows = getModelRows(logs);
     if (!rows.length) {
-      return '<div class="ai-call-empty">暂无模型调用数据。</div>';
+      return renderEmptyState({
+        icon: 'ti-chart-bar-off',
+        title: '还没有模型消耗数据',
+        description: '完成一次聊天或配置测试后，这里会按 Token 消耗自动生成模型排行。',
+        hints: ['等待首次调用', '自动统计 Token', '按模型汇总'],
+      });
     }
-    return rows.map((item) => `
-      <div class="ai-call-model-row">
-        <div>
-          <strong>${esc(item.model)}</strong>
-          <span>${esc(getProviderLabel(item.provider))} · 最近 ${esc(formatDateTime(item.lastAt))}</span>
+    const rankIcons = ['ti-medal', 'ti-medal-2', 'ti-medal'];
+    return rows.map((item, index) => `
+      <div class="ai-call-model-row ${index < 3 ? `is-top-${index + 1}` : ''}">
+        <div class="ai-call-model-rank">
+          ${index < 3 ? `<i class="ti ${rankIcons[index]}" aria-hidden="true"></i>` : index + 1}
         </div>
-        <div>
+        <div class="ai-call-model-main">
+          <strong class="ai-call-model-title">${esc(getModelDisplayName(item.model))}</strong>
+          <div class="ai-call-model-meta">
+            <span>${formatNumber(item.calls)} 次调用</span>
+            <span>${esc(formatCnyCost(item.cny))}</span>
+          </div>
+        </div>
+        <div class="ai-call-model-token">
           <strong>${formatNumber(item.tokens)}</strong>
-          <span>${formatNumber(item.calls)} 次 · ${esc(formatCnyCost(item.cny))}</span>
+          <span>Token</span>
         </div>
       </div>
     `).join('');
@@ -487,9 +567,14 @@
   const renderRows = (logs) => {
     if (!logs.length) {
       return `
-        <tr>
+        <tr class="ai-call-empty-row">
           <td colspan="8">
-            <div class="ai-call-empty">暂无 AI 调用记录。完成一次右侧聊天或配置测试后，这里会自动出现明细。</div>
+            ${renderEmptyState({
+              icon: 'ti-list-details',
+              title: '暂无调用明细',
+              description: '从右侧聊天发送一次问题，或在配置中心执行一次测试，明细会自动记录到这里。',
+              hints: ['时间来源', '模型状态', 'Tokens 与费用', '问题与结果'],
+            })}
           </td>
         </tr>
       `;
@@ -515,7 +600,7 @@
             <span class="ai-call-cell-sub">${esc(getSourceLabel(item.source))} · ${esc(item.pageTitle || getPageTitle(item.pageId))}</span>
           </td>
           <td>
-            <strong class="ai-call-cell-main">${esc(item.model || '-')}</strong>
+            <strong class="ai-call-cell-main">${esc(getModelDisplayName(item.model || '-'))}</strong>
             <span class="ai-call-cell-sub">${esc(getProviderLabel(item.provider))}</span>
           </td>
           <td>
@@ -559,7 +644,7 @@
     const detailRows = [
       renderDetailField('时间', formatDateTime(item.at)),
       renderDetailField('来源', `${getSourceLabel(item.source)} · ${item.pageTitle || getPageTitle(item.pageId)}`),
-      renderDetailField('模型', item.model),
+      renderDetailField('模型', getModelDisplayName(item.model)),
       renderDetailField('供应商', getProviderLabel(item.provider)),
       renderDetailField('状态', item.status === 'failed' ? `失败：${item.error || '-'}` : `成功：${item.statusText || '接口返回'}`),
       renderDetailField('Tokens', `总计 ${formatNumber(usage.totalTokens || 0)}，输入 ${formatNumber(usage.promptTokens || 0)}，输出 ${formatNumber(usage.completionTokens || 0)}`),
@@ -650,9 +735,9 @@
         <div class="ai-call-analysis-panel">
           <div class="ai-call-analysis-panel-head">
             <h2>模型消耗排行</h2>
-            <span class="ai-call-analysis-panel-subtitle">${formatNumber(totals.estimated)} 次为估算 Token</span>
+            <span class="ai-call-analysis-panel-subtitle">按 Token 消耗排序</span>
           </div>
-          <div class="ai-call-model-list">${renderModelSummary(logs)}</div>
+          <div class="ai-call-model-list${logs.length ? '' : ' is-empty'}">${renderModelSummary(logs)}</div>
         </div>
       </section>
 
@@ -674,7 +759,7 @@
               </button>
             </div>
           </div>
-          <div class="ai-call-analysis-table-wrap">
+          <div class="ai-call-analysis-table-wrap${logs.length ? '' : ' is-empty'}">
             <table class="ai-call-analysis-table">
               <thead>
                 <tr>

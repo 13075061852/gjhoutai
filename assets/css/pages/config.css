@@ -1909,6 +1909,97 @@
       cursor:not-allowed;
       filter:none;
     }
+    .send-btn.is-stop{
+      background:#ef4444;
+      color:#fff;
+    }
+    .send-btn.is-stop:hover{
+      filter:brightness(1.02);
+    }
+    .send-btn.is-stop.is-stopping{
+      background:#b91c1c;
+    }
+    .ai-message.is-pending{
+      border-color:color-mix(in srgb, var(--accent) 20%, var(--border));
+      background:color-mix(in srgb, var(--surface-2) 82%, var(--accent-soft));
+    }
+    .ai-message.is-pending .ai-message-content{
+      border-color:color-mix(in srgb, var(--accent) 18%, var(--border));
+    }
+    .ai-waiting-row{
+      width:max-content;
+      max-width:100%;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-top:2px;
+      padding:8px 12px;
+      border:1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+      border-radius:999px;
+      background:color-mix(in srgb, var(--accent-soft) 46%, var(--surface));
+      color:var(--text-2);
+      font-size:12.5px;
+      font-weight:700;
+      line-height:1;
+      box-shadow:0 8px 18px rgba(37,99,235,.08);
+    }
+    .ai-waiting-pulse{
+      width:9px;
+      height:9px;
+      border-radius:999px;
+      background:var(--accent);
+      box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+      animation:aiWaitingPulse 1.4s ease-in-out infinite;
+    }
+    .ai-waiting-text{
+      white-space:nowrap;
+    }
+    .ai-waiting-dots{
+      display:inline-flex;
+      align-items:center;
+      gap:3px;
+      padding-left:1px;
+    }
+    .ai-waiting-dots i{
+      width:4px;
+      height:4px;
+      border-radius:999px;
+      background:currentColor;
+      opacity:.35;
+      animation:aiWaitingDot 1.2s ease-in-out infinite;
+    }
+    .ai-waiting-dots i:nth-child(2){
+      animation-delay:.16s;
+    }
+    .ai-waiting-dots i:nth-child(3){
+      animation-delay:.32s;
+    }
+    @keyframes aiWaitingPulse{
+      0%,100%{
+        transform:scale(.88);
+        box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      50%{
+        transform:scale(1);
+        box-shadow:0 0 0 7px transparent;
+      }
+    }
+    @keyframes aiWaitingDot{
+      0%,80%,100%{
+        transform:translateY(0);
+        opacity:.32;
+      }
+      40%{
+        transform:translateY(-3px);
+        opacity:.9;
+      }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .ai-waiting-pulse,
+      .ai-waiting-dots i{
+        animation:none;
+      }
+    }
     .shell.assistant-collapsed{
       --assistant:0px;
     }
@@ -1932,4 +2023,3 @@
     }
 
     .shell.sidebar-collapsed .sidebar{overflow-x:hidden}
-

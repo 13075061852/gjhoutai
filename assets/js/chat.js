@@ -11,8 +11,23 @@
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
   let streamRenderTimer = 0;
+  let activeChatAbortController = null;
+  let chatAbortRequested = false;
+  const imageUploadAuthResolvers = new Map();
 
   const nowIso = () => new Date().toISOString();
+
+  const createAbortError = (message = '用户已终止本次分析。') => {
+    try {
+      return new DOMException(message, 'AbortError');
+    } catch {
+      const error = new Error(message);
+      error.name = 'AbortError';
+      return error;
+    }
+  };
+
+  const isAbortError = (error) => error?.name === 'AbortError' || /aborted|abort|终止/i.test(String(error?.message || ''));
 
   const makeSessionId = () => {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -94,6 +109,7 @@
       cost: normalizeCostUsage(message.tokenUsage.cost),
     } : null,
     actions: normalizeSkillActions(message?.actions),
+    imageUploadAuth: normalizeImageUploadAuth(message?.imageUploadAuth),
   });
 
   const deriveSessionTitle = (messages) => {
@@ -149,6 +165,17 @@
   const isFreshSession = () => {
     const session = getActiveSession();
     return !session || session.messages.length === 0;
+  };
+
+  const isEmptyConversation = (session) => Array.isArray(session?.messages) && session.messages.length === 0;
+
+  const getReusableEmptyConversation = () => {
+    const activeSession = getActiveSession();
+    if (isEmptyConversation(activeSession)) return activeSession;
+    return state.chatSessions
+      .filter(isEmptyConversation)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0]
+      || null;
   };
 
   const isAssistantFullscreen = () => Boolean(refs.shell?.classList.contains('assistant-fullscreen'));
@@ -332,6 +359,112 @@
     `;
   };
 
+  const normalizeImageUploadAuth = (auth) => {
+    if (!auth || typeof auth !== 'object') return null;
+    const id = String(auth.id || '').trim();
+    const count = Number.parseInt(auth.count, 10);
+    if (!id || !Number.isFinite(count) || count <= 0) return null;
+    const status = ['pending', 'approved', 'cancelled'].includes(String(auth.status))
+      ? String(auth.status)
+      : 'pending';
+    const items = Array.isArray(auth.items) ? auth.items.map((item, index) => {
+      const label = String(item?.label || item?.title || item?.code || '').trim();
+      const meta = String(item?.meta || '').trim();
+      return label ? { label, meta } : { label: `图谱图片 ${index + 1}`, meta };
+    }).filter((item) => item.label).slice(0, 12) : [];
+    return {
+      id,
+      count,
+      status,
+      source: String(auth.source || '图片上传').trim() || '图片上传',
+      items,
+    };
+  };
+
+  const renderImageUploadItems = (items, count) => {
+    if (!Array.isArray(items) || !items.length) return '';
+    const hiddenCount = Math.max(0, Number(count || 0) - items.length);
+    return `
+      <div class="ai-upload-auth-list" aria-label="即将上传的图谱图片">
+        <div class="ai-upload-auth-list-title">即将上传的图片</div>
+        <ol>
+          ${items.map((image, index) => `
+            <li>
+              <span>${utils.escapeHtml(String(index + 1))}</span>
+              <strong title="${utils.escapeHtml(image.label)}">${utils.escapeHtml(image.label)}</strong>
+              ${image.meta ? `<em>${utils.escapeHtml(image.meta)}</em>` : ''}
+            </li>
+          `).join('')}
+          ${hiddenCount ? `<li class="is-more">还有 ${utils.escapeHtml(String(hiddenCount))} 张未显示</li>` : ''}
+        </ol>
+      </div>
+    `;
+  };
+
+  const renderImageUploadAuthorization = (auth) => {
+    const item = normalizeImageUploadAuth(auth);
+    if (!item) return '';
+    const pending = item.status === 'pending';
+    const approved = item.status === 'approved';
+    const statusText = pending ? '等待授权' : approved ? '已授权' : '已取消';
+    return `
+      <div class="ai-upload-auth ${pending ? 'is-pending' : approved ? 'is-approved' : 'is-cancelled'}">
+        <div class="ai-upload-auth-head">
+          <span class="ai-upload-auth-icon"><i class="ti ti-photo-up" aria-hidden="true"></i></span>
+          <span>
+            <strong>上传图谱图片确认</strong>
+            <em>${utils.escapeHtml(item.source)} · ${utils.escapeHtml(String(item.count))} 张 · ${utils.escapeHtml(statusText)}</em>
+          </span>
+        </div>
+        <p>授权后才会把这些图片发送给当前配置的 AI 服务，用于曲线、峰形、标注和异常点分析。</p>
+        ${renderImageUploadItems(item.items, item.count)}
+        <div class="ai-upload-auth-actions">
+          <button class="ai-upload-auth-btn is-primary" type="button" data-chat-image-auth="${utils.escapeHtml(item.id)}:approve" ${pending ? '' : 'disabled aria-disabled="true"'}>
+            <i class="ti ti-check" aria-hidden="true"></i>
+            <span>授权上传并分析</span>
+          </button>
+          <button class="ai-upload-auth-btn" type="button" data-chat-image-auth="${utils.escapeHtml(item.id)}:cancel" ${pending ? '' : 'disabled aria-disabled="true"'}>
+            <i class="ti ti-x" aria-hidden="true"></i>
+            <span>取消上传</span>
+          </button>
+        </div>
+      </div>
+    `;
+  };
+
+  const PENDING_STATUS_RE = /(?:正在思考|正在获取匹配数据表|正在获取项目数据|正在分析|正在执行项目技能|项目技能已执行，正在整理结果|等待上传授权|准备上传图片|正在分析图谱图片)(?:[.。…]*)?$/;
+
+  const getPendingStatus = (item) => {
+    const explicitStatus = String(item?.pendingStatus || '').trim();
+    if (explicitStatus) return explicitStatus.replace(/[.。…]+$/g, '');
+    const content = String(item?.content || '').trim();
+    const match = content.match(PENDING_STATUS_RE);
+    return (match?.[0] || '正在思考').replace(/[.。…]+$/g, '');
+  };
+
+  const stripPendingStatus = (content = '', status = '') => {
+    let text = String(content || '').trim();
+    const statusText = String(status || '').trim();
+    if (statusText && text.endsWith(statusText)) {
+      text = text.slice(0, -statusText.length).trim();
+    }
+    return text.replace(PENDING_STATUS_RE, '').trim();
+  };
+
+  const renderPendingContent = (item) => {
+    const status = getPendingStatus(item);
+    const body = stripPendingStatus(item.content, status);
+    const bodyHtml = body ? utils.markdownLite(body) : '';
+    return `
+      ${bodyHtml}
+      <div class="ai-waiting-row" role="status" aria-live="polite">
+        <span class="ai-waiting-pulse" aria-hidden="true"></span>
+        <span class="ai-waiting-text">${utils.escapeHtml(status)}</span>
+        <span class="ai-waiting-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+    `;
+  };
+
   const renderChatMessages = (options = {}) => {
     if (!refs.chatMessages) return;
     const shouldStickToBottom = options.forceScroll || (options.autoScroll !== false && isChatNearBottom());
@@ -353,7 +486,10 @@
             : '';
           const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
           const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''}"><div class="ai-message-content">${utils.markdownLite(item.content)}</div>${images}${actions}${tokenMeta}</div>`;
+          const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
+          const pending = item.role === 'assistant' && item.pending;
+          const contentHtml = pending ? renderPendingContent(item) : utils.markdownLite(item.content);
+          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
         }).join('')
       : '';
 
@@ -685,6 +821,17 @@
   };
 
   const createNewConversation = () => {
+    const reusableSession = getReusableEmptyConversation();
+    if (reusableSession) {
+      reusableSession.updatedAt = nowIso();
+      state.chatSessionId = reusableSession.id;
+      state.chatHistory = reusableSession.messages;
+      saveChatState();
+      renderChat();
+      requestAnimationFrame(() => refs.chatInput?.focus());
+      return;
+    }
+
     const session = normalizeSession({
       id: makeSessionId(),
       title: getNextConversationTitle(),
@@ -707,6 +854,10 @@
       url: String(item?.image_url?.url || item?.url || ''),
     },
     preview_url: String(item?.preview_url || item?.previewUrl || item?.image_url?.url || item?.url || ''),
+    label: String(item?.label || item?.title || item?.name || item?.code || ''),
+    title: String(item?.title || ''),
+    code: String(item?.code || ''),
+    meta: String(item?.meta || item?.category || item?.spectrumType || ''),
   })).filter((item) => item.image_url.url) : []);
 
   const draftPrompt = (prompt, options = {}) => {
@@ -717,7 +868,7 @@
       createNewConversation();
     }
 
-    pendingDraftImages = normalizeImages(options.images).slice(0, 1);
+    pendingDraftImages = normalizeImages(options.images);
     refs.chatInput.value = value;
     refs.chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     App.navigation?.setAssistantCollapsed?.(false);
@@ -736,13 +887,18 @@
     }
   };
 
+  const isProjectAccessEnabled = () => Boolean(state.dataAttachmentEnabled);
+
   const getProjectContext = () => {
     const activePageId = getActivePageId();
     const activePageTitle = constants.PAGE_DEFS?.[activePageId]?.title || activePageId || '未知页面';
+    const pageCatalog = Object.entries(constants.PAGE_DEFS || {})
+      .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
+      .join('；');
     return [
       '【项目背景】',
       '你正在广俊塑料科技后台管理系统中工作。',
-      '项目当前包含物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板、主题设置和配置中心。',
+      `项目当前已注册页面：${pageCatalog}`,
       `当前页面：${activePageTitle}`,
       '默认流程：先判断是否需要项目技能；需要数据或页面操作时输出技能调用 JSON，由前端获取数据或执行操作后再交给 AI 分析。',
       '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
@@ -750,6 +906,7 @@
   };
 
   const getAttachedDataContext = (prompt) => {
+    if (!isProjectAccessEnabled()) return '';
     const pageId = getActivePageId();
     if (App.agentButler?.buildContext) {
       return App.agentButler.buildContext({
@@ -773,7 +930,7 @@
   };
 
   const getAttachedDataFile = (prompt) => {
-    if (!state.dataAttachmentEnabled) return null;
+    if (!isProjectAccessEnabled()) return null;
     const pageId = getActivePageId();
     if (pageId === 'property-analysis') {
       // OpenRouter rejects text/plain file attachments for some models/routes.
@@ -784,6 +941,7 @@
   };
 
   const getAttachedDataImages = (prompt) => {
+    if (!isProjectAccessEnabled()) return [];
     const pageId = getActivePageId();
     if (App.agentButler?.getImages) {
       return normalizeImages(App.agentButler.getImages({
@@ -864,30 +1022,118 @@
   };
 
   const compressImagesForAi = async (images, options = {}) => {
-    const normalized = normalizeImages(images).slice(0, 1);
+    const parsedLimit = Number.parseInt(options.maxImages, 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
+    const normalizedImages = normalizeImages(images);
+    const normalized = limit ? normalizedImages.slice(0, limit) : normalizedImages;
     const activePageId = getActivePageId();
     const preserveAlpha = activePageId === 'image-cutout' || /(?:透明|抠图|去背|png)/.test(String(options.prompt || ''));
     const maxSize = activePageId === 'image-cutout' ? 768 : 768;
     return Promise.all(normalized.map((image) => compressImageForAi(image, { maxSize, preserveAlpha })));
   };
 
+  const settleImageUploadAuthorization = (requestId, approved) => {
+    const request = imageUploadAuthResolvers.get(requestId);
+    if (!request) return;
+    imageUploadAuthResolvers.delete(requestId);
+    request.cleanup?.();
+
+    const message = state.chatHistory[request.pendingIndex];
+    if (message?.imageUploadAuth?.id === requestId) {
+      message.imageUploadAuth = {
+        ...message.imageUploadAuth,
+        status: approved ? 'approved' : 'cancelled',
+      };
+      message.pending = approved;
+      message.pendingStatus = approved ? '准备上传图片' : '';
+      saveChatState();
+      renderChatMessages({ autoScroll: true });
+    }
+
+    request.resolve(Boolean(approved));
+  };
+
+  const requestImageUploadAuthorization = (images, options = {}) => new Promise((resolve, reject) => {
+    const normalizedImages = normalizeImages(images);
+    const count = normalizedImages.length;
+    if (!count) {
+      resolve(true);
+      return;
+    }
+    const pendingIndex = Number.parseInt(options.pendingIndex, 10);
+    if (!Number.isFinite(pendingIndex) || pendingIndex < 0) {
+      resolve(true);
+      return;
+    }
+    const source = String(options.source || '本次请求').trim() || '本次请求';
+    const requestId = `image-upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const signal = options.signal || null;
+    let abortHandler = null;
+
+    const cleanup = () => {
+      if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
+    };
+
+    abortHandler = () => {
+      imageUploadAuthResolvers.delete(requestId);
+      cleanup();
+      reject(createAbortError());
+    };
+
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+    if (signal) signal.addEventListener('abort', abortHandler, { once: true });
+
+    imageUploadAuthResolvers.set(requestId, {
+      resolve,
+      reject,
+      cleanup,
+      pendingIndex,
+    });
+
+    const content = [
+      options.displayPrefix || '',
+      `${source}需要上传 ${count} 张图片给当前配置的 AI 服务。`,
+      '请在下方确认要上传的图片清单；授权后我会继续让 AI 阅读图片并输出分析结果。',
+    ].filter(Boolean).join('\n\n');
+
+    flushStreamRender(pendingIndex, content, {
+      pending: true,
+      pendingStatus: '等待上传授权',
+      imageUploadAuth: {
+        id: requestId,
+        source,
+        count,
+        status: 'pending',
+        items: normalizedImages.map((image, index) => ({
+          label: String(image.label || image.title || image.code || `图谱图片 ${index + 1}`).trim(),
+          meta: String(image.meta || '').trim(),
+        })),
+      },
+    });
+  });
+
   const getContextMessages = (config, prompt) => {
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
-    const attachedDataContext = prompt ? getAttachedDataContext(prompt) : '';
+    const projectAccessEnabled = isProjectAccessEnabled();
+    const attachedDataContext = projectAccessEnabled && prompt ? getAttachedDataContext(prompt) : '';
     const messages = [{ role: 'system', content: basePrompt }];
-    const skillProtocolContext = App.projectSkills?.getAiProtocolContext?.() || '';
+    const skillProtocolContext = projectAccessEnabled ? (App.projectSkills?.getAiProtocolContext?.() || '') : '';
 
-    if (skillProtocolContext) {
+    if (projectAccessEnabled) {
       messages.push({
         role: 'system',
         content: [
           getProjectContext(),
           '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
           '用户要求分析、查询、对比、总结当前项目数据、当前页数据或选中数据时，不要直接强答，必须先输出项目技能调用 JSON。',
-          '用户询问物性型号、批次、参数、趋势、走势或指标时，必须调用 property.searchRows 获取数据后再分析。',
+          '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，调用 property.searchRows 获取物性数据后再分析。',
+          '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用图谱相关技能，通常是 spectrum.searchImages；不要因为问题里有型号就改调用物性表。',
           '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
           skillProtocolContext,
-        ].join('\n\n'),
+        ].filter(Boolean).join('\n\n'),
       });
     }
 
@@ -1119,19 +1365,17 @@
   const shouldSynthesizeSkillResult = (execution) => {
     const skillId = String(execution?.skill?.id || '');
     const result = execution?.result || {};
-    if (!result.ok || result.candidates?.length) return false;
+    if (!result.ok) return false;
+    if (skillId === 'spectrum.searchImages') {
+      return Boolean(result.data?.context || getSkillResultImages(execution).length);
+    }
+    if (result.candidates?.length) return false;
     return Boolean(result.data?.context)
       || skillId === 'analysis.buildJointPackage'
       || skillId === 'property.searchRows';
   };
 
-  const shouldFallbackToPropertySearch = (prompt = '') => {
-    const text = String(prompt || '');
-    const activePageId = getActivePageId();
-    const hasPropertyIntent = /(?:分析|查询|查|看|趋势|走势|对比|列举|统计|总结|物性|参数|指标|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰份|伸长率)/.test(text);
-    const hasIdentifier = /[A-Za-z0-9][A-Za-z0-9._/-]{2,}/.test(text);
-    return hasPropertyIntent && (activePageId === 'property-analysis' || hasIdentifier || /(?:物性|型号|批次|参数|指标)/.test(text));
-  };
+  const getSkillResultImages = (execution) => normalizeImages(execution?.result?.data?.images || []);
 
   const getSkillDisplayPrefix = (execution) => {
     const table = String(execution?.result?.data?.displayTable || '').trim();
@@ -1144,7 +1388,7 @@
     ].join('\n');
   };
 
-  const buildSkillSynthesisPrompt = (prompt, execution) => {
+  const buildSkillSynthesisPrompt = (prompt, execution, skillImages = []) => {
     const result = execution?.result || {};
     const rawContext = String(result.data?.context || '');
     const displayPrefix = getSkillDisplayPrefix(execution);
@@ -1169,6 +1413,9 @@
       displayPrefix
         ? '前端已经在最终回复开头展示完整匹配数据表。你不要重复输出表格，只输出“分析结果”下面的分析内容。'
         : '',
+      skillImages.length
+        ? `前端已随本次消息上传 ${skillImages.length} 张匹配图谱图片。你必须阅读图片曲线和图中标注，重点做图谱之间的峰形、峰值、温区、吸放热/失重形态和异常点对比，不要只分析标题、标签或分类。`
+        : '',
       '请直接回答用户原始问题，给出分析结论、关键依据和必要建议。',
       '不要再输出 gjhSkillCall JSON。',
       '不要只复述“技能已执行”。',
@@ -1176,10 +1423,10 @@
     ].filter(Boolean).join('\n');
   };
 
-  const createAbortTimer = (label, timeoutMs = SKILL_SYNTHESIS_TIMEOUT_MS) => {
+  const createAbortTimer = (label, timeoutMs = SKILL_SYNTHESIS_TIMEOUT_MS, parentSignal = null) => {
     if (typeof AbortController !== 'function') {
       return {
-        signal: undefined,
+        signal: parentSignal || undefined,
         clear: () => {},
         formatError: (error) => error?.message || '未知错误',
       };
@@ -1187,11 +1434,26 @@
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    let parentAbortHandler = null;
+    if (parentSignal) {
+      if (parentSignal.aborted) {
+        controller.abort();
+      } else {
+        parentAbortHandler = () => controller.abort();
+        parentSignal.addEventListener('abort', parentAbortHandler, { once: true });
+      }
+    }
     return {
       signal: controller.signal,
-      clear: () => window.clearTimeout(timer),
+      clear: () => {
+        window.clearTimeout(timer);
+        if (parentSignal && parentAbortHandler) {
+          parentSignal.removeEventListener('abort', parentAbortHandler);
+        }
+      },
       formatError: (error) => {
         if (error?.name === 'AbortError') {
+          if (parentSignal?.aborted || chatAbortRequested) return '用户已终止本次分析。';
           const seconds = Math.round(timeoutMs / 1000);
           return `${label}超过 ${seconds} 秒未返回，请缩小数据范围或切换更快模型后重试。`;
         }
@@ -1200,7 +1462,8 @@
     };
   };
 
-  const synthesizeSkillResult = async ({ config, model, prompt, execution, pendingIndex, displayPrefix = '' }) => {
+  const synthesizeSkillResult = async ({ config, model, prompt, execution, pendingIndex, displayPrefix = '', signal = null, images = [] }) => {
+    const skillImages = normalizeImages(images);
     const synthesisMessages = [
       { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
       {
@@ -1210,12 +1473,18 @@
           '你正在接收前端项目技能执行后的数据结果。你的任务是把这些结果转成用户真正想要的分析回答，而不是继续调用技能。',
           '前端已经完成数据检索或项目操作；你必须直接分析这些数据并给出结论，不要输出 gjhSkillCall JSON。',
           '如果前端已经展示匹配数据表，你不要重复输出表格，只继续输出分析结果。',
+          skillImages.length
+            ? '本轮还包含匹配图谱图片作为视觉输入。你要基于图片本身做图谱对比分析，不要停留在元数据摘要。'
+            : '',
         ].join('\n\n'),
       },
-      { role: 'user', content: buildSkillSynthesisPrompt(prompt, execution) },
+      toApiMessage(
+        { role: 'user', content: buildSkillSynthesisPrompt(prompt, execution, skillImages) },
+        { images: skillImages }
+      ),
     ];
     const streamEnabled = config.aiProvider === 'lmstudio' || Boolean(config.streamEnabled);
-    const requestTimer = createAbortTimer('AI 分析');
+    const requestTimer = createAbortTimer('AI 分析', SKILL_SYNTHESIS_TIMEOUT_MS, signal);
 
     try {
       const response = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -1248,7 +1517,7 @@
           if (Number.isInteger(pendingIndex) && pendingIndex >= 0) {
             scheduleStreamRender(pendingIndex, [displayPrefix, content || '正在分析...'].filter(Boolean).join('\n\n'));
           }
-        });
+        }, { signal: requestTimer.signal });
 
         if (!streamResult.receivedDelta) {
           throw new Error('AI 分析没有返回流式内容。');
@@ -1266,7 +1535,9 @@
         };
       }
 
+      if (requestTimer.signal?.aborted) throw createAbortError();
       const data = await response.json();
+      if (requestTimer.signal?.aborted) throw createAbortError();
       const content = data?.choices?.[0]?.message?.content?.trim() || '';
       return {
         content: [displayPrefix, content].filter(Boolean).join('\n\n'),
@@ -1283,9 +1554,7 @@
   };
 
   const runLocalSkillPlan = async (prompt, plan) => {
-    state.chatBusy = true;
-    if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
-    if (refs.chatInput) refs.chatInput.disabled = true;
+    setChatBusyState(true);
 
     pushChatMessage('user', prompt);
     if (refs.chatInput) refs.chatInput.value = '';
@@ -1304,10 +1573,8 @@
     } catch (error) {
       pushChatMessage('assistant', `项目技能执行失败：${error?.message || '未知错误'}`);
     } finally {
-      state.chatBusy = false;
-      if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
+      setChatBusyState(false);
       if (refs.chatInput) {
-        refs.chatInput.disabled = false;
         refs.chatInput.focus();
       }
     }
@@ -1319,9 +1586,7 @@
     const action = normalizeSkillActions(sourceMessage?.actions)[actionIndex];
     if (!sourceMessage || !action || action.disabled) return;
 
-    state.chatBusy = true;
-    if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
-    if (refs.chatInput) refs.chatInput.disabled = true;
+    setChatBusyState(true);
 
     const actions = normalizeSkillActions(sourceMessage.actions);
     if (action.consumesGroup) {
@@ -1347,25 +1612,36 @@
     } catch (error) {
       pushChatMessage('assistant', `项目技能执行失败：${error?.message || '未知错误'}`);
     } finally {
-      state.chatBusy = false;
-      if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
+      setChatBusyState(false);
       if (refs.chatInput) {
-        refs.chatInput.disabled = false;
         refs.chatInput.focus();
       }
     }
   };
 
-  const consumeChatCompletionStream = async (response, onDelta) => {
+  const consumeChatCompletionStream = async (response, onDelta, options = {}) => {
     if (!response.body) return { receivedDelta: false, usage: null, finishReason: '' };
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
+    const signal = options.signal || null;
     let buffer = '';
     let finished = false;
     let receivedDelta = false;
     let streamUsage = null;
     let streamFinishReason = '';
+    let abortHandler = null;
+
+    if (signal?.aborted) {
+      await reader.cancel().catch(() => {});
+      throw createAbortError();
+    }
+    if (signal) {
+      abortHandler = () => {
+        reader.cancel().catch(() => {});
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+    }
 
     const processBlock = (block) => {
       const dataLines = [];
@@ -1395,55 +1671,70 @@
       }
     };
 
-    while (!finished) {
-      const { value, done } = await reader.read();
-      if (value) {
-        buffer += decoder.decode(value, { stream: !done });
-        buffer = buffer.replace(/\r\n/g, '\n');
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() || '';
-        parts.forEach((part) => {
-          if (!finished) processBlock(part);
-        });
+    try {
+      while (!finished) {
+        if (signal?.aborted) throw createAbortError();
+        const { value, done } = await reader.read();
+        if (signal?.aborted) throw createAbortError();
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          buffer = buffer.replace(/\r\n/g, '\n');
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          parts.forEach((part) => {
+            if (!finished) processBlock(part);
+          });
+        }
+        if (done) break;
       }
-      if (done) break;
+
+      buffer += decoder.decode();
+      buffer = buffer.replace(/\r\n/g, '\n');
+      const tailParts = buffer.split('\n\n');
+      tailParts.forEach((part) => {
+        if (!finished) processBlock(part);
+      });
+
+      return { receivedDelta, usage: streamUsage, finishReason: streamFinishReason };
+    } catch (error) {
+      if (signal?.aborted || isAbortError(error)) throw createAbortError();
+      throw error;
+    } finally {
+      if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
+      try {
+        reader.releaseLock?.();
+      } catch {
+        // Some browsers keep the reader locked briefly after cancellation.
+      }
     }
-
-    buffer += decoder.decode();
-    buffer = buffer.replace(/\r\n/g, '\n');
-    const tailParts = buffer.split('\n\n');
-    tailParts.forEach((part) => {
-      if (!finished) processBlock(part);
-    });
-
-    return { receivedDelta, usage: streamUsage, finishReason: streamFinishReason };
   };
 
-  const scheduleStreamRender = (pendingIndex, content) => {
+  const buildAssistantRenderMessage = (content, options = {}) => ({
+    role: 'assistant',
+    content: content || '正在思考...',
+    images: [],
+    pending: Boolean(options.pending),
+    pendingStatus: options.pendingStatus || '',
+    imageUploadAuth: normalizeImageUploadAuth(options.imageUploadAuth),
+  });
+
+  const scheduleStreamRender = (pendingIndex, content, options = {}) => {
     if (streamRenderTimer) return;
     streamRenderTimer = window.setTimeout(() => {
       streamRenderTimer = 0;
-      state.chatHistory[pendingIndex] = {
-        role: 'assistant',
-        content: content || '正在思考...',
-        images: [],
-      };
+      state.chatHistory[pendingIndex] = buildAssistantRenderMessage(content, options);
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
       renderChatMessages({ autoScroll: true });
     }, 120);
   };
 
-  const flushStreamRender = (pendingIndex, content) => {
+  const flushStreamRender = (pendingIndex, content, options = {}) => {
     if (streamRenderTimer) {
       window.clearTimeout(streamRenderTimer);
       streamRenderTimer = 0;
     }
-    state.chatHistory[pendingIndex] = {
-      role: 'assistant',
-      content: content || '正在思考...',
-      images: [],
-    };
+    state.chatHistory[pendingIndex] = buildAssistantRenderMessage(content, options);
     const session = getActiveSession();
     if (session) session.updatedAt = nowIso();
     saveChatState();
@@ -1457,7 +1748,7 @@
     session.messages.push({
       role,
       content,
-      images: normalizeImages(images).slice(0, 1),
+      images: normalizeImages(images),
       actions: normalizeSkillActions(actions),
     });
     session.updatedAt = nowIso();
@@ -1472,26 +1763,21 @@
 
   const renderDataAttachmentState = () => {
     if (!refs.assistantDataToggleBtn) return;
-    const enabled = Boolean(state.dataAttachmentEnabled);
+    const enabled = isProjectAccessEnabled();
     const pageId = getActivePageId();
-    const label = enabled ? '本页' : '全局';
-    const icon = enabled ? 'ti-database' : 'ti-world';
+    const pageTitle = constants.PAGE_DEFS?.[pageId]?.title || '当前页';
+    const label = enabled ? '接入' : '不接入';
+    const icon = enabled ? 'ti-plug-connected' : 'ti-plug-off';
 
     refs.assistantDataToggleBtn.innerHTML = `<i class="ti ${icon}" aria-hidden="true"></i><span>${label}</span>`;
     refs.assistantDataToggleBtn.classList.toggle('is-active', enabled);
     refs.assistantDataToggleBtn.setAttribute('aria-pressed', String(enabled));
-    refs.assistantDataToggleBtn.setAttribute('aria-label', enabled ? '当前页数据模式' : '全局数据模式');
+    refs.assistantDataToggleBtn.setAttribute('aria-label', enabled ? '已接入项目数据与技能' : '未接入项目数据与技能');
     refs.assistantDataToggleBtn.setAttribute(
       'title',
       enabled
-        ? '本页模式：管家会强制优先携带当前页面数据'
-        : pageId === 'property-analysis'
-          ? '全局模式：AI 先判断是否调用物性数据技能，再由前端获取对应数据'
-          : pageId === 'spectrum-analysis'
-            ? '全局模式：AI 先判断是否调用图谱技能，再由前端获取对应数据'
-            : pageId === 'image-cutout'
-              ? '全局模式：AI 先判断是否调用抠图技能，再由前端获取对应数据'
-              : '全局模式：AI 先判断是否调用项目技能，再由前端获取对应数据'
+        ? `已接入：AI 会按当前所在页面（${pageTitle}）读取项目数据并可调用项目技能`
+        : '未接入：仅进行普通 AI 对话，不读取项目数据，也不调用项目技能'
     );
   };
 
@@ -1503,10 +1789,49 @@
     state.dataAttachmentEnabled = Boolean(utils.readJson(constants.CHAT_DATA_ATTACHMENT_KEY, false));
   };
 
+  const renderChatSubmitState = () => {
+    if (!refs.chatSendBtn) return;
+    const busy = Boolean(state.chatBusy);
+    refs.chatSendBtn.classList.toggle('is-stop', busy);
+    refs.chatSendBtn.classList.toggle('is-stopping', busy && chatAbortRequested);
+    refs.chatSendBtn.disabled = busy && chatAbortRequested;
+    refs.chatSendBtn.setAttribute('aria-label', busy ? '终止本次 AI 分析' : '开始 AI 分析');
+    refs.chatSendBtn.setAttribute('title', busy ? '终止本次 AI 分析' : '开始分析');
+    refs.chatSendBtn.innerHTML = busy
+      ? `<span>${chatAbortRequested ? '终止中' : '终止分析'}</span><i class="ti ti-player-stop-filled" aria-hidden="true"></i>`
+      : '<span>开始分析</span><i class="ti ti-send-2" aria-hidden="true"></i>';
+  };
+
+  const setChatBusyState = (busy) => {
+    state.chatBusy = Boolean(busy);
+    if (!busy) chatAbortRequested = false;
+    if (refs.chatInput) refs.chatInput.disabled = Boolean(busy);
+    renderChatSubmitState();
+  };
+
+  const stopCurrentChatAnalysis = () => {
+    if (!state.chatBusy || chatAbortRequested) return;
+    chatAbortRequested = true;
+    renderChatSubmitState();
+    if (activeChatAbortController) {
+      activeChatAbortController.abort();
+    }
+  };
+
   const sendChatMessage = async () => {
-    if (state.chatBusy) return;
+    if (state.chatBusy) {
+      stopCurrentChatAnalysis();
+      return;
+    }
     const prompt = (refs.chatInput?.value || '').trim();
     if (!prompt) return;
+
+    const projectAccessEnabled = isProjectAccessEnabled();
+    const localPlan = projectAccessEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
+    if (localPlan?.skillId === 'assistant.openPage') {
+      await runLocalSkillPlan(prompt, localPlan);
+      return;
+    }
 
     const config = App.config.getFormConfig();
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
@@ -1530,23 +1855,23 @@
     const rawAttachedImages = supportsImageInput
       ? [
           ...pendingDraftImages,
-          ...(state.dataAttachmentEnabled ? getAttachedDataImages(prompt) : []),
-        ].slice(0, 1)
+          ...(projectAccessEnabled ? getAttachedDataImages(prompt) : []),
+        ]
+        .slice(0, 8)
       : [];
-    const attachedImages = supportsImageInput
-      ? await compressImagesForAi(rawAttachedImages, { prompt })
-      : [];
-    const wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+    let attachedImages = [];
+    let wantsImages = false;
 
-    state.chatBusy = true;
-    if (refs.chatSendBtn) refs.chatSendBtn.disabled = true;
-    if (refs.chatInput) refs.chatInput.disabled = true;
+    activeChatAbortController = typeof AbortController === 'function' ? new AbortController() : null;
+    chatAbortRequested = false;
+    setChatBusyState(true);
 
-    pushChatMessage('user', prompt, attachedImages);
+    pushChatMessage('user', prompt);
     pendingDraftImages = [];
     if (refs.chatInput) refs.chatInput.value = '';
     pushChatMessage('assistant', '正在思考...');
     const pendingIndex = state.chatHistory.length - 1;
+    flushStreamRender(pendingIndex, '正在思考...', { pending: true, pendingStatus: '正在思考' });
     const isLmStudioProvider = config.aiProvider === 'lmstudio';
     const streamEnabled = isLmStudioProvider || Boolean(config.streamEnabled);
     let streamedContent = '';
@@ -1558,105 +1883,120 @@
     let attachedDataContext = '';
     let usedStream = false;
     let skillExecution = null;
+    let skipAiRequest = false;
     const callStartedAt = nowIso();
     const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
-      if (!wantsImages && shouldFallbackToPropertySearch(prompt) && App.projectSkills?.executeSkill) {
-        flushStreamRender(pendingIndex, '正在获取匹配数据表...');
-        skillExecution = await App.projectSkills.executeSkill('property.searchRows', { query: prompt }, {
-          source: 'chat-data-preflight',
-          prompt,
-          reason: '用户正在分析物性数据，前端先检索并渲染匹配表格，再交给 AI 输出分析。',
+      attachedDataFile = projectAccessEnabled ? getAttachedDataFile(prompt) : null;
+      attachedDataContext = projectAccessEnabled ? getAttachedDataContext(prompt) : '';
+      if (rawAttachedImages.length) {
+        const approved = await requestImageUploadAuthorization(rawAttachedImages, {
+          pendingIndex,
+          source: '本次消息',
+          signal: activeChatAbortController?.signal,
         });
-      }
-
-      if (!skillExecution) {
-        attachedDataFile = state.dataAttachmentEnabled ? getAttachedDataFile(prompt) : null;
-        attachedDataContext = state.dataAttachmentEnabled ? getAttachedDataContext(prompt) : '';
-        const requestMessages = state.chatHistory
-          .slice(0, pendingIndex)
-          .filter((item) => item.role === 'user' || item.role === 'assistant')
-          .slice(-12)
-          .map((item, index, items) => {
-            const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
-            return toApiMessage(item, {
-              content: isCurrentUserMessage
-                ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
-                : item.content,
-              files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
-              images: isCurrentUserMessage ? attachedImages : item.images,
-            });
-          });
-        apiMessages = [
-          ...getContextMessages(config, ''),
-          ...requestMessages,
-        ];
-
-        const response = await fetch(`${config.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: App.config.getRequestHeaders(config),
-          body: JSON.stringify({
-            model,
-            messages: apiMessages,
-            temperature: config.temperature,
-            max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
-            modalities: wantsImages ? ['image', 'text'] : undefined,
-            stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => '');
-          throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
-        }
-        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-        usedStream = !wantsImages
-          && !attachedDataFile
-          && streamEnabled
-          && response.body
-          && (isLmStudioProvider || contentType.includes('text/event-stream'));
-
-        if (usedStream) {
-          const streamResult = await consumeChatCompletionStream(response, (delta) => {
-            streamedContent += delta;
-            scheduleStreamRender(pendingIndex, streamedContent);
-          });
-          if (!streamResult.receivedDelta) {
-            throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
-          }
-          apiUsage = streamResult.usage || apiUsage;
-          finishReason = streamResult.finishReason || finishReason;
-          flushStreamRender(pendingIndex, streamedContent);
+        if (!approved) {
+          streamedContent = `已取消上传 ${rawAttachedImages.length} 张图片，本次未向 AI 发送图片。`;
+          finishReason = 'image_upload_cancelled';
+          skipAiRequest = true;
         } else {
-          const data = await response.json();
-          streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
-          finishReason = String(data?.choices?.[0]?.finish_reason || '');
-          apiUsage = data?.usage || null;
-          streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
-            ? data.choices[0].message.images.map((image) => ({
-                type: String(image?.type || 'image_url'),
-                image_url: {
-                  url: String(image?.image_url?.url || image?.url || ''),
-                },
-              })).filter((image) => image.image_url.url)
-            : [];
-        }
-
-        skillExecution = await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
-          source: 'assistant-skill-call',
-          prompt,
-          onBeforeExecute: () => flushStreamRender(pendingIndex, '正在获取项目数据...'),
-        });
-        if (!skillExecution && shouldFallbackToPropertySearch(prompt) && App.projectSkills?.executeSkill) {
-          flushStreamRender(pendingIndex, '正在获取匹配数据表...');
-          skillExecution = await App.projectSkills.executeSkill('property.searchRows', { query: prompt }, {
-            source: 'chat-data-fallback',
-            prompt,
-            reason: '模型未主动调用数据技能，前端按数据问题兜底检索物性表格。',
+          flushStreamRender(pendingIndex, `已授权上传 ${rawAttachedImages.length} 张图片，正在准备发送...`, {
+            pending: true,
+            pendingStatus: '准备上传图片',
           });
+          attachedImages = await compressImagesForAi(rawAttachedImages, { prompt });
+          const userMessage = state.chatHistory[pendingIndex - 1];
+          if (userMessage?.role === 'user') {
+            userMessage.images = attachedImages;
+            saveChatState();
+          }
         }
       }
+
+      wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+
+      if (!skipAiRequest) {
+      const requestMessages = state.chatHistory
+        .slice(0, pendingIndex)
+        .filter((item) => item.role === 'user' || item.role === 'assistant')
+        .slice(-12)
+        .map((item, index, items) => {
+          const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
+          return toApiMessage(item, {
+            content: isCurrentUserMessage
+              ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
+              : item.content,
+            files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
+            images: isCurrentUserMessage ? attachedImages : item.images,
+          });
+        });
+      apiMessages = [
+        ...getContextMessages(config, ''),
+        ...requestMessages,
+      ];
+
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config.getRequestHeaders(config),
+        signal: activeChatAbortController?.signal,
+        body: JSON.stringify({
+          model,
+          messages: apiMessages,
+          temperature: config.temperature,
+          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
+          modalities: wantsImages ? ['image', 'text'] : undefined,
+          stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+      }
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      usedStream = !wantsImages
+        && !attachedDataFile
+        && streamEnabled
+        && response.body
+        && (isLmStudioProvider || contentType.includes('text/event-stream'));
+
+      if (usedStream) {
+        const streamResult = await consumeChatCompletionStream(response, (delta) => {
+          streamedContent += delta;
+          scheduleStreamRender(pendingIndex, streamedContent);
+        }, { signal: activeChatAbortController?.signal });
+        if (!streamResult.receivedDelta) {
+          throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
+        }
+        apiUsage = streamResult.usage || apiUsage;
+        finishReason = streamResult.finishReason || finishReason;
+        flushStreamRender(pendingIndex, streamedContent);
+      } else {
+        if (activeChatAbortController?.signal.aborted) throw createAbortError();
+        const data = await response.json();
+        if (activeChatAbortController?.signal.aborted) throw createAbortError();
+        streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+        finishReason = String(data?.choices?.[0]?.finish_reason || '');
+        apiUsage = data?.usage || null;
+        streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
+          ? data.choices[0].message.images.map((image) => ({
+              type: String(image?.type || 'image_url'),
+              image_url: {
+                url: String(image?.image_url?.url || image?.url || ''),
+              },
+            })).filter((image) => image.image_url.url)
+          : [];
+      }
+
+      skillExecution = projectAccessEnabled
+        ? await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
+            source: 'assistant-skill-call',
+            prompt,
+            onBeforeExecute: () => flushStreamRender(pendingIndex, '正在获取项目数据...', { pending: true, pendingStatus: '正在获取项目数据' }),
+          })
+        : null;
+      if (activeChatAbortController?.signal.aborted) throw createAbortError();
       if (skillExecution) {
         const needsSynthesis = shouldSynthesizeSkillResult(skillExecution);
         const displayPrefix = getSkillDisplayPrefix(skillExecution);
@@ -1664,34 +2004,100 @@
           pendingIndex,
           needsSynthesis
             ? [displayPrefix, '正在分析...'].filter(Boolean).join('\n\n')
-            : '项目技能已执行，正在整理结果...'
+            : '项目技能已执行，正在整理结果...',
+          {
+            pending: true,
+            pendingStatus: needsSynthesis ? '正在分析' : '项目技能已执行，正在整理结果',
+          }
         );
         if (needsSynthesis) {
           try {
-            const synthesized = await synthesizeSkillResult({
-              config,
-              model,
-              prompt,
-              execution: skillExecution,
-              pendingIndex,
-              displayPrefix,
-            });
-            streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
-            apiUsage = synthesized.usage || apiUsage;
-            finishReason = synthesized.finishReason || finishReason;
-            apiMessages = synthesized.messages || apiMessages;
-            usedStream = usedStream || Boolean(synthesized.usedStream);
+            const rawSkillImages = getSkillResultImages(skillExecution);
+            const isSpectrumImageSearch = skillExecution?.skill?.id === 'spectrum.searchImages';
+            if (isSpectrumImageSearch && !rawSkillImages.length) {
+              streamedContent = [
+                App.projectSkills.formatSkillMessage(skillExecution),
+                '',
+                '【提示】检索结果没有可上传的图谱图片，无法进行曲线、峰形或标注的视觉分析。',
+              ].join('\n');
+            } else {
+              if (rawSkillImages.length) {
+                const skillUploadApproved = await requestImageUploadAuthorization(rawSkillImages, {
+                  pendingIndex,
+                  displayPrefix,
+                  source: '图谱检索结果',
+                  signal: activeChatAbortController?.signal,
+                });
+                if (!skillUploadApproved) {
+                  streamedContent = [
+                    displayPrefix,
+                    `已取消上传 ${rawSkillImages.length} 张图谱图片，本次未继续进行视觉图谱分析。`,
+                  ].filter(Boolean).join('\n\n');
+                } else {
+                  flushStreamRender(
+                    pendingIndex,
+                    [displayPrefix, `已授权上传 ${rawSkillImages.length} 张图谱图片，正在交给 AI 分析...`].filter(Boolean).join('\n\n'),
+                    { pending: true, pendingStatus: '正在分析图谱图片' }
+                  );
+                  const skillImages = await compressImagesForAi(rawSkillImages, { prompt });
+                  const imageNotice = rawSkillImages.length && !skillImages.length
+                    ? '\n\n【提示】本次没有可上传的图谱图片，因此无法做曲线图片分析。请确认图谱记录里有图片。'
+                    : '';
+                  const synthesized = await synthesizeSkillResult({
+                    config,
+                    model,
+                    prompt,
+                    execution: skillExecution,
+                    pendingIndex,
+                    displayPrefix,
+                    signal: activeChatAbortController?.signal,
+                    images: skillImages,
+                  });
+                  streamedContent = `${synthesized.content || App.projectSkills.formatSkillMessage(skillExecution)}${imageNotice}`;
+                  apiUsage = synthesized.usage || apiUsage;
+                  finishReason = synthesized.finishReason || finishReason;
+                  apiMessages = synthesized.messages || apiMessages;
+                  usedStream = usedStream || Boolean(synthesized.usedStream);
+                }
+              } else {
+                const synthesized = await synthesizeSkillResult({
+                  config,
+                  model,
+                  prompt,
+                  execution: skillExecution,
+                  pendingIndex,
+                  displayPrefix,
+                  signal: activeChatAbortController?.signal,
+                  images: [],
+                });
+                streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
+                apiUsage = synthesized.usage || apiUsage;
+                finishReason = synthesized.finishReason || finishReason;
+                apiMessages = synthesized.messages || apiMessages;
+                usedStream = usedStream || Boolean(synthesized.usedStream);
+              }
+            }
           } catch (error) {
-            streamedContent = [
-              App.projectSkills.formatSkillMessage(skillExecution),
-              '',
-              `【提示】技能结果已生成，但二次分析失败：${error?.message || '未知错误'}`,
-            ].join('\n');
+            if (isAbortError(error)) throw error;
+            const skillImageCount = getSkillResultImages(skillExecution).length;
+            streamedContent = skillExecution?.skill?.id === 'spectrum.searchImages' && skillImageCount
+              ? [
+                  `已找到 ${skillImageCount} 张相关图谱，并已尝试上传图谱图片给 AI 做曲线对比分析。`,
+                  '',
+                  `【提示】图片分析失败：${error?.message || '未知错误'}`,
+                  '请确认当前模型支持图像输入；如果不支持，请切换到图像理解模型后重试。',
+                ].join('\n')
+              : [
+                  App.projectSkills.formatSkillMessage(skillExecution),
+                  '',
+                  `【提示】技能结果已生成，但二次分析失败：${error?.message || '未知错误'}`,
+                ].join('\n');
           }
         } else {
           streamedContent = App.projectSkills.formatSkillMessage(skillExecution);
         }
         streamedImages = [];
+      }
       }
       const skillActions = skillExecution
         ? (App.projectSkills.getResultActions?.(skillExecution) || [])
@@ -1726,7 +2132,7 @@
         startedAt: callStartedAt,
         endedAt: nowIso(),
         durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: 'success',
+        status: skipAiRequest ? 'cancelled' : 'success',
         statusText: finishReason,
         prompt,
         responsePreview: streamedContent,
@@ -1744,12 +2150,15 @@
         window.clearTimeout(streamRenderTimer);
         streamRenderTimer = 0;
       }
-      const currentContent = String(state.chatHistory[pendingIndex]?.content || '').trim();
-      const fallbackMessage = `发送失败：${error?.message || '网络或权限错误'}`;
+      const wasStopped = chatAbortRequested || isAbortError(error);
+      const currentMessage = state.chatHistory[pendingIndex] || {};
+      const currentContent = stripPendingStatus(String(currentMessage.content || '').trim(), currentMessage.pendingStatus);
+      const fallbackMessage = wasStopped ? '【已终止】本次 AI 分析已停止。' : `发送失败：${error?.message || '网络或权限错误'}`;
       state.chatHistory[pendingIndex] = {
         role: 'assistant',
         content: currentContent ? `${currentContent}\n\n${fallbackMessage}` : fallbackMessage,
         images: [],
+        pending: false,
       };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
@@ -1765,8 +2174,8 @@
         startedAt: callStartedAt,
         endedAt: nowIso(),
         durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: 'failed',
-        error: error?.message || '网络或权限错误',
+        status: wasStopped ? 'cancelled' : 'failed',
+        error: wasStopped ? '用户终止' : (error?.message || '网络或权限错误'),
         prompt,
         responsePreview: currentContent,
         requestMessages: apiMessages,
@@ -1780,9 +2189,9 @@
         },
       });
     } finally {
-      state.chatBusy = false;
-      if (refs.chatSendBtn) refs.chatSendBtn.disabled = false;
-      if (refs.chatInput) refs.chatInput.disabled = false;
+      activeChatAbortController = null;
+      setChatBusyState(false);
+      if (refs.chatInput) refs.chatInput.focus();
     }
   };
 
@@ -1843,6 +2252,13 @@
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
 
+      const imageAuthButton = target.closest('[data-chat-image-auth]');
+      if (imageAuthButton) {
+        const [requestId, decision] = String(imageAuthButton.getAttribute('data-chat-image-auth') || '').split(':');
+        if (requestId) settleImageUploadAuthorization(requestId, decision === 'approve');
+        return;
+      }
+
       const actionButton = target.closest('[data-chat-skill-action]');
       if (actionButton) {
         const [messageIndex, actionIndex] = String(actionButton.getAttribute('data-chat-skill-action') || '')
@@ -1876,6 +2292,7 @@
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
+        if (state.chatBusy) stopCurrentChatAnalysis();
         closeConversationMenu();
         closeChatImagePreview();
       }
@@ -1892,6 +2309,7 @@
     bindChat();
     renderChat();
     renderDataAttachmentState();
+    renderChatSubmitState();
     updateHeaderState();
   };
 

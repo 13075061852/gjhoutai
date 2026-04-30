@@ -6,6 +6,8 @@
 
   const { refs, constants, state, utils } = App;
   const NEW_CONVERSATION_TITLE = '新建对话';
+  const SKILL_SYNTHESIS_TIMEOUT_MS = 90000;
+  const SKILL_SYNTHESIS_CONTEXT_LIMIT = 12000;
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
   let streamRenderTimer = 0;
@@ -734,12 +736,18 @@
     }
   };
 
-  const getProjectContext = () => [
-    '【项目背景】',
-    '你正在广俊塑料科技后台管理系统中工作。',
-    '项目当前包含物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板、主题设置和配置中心。',
-    '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
-  ].join('\n');
+  const getProjectContext = () => {
+    const activePageId = getActivePageId();
+    const activePageTitle = constants.PAGE_DEFS?.[activePageId]?.title || activePageId || '未知页面';
+    return [
+      '【项目背景】',
+      '你正在广俊塑料科技后台管理系统中工作。',
+      '项目当前包含物性分析、图谱分析、抠图助手、技能面板、AI调用分析面板、主题设置和配置中心。',
+      `当前页面：${activePageTitle}`,
+      '默认流程：先判断是否需要项目技能；需要数据或页面操作时输出技能调用 JSON，由前端获取数据或执行操作后再交给 AI 分析。',
+      '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
+    ].join('\n');
+  };
 
   const getAttachedDataContext = (prompt) => {
     const pageId = getActivePageId();
@@ -875,6 +883,8 @@
         content: [
           getProjectContext(),
           '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
+          '用户要求分析、查询、对比、总结当前项目数据、当前页数据或选中数据时，不要直接强答，必须先输出项目技能调用 JSON。',
+          '用户询问物性型号、批次、参数、趋势、走势或指标时，必须调用 property.searchRows 获取数据后再分析。',
           '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
           skillProtocolContext,
         ].join('\n\n'),
@@ -1115,9 +1125,33 @@
       || skillId === 'property.searchRows';
   };
 
+  const shouldFallbackToPropertySearch = (prompt = '') => {
+    const text = String(prompt || '');
+    const activePageId = getActivePageId();
+    const hasPropertyIntent = /(?:分析|查询|查|看|趋势|走势|对比|列举|统计|总结|物性|参数|指标|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰份|伸长率)/.test(text);
+    const hasIdentifier = /[A-Za-z0-9][A-Za-z0-9._/-]{2,}/.test(text);
+    return hasPropertyIntent && (activePageId === 'property-analysis' || hasIdentifier || /(?:物性|型号|批次|参数|指标)/.test(text));
+  };
+
+  const getSkillDisplayPrefix = (execution) => {
+    const table = String(execution?.result?.data?.displayTable || '').trim();
+    if (!table) return '';
+    return [
+      '### 匹配数据表',
+      table,
+      '',
+      '### 分析结果',
+    ].join('\n');
+  };
+
   const buildSkillSynthesisPrompt = (prompt, execution) => {
     const result = execution?.result || {};
-    const context = String(result.data?.context || '');
+    const rawContext = String(result.data?.context || '');
+    const displayPrefix = getSkillDisplayPrefix(execution);
+    const shouldKeepFullContext = Boolean(result.data?.fullContext || result.data?.stats?.fullMatchedRowsUploaded);
+    const context = !shouldKeepFullContext && rawContext.length > SKILL_SYNTHESIS_CONTEXT_LIMIT
+      ? `${rawContext.slice(0, SKILL_SYNTHESIS_CONTEXT_LIMIT)}\n...（技能上下文已自动压缩截断，避免一次分析消耗过多 token。）`
+      : rawContext;
     const details = Array.isArray(result.details) ? result.details.join('\n') : '';
     return [
       '【用户原始问题】',
@@ -1132,6 +1166,9 @@
       context ? `【技能返回的完整数据上下文】\n${context}` : '',
       '',
       '【回答要求】',
+      displayPrefix
+        ? '前端已经在最终回复开头展示完整匹配数据表。你不要重复输出表格，只输出“分析结果”下面的分析内容。'
+        : '',
       '请直接回答用户原始问题，给出分析结论、关键依据和必要建议。',
       '不要再输出 gjhSkillCall JSON。',
       '不要只复述“技能已执行”。',
@@ -1139,7 +1176,31 @@
     ].filter(Boolean).join('\n');
   };
 
-  const synthesizeSkillResult = async ({ config, model, prompt, execution }) => {
+  const createAbortTimer = (label, timeoutMs = SKILL_SYNTHESIS_TIMEOUT_MS) => {
+    if (typeof AbortController !== 'function') {
+      return {
+        signal: undefined,
+        clear: () => {},
+        formatError: (error) => error?.message || '未知错误',
+      };
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    return {
+      signal: controller.signal,
+      clear: () => window.clearTimeout(timer),
+      formatError: (error) => {
+        if (error?.name === 'AbortError') {
+          const seconds = Math.round(timeoutMs / 1000);
+          return `${label}超过 ${seconds} 秒未返回，请缩小数据范围或切换更快模型后重试。`;
+        }
+        return error?.message || '未知错误';
+      },
+    };
+  };
+
+  const synthesizeSkillResult = async ({ config, model, prompt, execution, pendingIndex, displayPrefix = '' }) => {
     const synthesisMessages = [
       { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
       {
@@ -1147,35 +1208,78 @@
         content: [
           getProjectContext(),
           '你正在接收前端项目技能执行后的数据结果。你的任务是把这些结果转成用户真正想要的分析回答，而不是继续调用技能。',
+          '前端已经完成数据检索或项目操作；你必须直接分析这些数据并给出结论，不要输出 gjhSkillCall JSON。',
+          '如果前端已经展示匹配数据表，你不要重复输出表格，只继续输出分析结果。',
         ].join('\n\n'),
       },
       { role: 'user', content: buildSkillSynthesisPrompt(prompt, execution) },
     ];
+    const streamEnabled = config.aiProvider === 'lmstudio' || Boolean(config.streamEnabled);
+    const requestTimer = createAbortTimer('AI 分析');
 
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: App.config.getRequestHeaders(config),
-      body: JSON.stringify({
-        model,
+    try {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config.getRequestHeaders(config),
+        signal: requestTimer.signal,
+        body: JSON.stringify({
+          model,
+          messages: synthesisMessages,
+          temperature: config.temperature,
+          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
+          stream: streamEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const usedStream = streamEnabled
+        && response.body
+        && (config.aiProvider === 'lmstudio' || contentType.includes('text/event-stream'));
+
+      if (usedStream) {
+        let content = '';
+        const streamResult = await consumeChatCompletionStream(response, (delta) => {
+          content += delta;
+          if (Number.isInteger(pendingIndex) && pendingIndex >= 0) {
+            scheduleStreamRender(pendingIndex, [displayPrefix, content || '正在分析...'].filter(Boolean).join('\n\n'));
+          }
+        });
+
+        if (!streamResult.receivedDelta) {
+          throw new Error('AI 分析没有返回流式内容。');
+        }
+        if (Number.isInteger(pendingIndex) && pendingIndex >= 0) {
+          flushStreamRender(pendingIndex, [displayPrefix, content || '我暂时没有返回内容。'].filter(Boolean).join('\n\n'));
+        }
+
+        return {
+          content: [displayPrefix, content.trim()].filter(Boolean).join('\n\n'),
+          usage: streamResult.usage || null,
+          finishReason: streamResult.finishReason || '',
+          messages: synthesisMessages,
+          usedStream,
+        };
+      }
+
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content?.trim() || '';
+      return {
+        content: [displayPrefix, content].filter(Boolean).join('\n\n'),
+        usage: data?.usage || null,
+        finishReason: String(data?.choices?.[0]?.finish_reason || ''),
         messages: synthesisMessages,
-        temperature: config.temperature,
-        max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+        usedStream,
+      };
+    } catch (error) {
+      throw new Error(requestTimer.formatError(error));
+    } finally {
+      requestTimer.clear();
     }
-
-    const data = await response.json();
-    return {
-      content: data?.choices?.[0]?.message?.content?.trim() || '',
-      usage: data?.usage || null,
-      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
-      messages: synthesisMessages,
-    };
   };
 
   const runLocalSkillPlan = async (prompt, plan) => {
@@ -1371,21 +1475,23 @@
     const enabled = Boolean(state.dataAttachmentEnabled);
     const pageId = getActivePageId();
     const label = enabled ? '本页' : '全局';
+    const icon = enabled ? 'ti-database' : 'ti-world';
 
-    refs.assistantDataToggleBtn.textContent = label;
+    refs.assistantDataToggleBtn.innerHTML = `<i class="ti ${icon}" aria-hidden="true"></i><span>${label}</span>`;
     refs.assistantDataToggleBtn.classList.toggle('is-active', enabled);
     refs.assistantDataToggleBtn.setAttribute('aria-pressed', String(enabled));
+    refs.assistantDataToggleBtn.setAttribute('aria-label', enabled ? '当前页数据模式' : '全局数据模式');
     refs.assistantDataToggleBtn.setAttribute(
       'title',
       enabled
         ? '本页模式：管家会强制优先携带当前页面数据'
         : pageId === 'property-analysis'
-          ? '全局模式：管家会自动检索当前页和相关模块数据'
+          ? '全局模式：AI 先判断是否调用物性数据技能，再由前端获取对应数据'
           : pageId === 'spectrum-analysis'
-            ? '全局模式：管家会自动检索当前页和相关模块数据'
+            ? '全局模式：AI 先判断是否调用图谱技能，再由前端获取对应数据'
             : pageId === 'image-cutout'
-              ? '全局模式：管家会自动检索当前页和相关模块数据'
-              : '全局模式：管家会自动检索项目内相关数据'
+              ? '全局模式：AI 先判断是否调用抠图技能，再由前端获取对应数据'
+              : '全局模式：AI 先判断是否调用项目技能，再由前端获取对应数据'
     );
   };
 
@@ -1424,7 +1530,7 @@
     const rawAttachedImages = supportsImageInput
       ? [
           ...pendingDraftImages,
-          ...getAttachedDataImages(prompt),
+          ...(state.dataAttachmentEnabled ? getAttachedDataImages(prompt) : []),
         ].slice(0, 1)
       : [];
     const attachedImages = supportsImageInput
@@ -1451,94 +1557,130 @@
     let attachedDataFile = null;
     let attachedDataContext = '';
     let usedStream = false;
+    let skillExecution = null;
     const callStartedAt = nowIso();
     const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
-      attachedDataFile = getAttachedDataFile(prompt);
-      attachedDataContext = getAttachedDataContext(prompt);
-      const requestMessages = state.chatHistory
-        .slice(0, pendingIndex)
-        .filter((item) => item.role === 'user' || item.role === 'assistant')
-        .slice(-12)
-        .map((item, index, items) => {
-          const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
-          return toApiMessage(item, {
-            content: isCurrentUserMessage
-              ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
-              : item.content,
-            files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
-            images: isCurrentUserMessage ? attachedImages : item.images,
+      if (!wantsImages && shouldFallbackToPropertySearch(prompt) && App.projectSkills?.executeSkill) {
+        flushStreamRender(pendingIndex, '正在获取匹配数据表...');
+        skillExecution = await App.projectSkills.executeSkill('property.searchRows', { query: prompt }, {
+          source: 'chat-data-preflight',
+          prompt,
+          reason: '用户正在分析物性数据，前端先检索并渲染匹配表格，再交给 AI 输出分析。',
+        });
+      }
+
+      if (!skillExecution) {
+        attachedDataFile = state.dataAttachmentEnabled ? getAttachedDataFile(prompt) : null;
+        attachedDataContext = state.dataAttachmentEnabled ? getAttachedDataContext(prompt) : '';
+        const requestMessages = state.chatHistory
+          .slice(0, pendingIndex)
+          .filter((item) => item.role === 'user' || item.role === 'assistant')
+          .slice(-12)
+          .map((item, index, items) => {
+            const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
+            return toApiMessage(item, {
+              content: isCurrentUserMessage
+                ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
+                : item.content,
+              files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
+              images: isCurrentUserMessage ? attachedImages : item.images,
+            });
           });
+        apiMessages = [
+          ...getContextMessages(config, ''),
+          ...requestMessages,
+        ];
+
+        const response = await fetch(`${config.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: App.config.getRequestHeaders(config),
+          body: JSON.stringify({
+            model,
+            messages: apiMessages,
+            temperature: config.temperature,
+            max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
+            modalities: wantsImages ? ['image', 'text'] : undefined,
+            stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
+          }),
         });
-      apiMessages = [
-        ...getContextMessages(config, ''),
-        ...requestMessages,
-      ];
 
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: App.config.getRequestHeaders(config),
-        body: JSON.stringify({
-          model,
-          messages: apiMessages,
-          temperature: config.temperature,
-          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
-          modalities: wantsImages ? ['image', 'text'] : undefined,
-          stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
-      }
-      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      usedStream = !wantsImages
-        && !attachedDataFile
-        && streamEnabled
-        && response.body
-        && (isLmStudioProvider || contentType.includes('text/event-stream'));
-
-      if (usedStream) {
-        const streamResult = await consumeChatCompletionStream(response, (delta) => {
-          streamedContent += delta;
-          scheduleStreamRender(pendingIndex, streamedContent);
-        });
-        if (!streamResult.receivedDelta) {
-          throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
         }
-        apiUsage = streamResult.usage || apiUsage;
-        finishReason = streamResult.finishReason || finishReason;
-        flushStreamRender(pendingIndex, streamedContent);
-      } else {
-        const data = await response.json();
-        streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
-        finishReason = String(data?.choices?.[0]?.finish_reason || '');
-        apiUsage = data?.usage || null;
-        streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
-          ? data.choices[0].message.images.map((image) => ({
-              type: String(image?.type || 'image_url'),
-              image_url: {
-                url: String(image?.image_url?.url || image?.url || ''),
-              },
-            })).filter((image) => image.image_url.url)
-          : [];
-      }
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        usedStream = !wantsImages
+          && !attachedDataFile
+          && streamEnabled
+          && response.body
+          && (isLmStudioProvider || contentType.includes('text/event-stream'));
 
-      const skillExecution = await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
-        source: 'assistant-skill-call',
-        prompt,
-      });
+        if (usedStream) {
+          const streamResult = await consumeChatCompletionStream(response, (delta) => {
+            streamedContent += delta;
+            scheduleStreamRender(pendingIndex, streamedContent);
+          });
+          if (!streamResult.receivedDelta) {
+            throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
+          }
+          apiUsage = streamResult.usage || apiUsage;
+          finishReason = streamResult.finishReason || finishReason;
+          flushStreamRender(pendingIndex, streamedContent);
+        } else {
+          const data = await response.json();
+          streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
+          finishReason = String(data?.choices?.[0]?.finish_reason || '');
+          apiUsage = data?.usage || null;
+          streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
+            ? data.choices[0].message.images.map((image) => ({
+                type: String(image?.type || 'image_url'),
+                image_url: {
+                  url: String(image?.image_url?.url || image?.url || ''),
+                },
+              })).filter((image) => image.image_url.url)
+            : [];
+        }
+
+        skillExecution = await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
+          source: 'assistant-skill-call',
+          prompt,
+          onBeforeExecute: () => flushStreamRender(pendingIndex, '正在获取项目数据...'),
+        });
+        if (!skillExecution && shouldFallbackToPropertySearch(prompt) && App.projectSkills?.executeSkill) {
+          flushStreamRender(pendingIndex, '正在获取匹配数据表...');
+          skillExecution = await App.projectSkills.executeSkill('property.searchRows', { query: prompt }, {
+            source: 'chat-data-fallback',
+            prompt,
+            reason: '模型未主动调用数据技能，前端按数据问题兜底检索物性表格。',
+          });
+        }
+      }
       if (skillExecution) {
-        flushStreamRender(pendingIndex, '正在执行项目技能...');
-        if (shouldSynthesizeSkillResult(skillExecution)) {
+        const needsSynthesis = shouldSynthesizeSkillResult(skillExecution);
+        const displayPrefix = getSkillDisplayPrefix(skillExecution);
+        flushStreamRender(
+          pendingIndex,
+          needsSynthesis
+            ? [displayPrefix, '正在分析...'].filter(Boolean).join('\n\n')
+            : '项目技能已执行，正在整理结果...'
+        );
+        if (needsSynthesis) {
           try {
-            const synthesized = await synthesizeSkillResult({ config, model, prompt, execution: skillExecution });
+            const synthesized = await synthesizeSkillResult({
+              config,
+              model,
+              prompt,
+              execution: skillExecution,
+              pendingIndex,
+              displayPrefix,
+            });
             streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
             apiUsage = synthesized.usage || apiUsage;
             finishReason = synthesized.finishReason || finishReason;
             apiMessages = synthesized.messages || apiMessages;
+            usedStream = usedStream || Boolean(synthesized.usedStream);
           } catch (error) {
             streamedContent = [
               App.projectSkills.formatSkillMessage(skillExecution),

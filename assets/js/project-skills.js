@@ -130,6 +130,70 @@
     };
   };
 
+  const extractSpectrumCreateInput = (prompt) => {
+    const text = String(prompt || '').trim();
+    const title = extractQuotedText(text)
+      || text.match(/(?:新增|创建|新建|添加)\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{2,80})\s*(?:图谱|谱图|记录|数据)?/)?.[1]
+      || '';
+    const category = text.match(/(?:分类|归类|放到|分到)(?:为|到|成|：|:)?\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{1,40})/)?.[1] || '';
+    const type = text.match(/\b(DSC|TGA)\b/i)?.[1] || '';
+    const tags = normalizeTagList(text.match(/(?:标签|tag)(?:为|是|：|:)?\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/，,、 -]{1,80})/)?.[1] || '');
+    if (!title) return null;
+    return { title, category, type, tags };
+  };
+
+  const extractSpectrumUpdateInput = (prompt) => {
+    const text = String(prompt || '').trim();
+    const selected = /(?:当前已选|当前选中|已选|选中)/.test(text);
+    const filtered = /(?:当前筛选|筛选结果|当前列表|当前页面|当前分类)/.test(text);
+    const updates = {};
+    const category = text.match(/(?:分类|归类|放到|分到|改到|改成|改为)(?:为|到|成|：|:)?\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{1,40})/)?.[1] || '';
+    const note = text.match(/(?:备注|说明)(?:为|改为|写成|：|:)\s*([^，。,.!?！？]{1,120})/)?.[1] || '';
+    const title = text.match(/(?:名称|标题)(?:为|改为|写成|：|:)\s*([^，。,.!?！？]{1,80})/)?.[1] || '';
+    const tagsAdd = /(?:标签|打标|标记)/.test(text) ? normalizeTagList(text.match(/(?:加上|添加|增加|打上|写入|标记为|设为|设置为)\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/，,、 -]{1,80})/)?.[1] || '') : [];
+    const tagsRemove = /(?:删除|移除|去掉|清除).*(?:标签|tag)/.test(text)
+      ? normalizeTagList(text.match(/(?:删除|移除|去掉|清除)\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/，,、 -]{1,80})\s*(?:标签|tag)/)?.[1] || '')
+      : [];
+
+    if (category) updates.category = category;
+    if (note) updates.note = note;
+    if (title) updates.title = title;
+    if (tagsAdd.length) updates.tagsAdd = tagsAdd;
+    if (tagsRemove.length) updates.tagsRemove = tagsRemove;
+    if (!Object.keys(updates).length) return null;
+
+    const target = selected || filtered
+      ? ''
+      : (extractQuotedText(text)
+        || text.match(/(?:把|将|给)?\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{2,60})(?:的)?(?:图谱|谱图|图片|记录|数据)/)?.[1]
+        || '');
+    return {
+      target,
+      mode: selected ? 'selected' : filtered ? 'filtered' : 'query',
+      updates,
+      maxAffected: 30,
+    };
+  };
+
+  const extractSpectrumSelectInput = (prompt) => {
+    const text = String(prompt || '').trim();
+    const filtered = /(?:当前筛选|筛选结果|当前列表|当前页面|当前分类)/.test(text);
+    const active = /(?:当前图谱|当前图片|当前这张|这张)/.test(text);
+    const target = filtered || active
+      ? ''
+      : (extractQuotedText(text)
+        || stripCommandNoise(text)
+          .replace(/^(选择|选中|勾选|定位|打开|查看|筛出|筛选)\s*/, '')
+          .replace(/(图谱|谱图|图片|记录|数据|一下|出来|上)$/g, '')
+          .trim());
+    return {
+      target,
+      mode: filtered ? 'filtered' : active ? 'active' : 'query',
+      clearExisting: !/(?:追加|加选|保留已选)/.test(text),
+      maxAffected: 80,
+    };
+  };
+
   const resolvePageId = (prompt) => {
     const text = normalizeText(prompt);
     const exact = Object.entries(PAGE_ALIASES).find(([alias]) => text.includes(normalizeText(alias)));
@@ -231,13 +295,91 @@
       },
     },
     {
+      id: 'spectrum.createImageRecord',
+      title: '新增图谱记录',
+      module: '图谱分析',
+      icon: 'ti-file-plus',
+      level: '执行型',
+      summary: '新增一条待上传图谱记录，写入名称、编号、类型、分类、标签、日期和备注；不会重复创建同名记录。',
+      inputSpec: '{ "title": "图谱名称", "code": "编号", "type": "DSC | TGA", "category": "分类", "date": "YYYY-MM-DD", "tags": ["标签"], "note": "备注" }',
+      outputSpec: '{ "ok": true, "created": 1, "items": [{ "title": "..." }] }',
+      examples: ['新增一条「320G6-B1 DSC」图谱记录，分类阻燃', '创建一个杜邦 PET FR530 DSC 的待上传图谱'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+        const hasCreateIntent = /(?:新增|创建|新建|添加)/.test(text) && /(?:图谱|谱图|图片|记录|数据)/.test(text);
+        if (!hasCreateIntent || (!activeOnSpectrumPage && !/(?:图谱|谱图)/.test(text))) return null;
+        const input = extractSpectrumCreateInput(text);
+        if (!input) return null;
+        return { skillId: this.id, confidence: 0.86, input };
+      },
+      async handler(input = {}) {
+        if (!App.spectrumAnalysis?.createByAgent) {
+          return { ok: false, message: '图谱分析模块尚未暴露新增记录技能接口。' };
+        }
+        return App.spectrumAnalysis.createByAgent(input);
+      },
+    },
+    {
+      id: 'spectrum.updateImages',
+      title: '更新图谱数据',
+      module: '图谱分析',
+      icon: 'ti-edit',
+      level: '执行型',
+      summary: '精确更新图谱标题、分类、日期、备注或标签；支持当前已选、当前筛选或明确关键词范围，并限制单次影响数量。',
+      inputSpec: '{ "target": "名称/编号/分类/标签", "mode": "query | selected | filtered | active", "updates": { "title": "...", "category": "...", "date": "YYYY-MM-DD", "note": "...", "tagsAdd": ["..."], "tagsRemove": ["..."], "tagsSet": ["..."] }, "maxAffected": 30 }',
+      outputSpec: '{ "ok": true, "updated": 3, "changed": 2, "items": [{ "title": "..." }] }',
+      examples: ['把当前选中的图谱备注改为需要复核', '给杜邦相关图谱移除 PET 标签', '把 320G6-B1 的分类改为阻燃'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+        const hasUpdateIntent = /(?:修改|更新|改成|改为|设置|设为|写入|移除|去掉|清除|备注|标题|名称|标签|分类)/.test(text);
+        const mentionsSpectrum = /(?:图谱|谱图|图片|记录|数据|当前已选|当前筛选|选中)/.test(text);
+        if (!hasUpdateIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
+        const input = extractSpectrumUpdateInput(text);
+        if (!input) return null;
+        return { skillId: this.id, confidence: 0.88, input };
+      },
+      async handler(input = {}) {
+        if (!App.spectrumAnalysis?.updateByAgent) {
+          return { ok: false, message: '图谱分析模块尚未暴露更新数据技能接口。' };
+        }
+        return App.spectrumAnalysis.updateByAgent(input);
+      },
+    },
+    {
+      id: 'spectrum.selectImages',
+      title: '选择图谱数据',
+      module: '图谱分析',
+      icon: 'ti-checklist',
+      level: '执行型',
+      summary: '按明确关键词、当前筛选或当前图谱选择数据，供后续分析、更新或删除复用，避免一次处理过宽范围。',
+      inputSpec: '{ "target": "名称/编号/分类/标签", "mode": "query | filtered | active", "clearExisting": true, "maxAffected": 80 }',
+      outputSpec: '{ "ok": true, "selected": 3, "totalSelected": 3 }',
+      examples: ['先选中杜邦相关图谱', '选择当前筛选结果', '追加选择 320G6-B1 图谱'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+        const hasSelectIntent = /(?:选择|选中|勾选|定位|筛出|筛选|追加选择|加选)/.test(text);
+        const mentionsSpectrum = /(?:图谱|谱图|图片|记录|数据|当前筛选|当前图谱)/.test(text);
+        if (!hasSelectIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
+        return { skillId: this.id, confidence: 0.82, input: extractSpectrumSelectInput(text) };
+      },
+      async handler(input = {}) {
+        if (!App.spectrumAnalysis?.selectByAgent) {
+          return { ok: false, message: '图谱分析模块尚未暴露选择数据技能接口。' };
+        }
+        return App.spectrumAnalysis.selectByAgent(input);
+      },
+    },
+    {
       id: 'spectrum.addTags',
       title: '批量添加图谱标签',
       module: '图谱分析',
       icon: 'ti-tags',
       level: '执行型',
-      summary: '按关键词、当前筛选结果或已选图谱批量写入标签，并同步图谱库、详情编辑和本地保存。',
-      inputSpec: '{ "target": "420", "tags": ["PET"], "mode": "query | selected | filtered" }',
+      summary: '按明确关键词、当前筛选结果或已选图谱批量写入标签，并同步图谱库、详情编辑和本地保存。',
+      inputSpec: '{ "target": "420", "tags": ["PET"], "mode": "query | selected | filtered", "maxAffected": 30 }',
       outputSpec: '{ "ok": true, "updated": 17, "tags": ["PET"] }',
       examples: ['帮我把所有 420 的图谱加上 PET 标签', '给当前已选图谱添加阻燃标签'],
       infer(prompt) {
@@ -268,8 +410,8 @@
       module: '图谱分析',
       icon: 'ti-tags',
       level: '执行型',
-      summary: '按关键词、当前筛选结果或已选图谱批量更新分类，并自动切换到新分类视图。',
-      inputSpec: '{ "target": "杜邦", "category": "杜邦", "mode": "query | selected | filtered" }',
+      summary: '按明确关键词、当前筛选结果或已选图谱批量更新分类，并自动切换到新分类视图。',
+      inputSpec: '{ "target": "杜邦", "category": "杜邦", "mode": "query | selected | filtered", "maxAffected": 30 }',
       outputSpec: '{ "ok": true, "updated": 17, "category": "杜邦" }',
       examples: ['把杜邦的产品整理出来做一个新分类叫杜邦', '把当前筛选结果归类为PET'],
       infer(prompt) {
@@ -336,13 +478,25 @@
         return { skillId: this.id, confidence: 0.72, input: { query: stripCommandNoise(text) } };
       },
       async handler(input = {}) {
-        const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', { activePageId: 'property-analysis' });
+        const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', {
+          activePageId: 'property-analysis',
+          compact: true,
+        });
         if (!context?.content) return { ok: false, message: '物性分析数据尚未加载，暂时无法检索。' };
         return {
           ok: true,
           message: '已完成物性数据检索。',
-          details: [context.reason || '已返回物性分析上下文。'],
-          data: { context: context.content, stats: context.stats || {} },
+          details: [
+            context.reason || '已返回物性分析上下文。',
+            context.stats?.uploadedRows ? `已上传匹配明细：${context.stats.uploadedRows} 行` : '',
+            context.stats?.contextChars ? `上下文长度：${context.stats.contextChars} 字符` : '',
+          ].filter(Boolean),
+          data: {
+            context: context.content,
+            displayTable: context.displayTable || '',
+            stats: context.stats || {},
+            fullContext: Boolean(context.fullContext),
+          },
         };
       },
     },
@@ -352,7 +506,7 @@
       module: '综合分析',
       icon: 'ti-binary-tree-2',
       level: '上下文型',
-      summary: '把当前问题、物性检索结果、图谱元数据和可上传图片整理成统一的 AI 分析上下文。',
+      summary: '仅在用户明确要求跨模块/物性+图谱联合分析时，把相关数据整理成统一的 AI 分析上下文。',
       inputSpec: '{ "question": "用户问题", "forceCurrentPage": false }',
       outputSpec: '{ "ok": true, "context": "...", "imageCount": 1 }',
       examples: ['把当前型号的物性和图谱合成分析包', '生成 320G6-N11 的联合分析上下文'],
@@ -609,6 +763,13 @@
   const executeSkillCallFromText = async (text = '', meta = {}) => {
     const call = parseSkillCallFromText(text);
     if (!call) return null;
+    if (typeof meta.onBeforeExecute === 'function') {
+      try {
+        meta.onBeforeExecute(call);
+      } catch (error) {
+        console.warn('[project-skills] onBeforeExecute failed:', error);
+      }
+    }
     return executeSkill(call.skillId, call.input, {
       ...meta,
       source: meta.source || 'assistant-skill-call',
@@ -627,6 +788,13 @@
       '如果需要让前端执行技能，只输出严格 JSON，不要混入解释、Markdown 或自然语言：',
       formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
       '技能执行后，前端会把执行结果回写给用户。',
+      '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
+      '用户只问单个型号、批次或物性指标分析时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
+      '物性数据默认上传所有符合条件的匹配行；只有用户明确说“前 N 条/只要 N 行/显示 N 个”等数量限制时，才限制上传数量。',
+      '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
+      '图谱数据处理按 CRUD 选择技能：查询用 spectrum.searchImages；新增待上传记录用 spectrum.createImageRecord；选择范围用 spectrum.selectImages；修改标题/分类/日期/备注/标签用 spectrum.updateImages 或专用标签/分类技能；删除用 spectrum.deleteImage。',
+      '所有增删改都必须给出明确 target 或 mode。单个对象优先使用名称/编号精确匹配；用户说“当前选中”用 mode=selected，说“当前筛选/当前分类”用 mode=filtered。',
+      '如果目标可能命中无关数据，先调用 spectrum.searchImages 或 spectrum.selectImages 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',
       '如果技能返回多个候选对象，前端会生成可点击的候选按钮，用户点击后再执行对应对象。',
       '如果用户表达含糊，你可以选择最接近的技能并填入从语义中推断出的参数；缺少关键参数时再自然语言追问。',
       '可用技能：',

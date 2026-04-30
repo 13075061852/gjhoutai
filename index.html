@@ -793,14 +793,25 @@
               </div>
             </div>
             <div class="assistant-footer">
-              <textarea class="chat-input" id="chatInput" placeholder="输入问题，按 Enter 分析，Shift+Enter 换行"></textarea>
-              <div class="footer-actions">
-                <div class="footer-actions-left">
-                  <button class="tiny-btn data-attach-btn" type="button" id="assistantDataToggleBtn" aria-pressed="false">接入数据</button>
-                  <button class="tiny-btn" type="button" id="clearChatBtn">清空聊天</button>
-                  <button class="tiny-btn" type="button" id="copyConfigBtn">复制配置</button>
+              <div class="chat-composer">
+                <textarea class="chat-input" id="chatInput" placeholder="输入问题，按 Enter 分析，Shift+Enter 换行"></textarea>
+                <div class="footer-actions">
+                  <div class="footer-actions-left">
+                    <button class="tiny-btn data-attach-btn" type="button" id="assistantDataToggleBtn" aria-pressed="false">
+                      <i class="ti ti-world" aria-hidden="true"></i>
+                      <span>全局</span>
+                    </button>
+                    <button class="tiny-btn" type="button" id="clearChatBtn">
+                      <i class="ti ti-trash" aria-hidden="true"></i>
+                      <span>清空聊天</span>
+                    </button>
+                    <button class="tiny-btn" type="button" id="copyConfigBtn">复制配置</button>
+                  </div>
+                  <button class="send-btn" type="button" id="chatSendBtn">
+                    <span>开始分析</span>
+                    <i class="ti ti-send-2" aria-hidden="true"></i>
+                  </button>
                 </div>
-                <button class="send-btn" type="button" id="chatSendBtn">开始分析</button>
               </div>
             </div>
           </div>

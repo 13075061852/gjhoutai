@@ -13,6 +13,7 @@
   const IMAGE_STORE_NAME = 'images';
   const EDITABLE_FIELDS = ['title', 'category', 'date', 'tags', 'note'];
   const DELETE_ANIMATION_MS = 240;
+  const SKILL_MUTATION_LIMIT = 30;
 
   const state = {
     items: [],
@@ -221,6 +222,52 @@
       existing.add(key);
     });
     return merged;
+  };
+
+  const removeTags = (currentTags, removedTags) => {
+    const removeSet = new Set(normalizeTags(Array.isArray(removedTags) ? removedTags.join('，') : removedTags)
+      .map((tag) => tag.toLowerCase()));
+    if (!removeSet.size) return Array.isArray(currentTags) ? currentTags : [];
+    return (Array.isArray(currentTags) ? currentTags : []).filter((tag) => !removeSet.has(String(tag).toLowerCase()));
+  };
+
+  const normalizeSkillDate = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const normalized = raw.replace(/[./]/g, '-');
+    const exact = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (exact) {
+      const [, year, month, day] = exact;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return normalized;
+  };
+
+  const normalizeSpectrumType = (value, fallback = '') => {
+    const text = String(value || fallback || '').trim().toUpperCase();
+    if (text.includes('DSC')) return 'DSC';
+    if (text.includes('TGA')) return 'TGA';
+    return '';
+  };
+
+  const escapeSvgText = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const createPlaceholderImage = (title = '') => {
+    const label = escapeSvgText(String(title || '待上传图谱').slice(0, 48));
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420">',
+      '<rect width="720" height="420" fill="#f6f8fc"/>',
+      '<rect x="56" y="56" width="608" height="308" rx="18" fill="#ffffff" stroke="#d8e0ef"/>',
+      '<path d="M96 286 C160 210 222 262 285 198 C348 134 421 174 478 118 C538 60 596 112 626 82" fill="none" stroke="#2f63f4" stroke-width="7" stroke-linecap="round"/>',
+      '<text x="96" y="330" fill="#43526b" font-family="Arial, sans-serif" font-size="24" font-weight="700">Pending spectrum record</text>',
+      `<text x="96" y="362" fill="#6f7d95" font-family="Arial, sans-serif" font-size="18">${label}</text>`,
+      '</svg>',
+    ].join('');
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
   };
 
   const syncTagValue = (form) => {
@@ -1111,6 +1158,34 @@
     note: item.note || '',
   });
 
+  const uniqueSkillItems = (items) => {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : []).filter((item) => {
+      if (!item?.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  };
+
+  const formatSkillItemDetails = (items, limit = 8) => {
+    const normalized = uniqueSkillItems(items);
+    const lines = normalized.slice(0, limit).map((item, index) => (
+      `${index + 1}. ${item.title || item.code || item.id}；类型=${item.type || '-'}；分类=${item.category || '-'}；标签=${item.tags?.length ? item.tags.join('、') : '-'}`
+    ));
+    if (normalized.length > limit) lines.push(`还有 ${normalized.length - limit} 张未展开。`);
+    return lines;
+  };
+
+  const buildSpectrumContext = (title, items, reason = '') => {
+    const normalized = uniqueSkillItems(items).map(toSkillItem);
+    return [
+      `【${title}】`,
+      reason ? `范围说明：${reason}` : '',
+      `返回图谱：${normalized.length} 张。`,
+      ...formatSkillItemDetails(normalized, 12),
+    ].filter(Boolean).join('\n');
+  };
+
   const searchByAgent = ({ query = '', limit = 8 } = {}) => {
     const normalizedLimit = Math.max(1, Math.min(20, Number.parseInt(limit, 10) || 8));
     const entries = state.items
@@ -1124,68 +1199,141 @@
       ok: true,
       message: entries.length ? `已找到 ${entries.length} 张相关图谱。` : '未找到匹配的图谱。',
       details: entries.map((item, index) => `${index + 1}. ${item.title || item.code}；类型=${item.type || '-'}；分类=${item.category || '-'}`),
-      data: { items: entries },
+      data: {
+        items: entries,
+        context: buildSpectrumContext('图谱库检索结果', entries, query ? `按关键词“${query}”检索` : '未提供关键词，返回图谱库概览'),
+      },
       candidates: entries,
     };
   };
 
-  const resolveSkillTargets = ({ target = '', mode = 'query' } = {}) => {
-    if (mode === 'selected') return getSelectedItems();
-    if (mode === 'active') return [getActiveItem()].filter(Boolean);
-    if (mode === 'filtered') return getFilteredItems();
+  const resolvePreciseSkillTargets = ({
+    target = '',
+    mode = 'query',
+    maxAffected = SKILL_MUTATION_LIMIT,
+    allowQueryBulk = true,
+    allowFuzzySingle = false,
+  } = {}) => {
+    const normalizedMode = ['selected', 'active', 'filtered', 'query', 'target'].includes(String(mode))
+      ? String(mode)
+      : 'query';
+    const limit = Math.max(1, Math.min(200, Number.parseInt(maxAffected, 10) || SKILL_MUTATION_LIMIT));
+    let targets = [];
+    let reason = '';
 
-    const query = String(target || '').trim();
-    if (!query) return [];
+    if (normalizedMode === 'selected') {
+      targets = getSelectedItems();
+      reason = '当前已选图谱';
+    } else if (normalizedMode === 'active') {
+      targets = [getActiveItem()].filter(Boolean);
+      reason = '当前激活图谱';
+    } else if (normalizedMode === 'filtered') {
+      targets = getFilteredItems();
+      reason = '当前筛选结果';
+    } else {
+      const query = String(target || '').trim();
+      const normalizedQuery = normalizeSkillText(query);
+      if (!normalizedQuery) {
+        return {
+          ok: false,
+          targets: [],
+          message: '请提供明确的目标名称、编号，或使用 selected/filtered/active 范围。',
+          candidates: getFilteredItems().slice(0, 8).map(toSkillItem),
+        };
+      }
 
-    const exact = state.items.find((item) => [item.id, item.code, item.title]
-      .map((value) => normalizeSkillText(value))
-      .filter(Boolean)
-      .includes(normalizeSkillText(query)));
-    if (exact) return [exact];
+      const exact = state.items.filter((item) => [item.id, item.code, item.title]
+        .map(normalizeSkillText)
+        .filter(Boolean)
+        .includes(normalizedQuery));
+      if (exact.length) {
+        targets = exact;
+        reason = `精确匹配“${query}”`;
+      } else {
+        const strict = state.items.filter((item) => [
+          item.id,
+          item.code,
+          item.title,
+          item.category,
+          ...(Array.isArray(item.tags) ? item.tags : []),
+        ].map(normalizeSkillText).filter(Boolean)
+          .some((value) => value === normalizedQuery || value.includes(normalizedQuery)));
 
-    return state.items
-      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.item);
+        if (strict.length) {
+          targets = strict;
+          reason = `字段包含“${query}”`;
+        } else if (allowFuzzySingle) {
+          const scored = state.items
+            .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+            .filter((entry) => entry.score > 0)
+            .sort((a, b) => b.score - a.score);
+          const topScore = scored[0]?.score || 0;
+          const topMatches = scored.filter((entry) => entry.score === topScore).map((entry) => entry.item);
+          if (topMatches.length === 1 && topScore >= 80) {
+            targets = topMatches;
+            reason = `唯一高置信匹配“${query}”`;
+          } else {
+            return {
+              ok: false,
+              targets: [],
+              message: topMatches.length ? `“${query}”匹配不够明确，暂未处理数据。` : `未找到匹配“${query}”的图谱。`,
+              candidates: topMatches.length ? topMatches.slice(0, 8).map(toSkillItem) : state.items.slice(0, 8).map(toSkillItem),
+            };
+          }
+        } else {
+          const candidates = state.items
+            .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+            .filter((entry) => entry.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8)
+            .map((entry) => toSkillItem(entry.item));
+          return {
+            ok: false,
+            targets: [],
+            message: candidates.length ? `“${query}”只命中相近结果，暂未处理数据。` : `未找到匹配“${query}”的图谱。`,
+            candidates,
+          };
+        }
+      }
+    }
+
+    targets = uniqueSkillItems(targets);
+    if (!targets.length) {
+      return {
+        ok: false,
+        targets: [],
+        message: normalizedMode === 'selected'
+          ? '当前没有已选图谱，暂未处理数据。'
+          : normalizedMode === 'filtered'
+            ? '当前筛选结果为空，暂未处理数据。'
+            : '未找到可处理的图谱。',
+      };
+    }
+
+    if ((normalizedMode === 'query' || normalizedMode === 'target') && targets.length > 1 && !allowQueryBulk) {
+      return {
+        ok: false,
+        targets: [],
+        message: `目标命中 ${targets.length} 张图谱，为避免误处理，请先选择具体图谱或改用“当前筛选/当前已选”。`,
+        candidates: targets.slice(0, 8).map(toSkillItem),
+        data: { matched: targets.length },
+      };
+    }
+
+    if (targets.length > limit) {
+      return {
+        ok: false,
+        targets: [],
+        message: `目标命中 ${targets.length} 张，超过本次处理上限 ${limit} 张。请缩小关键词、先筛选或提高 maxAffected。`,
+        candidates: targets.slice(0, 8).map(toSkillItem),
+        data: { matched: targets.length, limit },
+      };
+    }
+
+    return { ok: true, targets, reason };
   };
 
-  const resolveStrictSkillTargets = ({ target = '', mode = 'query' } = {}) => {
-    if (mode === 'selected') return getSelectedItems();
-    if (mode === 'active') return [getActiveItem()].filter(Boolean);
-    if (mode === 'filtered') return getFilteredItems();
-
-    const query = normalizeSkillText(target);
-    if (!query) return [];
-
-    return state.items.filter((item) => {
-      const values = [
-        item.id,
-        item.code,
-        item.title,
-        item.category,
-        item.note,
-        ...(Array.isArray(item.tags) ? item.tags : []),
-      ].map(normalizeSkillText).filter(Boolean);
-      return values.some((value) => value === query || value.includes(query));
-    });
-  };
-
-  const resolveCategorizeTargets = ({ target = '', mode = 'query' } = {}) => {
-    const strict = resolveStrictSkillTargets({ target, mode });
-    if (strict.length || mode !== 'query') return strict;
-
-    const query = String(target || '').trim();
-    if (!query) return [];
-
-    return state.items
-      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.item);
-  };
-
-  const tagByAgent = ({ target = '', tags = [], mode = 'query' } = {}) => {
+  const tagByAgent = ({ target = '', tags = [], mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {}) => {
     const normalizedTags = normalizeTags(Array.isArray(tags) ? tags.join('，') : tags);
     if (!normalizedTags.length) {
       return {
@@ -1194,14 +1342,16 @@
       };
     }
 
-    const targets = resolveSkillTargets({ target, mode });
+    const resolved = resolvePreciseSkillTargets({ target, mode, maxAffected, allowQueryBulk: true });
+    const targets = resolved.targets || [];
     if (!targets.length) {
       return {
         ok: false,
-        message: target
+        message: resolved.message || (target
           ? `未找到匹配“${target}”的图谱，暂未写入标签。`
-          : '当前没有可写入标签的图谱。',
-        candidates: state.items.slice(0, 8).map(toSkillItem),
+          : '当前没有可写入标签的图谱。'),
+        candidates: resolved.candidates || state.items.slice(0, 8).map(toSkillItem),
+        data: resolved.data || {},
       };
     }
 
@@ -1247,7 +1397,7 @@
     };
   };
 
-  const categorizeByAgent = ({ target = '', category = '', mode = 'query' } = {}) => {
+  const categorizeByAgent = ({ target = '', category = '', mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {}) => {
     const nextCategory = String(category || '').trim();
     if (!nextCategory) {
       return {
@@ -1256,15 +1406,17 @@
       };
     }
 
-    const targets = resolveCategorizeTargets({ target, mode });
-    const candidates = target ? targets.map(toSkillItem) : [];
+    const resolved = resolvePreciseSkillTargets({ target, mode, maxAffected, allowQueryBulk: true });
+    const targets = resolved.targets || [];
+    const candidates = resolved.candidates || (target ? targets.map(toSkillItem) : []);
     if (!targets.length) {
       return {
         ok: false,
-        message: target
+        message: resolved.message || (target
           ? `未找到匹配“${target}”的图谱，暂未更新分类。`
-          : '当前没有可更新分类的图谱。',
+          : '当前没有可更新分类的图谱。'),
         candidates,
+        data: resolved.data || {},
       };
     }
 
@@ -1312,57 +1464,216 @@
     };
   };
 
-  const deleteByAgent = ({ target = '', mode = 'target' } = {}) => {
-    const selected = getSelectedItems();
-    const active = getActiveItem();
-    let targets = [];
-
-    if (mode === 'selected') {
-      targets = selected;
-    } else if (mode === 'active') {
-      targets = active ? [active] : [];
-    } else {
-      const query = String(target || '').trim();
-      if (!query) {
-        return {
-          ok: false,
-          message: selected.length
-            ? '请说明要删除哪张图谱；如果要删除当前已选图谱，可以说“删除当前已选图谱”。'
-            : '请提供要删除的图谱名称、编号或先在图谱分析页选中目标图谱。',
-          candidates: selected.map(toSkillItem),
-        };
-      }
-
-      const scored = state.items
-        .map((item) => ({ item, score: scoreSkillItem(item, query) }))
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) => b.score - a.score);
-      const topScore = scored[0]?.score || 0;
-      const topMatches = scored.filter((entry) => entry.score === topScore).map((entry) => entry.item);
-
-      if (!topMatches.length) {
-        return {
-          ok: false,
-          message: `未找到名称或编号匹配“${query}”的图谱。`,
-          candidates: state.items.slice(0, 8).map(toSkillItem),
-        };
-      }
-
-      if (topMatches.length > 1 && topScore < 100) {
-        return {
-          ok: false,
-          message: `“${query}”匹配到多张图谱。`,
-          candidates: topMatches.slice(0, 8).map(toSkillItem),
-        };
-      }
-
-      targets = [topMatches[0]];
+  const createByAgent = ({
+    title = '',
+    code = '',
+    type = '',
+    spectrumType = '',
+    category = '',
+    date = '',
+    tags = [],
+    note = '',
+  } = {}) => {
+    const nextTitle = String(title || code || '').trim();
+    if (!nextTitle) {
+      return { ok: false, message: '请提供要新增的图谱名称或编号。' };
     }
+
+    const duplicate = state.items.find((item) => {
+      const values = [item.title, item.code].map(normalizeSkillText).filter(Boolean);
+      return values.includes(normalizeSkillText(nextTitle)) || (code && values.includes(normalizeSkillText(code)));
+    });
+    if (duplicate) {
+      return {
+        ok: false,
+        message: `已存在同名或同编号图谱“${duplicate.title || duplicate.code}”，暂未重复新增。`,
+        candidates: [toSkillItem(duplicate)],
+      };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const id = `agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const item = {
+      id,
+      code: String(code || `AGENT-${today.replace(/-/g, '')}`).trim(),
+      title: nextTitle,
+      spectrumType: normalizeSpectrumType(type || spectrumType, nextTitle),
+      category: String(category || '').trim(),
+      status: '待上传',
+      date: normalizeSkillDate(date) || today,
+      tags: normalizeTags(Array.isArray(tags) ? tags.join('，') : tags),
+      image: createPlaceholderImage(nextTitle),
+      imageStored: false,
+      note: String(note || 'AI 新增的待上传图谱记录，请补充真实图谱图片。').trim(),
+      uploaded: true,
+    };
+
+    state.items.unshift(item);
+    state.edits[item.id] = getEditableSnapshot(item);
+    revealItemInGallery(item);
+    saveUploadedItems();
+    saveItemEdits();
+    render();
+    App.projectSkills?.render?.();
+
+    return {
+      ok: true,
+      message: `已新增待上传图谱记录：${item.title}。`,
+      details: formatSkillItemDetails([toSkillItem(item)]),
+      data: { created: 1, items: [toSkillItem(item)] },
+    };
+  };
+
+  const normalizeUpdateInput = (input = {}) => {
+    const source = input.updates && typeof input.updates === 'object' ? { ...input.updates } : {};
+    ['title', 'category', 'date', 'note'].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(input, field)) source[field] = input[field];
+    });
+    if (input.field && Object.prototype.hasOwnProperty.call(input, 'value')) {
+      source[String(input.field)] = input.value;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'tags')) source.tagsSet = input.tags;
+    if (Object.prototype.hasOwnProperty.call(input, 'tagsAdd')) source.tagsAdd = input.tagsAdd;
+    if (Object.prototype.hasOwnProperty.call(input, 'addTags')) source.tagsAdd = input.addTags;
+    if (Object.prototype.hasOwnProperty.call(input, 'tagsRemove')) source.tagsRemove = input.tagsRemove;
+    if (Object.prototype.hasOwnProperty.call(input, 'removeTags')) source.tagsRemove = input.removeTags;
+    return source;
+  };
+
+  const updateByAgent = (input = {}) => {
+    const updates = normalizeUpdateInput(input);
+    const hasDirectUpdate = ['title', 'category', 'date', 'note'].some((field) => Object.prototype.hasOwnProperty.call(updates, field));
+    const tagsSet = Object.prototype.hasOwnProperty.call(updates, 'tagsSet')
+      ? normalizeTags(Array.isArray(updates.tagsSet) ? updates.tagsSet.join('，') : updates.tagsSet)
+      : null;
+    const tagsAdd = normalizeTags(Array.isArray(updates.tagsAdd) ? updates.tagsAdd.join('，') : updates.tagsAdd);
+    const tagsRemove = normalizeTags(Array.isArray(updates.tagsRemove) ? updates.tagsRemove.join('，') : updates.tagsRemove);
+
+    if (!hasDirectUpdate && tagsSet === null && !tagsAdd.length && !tagsRemove.length) {
+      return { ok: false, message: '请提供要更新的字段，例如分类、标题、日期、备注或标签。' };
+    }
+
+    const resolved = resolvePreciseSkillTargets({
+      target: input.target,
+      mode: input.mode || 'query',
+      maxAffected: input.maxAffected || SKILL_MUTATION_LIMIT,
+      allowQueryBulk: true,
+    });
+    const targets = resolved.targets || [];
+    if (!targets.length) {
+      return {
+        ok: false,
+        message: resolved.message || '未找到可更新的图谱。',
+        candidates: resolved.candidates || [],
+        data: resolved.data || {},
+      };
+    }
+
+    const targetIds = new Set(targets.map((item) => item.id));
+    let uploadedChanged = false;
+    let changedCount = 0;
+    let unchangedCount = 0;
+
+    state.items = state.items.map((item) => {
+      if (!targetIds.has(item.id)) return item;
+      const before = JSON.stringify(getEditableSnapshot(item));
+      const next = { ...item };
+      if (Object.prototype.hasOwnProperty.call(updates, 'title')) next.title = String(updates.title || '').trim() || next.title;
+      if (Object.prototype.hasOwnProperty.call(updates, 'category')) next.category = String(updates.category || '').trim();
+      if (Object.prototype.hasOwnProperty.call(updates, 'date')) next.date = normalizeSkillDate(updates.date) || next.date;
+      if (Object.prototype.hasOwnProperty.call(updates, 'note')) next.note = String(updates.note || '').trim();
+      if (tagsSet !== null) next.tags = tagsSet;
+      if (tagsAdd.length) next.tags = mergeTags(next.tags, tagsAdd);
+      if (tagsRemove.length) next.tags = removeTags(next.tags, tagsRemove);
+
+      const after = JSON.stringify(getEditableSnapshot(next));
+      if (before === after) unchangedCount += 1;
+      else changedCount += 1;
+      state.edits[next.id] = getEditableSnapshot(next);
+      if (next.uploaded) uploadedChanged = true;
+      return next;
+    });
+
+    saveItemEdits();
+    if (uploadedChanged) saveUploadedItems();
+    render();
+    App.projectSkills?.render?.();
+
+    const updatedItems = state.items.filter((item) => targetIds.has(item.id)).map(toSkillItem);
+    return {
+      ok: true,
+      message: `已更新 ${updatedItems.length} 张图谱。`,
+      details: [
+        `实际变更：${changedCount} 张`,
+        `内容未变化：${unchangedCount} 张`,
+        ...formatSkillItemDetails(updatedItems, 10),
+      ],
+      data: {
+        updated: updatedItems.length,
+        changed: changedCount,
+        unchanged: unchangedCount,
+        items: updatedItems,
+      },
+    };
+  };
+
+  const selectByAgent = ({ target = '', mode = 'query', clearExisting = true, maxAffected = 80 } = {}) => {
+    const resolved = resolvePreciseSkillTargets({
+      target,
+      mode,
+      maxAffected,
+      allowQueryBulk: true,
+    });
+    const targets = resolved.targets || [];
+    if (!targets.length) {
+      return {
+        ok: false,
+        message: resolved.message || '未找到可选择的图谱。',
+        candidates: resolved.candidates || [],
+        data: resolved.data || {},
+      };
+    }
+
+    if (clearExisting) state.selectedIds.clear();
+    targets.forEach((item) => state.selectedIds.add(item.id));
+    state.activeId = targets[0]?.id || state.activeId;
+    render();
+    App.projectSkills?.render?.();
+
+    const selectedItems = targets.map(toSkillItem);
+    return {
+      ok: true,
+      message: `${clearExisting ? '已选择' : '已追加选择'} ${selectedItems.length} 张图谱。`,
+      details: formatSkillItemDetails(selectedItems, 12),
+      data: {
+        selected: selectedItems.length,
+        totalSelected: state.selectedIds.size,
+        items: selectedItems,
+      },
+    };
+  };
+
+  const deleteByAgent = ({ target = '', mode = 'target', maxAffected = 12 } = {}) => {
+    const selected = getSelectedItems();
+    const resolved = resolvePreciseSkillTargets({
+      target,
+      mode,
+      maxAffected,
+      allowQueryBulk: false,
+      allowFuzzySingle: true,
+    });
+    const targets = resolved.targets || [];
 
     if (!targets.length) {
       return {
         ok: false,
-        message: mode === 'selected' ? '当前没有已选图谱，无法删除。' : '当前没有可删除的图谱。',
+        message: resolved.message || (mode === 'selected'
+          ? '当前没有已选图谱，无法删除。'
+          : selected.length
+            ? '请说明要删除哪张图谱；如果要删除当前已选图谱，可以说“删除当前已选图谱”。'
+            : '请提供要删除的图谱名称、编号或先在图谱分析页选中目标图谱。'),
+        candidates: resolved.candidates || selected.map(toSkillItem),
+        data: resolved.data || {},
       };
     }
 
@@ -1886,6 +2197,9 @@
     getAgentContext,
     getAgentImages,
     searchByAgent,
+    createByAgent,
+    updateByAgent,
+    selectByAgent,
     deleteByAgent,
     tagByAgent,
     categorizeByAgent,

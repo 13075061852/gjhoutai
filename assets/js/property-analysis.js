@@ -45,6 +45,29 @@
     'T2[0.8mm]',
   ];
   const SEARCH_KEYS = ['型号', '批次'];
+  const AGENT_CONTEXT_ROW_LIMIT = 12;
+  const AGENT_CONTEXT_SIMILAR_LIMIT = 8;
+  const AGENT_STOP_TERMS = new Set([
+    '帮我',
+    '请',
+    '分析',
+    '分析一下',
+    '查询',
+    '查一下',
+    '查看',
+    '看一下',
+    '看看',
+    '一下',
+    '数据',
+    '物性',
+    '型号',
+    '批次',
+    '材料',
+    '指标',
+    '效果',
+    '情况',
+    '结果',
+  ]);
 
   const refs = {
     searchInput: document.getElementById('analysisSearchInput'),
@@ -887,6 +910,42 @@
     });
   };
 
+  const escapeMarkdownTableCell = (value) => String(value ?? '')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const formatRowsMarkdownTableForAi = (rows, columns, limit = null) => {
+    const visibleColumns = (columns || []).filter((column) => column !== '__rowKey');
+    const tableRows = limit == null ? rows : rows.slice(0, limit);
+    if (!tableRows.length || !visibleColumns.length) return '';
+
+    const headers = ['序号', ...visibleColumns.map(formatHeader)];
+    const lines = [
+      `| ${headers.map(escapeMarkdownTableCell).join(' |')} |`,
+      `| ${headers.map(() => '---').join(' |')} |`,
+    ];
+
+    tableRows.forEach((row, index) => {
+      const values = visibleColumns.map((column) => {
+        const value = Array.isArray(row[column]) ? row[column].join(' / ') : valueToText(row[column]);
+        return escapeMarkdownTableCell(value || '-');
+      });
+      lines.push(`| ${[index + 1, ...values].join(' |')} |`);
+    });
+
+    return lines.join('\n');
+  };
+
+  const getAgentDetailColumns = (columns = []) => {
+    const visibleColumns = columns.filter((column) => column !== '__rowKey');
+    const available = new Set(visibleColumns);
+    const prioritized = COLUMN_PRIORITY.filter((column) => available.has(column));
+    const remaining = visibleColumns.filter((column) => !prioritized.includes(column));
+    return [...prioritized, ...remaining];
+  };
+
   const getAiContext = () => {
     if (!state.data) return '';
 
@@ -1070,13 +1129,70 @@
     .replace(/\s+/g, ' ')
     .trim();
 
+  const normalizeAgentTerm = (term) => normalizeAgentText(term)
+    .replace(/^(帮我|请|麻烦|分析一下|查一下|看一下|查询一下|分析|查询|查看|看)\s*/, '')
+    .replace(/^的+/, '')
+    .replace(/(一下|看看|数据|情况|结果)$/g, '')
+    .trim();
+
   const extractAgentTerms = (question = '') => {
     const text = String(question || '');
     const terms = [
       ...(text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || []),
       ...(text.match(/[\u4e00-\u9fa5]{2,}/g) || []),
     ];
-    return [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 2))];
+    return [...new Set(terms
+      .map(normalizeAgentTerm)
+      .filter((term) => term.length >= 2 && !AGENT_STOP_TERMS.has(term)))];
+  };
+
+  const getIdentifierTerms = (terms) => terms.filter((term) => /[a-z0-9]/i.test(term) && term.length >= 3);
+
+  const rowMatchesIdentifierTerm = (row, term) => {
+    const normalizedTerm = normalizeAgentText(term);
+    if (!normalizedTerm) return false;
+    return SEARCH_KEYS.some((key) => flattenSearchTexts(row?.[key]).some((value) => value === normalizedTerm));
+  };
+
+  const extractAgentRowLimit = (question = '') => {
+    const text = String(question || '');
+    if (/(?:全部|所有|完整|全量|不要省略|不要截断)/.test(text)) return null;
+    const match = text.match(/(?:前|只要|仅|取|显示|列出|上传|给我)?\s*(\d{1,3})\s*(?:条|行|个|批次|记录|数据)/);
+    if (!match) return null;
+    const count = Number.parseInt(match[1], 10);
+    if (!Number.isFinite(count) || count <= 0) return null;
+    return Math.min(count, 500);
+  };
+
+  const extractAgentRowWindow = (question = '') => {
+    const text = String(question || '');
+    const limit = extractAgentRowLimit(text);
+    if (limit == null) return { limit: null, mode: 'all' };
+
+    const wantsTail = /(?:最近|最新|近期|近|靠后|后面|末尾|最后|后)\s*的?\s*\d{0,3}\s*(?:条|行|个|批次|记录|数据)?/.test(text)
+      || /\d{1,3}\s*(?:条|行|个|批次|记录|数据)?\s*(?:最近|最新|靠后|后面|末尾|最后)/.test(text);
+    const wantsHead = /(?:最早|早期|靠前|前面|之前|以前|老批次|旧批次)\s*的?\s*\d{0,3}\s*(?:条|行|个|批次|记录|数据)?/.test(text)
+      || /前\s*\d{1,3}\s*(?:条|行|个|批次|记录|数据)/.test(text);
+
+    return {
+      limit,
+      mode: wantsTail ? 'tail' : wantsHead ? 'head' : 'head',
+    };
+  };
+
+  const sliceAgentRowsByWindow = (rows, rowWindow) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+    const limit = rowWindow?.limit;
+    if (limit == null || sourceRows.length <= limit) return sourceRows;
+    return rowWindow.mode === 'tail' ? sourceRows.slice(-limit) : sourceRows.slice(0, limit);
+  };
+
+  const getAgentRowWindowDescription = (rowWindow) => {
+    if (!rowWindow?.limit) return '上传策略：默认上传全部符合条件的数据；仅在用户指定数量时限制行数。';
+    if (rowWindow.mode === 'tail') {
+      return `用户指定上传数量：${rowWindow.limit} 行；批次顺序按表格从旧到新理解，已取靠后的最近 ${rowWindow.limit} 行，并保持从旧到新的顺序展示。`;
+    }
+    return `用户指定上传数量：${rowWindow.limit} 行；批次顺序按表格从旧到新理解，已取靠前的较早 ${rowWindow.limit} 行。`;
   };
 
   const getRowSearchText = (row) => normalizeAgentText(Object.entries(row || {})
@@ -1121,39 +1237,49 @@
     const visible = getVisibleRows();
     const selectedRows = getSelectedRowsForActiveSheet();
     const terms = extractAgentTerms(question);
+    const identifierTerms = getIdentifierTerms(terms);
+    const rowWindow = extractAgentRowWindow(question);
+    const requestedRowLimit = rowWindow.limit;
+    const exactMatches = [];
     const scoredRows = [];
 
     sheetNames.forEach((sheetName) => {
       const rows = getRowsForSheet(sheetName);
       const columns = getColumns(rows);
       rows.forEach((row) => {
+        if (identifierTerms.some((term) => rowMatchesIdentifierTerm(row, term))) {
+          exactMatches.push({ sheetName, row, columns, score: 100 });
+          return;
+        }
         const score = scoreAgentRow(row, terms);
         if (score > 0) scoredRows.push({ sheetName, row, columns, score });
       });
     });
 
     scoredRows.sort((a, b) => b.score - a.score);
-    const strongMatches = scoredRows.filter((item) => item.score >= 3);
-    const similarMatches = scoredRows.filter((item) => item.score > 0 && item.score < 3);
+    const strongMatches = exactMatches.length ? exactMatches : scoredRows.filter((item) => item.score >= 3);
+    const similarMatches = exactMatches.length ? [] : scoredRows.filter((item) => item.score > 0 && item.score < 3);
     const fallbackRows = selectedRows.length
       ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
       : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
     const rowsForSummary = strongMatches.length
-      ? strongMatches.map((item) => item.row)
+      ? sliceAgentRowsByWindow(strongMatches.map((item) => item.row), rowWindow)
       : selectedRows.length
-        ? selectedRows
-        : visible.filteredRows.slice(0, 30);
+        ? sliceAgentRowsByWindow(selectedRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow)
+        : sliceAgentRowsByWindow(visible.filteredRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow);
     const metrics = getMetricSummaryForAgent(rowsForSummary);
     const sections = [
       '【物性分析检索结果】',
       `命中原因：${terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
+      identifierTerms.length ? `精确型号/批次关键词：${identifierTerms.join('、')}；精确命中 ${exactMatches.length} 行。` : '',
+      getAgentRowWindowDescription(rowWindow),
       `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
       `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
-    ];
+      '展示策略：前端会先展示全部匹配数据表格，AI 只需要继续输出表格后的分析。',
+    ].filter(Boolean);
+    const displayTableSections = [];
 
-    if (metrics.length) sections.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
-
-    const appendRows = (title, items) => {
+    const appendRows = (title, items, rowLimit = null) => {
       if (!items.length) return;
       const grouped = items.reduce((map, item) => {
         const key = item.sheetName || activeSheet || '未命名工作表';
@@ -1164,15 +1290,34 @@
       sections.push(title);
       grouped.forEach((group, sheetName) => {
         sections.push(`### ${sheetName}（${group.rows.length} 行）`);
-        sections.push(...summarizeRowsForAi(group.rows, group.columns, group.rows.length));
+        const displayColumns = getAgentDetailColumns(group.columns);
+        const limitedRows = sliceAgentRowsByWindow(group.rows, { limit: rowLimit, mode: rowWindow.mode });
+        const limit = limitedRows.length;
+        const table = formatRowsMarkdownTableForAi(limitedRows, displayColumns, null);
+        if (table) {
+          const tableTitle = `### ${sheetName}（${limit} / ${group.rows.length} 行）`;
+          displayTableSections.push(tableTitle, table);
+          sections.push('【用于分析的数据表；前端会展示，请不要在分析中重复输出】', tableTitle, table);
+        }
+        if (rowLimit != null && group.rows.length > limit) {
+          const hiddenPosition = rowWindow.mode === 'tail' ? '靠前的较早' : '靠后的较新';
+          sections.push(`还有 ${group.rows.length - limit} 行未展开；这是因为用户指定了数量限制，未展开的是${hiddenPosition}数据。`);
+        }
       });
     };
 
-    appendRows(`强匹配数据（共 ${strongMatches.length} 行）：`, strongMatches);
-    appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches);
+    appendRows(`${exactMatches.length ? '精确匹配数据' : '强匹配数据'}（共 ${strongMatches.length} 行）：`, strongMatches, requestedRowLimit);
+    appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches, requestedRowLimit ?? AGENT_CONTEXT_SIMILAR_LIMIT);
     if (!strongMatches.length && !similarMatches.length) {
-      appendRows(selectedRows.length ? '当前已选数据：' : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`, fallbackRows);
+      appendRows(selectedRows.length ? '当前已选数据：' : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`, fallbackRows, requestedRowLimit ?? AGENT_CONTEXT_ROW_LIMIT);
     }
+    if (metrics.length) sections.push('表格之后再输出的分析摘要：', ...metrics.map((item) => `- ${item}`));
+    const content = sections.join('\n');
+    const uploadedRows = strongMatches.length
+      ? (requestedRowLimit == null ? strongMatches.length : Math.min(strongMatches.length, requestedRowLimit))
+      : similarMatches.length
+        ? (requestedRowLimit == null ? Math.min(similarMatches.length, AGENT_CONTEXT_SIMILAR_LIMIT) : Math.min(similarMatches.length, requestedRowLimit))
+        : (requestedRowLimit == null ? Math.min(fallbackRows.length, AGENT_CONTEXT_ROW_LIMIT) : Math.min(fallbackRows.length, requestedRowLimit));
 
     return {
       title: '物性分析',
@@ -1181,14 +1326,22 @@
         : selectedRows.length
           ? '未命中关键词，使用当前已选物性数据'
           : '未命中关键词，使用当前筛选物性数据预览',
-      content: sections.join('\n'),
+      content,
       score: options.forceCurrentPage ? 9 : 7,
       stats: {
+        exactMatches: exactMatches.length,
         strongMatches: strongMatches.length,
         similarMatches: similarMatches.length,
         selectedRows: selectedRows.length,
         filteredRows: visible.filteredRows.length,
+        requestedRowLimit,
+        rowWindowMode: rowWindow.mode,
+        uploadedRows,
+        fullMatchedRowsUploaded: requestedRowLimit == null && strongMatches.length > 0,
+        contextChars: content.length,
       },
+      displayTable: displayTableSections.join('\n\n'),
+      fullContext: requestedRowLimit == null && strongMatches.length > 0,
     };
   };
 

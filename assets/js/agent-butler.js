@@ -16,6 +16,8 @@
 
   const normalizeText = (value) => String(value || '').toLowerCase();
   const hasAny = (text, patterns) => patterns.some((pattern) => pattern.test(text));
+  const MAX_RESULT_CONTEXT_CHARS = 10000;
+  const MAX_TOTAL_CONTEXT_CHARS = 12000;
 
   const INTENT_RULES = [
     {
@@ -187,6 +189,12 @@
   };
 
   const compressContext = ({ intent, results } = {}) => {
+    const hasFullContextResult = (results || []).some((result) => result?.fullContext);
+    const limitText = (value, limit, bypass = false) => {
+      const text = String(value || '').trim();
+      if (bypass || text.length <= limit) return text;
+      return `${text.slice(0, limit)}\n...（上下文已自动压缩，避免一次分析消耗过多 token。）`;
+    };
     const sections = [
       '【Gjun AI 项目管家自动检索】',
       `当前页面：${intent?.activePageLabel || '未知页面'}`,
@@ -199,11 +207,11 @@
         '',
         `## 数据源 ${index + 1}：${result.title || result.label || result.skillId}`,
         `命中说明：${result.reason || '与当前问题相关'}`,
-        String(result.content || '').trim()
+        limitText(result.content, MAX_RESULT_CONTEXT_CHARS, Boolean(result.fullContext))
       );
     });
 
-    return sections.join('\n');
+    return limitText(sections.join('\n'), MAX_TOTAL_CONTEXT_CHARS, hasFullContextResult);
   };
 
   const buildContext = (options = {}) => compressContext(retrieveContext(options));

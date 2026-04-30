@@ -8,6 +8,7 @@
   let usdToCny = 6.838833;
   const PROVIDER_OPENROUTER = 'openrouter';
   const PROVIDER_LM_STUDIO = 'lmstudio';
+  const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
   let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
   const providerDrafts = {};
 
@@ -215,8 +216,39 @@
     };
   };
 
+  const isRedactedValue = (value) => String(value || '').trim() === SENSITIVE_CONFIG_PLACEHOLDER;
+
+  const dropRedactedSecrets = (config = {}) => {
+    const next = { ...config };
+    if (isRedactedValue(next.apiKey)) next.apiKey = '';
+    if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
+    if (isRedactedValue(next.ossAccessKeySecret)) next.ossAccessKeySecret = '';
+    if (next.openrouterConfig && typeof next.openrouterConfig === 'object') {
+      next.openrouterConfig = { ...next.openrouterConfig };
+      if (isRedactedValue(next.openrouterConfig.apiKey)) next.openrouterConfig.apiKey = '';
+    }
+    if (next.lmStudioConfig && typeof next.lmStudioConfig === 'object') {
+      next.lmStudioConfig = { ...next.lmStudioConfig, apiKey: '' };
+    }
+    return next;
+  };
+
+  const redactSensitiveConfig = (config = {}) => {
+    const next = JSON.parse(JSON.stringify(config || {}));
+    const redact = (target, key) => {
+      if (!target || !String(target[key] || '').trim()) return;
+      target[key] = SENSITIVE_CONFIG_PLACEHOLDER;
+    };
+    redact(next, 'apiKey');
+    redact(next, 'ossAccessKeyId');
+    redact(next, 'ossAccessKeySecret');
+    redact(next.openrouterConfig, 'apiKey');
+    redact(next.lmStudioConfig, 'apiKey');
+    return next;
+  };
+
   const setFormConfig = (config) => {
-    const next = { ...constants.DEFAULT_CONFIG, ...config };
+    const next = { ...constants.DEFAULT_CONFIG, ...dropRedactedSecrets(config) };
     const provider = inferProviderFromConfig(next);
     providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next.openrouterConfig || {});
     providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next.lmStudioConfig || {});
@@ -297,7 +329,7 @@
       refs.apiKeyLabelText.textContent = isLocal ? 'LM Studio API 密钥（可选）' : 'OpenRouter API 密钥';
     }
     if (refs.apiKeyNoteText) {
-      refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '私密存储，安全加密';
+      refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '仅保存在本机浏览器';
     }
     if (refs.openrouterApiKey) {
       refs.openrouterApiKey.placeholder = isLocal ? '可留空' : 'sk-or-...';
@@ -955,7 +987,7 @@
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      setFormConfig(parsed);
+      setFormConfig(dropRedactedSecrets(parsed));
       persistConfig(getFormConfig());
       updateSavedState(true);
       syncPreview();
@@ -966,14 +998,14 @@
   };
 
   const exportConfig = () => {
-    utils.downloadUtf8Json(`openrouter-config-${new Date().toISOString().slice(0, 10)}.json`, getFormConfig());
-    setStatus('已导出配置', 'success');
+    utils.downloadUtf8Json(`openrouter-config-${new Date().toISOString().slice(0, 10)}.json`, redactSensitiveConfig(getFormConfig()));
+    setStatus('已导出配置（密钥已脱敏）', 'success');
   };
 
   const copyConfig = async () => {
     try {
-      const copied = await utils.copyText(JSON.stringify(getFormConfig(), null, 2));
-      setStatus(copied ? '配置已复制到剪贴板' : '当前环境不支持剪贴板复制', copied ? 'success' : 'warn');
+      const copied = await utils.copyText(JSON.stringify(redactSensitiveConfig(getFormConfig()), null, 2));
+      setStatus(copied ? '配置已复制到剪贴板（密钥已脱敏）' : '当前环境不支持剪贴板复制', copied ? 'success' : 'warn');
     } catch (error) {
       setStatus(`复制失败：${error?.message || '未知错误'}`, 'warn');
     }

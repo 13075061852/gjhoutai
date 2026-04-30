@@ -2,16 +2,16 @@
 
 广俊塑料科技后台管理系统原型。
 
-## 项目说明
+## 项目定位
 
-这是一个以静态页面为基础的后台界面项目，目前已经从单一的 `index.html` 拆分为更清晰的结构，便于后续扩展、维护和逐步接入真实业务功能。
+这是一个静态前端后台原型，用于沉淀广俊塑料科技的业务管理、数据分析、AI 助手和配置中心能力。当前没有构建工具和后端服务，直接打开 `index.html` 即可运行。
 
 当前页面主要包含：
 
-- 左侧业务导航
-- 中间主内容区
-- 右侧 AI 聊天区
-- 配置中心
+- 业务导航、仪表盘和业务中心占位页
+- 配置中心、主题设置、权限管理和审计日志占位
+- 物性分析、图谱分析、抠图助手
+- 右侧 Gjun AI 聊天、项目技能面板、AI 调用分析面板
 
 ## 目录结构
 
@@ -20,52 +20,76 @@
 ├─ index.html
 ├─ logo.png
 ├─ README.md
+├─ .editorconfig
+├─ .gitattributes
+├─ docs
+│  ├─ architecture.md
+│  ├─ extension-guide.md
+│  ├─ security-audit.md
+│  └─ plans/
 └─ assets
    ├─ css
+   │  ├─ styles.css
    │  ├─ base.css
-   │  ├─ layout.css
-   │  ├─ pages.css
-   │  ├─ responsive.css
    │  ├─ sidebar.css
-   │  └─ styles.css
+   │  ├─ layout.css
+   │  ├─ responsive.css
+   │  ├─ pages.css
+   │  └─ pages/
+   │     ├─ dashboard-chat.css
+   │     ├─ business-pages.css
+   │     ├─ property-analysis.css
+   │     ├─ spectrum-analysis.css
+   │     ├─ image-cutout.css
+   │     ├─ config.css
+   │     ├─ theme-settings.css
+   │     ├─ project-skills.css
+   │     ├─ ai-call-analysis.css
+   │     └─ theme-overrides.css
    └─ js
+      ├─ core/
+      │  ├─ app-namespace.js
+      │  ├─ dom-refs.js
+      │  ├─ app-constants.js
+      │  ├─ runtime-state.js
+      │  └─ utils.js
       ├─ app-state.js
       ├─ app.js
-      ├─ chat.js
+      ├─ navigation.js
       ├─ config.js
-      └─ navigation.js
+      ├─ chat.js
+      └─ 功能模块脚本
 ```
 
 ## 文件职责
 
-- `index.html`：页面骨架和资源引用入口。
-- `assets/css/styles.css`：样式汇总入口，通过 `@import` 引入各 CSS 分层文件。
-- `assets/css/base.css`：全局变量、基础重置、通用按钮和基础排版。
-- `assets/css/sidebar.css`：侧边栏相关样式。
-- `assets/css/layout.css`：整体布局、顶部栏、主内容区。
-- `assets/css/pages.css`：页面内容、配置中心、占位页、聊天面板等样式。
-- `assets/css/responsive.css`：响应式适配与折叠态样式。
-- `assets/js/app-state.js`：共享 DOM 引用、常量、状态和通用工具。
-- `assets/js/navigation.js`：侧边栏折叠、页面切换、导航状态恢复。
-- `assets/js/config.js`：配置中心表单、预览、保存、导入、导出、模型检测。
-- `assets/js/chat.js`：聊天消息渲染、发送、历史记录读写。
-- `assets/js/app.js`：启动入口，只负责按顺序初始化模块。
+- `index.html`：页面骨架、外部资源和脚本加载顺序。
+- `assets/css/styles.css`：全局样式入口。
+- `assets/css/pages.css`：页面样式聚合入口，只负责 `@import` 页面级 CSS。
+- `assets/js/core/`：应用命名空间、DOM 引用、常量、运行态状态和通用工具。
+- `assets/js/app-state.js`：核心加载完整性检查，保留旧入口语义。
+- `assets/js/app.js`：启动入口，按顺序初始化功能模块。
+- `docs/architecture.md`：结构和模块边界说明。
+- `docs/extension-guide.md`：新增页面、模块、样式和安全约定。
+- `docs/security-audit.md`：安全检查结果和后续加固清单。
 
 ## 编码约定
 
-- 项目文件统一使用 UTF-8 编码读写，避免中文乱码。
-- 新增 CSS 和 JS 时，优先按职责继续拆分，不要把所有逻辑堆回单文件。
-- 页面上的新增功能建议先落到独立模块，再由 `app.js` 统一启动。
+- 项目文件统一按 UTF-8 读写。
+- 新增文本文件默认使用 LF 换行。
+- `.editorconfig` 和 `.gitattributes` 已固定基础编码与换行策略。
+- 如遇中文乱码，先确认文件编码，不要直接覆盖原内容。
 
 ## 本地使用
 
-当前项目是静态页面结构，直接用浏览器打开 `index.html` 即可查看。
+直接用浏览器打开 `index.html` 即可查看。
 
-如果后续接入接口、构建工具或服务端渲染，再补充对应的启动说明。
+如果使用 VS Code Live Server，当前仓库配置端口为 `5501`。
 
-## 后续扩展建议
+## 扩展原则
 
-- 新页面优先在 `index.html` 中补结构，再按功能拆分脚本。
-- 公共样式优先放入 `base.css` 或 `layout.css`。
-- 页面专属样式放入 `pages.css`。
-- 业务逻辑按模块拆分到 `assets/js/` 下的新文件中。
+- 新页面先补 `index.html` 页面结构和 `data-page` / `data-page-section` 映射。
+- 页面样式放到 `assets/css/pages/<feature>.css`，再由 `pages.css` 引入。
+- 业务逻辑优先新增独立 JS 文件，再由 `app.js` 统一初始化。
+- 共享 DOM、常量、状态和工具优先放入 `assets/js/core/`。
+- 涉及密钥、OSS、模型调用和文件导入的功能，先阅读 `docs/security-audit.md`。

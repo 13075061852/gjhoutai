@@ -1,0 +1,670 @@
+/* Light and dark theme page overrides */
+    /* Eye-care light theme tuning */
+    body:not([data-theme="dark"]) .topbar,
+    body:not([data-theme="dark"]) .sidebar,
+    body:not([data-theme="dark"]) .assistant,
+    body:not([data-theme="dark"]) .assistant-frame,
+    body:not([data-theme="dark"]) .assistant-main,
+    body:not([data-theme="dark"]) .assistant-head,
+    body:not([data-theme="dark"]) .spectrum-toolbar,
+    body:not([data-theme="dark"]) .spectrum-filter-panel,
+    body:not([data-theme="dark"]) .spectrum-gallery-panel,
+    body:not([data-theme="dark"]) .spectrum-detail-panel,
+    body:not([data-theme="dark"]) .cutout-toolbar,
+    body:not([data-theme="dark"]) .cutout-control-panel,
+    body:not([data-theme="dark"]) .cutout-canvas-panel,
+    body:not([data-theme="dark"]) .analysis-filter-card,
+    body:not([data-theme="dark"]) .analysis-panel,
+    body:not([data-theme="dark"]) .analysis-table-wrap,
+    body:not([data-theme="dark"]) .config-card,
+    body:not([data-theme="dark"]) .config-module,
+    body:not([data-theme="dark"]) .config-actions-panel,
+    body:not([data-theme="dark"]) .placeholder-card{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .content,
+    body:not([data-theme="dark"]) .dashboard,
+    body:not([data-theme="dark"]) .spectrum-page,
+    body:not([data-theme="dark"]) .image-cutout-page,
+    body:not([data-theme="dark"]) .analysis-page{
+      background:var(--bg);
+    }
+    body:not([data-theme="dark"]) .assistant-body{
+      background:var(--chat-bg);
+    }
+    body:not([data-theme="dark"]) .assistant-body{
+      padding:0;
+    }
+    body:not([data-theme="dark"]) .assistant-footer{
+      background:var(--chat-footer-bg);
+    }
+    body:not([data-theme="dark"]) .spectrum-card,
+    body:not([data-theme="dark"]) .spectrum-card-body,
+    body:not([data-theme="dark"]) .spectrum-detail-field input,
+    body:not([data-theme="dark"]) .spectrum-detail-field textarea,
+    body:not([data-theme="dark"]) .spectrum-detail-tag-editor input,
+    body:not([data-theme="dark"]) .spectrum-batch-tags input,
+    body:not([data-theme="dark"]) .spectrum-search,
+    body:not([data-theme="dark"]) .cutout-panel-block,
+    body:not([data-theme="dark"]) .cutout-crop-grid input,
+    body:not([data-theme="dark"]) .cutout-reset-btn,
+    body:not([data-theme="dark"]) .analysis-toolbar-btn,
+    body:not([data-theme="dark"]) .analysis-import-status,
+    body:not([data-theme="dark"]) .sidebar-search,
+    body:not([data-theme="dark"]) .chat-composer,
+    body:not([data-theme="dark"]) .ai-message:not(.user){
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .analysis-select-field select{
+      background-color:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body:not([data-theme="dark"]) .spectrum-card-image,
+    body:not([data-theme="dark"]) .spectrum-detail-image,
+    body:not([data-theme="dark"]) .spectrum-selected-empty,
+    body:not([data-theme="dark"]) .spectrum-selected-item,
+    body:not([data-theme="dark"]) .spectrum-gallery.is-list .spectrum-card-image,
+    body:not([data-theme="dark"]) .spectrum-view-switch,
+    body:not([data-theme="dark"]) .spectrum-mode-switch{
+      background:var(--surface-2);
+      border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .ai-box,
+    body:not([data-theme="dark"]) .ai-box-scroll{
+      background:transparent;
+      min-height:100%;
+    }
+    body:not([data-theme="dark"]) .spectrum-view-switch::before,
+    body:not([data-theme="dark"]) .spectrum-mode-switch::before,
+    body:not([data-theme="dark"]) .spectrum-card-image img,
+    body:not([data-theme="dark"]) .spectrum-detail-image img,
+    body:not([data-theme="dark"]) .spectrum-gallery.is-list .spectrum-card-image img{
+      background:var(--surface);
+    }
+    body:not([data-theme="dark"]) .spectrum-card,
+    body:not([data-theme="dark"]) .spectrum-filter-btn,
+    body:not([data-theme="dark"]) .spectrum-selected-item{
+      border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .spectrum-card:hover,
+    body:not([data-theme="dark"]) .spectrum-filter-btn:hover,
+    body:not([data-theme="dark"]) .analysis-toolbar-btn:hover:not(:disabled){
+      border-color:var(--border-2);
+      background:var(--surface-2);
+    }
+    body:not([data-theme="dark"]) .spectrum-card.is-selected,
+    body:not([data-theme="dark"]) .spectrum-card.is-selected:hover{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    body:not([data-theme="dark"]) .spectrum-card.is-selected .spectrum-card-body{
+      background:var(--accent-soft);
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn.is-active,
+    body:not([data-theme="dark"]) .analysis-toolbar-btn-primary.is-active{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn.is-active i,
+    body:not([data-theme="dark"]) .analysis-toolbar-btn-primary.is-active i{
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn.is-active:hover:not(:disabled),
+    body:not([data-theme="dark"]) .analysis-toolbar-btn-primary.is-active:hover:not(:disabled){
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn.is-active:hover:not(:disabled) i,
+    body:not([data-theme="dark"]) .analysis-toolbar-btn-primary.is-active:hover:not(:disabled) i{
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn:disabled{
+      background:#f4f7fb;
+      border-color:#d6dfec;
+      color:#7a879a;
+    }
+    body:not([data-theme="dark"]) .analysis-toolbar-btn:disabled i{
+      color:#7a879a;
+    }
+    body:not([data-theme="dark"]) .spectrum-muted,
+    body:not([data-theme="dark"]) .spectrum-card-meta,
+    body:not([data-theme="dark"]) .spectrum-filter-label,
+    body:not([data-theme="dark"]) .spectrum-toolbar-label,
+    body:not([data-theme="dark"]) .analysis-select-field span{
+      color:var(--muted);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-trigger,
+    body:not([data-theme="dark"]) .model-dropdown-panel{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-trigger:hover{
+      border-color:var(--border-2);
+      background:var(--surface-2);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-trigger:focus-visible{
+      border-color:var(--control-border-focus);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-arrow,
+    body:not([data-theme="dark"]) .model-dropdown-option-price,
+    body:not([data-theme="dark"]) .model-dropdown-option-context{
+      color:var(--muted);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-group + .model-dropdown-group,
+    body:not([data-theme="dark"]) .model-dropdown-option{
+      border-top-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-group-title{
+      background:var(--surface-2);
+      color:var(--muted);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option{
+      color:var(--text);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option:hover,
+    body:not([data-theme="dark"]) .model-dropdown-option:focus-visible{
+      background:var(--surface-2);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option.is-active{
+      background:rgba(37,99,235,.12);
+      box-shadow:inset 3px 0 0 var(--accent);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option.is-active .model-dropdown-option-label{
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option-label{
+      color:var(--text);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option-meta{
+      background:var(--accent-soft);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .model-dropdown-option.is-active .model-dropdown-option-meta{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .analysis-table-scroll{
+      background:var(--surface);
+      border-color:var(--border);
+      scrollbar-color:var(--scrollbar-thumb) transparent;
+    }
+    body:not([data-theme="dark"]) .analysis-table-scroll::-webkit-scrollbar-thumb{
+      background:var(--scrollbar-thumb);
+    }
+    body:not([data-theme="dark"]) .analysis-table th,
+    body:not([data-theme="dark"]) .analysis-table td{
+      border-right-color:var(--border);
+      border-bottom-color:var(--border);
+      background:var(--surface);
+    }
+    body:not([data-theme="dark"]) .analysis-table th{
+      background:var(--surface-2);
+      color:var(--text);
+    }
+    body:not([data-theme="dark"]) .analysis-table td{
+      color:var(--text-2);
+    }
+    body:not([data-theme="dark"]) .analysis-table tbody tr:hover td{
+      background:var(--surface-2);
+    }
+    body:not([data-theme="dark"]) .analysis-table tbody tr.is-selected td{
+      background:var(--accent-soft);
+    }
+    body:not([data-theme="dark"]) .analysis-page-btn,
+    body:not([data-theme="dark"]) .analysis-page-number{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body:not([data-theme="dark"]) .analysis-page-btn:hover:not(:disabled),
+    body:not([data-theme="dark"]) .analysis-page-number:hover{
+      border-color:var(--border-2);
+      background:var(--surface-2);
+    }
+    body:not([data-theme="dark"]) .analysis-page-number.is-active{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-btn{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-btn.is-active{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-btn.is-active:hover{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-counts em{
+      color:var(--muted);
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-counts strong{
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .spectrum-filter-btn.is-active .spectrum-filter-counts strong{
+      background:var(--accent);
+      color:#fff;
+    }
+    body:not([data-theme="dark"]) .spectrum-action-btn{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--accent);
+    }
+    body:not([data-theme="dark"]) .spectrum-action-btn:hover{
+      border-color:var(--border-2);
+      background:var(--surface-2);
+    }
+
+    /* Dark theme surface normalization */
+    body[data-theme="dark"] .main,
+    body[data-theme="dark"] .content,
+    body[data-theme="dark"] .dashboard,
+    body[data-theme="dark"] .analysis-page,
+    body[data-theme="dark"] .spectrum-page,
+    body[data-theme="dark"] .image-cutout-page,
+    body[data-theme="dark"] .theme-settings-page,
+    body[data-theme="dark"] .assistant-body{
+      background:var(--bg);
+    }
+    body[data-theme="dark"] .topbar,
+    body[data-theme="dark"] .sidebar,
+    body[data-theme="dark"] .sidebar-footer,
+    body[data-theme="dark"] .assistant,
+    body[data-theme="dark"] .assistant-frame,
+    body[data-theme="dark"] .assistant-main,
+    body[data-theme="dark"] .assistant-head,
+    body[data-theme="dark"] .assistant-footer,
+    body[data-theme="dark"] .config-card,
+    body[data-theme="dark"] .config-module,
+    body[data-theme="dark"] .config-actions-panel,
+    body[data-theme="dark"] .placeholder-card,
+    body[data-theme="dark"] .analysis-filter-card,
+    body[data-theme="dark"] .analysis-panel,
+    body[data-theme="dark"] .spectrum-toolbar,
+    body[data-theme="dark"] .spectrum-filter-panel,
+    body[data-theme="dark"] .spectrum-gallery-panel,
+    body[data-theme="dark"] .spectrum-detail-panel,
+    body[data-theme="dark"] .cutout-toolbar,
+    body[data-theme="dark"] .cutout-control-panel,
+    body[data-theme="dark"] .cutout-canvas-panel,
+    body[data-theme="dark"] .theme-settings-panel,
+    body[data-theme="dark"] .font-settings-panel,
+    body[data-theme="dark"] .theme-card{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .spectrum-workbench.is-detail-modal-open .spectrum-detail-panel{
+      background:rgba(2,6,23,.62);
+      border:0;
+      color:var(--text);
+    }
+    body[data-theme="dark"] .spectrum-workbench.is-detail-modal-open .spectrum-detail-body{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .spectrum-workbench.is-detail-modal-open .spectrum-detail-modal-head{
+      border-bottom-color:var(--border);
+    }
+    body[data-theme="dark"] .spectrum-compact-detail-dialog{
+      background:rgba(2,6,23,.62);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .spectrum-compact-detail-card{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .spectrum-compact-detail-card .spectrum-detail-modal-head{
+      border-bottom-color:var(--border);
+    }
+    body[data-theme="dark"] .spectrum-compact-detail-image,
+    body[data-theme="dark"] .spectrum-compact-detail-image img{
+      background:var(--surface-2);
+    }
+    body[data-theme="dark"] .analysis-search,
+    body[data-theme="dark"] .analysis-search-suggest,
+    body[data-theme="dark"] .analysis-search-suggest-item,
+    body[data-theme="dark"] .analysis-search-mode-btn,
+    body[data-theme="dark"] .analysis-toolbar-btn,
+    body[data-theme="dark"] .analysis-import-status,
+    body[data-theme="dark"] .analysis-sheet-tab,
+    body[data-theme="dark"] .analysis-page-btn,
+    body[data-theme="dark"] .analysis-page-number,
+    body[data-theme="dark"] .spectrum-search,
+    body[data-theme="dark"] .spectrum-view-switch,
+    body[data-theme="dark"] .spectrum-mode-switch,
+    body[data-theme="dark"] .spectrum-sort-field select,
+    body[data-theme="dark"] .spectrum-detail-toggle,
+    body[data-theme="dark"] .spectrum-filter-btn,
+    body[data-theme="dark"] .spectrum-action-btn,
+    body[data-theme="dark"] .spectrum-selected-empty,
+    body[data-theme="dark"] .spectrum-selected-item,
+    body[data-theme="dark"] .spectrum-tag-filter,
+    body[data-theme="dark"] .spectrum-card,
+    body[data-theme="dark"] .spectrum-card-body,
+    body[data-theme="dark"] .spectrum-detail-field input,
+    body[data-theme="dark"] .spectrum-detail-field textarea,
+    body[data-theme="dark"] .spectrum-batch-tags input,
+    body[data-theme="dark"] .spectrum-detail-tag-list,
+    body[data-theme="dark"] .spectrum-detail-list div,
+    body[data-theme="dark"] .spectrum-detail-modal-close,
+    body[data-theme="dark"] .cutout-panel-block,
+    body[data-theme="dark"] .cutout-crop-grid input,
+    body[data-theme="dark"] .cutout-reset-btn,
+    body[data-theme="dark"] .theme-reset-btn{
+      background:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .analysis-select-field select{
+      background-color:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-search-mode-btn.is-active,
+    body[data-theme="dark"] .spectrum-filter-btn.is-active,
+    body[data-theme="dark"] .spectrum-card.is-selected{
+      background:var(--accent-soft);
+      border-color:var(--accent);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .spectrum-card.is-selected{
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    body[data-theme="dark"] .spectrum-card.is-selected .spectrum-card-body{
+      background:var(--accent-soft);
+    }
+    body[data-theme="dark"] .analysis-toolbar-btn.is-active,
+    body[data-theme="dark"] .analysis-toolbar-btn-primary.is-active,
+    body[data-theme="dark"] .analysis-sheet-tab.is-active,
+    body[data-theme="dark"] .analysis-page-number.is-active,
+    body[data-theme="dark"] .spectrum-tag-filter.is-active,
+    body[data-theme="dark"] .spectrum-filter-btn.is-active .spectrum-filter-counts strong{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#06131f;
+    }
+    body[data-theme="dark"] .analysis-toolbar-btn-primary,
+    body[data-theme="dark"] .analysis-toolbar-btn:disabled,
+    body[data-theme="dark"] .spectrum-selected-remove,
+    body[data-theme="dark"] .spectrum-empty-icon,
+    body[data-theme="dark"] .spectrum-type-badge,
+    body[data-theme="dark"] .spectrum-card-tags span,
+    body[data-theme="dark"] .spectrum-detail-tags span,
+    body[data-theme="dark"] .spectrum-detail-tag-chip,
+    body[data-theme="dark"] .spectrum-note,
+    body[data-theme="dark"] .theme-card-check{
+      background:var(--surface-3);
+      border-color:var(--border);
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .analysis-table-scroll,
+    body[data-theme="dark"] .analysis-table-wrap,
+    body[data-theme="dark"] .spectrum-card-image,
+    body[data-theme="dark"] .spectrum-selected-thumb,
+    body[data-theme="dark"] .spectrum-detail-image,
+    body[data-theme="dark"] .spectrum-detail-image img,
+    body[data-theme="dark"] .spectrum-gallery.is-list .spectrum-card-image,
+    body[data-theme="dark"] .spectrum-gallery.is-list .spectrum-card-image img{
+      background:var(--surface-3);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .cutout-preview-frame,
+    body[data-theme="dark"] .cutout-empty{
+      background-color:var(--surface-3);
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .analysis-table th,
+    body[data-theme="dark"] .analysis-table td{
+      background:var(--surface);
+      border-right-color:var(--border);
+      border-bottom-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .analysis-table th{
+      background:var(--surface-2);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-table tbody tr:hover td,
+    body[data-theme="dark"] .analysis-search-suggest-item:hover,
+    body[data-theme="dark"] .analysis-search-suggest-item.is-active,
+    body[data-theme="dark"] .analysis-sheet-tab:hover,
+    body[data-theme="dark"] .analysis-page-btn:hover:not(:disabled),
+    body[data-theme="dark"] .analysis-page-number:hover,
+    body[data-theme="dark"] .spectrum-sort-field select:hover,
+    body[data-theme="dark"] .spectrum-sort-field select:focus,
+    body[data-theme="dark"] .spectrum-detail-toggle:hover,
+    body[data-theme="dark"] .spectrum-action-btn:hover,
+    body[data-theme="dark"] .theme-reset-btn:hover{
+      background:var(--surface-3);
+      border-color:var(--border-2);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-table tbody tr.is-selected td{
+      background:var(--accent-soft);
+    }
+    body[data-theme="dark"] #analysisSearchInput,
+    body[data-theme="dark"] .spectrum-search input,
+    body[data-theme="dark"] .chat-input,
+    body[data-theme="dark"] .sidebar-search input{
+      color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-panel-title,
+    body[data-theme="dark"] .spectrum-panel-title,
+    body[data-theme="dark"] .spectrum-card-title,
+    body[data-theme="dark"] .spectrum-selected-main span,
+    body[data-theme="dark"] .spectrum-empty-title,
+    body[data-theme="dark"] .spectrum-detail-title,
+    body[data-theme="dark"] .spectrum-delete-title,
+    body[data-theme="dark"] .theme-card-head strong,
+    body[data-theme="dark"] .cutout-title-block h1,
+    body[data-theme="dark"] .cutout-panel-title,
+    body[data-theme="dark"] .cutout-preview-title,
+    body[data-theme="dark"] .placeholder-title{
+      color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-panel-count,
+    body[data-theme="dark"] .analysis-footer-total,
+    body[data-theme="dark"] .analysis-select-field,
+    body[data-theme="dark"] .analysis-selection-meta,
+    body[data-theme="dark"] .analysis-import-status,
+    body[data-theme="dark"] .analysis-search,
+    body[data-theme="dark"] .analysis-search-suggest-type,
+    body[data-theme="dark"] .spectrum-muted,
+    body[data-theme="dark"] .spectrum-filter-label,
+    body[data-theme="dark"] .spectrum-filter-counts em,
+    body[data-theme="dark"] .spectrum-selected-main em,
+    body[data-theme="dark"] .spectrum-card-meta,
+    body[data-theme="dark"] .spectrum-empty-text,
+    body[data-theme="dark"] .spectrum-detail-code,
+    body[data-theme="dark"] .spectrum-detail-field,
+    body[data-theme="dark"] .spectrum-detail-list dt,
+    body[data-theme="dark"] .spectrum-delete-text,
+    body[data-theme="dark"] .theme-card-desc,
+    body[data-theme="dark"] .cutout-kicker,
+    body[data-theme="dark"] .cutout-preview-subtitle,
+    body[data-theme="dark"] .cutout-range-field,
+    body[data-theme="dark"] .placeholder-desc{
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .analysis-empty{
+      background:var(--surface-2);
+      border-color:var(--border-2);
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .spectrum-view-switch::before,
+    body[data-theme="dark"] .spectrum-mode-switch::before{
+      background:var(--surface);
+    }
+    body[data-theme="dark"] .spectrum-gallery-panel.is-drag-over,
+    body[data-theme="dark"] .spectrum-gallery-panel.is-drag-over::after{
+      background:rgba(34,199,184,.08);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    body[data-theme="dark"] .spectrum-preview-card,
+    body[data-theme="dark"] .spectrum-preview-card-head,
+    body[data-theme="dark"] .spectrum-preview-image-frame,
+    body[data-theme="dark"] .spectrum-preview-image-frame > img,
+    body[data-theme="dark"] .spectrum-preview-card-foot{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .spectrum-preview-card-title{
+      color:var(--text);
+    }
+    body[data-theme="dark"] .spectrum-delete-card{
+      background:var(--surface);
+      border-color:rgba(248,113,113,.36);
+    }
+    body[data-theme="dark"] .spectrum-danger-btn,
+    body[data-theme="dark"] .spectrum-action-danger,
+    body[data-theme="dark"] .spectrum-delete-icon{
+      background:rgba(248,113,113,.12);
+      border-color:rgba(248,113,113,.32);
+      color:#fca5a5;
+    }
+    body[data-theme="dark"] .theme-card.is-active{
+      border-color:var(--accent);
+    }
+    body[data-theme="dark"] .theme-card.is-active .theme-card-check,
+    body[data-theme="dark"] .font-card.is-active .font-card-check{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#06131f;
+    }
+    body[data-theme="dark"] .business-kpi,
+    body[data-theme="dark"] .business-panel,
+    body[data-theme="dark"] .business-table-wrap,
+    body[data-theme="dark"] .business-lane-icon{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .business-lane,
+    body[data-theme="dark"] .business-table th{
+      background:var(--surface-2);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .business-table td{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .business-kpi-value,
+    body[data-theme="dark"] .business-panel-head h2,
+    body[data-theme="dark"] .business-lane strong{
+      color:var(--text);
+    }
+    body[data-theme="dark"] .business-kpi-label,
+    body[data-theme="dark"] .business-kpi-meta em,
+    body[data-theme="dark"] .business-panel-head span,
+    body[data-theme="dark"] .business-lane p,
+    body[data-theme="dark"] .business-insight ul,
+    body[data-theme="dark"] .business-table th{
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .biz-stat-strip article,
+    body[data-theme="dark"] .biz-kanban-column,
+    body[data-theme="dark"] .biz-order-card,
+    body[data-theme="dark"] .biz-template-card,
+    body[data-theme="dark"] .biz-print-queue li,
+    body[data-theme="dark"] .biz-reserve-item,
+    body[data-theme="dark"] .biz-material-ready > div:not(.business-panel-head),
+    body[data-theme="dark"] .biz-tags span,
+    body[data-theme="dark"] .biz-audit-event,
+    body[data-theme="dark"] .biz-risk-card,
+    body[data-theme="dark"] .biz-today-list li{
+      background:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .biz-order-toolbar button,
+    body[data-theme="dark"] .biz-directory button,
+    body[data-theme="dark"] .biz-role-list button,
+    body[data-theme="dark"] .biz-audit-filter button,
+    body[data-theme="dark"] .biz-formula-list button,
+    body[data-theme="dark"] .biz-permission-row span{
+      background:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .biz-order-toolbar .is-active,
+    body[data-theme="dark"] .biz-directory .is-active,
+    body[data-theme="dark"] .biz-role-list .is-active,
+    body[data-theme="dark"] .biz-audit-filter .is-active,
+    body[data-theme="dark"] .biz-formula-list .is-active,
+    body[data-theme="dark"] .biz-permission-row .on{
+      background:var(--accent-soft);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    body[data-theme="dark"] .biz-ingredient div{
+      background:var(--surface-3);
+    }
+    body[data-theme="dark"] .biz-paper{
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .model-dropdown-trigger,
+    body[data-theme="dark"] .model-dropdown-panel{
+      background:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .model-dropdown-value,
+    body[data-theme="dark"] .model-dropdown-option-label{
+      color:var(--text);
+    }
+    body[data-theme="dark"] .model-dropdown-arrow,
+    body[data-theme="dark"] .model-dropdown-option-price,
+    body[data-theme="dark"] .model-dropdown-option-context,
+    body[data-theme="dark"] .model-dropdown-option-subline{
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .model-dropdown-group + .model-dropdown-group,
+    body[data-theme="dark"] .model-dropdown-option{
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .model-dropdown-group-title{
+      background:var(--surface-3);
+      color:var(--muted);
+    }
+    body[data-theme="dark"] .model-dropdown-option{
+      background:var(--surface);
+      color:var(--text);
+    }
+    body[data-theme="dark"] .model-dropdown-option:hover,
+    body[data-theme="dark"] .model-dropdown-option:focus-visible{
+      background:var(--surface-3);
+    }
+    body[data-theme="dark"] .model-dropdown-option.is-active{
+      background:rgba(96,165,250,.18);
+      box-shadow:inset 3px 0 0 var(--accent);
+    }
+    body[data-theme="dark"] .model-dropdown-option-meta{
+      background:var(--accent-soft);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    body[data-theme="dark"] .model-dropdown-option.is-active .model-dropdown-option-meta{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#06131f;
+    }

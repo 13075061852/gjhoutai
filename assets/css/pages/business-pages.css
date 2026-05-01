@@ -582,6 +582,9 @@
       gap:12px;
       overflow:hidden;
     }
+    .biz-formula-editor-layout{
+      grid-template-columns:minmax(520px,1fr) 320px;
+    }
     .biz-formula-page{
       height:calc(100dvh - var(--topbar) - 32px);
       min-height:0;
@@ -660,6 +663,205 @@
     .biz-formula-search input::placeholder{
       color:var(--muted-2);
     }
+    .biz-formula-table-panel{
+      padding:0;
+      overflow:hidden;
+      box-shadow:0 1px 2px rgba(15,23,42,.08);
+    }
+    .biz-formula-table-head{
+      min-height:64px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 18px;
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-formula-table-title{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--text);
+    }
+    .biz-formula-table-title i{
+      font-size:20px;
+    }
+    .biz-formula-table-title h2{
+      margin:0;
+      font-size:17px;
+      line-height:1.2;
+      font-weight:950;
+    }
+    .biz-formula-table-actions{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .biz-formula-table-search{
+      width:190px;
+      min-height:36px;
+    }
+    .biz-formula-table-actions select{
+      width:auto;
+      min-width:96px;
+      min-height:36px;
+      padding:0 34px 0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+      outline:none;
+      cursor:pointer;
+    }
+    .biz-formula-table-actions select:focus,
+    .biz-formula-table-search:focus-within{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-formula-new-btn{
+      min-height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 14px;
+      border:1px solid var(--accent);
+      border-radius:7px;
+      background:var(--accent);
+      color:#fff;
+      font:inherit;
+      font-size:13px;
+      font-weight:900;
+      cursor:pointer;
+      transition:filter .18s ease, transform .18s ease;
+    }
+    .biz-formula-new-btn:hover{
+      filter:brightness(1.04);
+      transform:translateY(-1px);
+    }
+    .biz-formula-table-wrap{
+      width:100%;
+      overflow:auto;
+    }
+    .biz-formula-table{
+      width:100%;
+      min-width:960px;
+      border-collapse:collapse;
+      table-layout:auto;
+      font-size:14px;
+    }
+    .biz-formula-table th,
+    .biz-formula-table td{
+      height:62px;
+      padding:0 18px;
+      border-bottom:1px solid var(--border);
+      color:var(--text);
+      text-align:center;
+      vertical-align:middle;
+      background:var(--surface);
+    }
+    .biz-formula-table th{
+      height:50px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-formula-table tr:last-child td{
+      border-bottom:0;
+    }
+    .biz-formula-name-link{
+      max-width:100%;
+      padding:0;
+      border:0;
+      background:transparent;
+      color:var(--accent);
+      font:inherit;
+      font-size:15px;
+      font-weight:950;
+      cursor:pointer;
+      text-align:center;
+      white-space:normal;
+      overflow-wrap:anywhere;
+      line-height:1.4;
+    }
+    .biz-formula-name-link:hover{
+      text-decoration:underline;
+      text-underline-offset:3px;
+    }
+    .biz-formula-chip,
+    .biz-formula-status{
+      min-height:26px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:0 10px;
+      border-radius:6px;
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+    }
+    .biz-formula-chip{
+      background:color-mix(in srgb, var(--accent) 14%, transparent);
+      color:var(--accent);
+    }
+    .biz-formula-status.is-ok{
+      background:rgba(16,185,129,.16);
+      color:#047857;
+    }
+    .biz-formula-status.is-warn{
+      background:rgba(245,158,11,.16);
+      color:#b45309;
+    }
+    .biz-formula-status.is-danger{
+      background:rgba(239,68,68,.14);
+      color:#dc2626;
+    }
+    .biz-formula-row-actions{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+    }
+    .biz-formula-row-actions button{
+      width:74px;
+      min-height:32px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+      cursor:pointer;
+      transition:border-color .18s ease, color .18s ease, transform .18s ease;
+    }
+    .biz-formula-row-actions button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+      transform:translateY(-1px);
+    }
+    .biz-formula-row-actions button.is-danger{
+      color:var(--danger);
+    }
+    .biz-formula-row-actions button.is-danger:hover{
+      border-color:var(--danger);
+      color:var(--danger);
+    }
     .biz-formula-list button{
       min-height:54px;
       gap:12px;
@@ -716,27 +918,41 @@
     }
     .biz-issue-meta-grid{
       display:grid;
-      grid-template-columns:repeat(7,minmax(0,1fr));
-      border-top:1px solid var(--border-2);
-      border-left:1px solid var(--border-2);
-      background:var(--surface);
+      grid-template-columns:repeat(6,minmax(0,1fr));
+      gap:10px;
+      background:transparent;
     }
     .biz-issue-meta-grid label{
       min-width:0;
       display:grid;
-      gap:12px;
-      padding:8px;
-      border-right:1px solid var(--border-2);
-      border-bottom:1px solid var(--border-2);
+      gap:8px;
+      padding:10px 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
     }
+    .biz-issue-meta-grid label.is-date{grid-column:1;grid-row:1}
+    .biz-issue-meta-grid label.is-code{grid-column:2;grid-row:1}
+    .biz-issue-meta-grid label.is-line{grid-column:3;grid-row:1}
     .biz-issue-meta-grid label.is-name{
-      grid-column:span 2;
+      grid-column:4;
+      grid-row:1;
+    }
+    .biz-issue-meta-grid label.is-batch{
+      grid-column:5;
+      grid-row:1;
+    }
+    .biz-issue-meta-grid label.is-output{
+      grid-column:6;
+      grid-row:1;
     }
     .biz-issue-meta-grid label.is-version{
-      grid-column:span 2;
+      grid-column:1 / span 2;
+      grid-row:2;
     }
     .biz-issue-meta-grid label.is-note{
-      grid-column:span 5;
+      grid-column:3 / -1;
+      grid-row:2;
     }
     .biz-issue-meta-grid span{
       color:var(--muted);
@@ -745,47 +961,45 @@
       font-weight:900;
     }
     .biz-issue-meta-grid input,
+    .biz-issue-meta-grid select,
     .biz-issue-meta-grid textarea,
     .biz-line-table select,
     .biz-line-table input{
       min-width:0;
-      min-height:30px;
+      min-height:34px;
+      box-sizing:border-box;
       border:1px solid transparent;
-      border-radius:4px;
+      border-radius:6px;
       background:transparent;
       color:var(--text);
       font:inherit;
-      font-size:12px;
-      font-weight:850;
+      font-size:14px;
+      font-weight:900;
       outline:none;
       transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
     }
     .biz-issue-meta-grid input,
+    .biz-issue-meta-grid select,
     .biz-issue-meta-grid textarea,
     .biz-line-table select{
       width:100%;
-      padding:0 6px;
+      padding:0 8px;
     }
     .biz-line-table select{
       text-align:center;
       text-align-last:center;
     }
-    .biz-issue-meta-grid textarea{
-      min-height:46px;
-      resize:vertical;
-      padding-top:6px;
-      line-height:1.45;
-    }
     .biz-issue-meta-grid input:focus,
+    .biz-issue-meta-grid select:focus,
     .biz-issue-meta-grid textarea:focus,
     .biz-line-table select:focus,
     .biz-line-table input:focus{
       border-color:var(--accent);
-      background:var(--surface);
-      box-shadow:0 0 0 2px var(--accent-soft);
+      background:var(--surface-2);
+      box-shadow:0 0 0 3px var(--accent-soft);
     }
     .biz-issue-meta-grid input[readonly]{
-      color:var(--muted);
+      color:var(--text-2);
       cursor:default;
     }
     .biz-line-issue-grid{
@@ -834,6 +1048,7 @@
     .biz-line-table .col-material{width:auto}
     .biz-line-table .col-ratio{width:96px}
     .biz-line-table .col-plan{width:110px}
+    .biz-line-table .col-cost{width:128px}
     .biz-line-table .col-stock{width:190px}
     .biz-line-table .col-action{width:124px}
     .biz-line-table th,
@@ -886,6 +1101,23 @@
     }
     .biz-line-table td:nth-child(2) select{
       max-width:190px;
+    }
+    .biz-line-cost{
+      display:inline-grid;
+      gap:2px;
+      justify-items:center;
+      line-height:1.2;
+    }
+    .biz-line-cost strong{
+      color:var(--text);
+      font-size:12px;
+      font-weight:950;
+    }
+    .biz-line-cost em{
+      color:var(--muted);
+      font-size:10px;
+      font-style:normal;
+      font-weight:850;
     }
     .biz-line-material-pick{
       width:auto;
@@ -1024,7 +1256,6 @@
       flex-wrap:wrap;
     }
     .biz-formula-actions button,
-    .biz-formula-material-card button,
     .biz-formula-remove-btn,
     .biz-formula-process-head button,
     .biz-formula-step.is-editable > button{
@@ -1039,15 +1270,13 @@
       cursor:pointer;
       transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
     }
-    .biz-formula-actions button:first-child,
-    .biz-formula-material-card button:not(:disabled),
+    .biz-formula-actions button[data-formula-save],
     .biz-formula-process-head button{
       border-color:var(--accent);
       background:var(--accent);
       color:#fff;
     }
     .biz-formula-actions button:hover,
-    .biz-formula-material-card button:not(:disabled):hover,
     .biz-formula-remove-btn:hover,
     .biz-formula-process-head button:hover,
     .biz-formula-step.is-editable > button:not(:disabled):hover{
@@ -1306,50 +1535,137 @@
       padding-right:2px;
     }
     .biz-formula-material-card{
+      position:relative;
       display:grid;
-      gap:12px;
-      padding:10px;
+      justify-items:center;
+      gap:6px;
+      min-height:112px;
+      padding:14px 14px 12px;
       border:1px solid var(--border);
-      border-left:4px solid var(--accent);
       border-radius:8px;
+      background:var(--surface);
+      text-align:center;
+      box-shadow:none;
+      cursor:pointer;
+      transition:border-color .2s ease, background .24s ease, box-shadow .24s ease;
+    }
+    .biz-formula-material-card:hover,
+    .biz-formula-material-card:focus-visible{
+      border-color:color-mix(in srgb, var(--accent) 34%, var(--border));
       background:var(--surface-2);
     }
+    .biz-formula-material-card:focus-visible{
+      outline:3px solid var(--accent-soft);
+      outline-offset:2px;
+    }
+    .biz-formula-material-card[aria-disabled="true"]{
+      cursor:default;
+    }
     .biz-formula-material-card.is-warn{
-      border-left-color:var(--warn);
+      border-color:var(--border);
     }
     .biz-formula-material-card.is-used{
-      border-left-color:var(--success);
-      background:var(--surface);
+      border-color:var(--border);
+      background:color-mix(in srgb, var(--success) 7%, var(--surface));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--success) 10%, transparent);
+      animation:formulaMaterialSelectIn .28s cubic-bezier(.2,.8,.2,1);
     }
     .biz-formula-material-card.is-current{
-      border-color:var(--accent);
+      border-color:var(--border);
       background:var(--accent-soft);
+      box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+    .biz-formula-material-card.is-used strong{
+      color:color-mix(in srgb, var(--success) 78%, var(--text));
+    }
+    .biz-formula-material-card.is-used span,
+    .biz-formula-material-card.is-used em{
+      color:color-mix(in srgb, var(--success) 38%, var(--text));
+    }
+    .biz-formula-material-card.is-used.is-current{
+      border-color:var(--border);
+    }
+    .biz-formula-material-badge{
+      position:absolute;
+      top:10px;
+      right:10px;
+      min-height:16px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:3px;
+      padding:0 6px;
+      border-radius:999px;
+      background:var(--success);
+      color:#fff;
+      font-size:9px;
+      font-weight:950;
+      line-height:1;
+      box-shadow:0 4px 10px rgba(22,101,52,.18);
+      pointer-events:none;
+      animation:formulaMaterialBadgeIn .22s cubic-bezier(.2,.8,.2,1);
+    }
+    .biz-formula-material-badge::before{
+      content:"✓";
+      font-size:9px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-formula-material-card.is-current .biz-formula-material-badge{
+      background:var(--accent);
+      box-shadow:0 4px 10px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+    @keyframes formulaMaterialSelectIn{
+      from{
+        background:var(--surface);
+        box-shadow:inset 0 0 0 1px transparent;
+      }
+      to{
+        background:color-mix(in srgb, var(--success) 7%, var(--surface));
+        box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--success) 10%, transparent);
+      }
+    }
+    @keyframes formulaMaterialBadgeIn{
+      from{
+        opacity:0;
+        transform:scale(.88);
+      }
+      to{
+        opacity:1;
+        transform:scale(1);
+      }
     }
     .biz-formula-material-card strong{
       color:var(--text);
-      font-size:12px;
-      font-weight:900;
+      max-width:100%;
+      font-size:13px;
+      line-height:1.25;
+      font-weight:950;
+      overflow-wrap:anywhere;
     }
     .biz-formula-material-card span,
     .biz-formula-material-card em{
       color:var(--muted);
       font-size:11px;
       font-style:normal;
-      line-height:1.45;
+      line-height:1.35;
+      max-width:100%;
     }
-    .biz-formula-material-card button{
-      justify-self:start;
-      min-height:30px;
-      margin-top:2px;
-      padding:0 10px;
-      font-size:11px;
+    .biz-formula-material-stock,
+    .biz-formula-material-state{
+      font-weight:900;
     }
-    .biz-formula-material-card button:disabled{
-      cursor:default;
-      color:var(--success);
-      background:rgba(101,163,13,.12);
-      border-color:var(--success);
-      transform:none;
+    .biz-formula-material-stock.is-ok,
+    .biz-formula-material-card em > .biz-formula-material-state.is-ok{
+      color:#059669;
+    }
+    .biz-formula-material-stock.is-warn,
+    .biz-formula-material-card em > .biz-formula-material-state.is-warn{
+      color:#d97706;
+    }
+    .biz-formula-material-stock.is-danger,
+    .biz-formula-material-card em > .biz-formula-material-state.is-danger{
+      color:#dc2626;
     }
     .biz-formula-process,
     .biz-formula-checks{

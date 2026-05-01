@@ -860,6 +860,11 @@
       align-items:center;
       gap:12px;
     }
+    .spectrum-card-meta > span:not(.spectrum-type-badge){
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
     .spectrum-gallery.is-grid .spectrum-card{
       height:214px;
     }
@@ -871,8 +876,8 @@
     .spectrum-gallery.is-grid .spectrum-card-body{
       flex:0 0 88px;
       min-height:88px;
-      padding:9px 10px;
-      gap:12px;
+      padding:8px 10px;
+      gap:5px;
       overflow:hidden;
     }
     .spectrum-gallery.is-grid .spectrum-card-top,
@@ -881,7 +886,7 @@
     }
     .spectrum-gallery.is-grid .spectrum-card-tags{
       display:flex;
-      flex:0 0 22px;
+      flex:0 0 18px;
       flex-wrap:nowrap;
       min-width:0;
       overflow:hidden;
@@ -937,11 +942,24 @@
       flex:0 1 auto;
     }
     .spectrum-gallery.is-grid .spectrum-card-tags span{
-      min-height:20px;
+      min-height:18px;
+      padding:0 6px;
       max-width:86px;
       border-radius:999px;
       font-size:10px;
       font-weight:850;
+    }
+    .spectrum-gallery.is-grid .spectrum-card-title{
+      line-height:1.25;
+    }
+    .spectrum-gallery.is-grid .spectrum-card-meta{
+      gap:8px;
+      line-height:18px;
+    }
+    .spectrum-gallery.is-grid .spectrum-type-badge{
+      min-height:18px;
+      padding:0 6px;
+      line-height:18px;
     }
     .spectrum-gallery.is-list .spectrum-card{
       display:grid;

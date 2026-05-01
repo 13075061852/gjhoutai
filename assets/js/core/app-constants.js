@@ -69,6 +69,11 @@
         eyebrow: '排产协同',
         desc: '以订单交期、产线负荷和原料到位情况组织每日生产计划。',
       },
+      'inventory-management': {
+        title: '库存管理',
+        eyebrow: '生产与配方',
+        desc: '统一管理原材料和生产完成后的成品材料，按供应商、分类、批次和库存状态联动供应商档案。',
+      },
       'supplier-archive': {
         title: '供应商档案',
         eyebrow: '采购基础',
@@ -83,11 +88,6 @@
         title: '人员档案',
         eyebrow: '组织管理',
         desc: '管理员工资料、岗位职责、在岗状态和系统权限关联。',
-      },
-      'data-source-config': {
-        title: '数据源配置',
-        eyebrow: '数据治理',
-        desc: '统一查看接口、文件、OSS、表格与业务模块之间的数据同步关系。',
       },
       'property-analysis': {
         title: '物性分析',
@@ -105,13 +105,13 @@
         desc: '抠图助手支持上传图片、识别边缘背景并生成透明 PNG，也可以裁剪透明背景或输入自定义裁剪区域。',
       },
       'project-skills': {
-        title: '技能面板',
-        eyebrow: 'Agent 管家',
+        title: 'AI技能面板',
+        eyebrow: '业务中心',
         desc: '集中管理本项目专属技能、AI 调用协议和执行记录，让 Gjun AI 可以按规范调取技能完成项目内操作。',
       },
       'ai-call-analysis': {
-        title: 'AI调用分析面板',
-        eyebrow: 'AI 功能',
+        title: 'AI调用分析',
+        eyebrow: '业务中心',
         desc: '追踪每一次 AI 模型调用、Token 消耗、费用估算、调用来源和执行状态，方便分析成本与使用质量。',
       },
       'permission-management': {
@@ -131,7 +131,7 @@
       },
       'ai-config': {
         title: '配置中心',
-        eyebrow: '当前可用',
+        eyebrow: '系统管理',
         desc: '这里可以配置 OpenRouter 接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
       },
     },

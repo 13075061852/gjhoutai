@@ -19,6 +19,7 @@
     谱图: 'spectrum-analysis',
     抠图助手: 'image-cutout',
     抠图: 'image-cutout',
+    AI技能面板: 'project-skills',
     技能面板: 'project-skills',
     技能: 'project-skills',
     AI调用分析面板: 'ai-call-analysis',
@@ -34,7 +35,10 @@
     开单打印: 'invoice-print',
     开单: 'invoice-print',
     销售库存: 'sales-stock',
-    库存: 'sales-stock',
+    库存管理: 'inventory-management',
+    库存: 'inventory-management',
+    原材料库存: 'inventory-management',
+    成品库存: 'inventory-management',
     配方管理: 'formula-management',
     配方: 'formula-management',
     生产计划: 'production-plan',
@@ -45,8 +49,6 @@
     客户: 'customer-archive',
     人员档案: 'personnel-archive',
     人员: 'personnel-archive',
-    数据源配置: 'data-source-config',
-    数据源: 'data-source-config',
     权限管理: 'permission-management',
     权限: 'permission-management',
     审计日志: 'audit-log',
@@ -598,7 +600,7 @@
       summary: '根据自然语言跳转到系统内任意已注册页面，包括业务中心、基础数据、系统管理和 AI 功能页。',
       inputSpec: '{ "pageId": "spectrum-analysis" }',
       outputSpec: '{ "ok": true, "pageId": "spectrum-analysis" }',
-      examples: ['打开客户档案', '切换到图谱分析', '打开AI调用分析面板'],
+      examples: ['打开客户档案', '切换到图谱分析', '打开AI调用分析'],
       infer(prompt) {
         const text = String(prompt || '');
         if (!hasOpenPageIntent(text)) return null;

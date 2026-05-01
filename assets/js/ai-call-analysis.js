@@ -20,6 +20,10 @@
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     return text.length > max ? `${text.slice(0, max)}...` : text;
   };
+  const truncateFormatted = (value, max = 220) => {
+    const text = String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+  };
   const formatNumber = (value) => new Intl.NumberFormat('zh-CN').format(Number(value || 0));
   const formatDateTime = (value) => {
     const date = new Date(value || Date.now());
@@ -236,8 +240,8 @@
       status,
       statusText: String(entry.statusText || ''),
       error: truncate(entry.error || '', 1200),
-      prompt: truncate(entry.prompt || '', 3000),
-      responsePreview: truncate(entry.responsePreview || entry.completionText || '', 5000),
+      prompt: truncateFormatted(entry.prompt || '', 3000),
+      responsePreview: truncateFormatted(entry.responsePreview || entry.completionText || '', 5000),
       requestMeta: entry.requestMeta && typeof entry.requestMeta === 'object' ? {
         messages: Number(entry.requestMeta.messages || 0),
         images: Number(entry.requestMeta.images || 0),
@@ -637,6 +641,119 @@
       <strong>${esc(value || '-')}</strong>
     </div>
   `;
+  const countSeparatorCells = (separator) => separator
+    .split('|')
+    .map((cell) => cell.trim())
+    .filter(Boolean)
+    .length;
+  const splitCollapsedTableRow = (line) => String(line || '')
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim());
+  const findCollapsedTableHeaderStart = (beforeSeparator, columnCount) => {
+    const value = String(beforeSeparator || '');
+    const pipePositions = [];
+    for (let index = value.indexOf('|'); index >= 0; index = value.indexOf('|', index + 1)) {
+      pipePositions.push(index);
+    }
+    return pipePositions.find((position) => {
+      const cells = splitCollapsedTableRow(value.slice(position));
+      return cells.length === columnCount && cells.every(Boolean);
+    }) ?? -1;
+  };
+  const readCollapsedTableRow = (source, columnCount) => {
+    const raw = String(source || '');
+    const trimmed = raw.replace(/^\s+/, '');
+    const leadingSpaces = raw.length - trimmed.length;
+    if (!trimmed.startsWith('|')) return null;
+
+    const cells = [];
+    let current = '';
+    let escaped = false;
+    for (let index = 1; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (escaped) {
+        current += char;
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        current += char;
+        escaped = true;
+        continue;
+      }
+      if (char === '|') {
+        cells.push(current.trim());
+        current = '';
+        if (cells.length === columnCount) {
+          const firstCell = cells[0] || '';
+          if (!/^\d+$/.test(firstCell)) return null;
+          return {
+            consumed: leadingSpaces + index + 1,
+            line: `| ${cells.join(' | ')} |`,
+          };
+        }
+        continue;
+      }
+      current += char;
+    }
+    return null;
+  };
+  const restoreCollapsedPipeTables = (value) => {
+    const source = String(value || '');
+    const separatorPattern = /\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|/g;
+    let output = '';
+    let cursor = 0;
+    let match = separatorPattern.exec(source);
+
+    while (match) {
+      const separator = match[0].trim();
+      const columnCount = countSeparatorCells(separator);
+      const beforeSeparator = source.slice(cursor, match.index);
+      const headerStart = findCollapsedTableHeaderStart(beforeSeparator, columnCount);
+      if (headerStart < 0 || columnCount < 2) {
+        output += source.slice(cursor, separatorPattern.lastIndex);
+        cursor = separatorPattern.lastIndex;
+        match = separatorPattern.exec(source);
+        continue;
+      }
+
+      output += beforeSeparator.slice(0, headerStart).trimEnd();
+      output += `\n${beforeSeparator.slice(headerStart).trim()}\n${separator}`;
+      cursor = separatorPattern.lastIndex;
+
+      let row = readCollapsedTableRow(source.slice(cursor), columnCount);
+      while (row) {
+        output += `\n${row.line}`;
+        cursor += row.consumed;
+        row = readCollapsedTableRow(source.slice(cursor), columnCount);
+      }
+      output += '\n';
+      separatorPattern.lastIndex = cursor;
+      match = separatorPattern.exec(source);
+    }
+
+    output += source.slice(cursor);
+    return output;
+  };
+  const restoreCollapsedMarkdown = (value) => {
+    const text = String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!text || text.includes('\n')) return text;
+    if (!/[#|*-]/.test(text)) return text;
+
+    return restoreCollapsedPipeTables(text)
+      .replace(/\s+(#{1,6}\s+)/g, '\n$1')
+      .replace(/\s+(-\s+(?=\*\*|[\u4e00-\u9fffA-Za-z]))/g, '\n$1')
+      .replace(/\s+(\d+\.\s+)/g, '\n$1')
+      .trim();
+  };
+  const renderDetailContent = (value) => {
+    const markdown = restoreCollapsedMarkdown(value || '-');
+    const html = utils.markdownLite?.(markdown) || '';
+    return html || `<p>${esc(value || '-')}</p>`;
+  };
   const renderDetailModal = (item) => {
     const usage = item.tokenUsage || {};
     const cost = normalizeCostUsage(usage.cost);
@@ -669,11 +786,11 @@
           <div class="ai-call-detail-grid">${detailRows}</div>
           <div class="ai-call-detail-block">
             <h3>问题</h3>
-            <p>${esc(item.prompt || '-')}</p>
+            <div class="ai-call-detail-content">${renderDetailContent(item.prompt || '-')}</div>
           </div>
           <div class="ai-call-detail-block">
             <h3>${item.status === 'failed' ? '错误' : '结果'}</h3>
-            <p>${esc(item.error || item.responsePreview || '-')}</p>
+            <div class="ai-call-detail-content">${renderDetailContent(item.error || item.responsePreview || '-')}</div>
           </div>
         </section>
       </div>

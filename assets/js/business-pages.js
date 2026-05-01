@@ -158,24 +158,254 @@
     ])}
   `;
 
-  const renderFormula = () => `
-    <section class="biz-formula-layout">
-      <aside class="business-panel biz-formula-list">
-        <div class="business-panel-head"><h2>配方版本</h2><span>214 个版本</span></div>
-        ${['FM-ABS-2026-041', 'FM-PP-2026-033', 'FM-PCABS-2026-019'].map((item, index) => `<button class="${index === 0 ? 'is-active' : ''}" type="button">${esc(item)}<span>${index === 0 ? '试产' : '在用'}</span></button>`).join('')}
-      </aside>
-      <article class="business-panel biz-recipe-card">
-        <div class="business-panel-head"><h2>阻燃 ABS 试产配方</h2><span>目标：冲击强度提升</span></div>
-        ${[['ABS 基料', 62], ['阻燃剂', 18], ['增韧剂', 9], ['色母/助剂', 11]].map(([name, value]) => `
-          <div class="biz-ingredient"><span>${esc(name)}</span><div><em style="width:${value}%"></em></div><strong>${value}%</strong></div>
-        `).join('')}
-      </article>
-      <article class="business-panel biz-lab-notes">
-        <div class="business-panel-head"><h2>验证记录</h2><span>实验室</span></div>
-        <p>小试批次 GJ260427-A08，熔指稳定，冲击强度提升 7.4%，阻燃等级保持 V0。建议补做 85 度老化测试后发布。</p>
-      </article>
-    </section>
-  `;
+  const inventoryRows = [
+    ['ABS 757K', '原材料', '基础树脂', '上海恒裕化工', '12.4 吨', '正常'],
+    ['玻纤 GF-30', '原材料', '增强填料', '宁波华纤材料', '4.6 吨', '预警'],
+    ['阻燃剂 FR-530', '原材料', '阻燃助剂', '常州新禾助剂', '1.8 吨', '紧急'],
+    ['增韧剂 IM-88', '原材料', '改性助剂', '常州新禾助剂', '2.4 吨', '正常'],
+    ['黑色母 B-204', '原材料', '色母助剂', '苏州蓝石物流', '0.9 吨', '预警'],
+    ['PP K8003', '原材料', '基础树脂', '上海恒裕化工', '9.6 吨', '正常'],
+    ['抗氧剂 AO-1010', '原材料', '稳定助剂', '常州新禾助剂', '1.2 吨', '正常'],
+    ['润滑剂 EBS-16', '原材料', '加工助剂', '苏州蓝石物流', '0.7 吨', '预警'],
+    ['PC/ABS 基料 901', '原材料', '基础树脂', '广州瑞丰树脂', '6.3 吨', '正常'],
+    ['相容剂 MAH-42', '原材料', '改性助剂', '广州瑞丰树脂', '1.5 吨', '正常'],
+    ['GJ-ABS-FR-760', '成品材料', '阻燃 ABS', '上海恒裕化工', '5.8 吨', '可发货'],
+    ['GJ-PP-GF30', '成品材料', '增强 PP', '宁波华纤材料', '8.2 吨', '锁库中'],
+    ['GJ-PCABS-901', '成品材料', 'PC/ABS 合金', '广州瑞丰树脂', '3.7 吨', '待检'],
+  ];
+  let inventoryCategory = '全部';
+  let activeFormulaId = 'FM-ABS-FR-760';
+  let formulaMaterialCategory = '全部';
+
+  const renderInventory = () => {
+    const rawRows = inventoryRows.filter((row) => row[1] === '原材料');
+    const finishedRows = inventoryRows.filter((row) => row[1] === '成品材料');
+    const suppliers = [...new Set(inventoryRows.map((row) => row[3]))];
+    const categories = [...new Set(inventoryRows.map((row) => row[2]))];
+    const categoryTabs = ['全部', ...categories];
+    if (!categoryTabs.includes(inventoryCategory)) inventoryCategory = '全部';
+    const visibleRows = inventoryCategory === '全部'
+      ? inventoryRows
+      : inventoryRows.filter((row) => row[2] === inventoryCategory);
+
+    return `
+      ${renderStatStrip([
+        ['原材料 SKU', String(rawRows.length), '按供应商追踪'],
+        ['成品材料', String(finishedRows.length), '生产完成入库'],
+        ['关联供应商', String(suppliers.length), '来源可追踪'],
+        ['库存预警', '3 项', '需采购/复检'],
+      ])}
+      <section class="business-panel biz-category-flow">
+        <div class="business-panel-head"><h2>分类视图</h2><span>${esc(inventoryCategory)} · ${visibleRows.length} 项</span></div>
+        <div class="biz-category-tabs">
+          ${categoryTabs.map((category) => {
+            const count = category === '全部'
+              ? inventoryRows.length
+              : inventoryRows.filter((row) => row[2] === category).length;
+            return `
+              <button
+                class="${category === inventoryCategory ? 'is-active' : ''}"
+                type="button"
+                data-inventory-category="${esc(category)}">
+                <span>${esc(category)}</span>
+                <strong>${count}</strong>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </section>
+      ${renderTable('材料明细', ['材料', '类型', '分类', '供应商', '库存', '状态'], visibleRows)}
+    `;
+  };
+
+  const getInventoryMaterial = (name) => inventoryRows.find((row) => row[0] === name)
+    || [name, '库存材料', '未分类', '未关联供应商', '--', '待确认'];
+
+  const formulaRecipes = [
+    {
+      id: 'FM-ABS-FR-760',
+      name: '阻燃 ABS 高冲击配方',
+      product: 'GJ-ABS-FR-760',
+      version: 'V3.2',
+      status: '试产验证',
+      owner: '陈工',
+      updated: '2026-04-30',
+      target: '冲击强度提升，阻燃等级保持 V0',
+      batchSize: '500 kg',
+      materials: [
+        { name: 'ABS 757K', ratio: 58, tolerance: '±0.6%', role: '主体树脂', stage: '主喂料' },
+        { name: '阻燃剂 FR-530', ratio: 18, tolerance: '±0.3%', role: '阻燃体系', stage: '侧喂料' },
+        { name: '增韧剂 IM-88', ratio: 13, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
+        { name: '玻纤 GF-30', ratio: 8, tolerance: '±0.2%', role: '尺寸稳定', stage: '侧喂料' },
+        { name: '黑色母 B-204', ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+      ],
+      process: [
+        ['称量', '按 500 kg 批量生成领料单，色母单独复核'],
+        ['干燥', 'ABS 80C 3h，增韧剂密封回温'],
+        ['预混', '树脂、增韧剂、色母低速 8 分钟'],
+        ['挤出', '一区 190C，六区 225C，主机 420rpm'],
+        ['质检', '熔指、冲击、阻燃、色差同步留样'],
+      ],
+      checks: ['配比合计 100%', '阻燃剂库存紧急', '供应商来源完整', '需补做 85C 老化'],
+    },
+    {
+      id: 'FM-PP-GF30',
+      name: '增强 PP 低翘曲配方',
+      product: 'GJ-PP-GF30',
+      version: 'V2.4',
+      status: '在用',
+      owner: '李娜',
+      updated: '2026-04-28',
+      target: '弯曲模量稳定，降低成型翘曲',
+      batchSize: '800 kg',
+      materials: [
+        { name: 'PP K8003', ratio: 63, tolerance: '±0.8%', role: '主体树脂', stage: '主喂料' },
+        { name: '玻纤 GF-30', ratio: 30, tolerance: '±0.4%', role: '增强填料', stage: '侧喂料' },
+        { name: '抗氧剂 AO-1010', ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
+        { name: '润滑剂 EBS-16', ratio: 2, tolerance: '±0.1%', role: '加工流动', stage: '预混' },
+        { name: '黑色母 B-204', ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+      ],
+      process: [
+        ['称量', '玻纤独立扫码，助剂小料包复称'],
+        ['预混', 'PP 与助剂混合 6 分钟'],
+        ['挤出', '玻纤侧喂，机筒 185-215C'],
+        ['切粒', '水温 35C，筛粉后入库'],
+        ['质检', '灰份、弯曲模量、外观黑点'],
+      ],
+      checks: ['配比合计 100%', '润滑剂库存预警', '供应商来源完整', '当前版本可排产'],
+    },
+    {
+      id: 'FM-PCABS-901',
+      name: 'PC/ABS 耐热合金配方',
+      product: 'GJ-PCABS-901',
+      version: 'V1.8',
+      status: '待放行',
+      owner: '王敏',
+      updated: '2026-04-26',
+      target: '提高耐热与尺寸稳定性',
+      batchSize: '300 kg',
+      materials: [
+        { name: 'PC/ABS 基料 901', ratio: 78, tolerance: '±0.7%', role: '主体基料', stage: '主喂料' },
+        { name: '相容剂 MAH-42', ratio: 8, tolerance: '±0.2%', role: '界面改性', stage: '主喂料' },
+        { name: '增韧剂 IM-88', ratio: 7, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
+        { name: '抗氧剂 AO-1010', ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
+        { name: '黑色母 B-204', ratio: 5, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+      ],
+      process: [
+        ['称量', '基料与相容剂按批次绑定'],
+        ['干燥', 'PC/ABS 90C 4h，水分小于 0.06%'],
+        ['预混', '小料包先混，基料后混'],
+        ['挤出', '机筒 220-245C，真空排气开启'],
+        ['质检', '热变形、缺口冲击、色差、银丝'],
+      ],
+      checks: ['配比合计 100%', '成品待检不可放量', '供应商来源完整', '需审核耐热数据'],
+    },
+  ];
+
+  const getActiveFormula = () => formulaRecipes.find((recipe) => recipe.id === activeFormulaId) || formulaRecipes[0];
+
+  const getFormulaRows = (recipe) => recipe.materials.map((item) => {
+    const [name, type, category, supplier, quantity, state] = getInventoryMaterial(item.name);
+    return { ...item, name, type, category, supplier, quantity, state };
+  });
+
+  const getFormulaRiskCount = (rows) => rows.filter((row) => /紧急|预警|待检/.test(row.state)).length;
+
+  const renderFormula = () => {
+    const recipe = getActiveFormula();
+    const formulaRows = getFormulaRows(recipe);
+    const totalRatio = formulaRows.reduce((sum, item) => sum + Number(item.ratio || 0), 0);
+    const materialRows = inventoryRows.filter((row) => row[1] === '原材料');
+    const materialCategories = ['全部', ...new Set(materialRows.map((row) => row[2]))];
+    if (!materialCategories.includes(formulaMaterialCategory)) formulaMaterialCategory = '全部';
+    const visibleMaterials = formulaMaterialCategory === '全部'
+      ? materialRows
+      : materialRows.filter((row) => row[2] === formulaMaterialCategory);
+    const riskCount = getFormulaRiskCount(formulaRows);
+
+    return `
+      ${renderStatStrip([
+        ['当前配方', recipe.product, recipe.version],
+        ['配比合计', `${totalRatio}%`, totalRatio === 100 ? '已平衡' : '需调整'],
+        ['材料数量', `${formulaRows.length} 种`, recipe.batchSize],
+        ['库存风险', `${riskCount} 项`, riskCount ? '需处理' : '可排产'],
+      ])}
+      <section class="biz-formula-layout">
+        <aside class="business-panel biz-formula-list">
+          <div class="business-panel-head"><h2>配方版本</h2><span>${formulaRecipes.length} 个</span></div>
+          ${formulaRecipes.map((item) => `
+            <button class="${item.id === recipe.id ? 'is-active' : ''}" type="button" data-formula-id="${esc(item.id)}">
+              ${esc(item.id)}
+              <span>${esc(item.status)}</span>
+            </button>
+          `).join('')}
+        </aside>
+        <article class="business-panel biz-recipe-card biz-formula-builder">
+          <div class="business-panel-head"><h2>${esc(recipe.name)}</h2><span>${esc(recipe.status)}</span></div>
+          <div class="biz-formula-meta">
+            <span>${esc(recipe.product)}</span>
+            <span>${esc(recipe.owner)}</span>
+            <span>${esc(recipe.updated)}</span>
+            <span>${esc(recipe.target)}</span>
+          </div>
+          ${formulaRows.map((item) => `
+            <div class="biz-ingredient biz-recipe-material">
+              <span><strong>${esc(item.name)}</strong><em>${esc(item.role)} · ${esc(item.category)} · ${esc(item.supplier)}</em></span>
+              <div><em style="width:${item.ratio}%"></em></div>
+              <strong>${item.ratio}%</strong>
+              <small>${esc(item.stage)} / ${esc(item.tolerance)} / 库存 ${esc(item.quantity)} / ${esc(item.state)}</small>
+            </div>
+          `).join('')}
+        </article>
+        <aside class="business-panel biz-formula-library">
+          <div class="business-panel-head"><h2>库存材料库</h2><span>${visibleMaterials.length} 项</span></div>
+          <div class="biz-formula-material-tabs">
+            ${materialCategories.map((category) => `
+              <button class="${category === formulaMaterialCategory ? 'is-active' : ''}" type="button" data-formula-material-category="${esc(category)}">${esc(category)}</button>
+            `).join('')}
+          </div>
+          <div class="biz-formula-material-list">
+            ${visibleMaterials.map(([name, type, category, supplier, quantity, state]) => `
+              <div class="biz-formula-material-card ${/紧急|预警/.test(state) ? 'is-warn' : ''}">
+                <strong>${esc(name)}</strong>
+                <span>${esc(category)} · ${esc(supplier)}</span>
+                <em>${esc(quantity)} / ${esc(state)}</em>
+              </div>
+            `).join('')}
+          </div>
+        </aside>
+      </section>
+      <section class="biz-formula-flow-grid">
+        <article class="business-panel biz-formula-process">
+          <div class="business-panel-head"><h2>配比流程</h2><span>${esc(recipe.batchSize)}</span></div>
+          ${recipe.process.map(([step, detail], index) => `
+            <div class="biz-formula-step">
+              <strong>${index + 1}</strong>
+              <span>${esc(step)}</span>
+              <em>${esc(detail)}</em>
+            </div>
+          `).join('')}
+        </article>
+        <article class="business-panel biz-formula-checks">
+          <div class="business-panel-head"><h2>配方校验</h2><span>版本放行</span></div>
+          ${recipe.checks.map((item) => `
+            <div class="${/紧急|待|需/.test(item) ? 'is-warn' : 'is-ok'}">
+              <i class="ti ${/紧急|待|需/.test(item) ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i>
+              <span>${esc(item)}</span>
+            </div>
+          `).join('')}
+        </article>
+      </section>
+      ${renderTable('配方 BOM 明细', ['库存材料', '角色', '分类', '供应商', '库存状态', '配比'], formulaRows.map((item) => [
+        item.name,
+        item.role,
+        item.category,
+        item.supplier,
+        `${item.quantity} / ${item.state}`,
+        `${item.ratio}%`,
+      ]))}
+    `;
+  };
 
   const renderProduction = () => `
     <section class="biz-production-layout">
@@ -206,9 +436,9 @@
   const archiveData = {
     'supplier-archive': {
       title: '供应商目录',
-      side: ['上海恒裕化工', '宁波华纤材料', '苏州蓝石物流'],
-      tags: ['阻燃剂', '玻纤', '物流', 'A级', '资质临期'],
-      rows: [['上海恒裕化工', '阻燃剂', 'A', '价格本周波动'], ['宁波华纤材料', '玻纤', 'B+', '交期需提前 5 天'], ['苏州蓝石物流', '物流', 'A-', '华南线路满载']],
+      side: ['上海恒裕化工', '宁波华纤材料', '常州新禾助剂', '广州瑞丰树脂', '苏州蓝石物流'],
+      tags: ['基础树脂', '玻纤', '阻燃助剂', '改性助剂', '色母助剂', 'A级', '资质临期'],
+      rows: [['上海恒裕化工', '基础树脂 / 阻燃 ABS', 'A', '价格本周波动'], ['宁波华纤材料', '玻纤 / 增强 PP', 'B+', '交期需提前 5 天'], ['常州新禾助剂', '阻燃剂', 'A-', '库存低于安全线'], ['广州瑞丰树脂', 'PC/ABS 合金', 'A', '新品试样中'], ['苏州蓝石物流', '色母助剂 / 物流', 'A-', '华南线路满载']],
       columns: ['供应商', '品类', '评级', '关注点'],
     },
     'customer-archive': {
@@ -245,23 +475,6 @@
       </section>
     `;
   };
-
-  const renderDataSource = () => `
-    <section class="biz-dataflow">
-      ${['OSS JSON', 'Excel 导入', '图谱本地库', 'AI 上下文'].map((item, index) => `
-        <article class="business-panel biz-source-node">
-          <i class="ti ${index === 0 ? 'ti-cloud' : index === 1 ? 'ti-file-spreadsheet' : index === 2 ? 'ti-photo' : 'ti-message-2'}" aria-hidden="true"></i>
-          <strong>${esc(item)}</strong>
-          <span>${index === 1 ? '待校验' : '正常'}</span>
-        </article>
-      `).join('')}
-    </section>
-    ${renderTable('同步与映射', ['数据源', '目标模块', '最近同步', '状态'], [
-      ['物性测试数据', '物性分析', '10 分钟前', '正常'],
-      ['客户订单台账', '订单管理', '今天 09:40', '待校验'],
-      ['图谱图片库', '图谱分析', '实时', '正常'],
-    ])}
-  `;
 
   const renderPermission = () => `
     <section class="biz-permission-layout">
@@ -304,10 +517,10 @@
       'sales-stock': renderStock,
       'formula-management': renderFormula,
       'production-plan': renderProduction,
+      'inventory-management': renderInventory,
       'supplier-archive': () => renderArchive('supplier-archive'),
       'customer-archive': () => renderArchive('customer-archive'),
       'personnel-archive': () => renderArchive('personnel-archive'),
-      'data-source-config': renderDataSource,
       'permission-management': renderPermission,
       'audit-log': renderAudit,
     };
@@ -320,6 +533,29 @@
       ${renderBody(pageId)}
     `;
   };
+
+  refs.businessPageContent?.addEventListener('click', (event) => {
+    const formulaButton = event.target.closest('[data-formula-id]');
+    if (formulaButton && refs.businessPageContent.contains(formulaButton)) {
+      activeFormulaId = formulaButton.getAttribute('data-formula-id') || activeFormulaId;
+      render('formula-management');
+      return;
+    }
+
+    const formulaMaterialButton = event.target.closest('[data-formula-material-category]');
+    if (formulaMaterialButton && refs.businessPageContent.contains(formulaMaterialButton)) {
+      formulaMaterialCategory = formulaMaterialButton.getAttribute('data-formula-material-category') || '全部';
+      render('formula-management');
+      return;
+    }
+
+    const categoryButton = event.target.closest('[data-inventory-category]');
+    if (categoryButton && refs.businessPageContent.contains(categoryButton)) {
+      inventoryCategory = categoryButton.getAttribute('data-inventory-category') || '全部';
+      render('inventory-management');
+      return;
+    }
+  });
 
   App.businessPages = { render };
 })();

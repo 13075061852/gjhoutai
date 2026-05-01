@@ -162,6 +162,6 @@
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      max-width:none;
-      transition:max-width .5s var(--ease),opacity .5s var(--ease),transform .5s var(--ease);
+      max-width:190px;
+      transition:max-width .5s var(--ease),opacity .12s ease,transform .24s var(--ease);
     }

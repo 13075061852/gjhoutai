@@ -1096,7 +1096,7 @@
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
       if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig) {
-        setStatus('请先填写 OpenRouter API 密钥或 OSS 数据源配置', 'warn');
+        setStatus('请先填写 OpenRouter API 密钥或 OSS 配置', 'warn');
         return;
       }
       persistConfig(config);

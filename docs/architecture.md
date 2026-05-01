@@ -58,7 +58,7 @@
 - `image-cutout.css`：抠图助手。
 - `config.css`：配置中心和 AI 侧栏。
 - `theme-settings.css`：主题设置。
-- `project-skills.css`：技能面板。
+- `project-skills.css`：AI技能面板。
 - `ai-call-analysis.css`：AI 调用分析。
 - `theme-overrides.css`：明暗主题覆盖。
 
@@ -69,7 +69,7 @@
 - 导航按钮使用 `data-page="<page-id>"`。
 - 页面容器使用 `data-page-section="<page-id>"`。
 
-业务占位页复用 `data-page-section="placeholder"`，页面文案来自 `App.constants.PAGE_DEFS`，业务内容由 `App.businessPages.render(pageId)` 生成。
+业务占位页复用 `data-page-section="placeholder"`，页面文案来自 `App.constants.PAGE_DEFS`，业务内容由 `App.businessPages.render(pageId)` 生成；库存管理等业务页可在 `business-pages.js` 中提供定制原型内容。
 
 ## 扩展边界
 

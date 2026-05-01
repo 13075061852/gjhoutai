@@ -13,6 +13,8 @@
   let draggedVisitedOriginalNext = null;
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
+  const DEFAULT_PAGE_ID = 'ai-config';
+  const SIDEBAR_TRANSITION_MS = 520;
   const MAX_RECENT_PAGES = 8;
 
   const clearCollapsedNavFlyoutTimer = () => {
@@ -120,16 +122,20 @@
     updateMobileMenuToggle();
   };
 
-  const runSidebarTransition = () => {
+  const runSidebarTransition = (direction = '') => {
     if (!refs.shell) return;
     const animations = window.App?.animations;
     animations?.addClass?.(refs.shell, 'sidebar-transitioning') ?? refs.shell.classList.add('sidebar-transitioning');
+    refs.shell.classList.toggle('sidebar-expanding', direction === 'expand');
+    refs.shell.classList.toggle('sidebar-collapsing', direction === 'collapse');
     animations?.clearDelay?.(refs.sidebarTransitionTimer) ?? window.clearTimeout(refs.sidebarTransitionTimer);
-    refs.sidebarTransitionTimer = animations?.schedule?.(520, () => {
+    const clearTransitionState = () => {
       animations?.removeClass?.(refs.shell, 'sidebar-transitioning') ?? refs.shell?.classList.remove('sidebar-transitioning');
-    }) ?? window.setTimeout(() => {
-      refs.shell?.classList.remove('sidebar-transitioning');
-    }, 520);
+      refs.shell?.classList.remove('sidebar-expanding');
+      refs.shell?.classList.remove('sidebar-collapsing');
+    };
+    refs.sidebarTransitionTimer = animations?.schedule?.(SIDEBAR_TRANSITION_MS, clearTransitionState)
+      ?? window.setTimeout(clearTransitionState, SIDEBAR_TRANSITION_MS);
   };
 
   const updateAssistantToggle = () => {
@@ -236,6 +242,10 @@
       desc: `“${fallbackLabel || '当前模块'}”页面已生成业务工作台，可继续补充真实数据接口。`,
     };
   };
+
+  const isAvailablePageId = (pageId) => Boolean(
+    pageId && Object.prototype.hasOwnProperty.call(constants.PAGE_DEFS || {}, pageId)
+  );
 
   const getRecentPages = () => {
     try {
@@ -600,6 +610,7 @@
   };
 
   const showPage = (pageId, options = {}) => {
+    pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
     const { scrollTop = true, trackRecent = true } = options;
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
@@ -663,7 +674,8 @@
   const bindNavigation = () => {
     if (refs.sidebarToggle) {
       refs.sidebarToggle.addEventListener('click', () => {
-        runSidebarTransition();
+        const willCollapse = !refs.shell?.classList.contains('sidebar-collapsed');
+        runSidebarTransition(willCollapse ? 'collapse' : 'expand');
         const collapsed = refs.shell?.classList.toggle('sidebar-collapsed');
         if (!collapsed) {
           removeCollapsedNavFlyout();
@@ -679,7 +691,7 @@
         if (!refs.shell?.classList.contains('sidebar-collapsed')) return;
         event.preventDefault();
         event.stopPropagation();
-        runSidebarTransition();
+        runSidebarTransition('expand');
         refs.shell.classList.remove('sidebar-collapsed');
         removeCollapsedNavFlyout();
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');

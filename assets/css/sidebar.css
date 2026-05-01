@@ -118,7 +118,7 @@
       overflow:hidden;
       text-overflow:ellipsis;
       max-width:140px;
-      transition:max-width .5s var(--ease),opacity .5s var(--ease),transform .5s var(--ease);
+      transition:max-width .5s var(--ease),opacity .12s ease,transform .24s var(--ease);
     }
     .nav-arrow{
       color:var(--muted-2);
@@ -230,19 +230,22 @@
       overflow:hidden;
       transition:opacity .18s ease, transform .28s var(--ease);
     }
-    .shell.sidebar-transitioning .brand-title,
-    .shell.sidebar-transitioning .section-label,
-    .shell.sidebar-transitioning .sidebar-toggle-label,
-    .shell.sidebar-transitioning .sidebar-account,
-    .shell.sidebar-transitioning .nav-text,
-    .shell.sidebar-transitioning .nav-arrow,
-    .shell.sidebar-transitioning .sidebar-search input,
-    .shell.sidebar-transitioning .sidebar-search .search-kbd{
+    .shell.sidebar-collapsing .brand-title,
+    .shell.sidebar-collapsing .section-label,
+    .shell.sidebar-collapsing .sidebar-toggle-label,
+    .shell.sidebar-collapsing .sidebar-account,
+    .shell.sidebar-collapsing .nav-arrow,
+    .shell.sidebar-collapsing .sidebar-search input,
+    .shell.sidebar-collapsing .sidebar-search .search-kbd{
       opacity:0;
       transform:translateX(-6px);
       pointer-events:none;
     }
-    .shell.sidebar-transitioning .nav-children{
+    .shell.sidebar-collapsing .nav-text{
+      opacity:0;
+      pointer-events:none;
+    }
+    .shell.sidebar-collapsing .nav-children{
       max-height:0;
       opacity:0;
       transform:translateY(-6px);

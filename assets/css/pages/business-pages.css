@@ -531,9 +531,57 @@
     .biz-reserve-item strong{color:var(--text)}
     .biz-reserve-item em{font-style:normal;color:var(--accent);font-weight:900}
     .biz-reserve-item.warn em{color:var(--danger)}
+    .biz-category-tabs{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+    .biz-category-tabs button{
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:0 13px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+      transition:background .18s ease, border-color .18s ease, color .18s ease;
+    }
+    .biz-category-tabs button:hover,
+    .biz-category-tabs button.is-active{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-category-tabs span{
+      white-space:nowrap;
+    }
+    .biz-category-tabs strong{
+      min-width:22px;
+      height:22px;
+      display:grid;
+      place-items:center;
+      border-radius:999px;
+      background:var(--surface);
+      color:var(--accent);
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+    }
     .biz-formula-layout{
       display:grid;
-      grid-template-columns:250px minmax(0,1fr) 300px;
+      grid-template-columns:248px minmax(420px,1fr) 320px;
+      gap:12px;
+    }
+    .biz-formula-flow-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);
       gap:12px;
     }
     .biz-formula-list,
@@ -554,6 +602,45 @@
       padding:0 12px;
       text-align:left;
     }
+    .biz-formula-list button{
+      min-height:54px;
+      gap:8px;
+    }
+    .biz-formula-list button span{
+      min-width:max-content;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:850;
+    }
+    .biz-formula-list button.is-active span{
+      color:var(--accent);
+    }
+    .biz-formula-builder{
+      display:flex;
+      flex-direction:column;
+    }
+    .biz-formula-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin:-2px 0 14px;
+    }
+    .biz-formula-meta span{
+      min-height:26px;
+      display:inline-flex;
+      align-items:center;
+      max-width:100%;
+      padding:0 9px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background:var(--surface-2);
+      color:var(--muted);
+      font-size:11px;
+      font-weight:850;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
     .biz-ingredient{
       display:grid;
       grid-template-columns:96px minmax(0,1fr) 48px;
@@ -564,17 +651,168 @@
       font-size:12px;
       font-weight:850;
     }
-    .biz-ingredient div{
+    .biz-ingredient > div{
       height:14px;
       border-radius:999px;
       background:var(--surface-3);
       overflow:hidden;
     }
-    .biz-ingredient em{
+    .biz-ingredient > div > em{
       display:block;
       height:100%;
       border-radius:999px;
       background:var(--accent);
+    }
+    .biz-recipe-material{
+      grid-template-columns:minmax(170px,.42fr) minmax(0,1fr) 54px;
+      align-items:center;
+      padding-bottom:12px;
+      margin-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .biz-recipe-material:last-child{
+      border-bottom:0;
+      margin-bottom:0;
+      padding-bottom:0;
+    }
+    .biz-recipe-material > span{
+      display:grid;
+      gap:5px;
+      min-width:0;
+    }
+    .biz-recipe-material > span strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:900;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .biz-recipe-material > span em,
+    .biz-recipe-material small{
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      line-height:1.4;
+    }
+    .biz-recipe-material small{
+      grid-column:1 / -1;
+    }
+    .biz-formula-library{
+      min-height:420px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .biz-formula-material-tabs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .biz-formula-material-tabs button{
+      min-height:32px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:11px;
+      font-weight:850;
+      cursor:pointer;
+      transition:background .18s ease, border-color .18s ease, color .18s ease;
+    }
+    .biz-formula-material-tabs button:hover,
+    .biz-formula-material-tabs button.is-active{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-formula-material-list{
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .biz-formula-material-card{
+      display:grid;
+      gap:5px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-left:4px solid var(--accent);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-formula-material-card.is-warn{
+      border-left-color:var(--warn);
+    }
+    .biz-formula-material-card strong{
+      color:var(--text);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-formula-material-card span,
+    .biz-formula-material-card em{
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      line-height:1.45;
+    }
+    .biz-formula-process,
+    .biz-formula-checks{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .biz-formula-step{
+      display:grid;
+      grid-template-columns:32px 90px minmax(0,1fr);
+      align-items:center;
+      gap:10px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-formula-step strong{
+      width:28px;
+      height:28px;
+      display:grid;
+      place-items:center;
+      border-radius:999px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-formula-step span{
+      color:var(--text);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-formula-step em{
+      color:var(--muted);
+      font-size:12px;
+      font-style:normal;
+      line-height:1.5;
+    }
+    .biz-formula-checks > div:not(.business-panel-head){
+      display:flex;
+      align-items:center;
+      gap:9px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:850;
+    }
+    .biz-formula-checks i{
+      color:var(--success);
+      font-size:17px;
+    }
+    .biz-formula-checks .is-warn i{
+      color:var(--warn);
     }
     .biz-lab-notes p{
       margin:0;
@@ -673,24 +911,6 @@
       font-size:12px;
       font-weight:800;
     }
-    .biz-dataflow{
-      display:grid;
-      grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:12px;
-      position:relative;
-    }
-    .biz-source-node{
-      min-height:150px;
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      align-items:center;
-      gap:10px;
-      text-align:center;
-    }
-    .biz-source-node i{color:var(--accent);font-size:30px}
-    .biz-source-node strong{color:var(--text);font-size:14px}
-    .biz-source-node span{color:var(--muted);font-size:12px;font-weight:850}
     .biz-permission-matrix{
       overflow:auto;
     }

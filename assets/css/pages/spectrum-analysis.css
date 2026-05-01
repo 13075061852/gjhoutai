@@ -4,7 +4,7 @@
       max-width:none;
       margin:0;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
       height:100%;
       min-height:0;
       overflow:hidden;
@@ -32,7 +32,7 @@
     .spectrum-toolbar-actions{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       min-width:0;
       flex-wrap:wrap;
     }
@@ -41,7 +41,7 @@
       display:grid;
       grid-template-columns:auto minmax(0,1fr);
       align-items:center;
-      gap:10px;
+      gap:12px;
       padding-top:10px;
       border-top:1px solid #eef2f7;
       min-width:0;
@@ -58,7 +58,7 @@
       min-width:240px;
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       padding:0 6px 0 12px;
       border:1px solid #dbe5f0;
       border-radius:8px;
@@ -85,7 +85,7 @@
     .spectrum-mode-switch{
       display:inline-flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       padding:4px;
       border:1px solid #e3e9f2;
       border-radius:8px;
@@ -177,14 +177,14 @@
       min-height:0;
       flex:1 1 0;
       display:grid;
-      grid-template-columns:220px 14px minmax(360px,1fr) 14px 320px;
+      grid-template-columns:220px 0 minmax(360px,1fr) 14px 320px;
       grid-template-rows:minmax(0,1fr);
       gap:0;
       transition:grid-template-columns .52s var(--ease);
       will-change:grid-template-columns;
     }
     .spectrum-workbench.is-detail-collapsed{
-      grid-template-columns:220px 14px minmax(360px,1fr) 0 0;
+      grid-template-columns:220px 0 minmax(360px,1fr) 0 0;
     }
     .spectrum-filter-panel,
     .spectrum-gallery-panel,
@@ -198,21 +198,32 @@
     }
     .spectrum-filter-panel{
       grid-column:1;
-      padding:16px 14px;
+      border-top-right-radius:0;
+      border-bottom-right-radius:0;
+      padding:0;
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:0;
       overflow:hidden;
     }
     .spectrum-gallery-panel{
       grid-column:3;
+      border-left:0;
+      border-top-left-radius:0;
+      border-bottom-left-radius:0;
+    }
+    .spectrum-filter-panel + .spectrum-gallery-panel{
+      border-left-width:0;
     }
     .spectrum-filter-head,
     .spectrum-gallery-head{
+      flex:0 0 auto;
+      min-height:48px;
+      padding:14px 14px 10px;
       display:flex;
-      align-items:flex-start;
+      align-items:center;
       justify-content:space-between;
-      gap:10px;
+      gap:12px;
     }
     .spectrum-panel-title{
       color:#243247;
@@ -220,10 +231,36 @@
       font-weight:800;
       letter-spacing:-.02em;
     }
+    .spectrum-category-search{
+      width:100%;
+      height:34px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:0 10px;
+      border:1px solid #dbe5f0;
+      border-radius:8px;
+      background:#fff;
+      color:#94a3b8;
+    }
+    .spectrum-category-search input{
+      width:100%;
+      min-width:0;
+      border:0;
+      outline:0;
+      background:transparent;
+      color:#243247;
+      font:inherit;
+      font-size:12px;
+      font-weight:700;
+    }
+    .spectrum-category-search input::placeholder{
+      color:#94a3b8;
+    }
     .spectrum-gallery-title-row{
       display:flex;
       align-items:baseline;
-      gap:10px;
+      gap:12px;
       min-width:0;
       flex-wrap:wrap;
     }
@@ -312,7 +349,7 @@
       color:#475569;
       display:inline-flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       font:inherit;
       font-size:12px;
       font-weight:800;
@@ -349,8 +386,9 @@
       flex:1 1 0;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:0;
       min-height:0;
+      padding:0;
       overflow:hidden;
     }
     .spectrum-filter-label{
@@ -362,13 +400,15 @@
       flex:1 1 0;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:12px;
       min-height:0;
+      padding:0 14px 14px;
       overflow:auto;
-      scrollbar-gutter:stable;
+      scrollbar-width:none;
     }
+    .spectrum-filter-list::-webkit-scrollbar{display:none}
     .spectrum-filter-list.compact{
-      gap:5px;
+      gap:12px;
     }
     .spectrum-filter-btn{
       width:100%;
@@ -381,16 +421,31 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:8px;
+      gap:12px;
       font:inherit;
       font-size:12px;
       font-weight:700;
       cursor:pointer;
+      will-change:transform;
+    }
+    .spectrum-filter-btn[draggable="true"]{
+      cursor:grab;
+    }
+    .spectrum-filter-btn.is-dragging{
+      opacity:.48;
+      cursor:grabbing;
+    }
+    .spectrum-filter-btn.is-drag-over{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .spectrum-filter-list.is-reordering .spectrum-filter-btn{
+      transition:border-color .16s ease, box-shadow .16s ease, opacity .16s ease;
     }
     .spectrum-filter-counts{
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       flex:0 0 auto;
     }
     .spectrum-filter-counts em{
@@ -423,49 +478,26 @@
     }
     .spectrum-selected-block{
       flex:0 0 auto;
-      max-height:30%;
-      padding-top:14px;
+      max-height:none;
+      padding:12px 14px 12px;
       border-top:1px solid #e7edf5;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:8px;
       min-height:0;
-      overflow:hidden;
+      overflow:visible;
     }
     .spectrum-selected-head{
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:10px;
+      gap:12px;
     }
     .spectrum-selected-actions{
       display:flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       flex:0 0 auto;
-    }
-    .spectrum-batch-tags{
-      display:grid;
-      grid-template-columns:minmax(0,1fr) auto;
-      gap:6px;
-    }
-    .spectrum-batch-tags input{
-      width:100%;
-      min-width:0;
-      height:30px;
-      padding:0 9px;
-      border:1px solid #d8e4f2;
-      border-radius:6px;
-      background:#fff;
-      color:#243247;
-      font:inherit;
-      font-size:12px;
-      font-weight:700;
-      outline:none;
-    }
-    .spectrum-batch-tags input:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
     }
     .spectrum-action-btn{
       min-width:42px;
@@ -512,6 +544,7 @@
     .spectrum-selected-list{
       flex:0 1 auto;
       width:100%;
+      max-height:166px;
       display:flex;
       flex-direction:column;
       gap:8px;
@@ -520,7 +553,7 @@
       scrollbar-gutter:auto;
     }
     .spectrum-selected-empty{
-      min-height:44px;
+      min-height:40px;
       border:1px dashed #dbe5f0;
       border-radius:8px;
       color:#94a3b8;
@@ -539,7 +572,7 @@
       display:grid;
       grid-template-columns:38px minmax(0,1fr) 26px;
       align-items:center;
-      gap:8px;
+      gap:12px;
     }
     .spectrum-card.is-deleting,
     .spectrum-selected-item.is-deleting{
@@ -621,7 +654,7 @@
     .spectrum-tag-cloud{
       display:flex;
       flex-wrap:wrap;
-      gap:6px;
+      gap:12px;
       min-width:0;
     }
     .spectrum-tag-filter{
@@ -672,11 +705,6 @@
       font-weight:850;
       pointer-events:none;
     }
-    .spectrum-gallery-head{
-      flex:0 0 auto;
-      padding:14px 14px 10px;
-      align-items:center;
-    }
     .spectrum-gallery{
       flex:1 1 0;
       min-height:0;
@@ -698,7 +726,7 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:10px;
+      gap:12px;
       padding:28px 24px;
       color:#64748b;
       text-align:center;
@@ -750,7 +778,7 @@
     .spectrum-gallery.is-list{
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:12px;
     }
     .spectrum-card{
       border:1px solid #e7edf5;
@@ -798,7 +826,7 @@
       padding:10px;
       display:flex;
       flex-direction:column;
-      gap:7px;
+      gap:12px;
       min-width:0;
       flex:1 1 auto;
       background:#fff;
@@ -807,7 +835,7 @@
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:8px;
+      gap:12px;
       min-width:0;
     }
     .spectrum-card-title{
@@ -830,7 +858,7 @@
       text-overflow:ellipsis;
       display:flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
     }
     .spectrum-gallery.is-grid .spectrum-card{
       height:214px;
@@ -844,7 +872,7 @@
       flex:0 0 88px;
       min-height:88px;
       padding:9px 10px;
-      gap:6px;
+      gap:12px;
       overflow:hidden;
     }
     .spectrum-gallery.is-grid .spectrum-card-top,
@@ -888,7 +916,7 @@
     .spectrum-detail-tags{
       display:flex;
       flex-wrap:wrap;
-      gap:6px;
+      gap:12px;
     }
     .spectrum-card-tags span,
     .spectrum-detail-tags span{
@@ -966,7 +994,7 @@
       display:flex;
       flex-direction:column;
       justify-content:center;
-      gap:8px;
+      gap:12px;
       background:#fff;
     }
     .spectrum-gallery.is-list .spectrum-card-top,
@@ -1127,7 +1155,7 @@
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:14px;
+      gap:12px;
       padding-bottom:12px;
       border-bottom:1px solid #e5ebf3;
     }
@@ -1169,7 +1197,7 @@
     .spectrum-detail-image{
       flex:0 0 auto;
       width:100%;
-      padding:12px;
+      padding:0;
       border:0;
       background:#f8fafc;
       border-bottom:1px solid #e7edf5;
@@ -1205,7 +1233,7 @@
       overflow:auto;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
       padding:8px;
       border-radius:12px;
       background:rgba(15,23,42,.42);
@@ -1221,7 +1249,7 @@
       color:rgba(255,255,255,.82);
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
       text-align:left;
       cursor:pointer;
     }
@@ -1271,7 +1299,7 @@
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:18px;
+      gap:12px;
       padding:12px 16px;
       border-bottom:1px solid #e5ebf3;
       background:#fbfdff;
@@ -1285,7 +1313,7 @@
     .spectrum-preview-card-meta{
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       flex-wrap:wrap;
       justify-content:flex-end;
       color:#475569;
@@ -1376,14 +1404,14 @@
     .spectrum-detail-form{
       display:grid;
       grid-template-columns:1fr 1fr;
-      gap:10px;
+      gap:12px;
       min-width:0;
     }
     .spectrum-detail-field{
       min-width:0;
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
       color:#64748b;
       font-size:12px;
       font-weight:800;
@@ -1422,7 +1450,7 @@
     .spectrum-detail-tag-editor{
       display:grid;
       grid-template-columns:minmax(0,1fr) 64px;
-      gap:8px;
+      gap:12px;
     }
     .spectrum-detail-tag-editor .analysis-toolbar-btn{
       height:38px;
@@ -1434,7 +1462,7 @@
       display:flex;
       align-items:flex-start;
       flex-wrap:wrap;
-      gap:8px;
+      gap:12px;
       padding:10px;
       border:1px solid #dbe5f0;
       border-radius:8px;
@@ -1449,7 +1477,7 @@
       color:#4338CA;
       display:inline-flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       font:inherit;
       font-size:12px;
       font-weight:850;
@@ -1477,7 +1505,7 @@
       margin:0;
       display:grid;
       grid-template-columns:1fr 1fr;
-      gap:8px;
+      gap:12px;
     }
     .spectrum-detail-list div{
       min-width:0;
@@ -1512,14 +1540,14 @@
     }
     .spectrum-detail-actions{
       display:flex;
-      gap:8px;
+      gap:12px;
       flex-wrap:nowrap;
       grid-column:1 / -1;
     }
     .spectrum-detail-actions .analysis-toolbar-btn{
       height:36px;
       padding:0 10px;
-      gap:6px;
+      gap:12px;
       font-size:12px;
       white-space:nowrap;
       flex:1 1 0;
@@ -1548,7 +1576,7 @@
       width:min(420px,100%);
       display:grid;
       grid-template-columns:44px minmax(0,1fr);
-      gap:14px;
+      gap:12px;
       padding:18px;
       border:1px solid #fee2e2;
       border-radius:12px;
@@ -1586,7 +1614,7 @@
       grid-column:1 / -1;
       display:flex;
       justify-content:flex-end;
-      gap:10px;
+      gap:12px;
       padding-top:4px;
     }
     .spectrum-upload-conflict-card{

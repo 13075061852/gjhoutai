@@ -1,4 +1,4 @@
-﻿    .main{
+    .main{
       flex:1;
       min-width:0;
       display:flex;
@@ -11,7 +11,7 @@
       min-height:var(--topbar);
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       padding:0 20px;
       background:var(--surface);
     }
@@ -44,7 +44,7 @@
       min-width:0;
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       overflow:auto hidden;
       scrollbar-width:none;
       padding:0 6px 0 0;
@@ -59,7 +59,7 @@
       flex:0 0 auto;
       display:inline-flex;
       align-items:center;
-      gap:4px;
+      gap:12px;
       min-height:36px;
       border:1px solid transparent;
       border-radius:11px;
@@ -198,7 +198,7 @@
       margin-left:12px;
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       flex:0 0 auto;
     }
     .pill-btn,.icon-btn,.time-chip{
@@ -209,7 +209,7 @@
       border-radius:12px;
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       cursor:pointer;
       padding:0 14px;
       font-weight:500;
@@ -232,7 +232,7 @@
       flex:1;
       min-height:0;
       overflow:auto;
-      padding:18px;
+      padding:12px;
       scrollbar-width:none;
       background:var(--bg);
     }

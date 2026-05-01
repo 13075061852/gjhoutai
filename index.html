@@ -549,8 +549,13 @@
 
             <div class="spectrum-workbench">
               <aside class="spectrum-filter-panel" aria-label="图谱筛选">
+                <div class="spectrum-filter-head">
+                  <label class="spectrum-category-search" aria-label="搜索分类">
+                    <i class="ti ti-search" aria-hidden="true"></i>
+                    <input id="spectrumCategorySearchInput" type="search" placeholder="搜索分类" />
+                  </label>
+                </div>
                 <div class="spectrum-filter-block">
-                  <div class="spectrum-filter-label">分类</div>
                   <div class="spectrum-filter-list" id="spectrumCategoryFilters"></div>
                 </div>
                 <div class="spectrum-selected-block">
@@ -560,10 +565,6 @@
                       <button class="spectrum-action-btn" id="spectrumClearSelectedBtn" type="button">清空</button>
                       <button class="spectrum-action-btn spectrum-action-danger" id="spectrumDeleteSelectedBtn" type="button">删除</button>
                     </div>
-                  </div>
-                  <div class="spectrum-batch-tags" aria-label="批量写入标签">
-                    <input id="spectrumBatchTagInput" type="text" placeholder="批量标签，逗号分隔" />
-                    <button class="spectrum-action-btn" id="spectrumBatchTagBtn" type="button" disabled>写入</button>
                   </div>
                   <div class="spectrum-selected-list" id="spectrumSelectedList"></div>
                 </div>

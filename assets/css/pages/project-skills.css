@@ -12,7 +12,7 @@
       margin:0;
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
       min-height:0;
     }
     .project-skill-kicker{
@@ -57,7 +57,7 @@
       overflow:auto;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
       padding-right:3px;
     }
     .project-skill-card{
@@ -65,7 +65,7 @@
       padding:12px;
       display:flex;
       flex-direction:column;
-      gap:9px;
+      gap:12px;
       flex:0 0 auto;
     }
     .project-skill-card-top{
@@ -113,7 +113,7 @@
       margin-top:auto;
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
     }
     .project-skill-schema span{
       color:var(--muted);
@@ -139,7 +139,7 @@
     .project-skill-examples{
       display:flex;
       flex-wrap:wrap;
-      gap:8px;
+      gap:12px;
     }
     .project-skill-examples button,
     .project-skill-clear-btn{
@@ -169,7 +169,7 @@
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
-      gap:14px;
+      gap:12px;
       margin-bottom:12px;
     }
     .project-skill-history-head h2{
@@ -180,7 +180,7 @@
       padding:0 12px;
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       flex:0 0 auto;
     }
     .project-skill-history{
@@ -188,7 +188,7 @@
       overflow:auto;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
       padding-right:3px;
     }
     .project-skill-log-item,
@@ -203,7 +203,7 @@
     .project-skill-log-item{
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
     }
     .project-skill-log-item span{
       width:max-content;

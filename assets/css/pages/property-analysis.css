@@ -4,7 +4,7 @@
       max-width:none;
       margin:0;
       flex-direction:column;
-      gap:18px;
+      gap:12px;
       height:100%;
       min-height:0;
       max-height:none;
@@ -40,7 +40,7 @@
     .analysis-search{
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       min-width:220px;
       border:1px solid #dbe5f0;
       border-radius:8px;
@@ -71,7 +71,7 @@
     .analysis-search-mode{
       display:inline-flex;
       align-items:center;
-      gap:4px;
+      gap:12px;
       flex:0 0 auto;
       margin-left:4px;
       padding-left:8px;
@@ -118,7 +118,7 @@
       background:#fff;
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       text-align:left;
       cursor:pointer;
     }
@@ -152,7 +152,7 @@
     .analysis-action-group{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .analysis-toolbar-btn{
@@ -167,7 +167,7 @@
       font-weight:700;
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       cursor:pointer;
       transition:border-color .2s ease, color .2s ease, background .2s ease;
     }
@@ -208,7 +208,7 @@
     .analysis-sheet-tabs{
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       flex:1 1 auto;
       overflow-x:auto;
       scrollbar-width:none;
@@ -248,7 +248,7 @@
     .analysis-status-row{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       flex:0 0 auto;
       flex-wrap:wrap;
       justify-content:flex-end;
@@ -267,7 +267,7 @@
       font-weight:700;
       white-space:nowrap;
       line-height:1;
-      gap:7px;
+      gap:12px;
     }
     .analysis-import-status.is-loading::before{
       content:"";
@@ -312,7 +312,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:14px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .analysis-panel-title-row{
@@ -337,7 +337,7 @@
     .analysis-panel-controls{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:12px;
       flex-wrap:wrap;
       justify-content:flex-end;
       margin-left:auto;
@@ -345,7 +345,7 @@
     .analysis-select-field{
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       color:#8090a7;
       font-size:12px;
       font-weight:700;
@@ -394,7 +394,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:10px;
+      gap:12px;
       border:1px solid var(--border, #dbe5f0);
       border-radius:9px;
       background:var(--surface, #fff);
@@ -455,7 +455,7 @@
       z-index:50;
       display:flex;
       flex-direction:column;
-      gap:4px;
+      gap:12px;
       max-height:240px;
       overflow:auto;
       padding:6px;
@@ -484,7 +484,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:8px;
+      gap:12px;
       border:0;
       border-radius:8px;
       background:transparent;
@@ -596,7 +596,7 @@
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      gap:6px;
+      gap:12px;
       white-space:nowrap;
     }
     .analysis-cell-main{
@@ -621,7 +621,7 @@
     .analysis-pagination{
       display:flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .analysis-page-btn,
@@ -656,7 +656,7 @@
     .analysis-page-numbers{
       display:flex;
       align-items:center;
-      gap:6px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .analysis-page-ellipsis{
@@ -680,4 +680,3 @@
       margin:0;
       width:100%;
     }
-

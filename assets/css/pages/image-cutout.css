@@ -4,7 +4,7 @@
       max-width:none;
       margin:0;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
       height:100%;
       min-height:0;
       overflow:hidden;
@@ -14,7 +14,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:14px;
+      gap:12px;
       padding:12px 14px;
       border:1px solid #e7edf5;
       border-radius:8px;
@@ -24,7 +24,7 @@
       min-width:0;
       display:flex;
       align-items:center;
-      gap:14px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .cutout-title-block h1{
@@ -44,7 +44,7 @@
       display:flex;
       align-items:center;
       justify-content:flex-end;
-      gap:10px;
+      gap:12px;
       flex-wrap:wrap;
     }
     .cutout-workbench{
@@ -52,7 +52,7 @@
       min-height:0;
       display:grid;
       grid-template-columns:280px minmax(0,1fr);
-      gap:14px;
+      gap:12px;
       overflow:hidden;
     }
     .cutout-control-panel,
@@ -87,7 +87,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap:10px;
+      gap:12px;
       color:#64748b;
       font-size:12px;
       font-weight:800;
@@ -151,12 +151,12 @@
     .cutout-crop-grid{
       display:grid;
       grid-template-columns:1fr 1fr;
-      gap:8px;
+      gap:12px;
     }
     .cutout-crop-grid label{
       display:flex;
       flex-direction:column;
-      gap:5px;
+      gap:12px;
       color:#7c8ba1;
       font-size:12px;
       font-weight:800;
@@ -181,7 +181,7 @@
     .cutout-crop-actions{
       display:grid;
       grid-template-columns:1fr;
-      gap:8px;
+      gap:12px;
     }
     .cutout-crop-actions .analysis-toolbar-btn[hidden]{
       display:none;
@@ -235,7 +235,7 @@
       font-weight:800;
       display:inline-flex;
       align-items:center;
-      gap:7px;
+      gap:12px;
       cursor:pointer;
     }
     .cutout-reset-btn:disabled{
@@ -315,7 +315,7 @@
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      gap:10px;
+      gap:12px;
       color:#7c8ba1;
       font-size:13px;
       font-weight:800;

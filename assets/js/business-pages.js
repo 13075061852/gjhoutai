@@ -176,6 +176,9 @@
   let inventoryCategory = '全部';
   let activeFormulaId = 'FM-ABS-FR-760';
   let formulaMaterialCategory = '全部';
+  let formulaDraftNote = '草稿自动保存';
+  let formulaSearchQuery = '';
+  let activeFormulaMaterialIndex = null;
 
   const renderInventory = () => {
     const rawRows = inventoryRows.filter((row) => row[1] === '原材料');
@@ -221,23 +224,25 @@
   const getInventoryMaterial = (name) => inventoryRows.find((row) => row[0] === name)
     || [name, '库存材料', '未分类', '未关联供应商', '--', '待确认'];
 
-  const formulaRecipes = [
+  const FORMULA_STORAGE_KEY = 'gjh-formula-recipes-v1';
+  const defaultFormulaRecipes = [
     {
       id: 'FM-ABS-FR-760',
       name: '阻燃 ABS 高冲击配方',
       product: 'GJ-ABS-FR-760',
       version: 'V3.2',
       status: '试产验证',
+      line: 'B',
       owner: '陈工',
       updated: '2026-04-30',
       target: '冲击强度提升，阻燃等级保持 V0',
       batchSize: '500 kg',
       materials: [
-        { name: 'ABS 757K', ratio: 58, tolerance: '±0.6%', role: '主体树脂', stage: '主喂料' },
-        { name: '阻燃剂 FR-530', ratio: 18, tolerance: '±0.3%', role: '阻燃体系', stage: '侧喂料' },
-        { name: '增韧剂 IM-88', ratio: 13, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
-        { name: '玻纤 GF-30', ratio: 8, tolerance: '±0.2%', role: '尺寸稳定', stage: '侧喂料' },
-        { name: '黑色母 B-204', ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+        { name: 'ABS 757K', port: 1, ratio: 58, tolerance: '±0.6%', role: '主体树脂', stage: '主喂料' },
+        { name: '阻燃剂 FR-530', port: 3, ratio: 18, tolerance: '±0.3%', role: '阻燃体系', stage: '侧喂料' },
+        { name: '增韧剂 IM-88', port: 3, ratio: 13, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
+        { name: '玻纤 GF-30', port: 3, ratio: 8, tolerance: '±0.2%', role: '尺寸稳定', stage: '侧喂料' },
+        { name: '黑色母 B-204', port: 5, ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
       ],
       process: [
         ['称量', '按 500 kg 批量生成领料单，色母单独复核'],
@@ -254,16 +259,17 @@
       product: 'GJ-PP-GF30',
       version: 'V2.4',
       status: '在用',
+      line: 'A',
       owner: '李娜',
       updated: '2026-04-28',
       target: '弯曲模量稳定，降低成型翘曲',
       batchSize: '800 kg',
       materials: [
-        { name: 'PP K8003', ratio: 63, tolerance: '±0.8%', role: '主体树脂', stage: '主喂料' },
-        { name: '玻纤 GF-30', ratio: 30, tolerance: '±0.4%', role: '增强填料', stage: '侧喂料' },
-        { name: '抗氧剂 AO-1010', ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
-        { name: '润滑剂 EBS-16', ratio: 2, tolerance: '±0.1%', role: '加工流动', stage: '预混' },
-        { name: '黑色母 B-204', ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+        { name: 'PP K8003', port: 1, ratio: 63, tolerance: '±0.8%', role: '主体树脂', stage: '主喂料' },
+        { name: '玻纤 GF-30', port: 2, ratio: 30, tolerance: '±0.4%', role: '增强填料', stage: '侧喂料' },
+        { name: '抗氧剂 AO-1010', port: 3, ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
+        { name: '润滑剂 EBS-16', port: 3, ratio: 2, tolerance: '±0.1%', role: '加工流动', stage: '预混' },
+        { name: '黑色母 B-204', port: 5, ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
       ],
       process: [
         ['称量', '玻纤独立扫码，助剂小料包复称'],
@@ -280,16 +286,17 @@
       product: 'GJ-PCABS-901',
       version: 'V1.8',
       status: '待放行',
+      line: 'B',
       owner: '王敏',
       updated: '2026-04-26',
       target: '提高耐热与尺寸稳定性',
       batchSize: '300 kg',
       materials: [
-        { name: 'PC/ABS 基料 901', ratio: 78, tolerance: '±0.7%', role: '主体基料', stage: '主喂料' },
-        { name: '相容剂 MAH-42', ratio: 8, tolerance: '±0.2%', role: '界面改性', stage: '主喂料' },
-        { name: '增韧剂 IM-88', ratio: 7, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
-        { name: '抗氧剂 AO-1010', ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
-        { name: '黑色母 B-204', ratio: 5, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
+        { name: 'PC/ABS 基料 901', port: 1, ratio: 78, tolerance: '±0.7%', role: '主体基料', stage: '主喂料' },
+        { name: '相容剂 MAH-42', port: 3, ratio: 8, tolerance: '±0.2%', role: '界面改性', stage: '主喂料' },
+        { name: '增韧剂 IM-88', port: 3, ratio: 7, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
+        { name: '抗氧剂 AO-1010', port: 3, ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
+        { name: '黑色母 B-204', port: 5, ratio: 5, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
       ],
       process: [
         ['称量', '基料与相容剂按批次绑定'],
@@ -302,19 +309,412 @@
     },
   ];
 
+  const cloneFormulaData = (value) => JSON.parse(JSON.stringify(value));
+  const formulaStatusOptions = ['试产验证', '在用', '待放行', '停用'];
+  const formulaLineOptions = ['A', 'B'];
+  const formulaStageOptions = ['主喂料', '侧喂料', '预混', '干燥', '后处理', '待设定'];
+  const formulaEditableFields = new Set(['name', 'product', 'status', 'line', 'owner', 'batchSize', 'target']);
+  const formulaMaterialFields = new Set(['name', 'port', 'ratio', 'role', 'stage', 'tolerance']);
+  const formulaProcessFields = new Set(['step', 'detail']);
+  const feederPorts = [1, 2, 3, 4, 5];
+
+  const getRecipeVersionSnapshot = (recipe) => ({
+    name: String(recipe.name || ''),
+    product: String(recipe.product || ''),
+    status: String(recipe.status || ''),
+    line: formulaLineOptions.includes(recipe.line) ? recipe.line : 'A',
+    owner: String(recipe.owner || ''),
+    batchSize: String(recipe.batchSize || ''),
+    target: String(recipe.target || ''),
+    materials: Array.isArray(recipe.materials) ? recipe.materials.map((item, index) => ({
+      name: String(item.name || ''),
+      port: getDefaultPortByStage(item, index),
+      ratio: Number(item.ratio || 0),
+      tolerance: String(item.tolerance || '±0.1%'),
+      role: String(item.role || '配方材料'),
+      stage: String(item.stage || '待设定'),
+    })) : [],
+    process: Array.isArray(recipe.process) ? recipe.process.map((item) => Array.isArray(item)
+      ? [String(item[0] || ''), String(item[1] || '')]
+      : [String(item.step || ''), String(item.detail || '')]) : [],
+    checks: Array.isArray(recipe.checks) ? cloneFormulaData(recipe.checks) : [],
+  });
+
+  const getRecipeVersionKey = (recipe) => JSON.stringify(getRecipeVersionSnapshot(recipe));
+
+  const getNextFormulaVersionLabel = (version) => {
+    const match = String(version || '').match(/^(.*?)(\d+)(?:\.(\d+))?$/);
+    if (!match) return `V${getTodayCode().replace(/-/g, '')}-${getTimeCode().replace(':', '')}`;
+    const [, prefix, major, minor] = match;
+    if (minor !== undefined) return `${prefix}${major}.${Number(minor) + 1}`;
+    return `${prefix}${Number(major) + 1}`;
+  };
+
+  const createFormulaVersionRecord = (recipe, label = recipe.version, note = '初始版本') => ({
+    id: `${String(label || 'V1').replace(/\s+/g, '-')}-${Date.now().toString(36)}`,
+    label: String(label || 'V1'),
+    savedAt: `${getTodayCode()} ${getTimeCode()}`,
+    note,
+    snapshot: getRecipeVersionSnapshot(recipe),
+  });
+
+  const formatFormulaNumber = (value) => {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return '0';
+    return Number.isInteger(number) ? String(number) : number.toFixed(1).replace(/\.0$/, '');
+  };
+
+  const clampPercent = (value) => Math.max(0, Math.min(100, Number(value || 0)));
+  const normalizeFeederPort = (value, fallback = 1) => {
+    const port = Number(value);
+    return feederPorts.includes(port) ? port : fallback;
+  };
+  const getDefaultPortByStage = (item, index = 0) => {
+    if (item.port) return normalizeFeederPort(item.port);
+    const text = `${item.stage || ''} ${item.role || ''}`;
+    if (/侧喂|阻燃|增强|玻纤|填料/.test(text)) return 3;
+    if (/预混|色|稳定|加工|助剂/.test(text)) return 5;
+    if (/主喂|主体|基料|树脂/.test(text)) return 1;
+    return (index % feederPorts.length) + 1;
+  };
+  const parseKgValue = (value) => Number(String(value || '').match(/[\d.]+/)?.[0] || 0);
+  const formatKgValue = (value) => {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return '0';
+    return number >= 100 ? number.toFixed(0) : number.toFixed(2).replace(/\.?0+$/, '');
+  };
+
+  const getTodayCode = () => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  };
+
+  const getTimeCode = () => {
+    const now = new Date();
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    return `${hour}:${minute}`;
+  };
+
+  const normalizeFormulaRecipes = (value) => {
+    if (!Array.isArray(value) || !value.length) return cloneFormulaData(defaultFormulaRecipes);
+
+    return value.map((recipe, index) => {
+      const fallback = defaultFormulaRecipes[index] || defaultFormulaRecipes[0];
+      const materials = Array.isArray(recipe.materials) && recipe.materials.length
+        ? recipe.materials.map((item, materialIndex) => ({
+          name: String(item.name || ''),
+          port: getDefaultPortByStage(item, materialIndex),
+          ratio: Number(item.ratio || 0),
+          tolerance: String(item.tolerance || '±0.1%'),
+          role: String(item.role || '配方材料'),
+          stage: String(item.stage || '待设定'),
+        })).filter((item) => item.name)
+        : cloneFormulaData(fallback.materials || []);
+      const process = Array.isArray(recipe.process) && recipe.process.length
+        ? recipe.process.map((item) => Array.isArray(item)
+          ? [String(item[0] || ''), String(item[1] || '')]
+          : [String(item.step || ''), String(item.detail || '')])
+        : cloneFormulaData(fallback.process || []);
+      const normalizedRecipe = {
+        ...fallback,
+        ...recipe,
+        id: String(recipe.id || fallback.id),
+        name: String(recipe.name || fallback.name),
+        product: String(recipe.product || fallback.product),
+        version: String(recipe.version || fallback.version),
+        status: String(recipe.status || fallback.status),
+        line: formulaLineOptions.includes(recipe.line) ? recipe.line : fallback.line || 'A',
+        owner: String(recipe.owner || fallback.owner),
+        updated: String(recipe.updated || fallback.updated || getTodayCode()),
+        target: String(recipe.target || fallback.target),
+        batchSize: String(recipe.batchSize || fallback.batchSize),
+        materials,
+        process,
+        checks: Array.isArray(recipe.checks) ? recipe.checks : cloneFormulaData(fallback.checks || []),
+      };
+      const versions = Array.isArray(recipe.versions) && recipe.versions.length
+        ? recipe.versions.map((versionItem) => ({
+          id: String(versionItem.id || `${versionItem.label || normalizedRecipe.version}-${Date.now().toString(36)}`),
+          label: String(versionItem.label || normalizedRecipe.version),
+          savedAt: String(versionItem.savedAt || normalizedRecipe.updated),
+          note: String(versionItem.note || '历史版本'),
+          snapshot: versionItem.snapshot || getRecipeVersionSnapshot(normalizedRecipe),
+        }))
+        : [createFormulaVersionRecord(normalizedRecipe, normalizedRecipe.version, '初始版本')];
+
+      return {
+        ...normalizedRecipe,
+        versions,
+      };
+    });
+  };
+
+  let formulaRecipes = normalizeFormulaRecipes(utils.readJson(FORMULA_STORAGE_KEY, null));
+  if (!formulaRecipes.some((recipe) => recipe.id === activeFormulaId) && formulaRecipes[0]) {
+    activeFormulaId = formulaRecipes[0].id;
+  }
+
+  const persistFormulaRecipes = (note = '草稿自动保存') => {
+    formulaDraftNote = note;
+    utils.writeJson(FORMULA_STORAGE_KEY, formulaRecipes);
+  };
+
+  const saveActiveFormulaVersion = () => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe) return;
+    const currentKey = getRecipeVersionKey(recipe);
+    const matchedVersion = recipe.versions?.find((item) => JSON.stringify(item.snapshot) === currentKey);
+    if (matchedVersion) {
+      recipe.version = matchedVersion.label;
+      persistFormulaRecipes(`当前配方与 ${matchedVersion.label} 一致 · ${getTimeCode()}`);
+      return;
+    }
+    const latestVersion = recipe.versions?.[recipe.versions.length - 1];
+    const nextLabel = getNextFormulaVersionLabel(latestVersion?.label || recipe.version);
+    recipe.version = nextLabel;
+    recipe.updated = getTodayCode();
+    recipe.versions = [...(recipe.versions || []), createFormulaVersionRecord(recipe, nextLabel, '手动保存')];
+    persistFormulaRecipes(`已新增版本 ${nextLabel} · ${getTimeCode()}`);
+  };
+
+  const applyActiveFormulaVersion = (versionId) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const versionRecord = recipe?.versions?.find((item) => item.id === versionId);
+    if (!recipe || !versionRecord?.snapshot) return;
+    const snapshot = cloneFormulaData(versionRecord.snapshot);
+    recipe.name = snapshot.name;
+    recipe.product = snapshot.product;
+    recipe.status = snapshot.status;
+    recipe.line = snapshot.line;
+    recipe.owner = snapshot.owner;
+    recipe.batchSize = snapshot.batchSize;
+    recipe.target = snapshot.target;
+    recipe.materials = snapshot.materials || [];
+    recipe.process = snapshot.process || [];
+    recipe.checks = snapshot.checks || [];
+    recipe.version = versionRecord.label;
+    recipe.updated = String(versionRecord.savedAt || '').split(' ')[0] || recipe.updated;
+    activeFormulaMaterialIndex = null;
+    persistFormulaRecipes(`正在查看 ${versionRecord.label} · ${getTimeCode()}`);
+  };
+
+  const getActiveFormulaIndex = () => {
+    const index = formulaRecipes.findIndex((recipe) => recipe.id === activeFormulaId);
+    return index >= 0 ? index : 0;
+  };
+
   const getActiveFormula = () => formulaRecipes.find((recipe) => recipe.id === activeFormulaId) || formulaRecipes[0];
+
+  const getLeastUsedPort = (materials) => {
+    const counts = feederPorts.map((port) => [
+      port,
+      materials.filter((item) => normalizeFeederPort(item.port) === port).length,
+    ]);
+    counts.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    return counts[0]?.[0] || 1;
+  };
+
+  const getDefaultFormulaMaterial = (name, port = 1) => {
+    const [, , category] = getInventoryMaterial(name);
+    const roleMap = {
+      '基础树脂': '主体树脂',
+      '增强填料': '增强填料',
+      '阻燃助剂': '阻燃体系',
+      '改性助剂': '改性助剂',
+      '色母助剂': '颜色体系',
+      '稳定助剂': '热稳定',
+      '加工助剂': '加工流动',
+    };
+    const stage = /树脂|基料/.test(category)
+      ? '主喂料'
+      : /玻纤|填料|阻燃/.test(category)
+        ? '侧喂料'
+        : '预混';
+    return {
+      name,
+      port: normalizeFeederPort(port),
+      ratio: 0,
+      tolerance: '±0.1%',
+      role: roleMap[category] || category || '配方材料',
+      stage,
+    };
+  };
+
+  const getEmptyFormulaMaterial = (port = 1) => ({
+    name: '',
+    port: normalizeFeederPort(port),
+    ratio: 0,
+    tolerance: '±0.1%',
+    role: '配方材料',
+    stage: '待设定',
+  });
+
+  const updateActiveFormulaField = (field, value) => {
+    if (!formulaEditableFields.has(field)) return;
+    const index = getActiveFormulaIndex();
+    formulaRecipes[index] = {
+      ...formulaRecipes[index],
+      [field]: value,
+      updated: getTodayCode(),
+    };
+    persistFormulaRecipes('已自动保存');
+  };
+
+  const updateActiveFormulaMaterial = (materialIndex, field, value) => {
+    if (!formulaMaterialFields.has(field)) return;
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const material = recipe?.materials?.[materialIndex];
+    if (!material) return;
+    if (field === 'ratio') {
+      material[field] = Number(value || 0);
+    } else if (field === 'port') {
+      material[field] = normalizeFeederPort(value, material.port);
+    } else {
+      material[field] = value;
+    }
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已自动保存');
+  };
+
+  const updateActiveFormulaPortGroup = (fromPort, toPort) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const sourcePort = normalizeFeederPort(fromPort);
+    const targetPort = normalizeFeederPort(toPort, sourcePort);
+    if (!recipe || sourcePort === targetPort) return;
+    recipe.materials.forEach((material) => {
+      if (normalizeFeederPort(material.port) === sourcePort) material.port = targetPort;
+    });
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已调整下料口');
+  };
+
+  const updateActiveFormulaProcess = (processIndex, field, value) => {
+    if (!formulaProcessFields.has(field)) return;
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const process = recipe?.process?.[processIndex];
+    if (!process) return;
+    process[field === 'step' ? 0 : 1] = value;
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已自动保存');
+  };
+
+  const addActiveFormulaMaterial = (name) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe || recipe.materials.some((item) => item.name === name)) return;
+    recipe.materials.push(getDefaultFormulaMaterial(name, getLeastUsedPort(recipe.materials)));
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已加入库存材料');
+  };
+
+  const addActiveFormulaMaterialRow = (port, afterIndex = null) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe) return;
+    const targetPort = normalizeFeederPort(port);
+    const explicitMaterial = recipe.materials[afterIndex];
+    const explicitIndex = explicitMaterial && normalizeFeederPort(explicitMaterial.port) === targetPort
+      ? afterIndex
+      : -1;
+    const selectedMaterial = recipe.materials[activeFormulaMaterialIndex];
+    const selectedIndex = explicitIndex >= 0
+      ? explicitIndex
+      : selectedMaterial && normalizeFeederPort(selectedMaterial.port) === targetPort
+        ? activeFormulaMaterialIndex
+        : -1;
+    const lastPortIndex = recipe.materials.reduce((lastIndex, material, index) => (
+      normalizeFeederPort(material.port) === targetPort ? index : lastIndex
+    ), -1);
+    const insertIndex = selectedIndex >= 0 ? selectedIndex + 1 : lastPortIndex + 1;
+    recipe.materials.splice(insertIndex, 0, getEmptyFormulaMaterial(targetPort));
+    activeFormulaMaterialIndex = insertIndex;
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已增加下料口行');
+  };
+
+  const assignActiveFormulaMaterial = (materialIndex, name) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const material = recipe?.materials?.[materialIndex];
+    if (!material || !name) return;
+    const nextMaterial = getDefaultFormulaMaterial(name, material.port);
+    recipe.materials[materialIndex] = {
+      ...nextMaterial,
+      ratio: Number(material.ratio || 0),
+    };
+    activeFormulaMaterialIndex = materialIndex;
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已更换配方材料');
+  };
+
+  const removeActiveFormulaMaterial = (materialIndex) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe?.materials?.[materialIndex]) return;
+    recipe.materials.splice(materialIndex, 1);
+    activeFormulaMaterialIndex = null;
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已移除配方材料');
+  };
+
+  const addActiveFormulaProcess = () => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe) return;
+    recipe.process.push(['新步骤', '填写温度、转速、时长或质检要求']);
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已添加流程步骤');
+  };
+
+  const removeActiveFormulaProcess = (processIndex) => {
+    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    if (!recipe?.process?.[processIndex] || recipe.process.length <= 1) return;
+    recipe.process.splice(processIndex, 1);
+    recipe.updated = getTodayCode();
+    persistFormulaRecipes('已移除流程步骤');
+  };
+
+  const resetFormulaRecipes = () => {
+    formulaRecipes = cloneFormulaData(defaultFormulaRecipes);
+    activeFormulaId = formulaRecipes[0]?.id || activeFormulaId;
+    formulaMaterialCategory = '全部';
+    activeFormulaMaterialIndex = null;
+    persistFormulaRecipes('已恢复默认配方');
+  };
+
+  const renderOptions = (options, value) => options.map((option) => `
+    <option value="${esc(option)}" ${option === value ? 'selected' : ''}>${esc(option)}</option>
+  `).join('');
+
+  const renderMaterialOptions = (value, materialRows) => `
+    <option value="">待选择</option>
+    ${materialRows.map(([name]) => `<option value="${esc(name)}" ${name === value ? 'selected' : ''}>${esc(name)}</option>`).join('')}
+  `;
+
+  const renderPortOptions = (currentLine, value) => feederPorts.map((port) => `
+    <option value="${port}" ${port === normalizeFeederPort(value) ? 'selected' : ''}>${esc(currentLine)}${port}</option>
+  `).join('');
 
   const getFormulaRows = (recipe) => recipe.materials.map((item) => {
     const [name, type, category, supplier, quantity, state] = getInventoryMaterial(item.name);
-    return { ...item, name, type, category, supplier, quantity, state };
+    return { ...item, port: normalizeFeederPort(item.port), name, type, category, supplier, quantity, state };
   });
 
   const getFormulaRiskCount = (rows) => rows.filter((row) => /紧急|预警|待检/.test(row.state)).length;
+  const getFormulaChecks = (recipe, rows, totalRatio, riskCount) => {
+    const supplierMissing = rows.filter((row) => row.supplier === '未关联供应商').length;
+    return [
+      totalRatio === 100 ? '配比合计 100%' : `配比合计 ${formatFormulaNumber(totalRatio)}%，需调整至 100%`,
+      supplierMissing ? `${supplierMissing} 个材料未关联供应商` : '供应商来源完整',
+      riskCount ? `${riskCount} 项库存风险需处理` : '库存可支持排产',
+      /待放行|停用/.test(recipe.status) ? `版本状态为${recipe.status}，需确认后排产` : `版本状态为${recipe.status}，可继续推进`,
+    ];
+  };
 
   const renderFormula = () => {
     const recipe = getActiveFormula();
+    if (!recipe) return '';
     const formulaRows = getFormulaRows(recipe);
     const totalRatio = formulaRows.reduce((sum, item) => sum + Number(item.ratio || 0), 0);
+    const totalRatioLabel = formatFormulaNumber(totalRatio);
     const materialRows = inventoryRows.filter((row) => row[1] === '原材料');
     const materialCategories = ['全部', ...new Set(materialRows.map((row) => row[2]))];
     if (!materialCategories.includes(formulaMaterialCategory)) formulaMaterialCategory = '全部';
@@ -322,88 +722,200 @@
       ? materialRows
       : materialRows.filter((row) => row[2] === formulaMaterialCategory);
     const riskCount = getFormulaRiskCount(formulaRows);
+    const usedMaterialNames = new Set(recipe.materials.map((item) => item.name));
+    const hasActiveMaterialRow = Number.isInteger(activeFormulaMaterialIndex)
+      && !!recipe.materials[activeFormulaMaterialIndex];
+    const batchKg = parseKgValue(recipe.batchSize);
+    const currentLine = formulaLineOptions.includes(recipe.line) ? recipe.line : 'A';
+    const lineBatchKg = batchKg;
+    const lineTotal = formulaRows.reduce((sum, item) => sum + (lineBatchKg * Number(item.ratio || 0) / 100), 0);
+    const normalizedFormulaSearch = formulaSearchQuery.trim().toLowerCase();
+    const visibleFormulaRecipes = normalizedFormulaSearch
+      ? formulaRecipes.filter((item) => [
+        item.id,
+        item.name,
+        item.product,
+        item.version,
+        item.status,
+      ].some((value) => String(value || '').toLowerCase().includes(normalizedFormulaSearch)))
+      : formulaRecipes;
 
     return `
-      ${renderStatStrip([
-        ['当前配方', recipe.product, recipe.version],
-        ['配比合计', `${totalRatio}%`, totalRatio === 100 ? '已平衡' : '需调整'],
-        ['材料数量', `${formulaRows.length} 种`, recipe.batchSize],
-        ['库存风险', `${riskCount} 项`, riskCount ? '需处理' : '可排产'],
-      ])}
-      <section class="biz-formula-layout">
-        <aside class="business-panel biz-formula-list">
-          <div class="business-panel-head"><h2>配方版本</h2><span>${formulaRecipes.length} 个</span></div>
-          ${formulaRecipes.map((item) => `
-            <button class="${item.id === recipe.id ? 'is-active' : ''}" type="button" data-formula-id="${esc(item.id)}">
-              ${esc(item.id)}
-              <span>${esc(item.status)}</span>
-            </button>
-          `).join('')}
-        </aside>
-        <article class="business-panel biz-recipe-card biz-formula-builder">
-          <div class="business-panel-head"><h2>${esc(recipe.name)}</h2><span>${esc(recipe.status)}</span></div>
-          <div class="biz-formula-meta">
-            <span>${esc(recipe.product)}</span>
-            <span>${esc(recipe.owner)}</span>
-            <span>${esc(recipe.updated)}</span>
-            <span>${esc(recipe.target)}</span>
-          </div>
-          ${formulaRows.map((item) => `
-            <div class="biz-ingredient biz-recipe-material">
-              <span><strong>${esc(item.name)}</strong><em>${esc(item.role)} · ${esc(item.category)} · ${esc(item.supplier)}</em></span>
-              <div><em style="width:${item.ratio}%"></em></div>
-              <strong>${item.ratio}%</strong>
-              <small>${esc(item.stage)} / ${esc(item.tolerance)} / 库存 ${esc(item.quantity)} / ${esc(item.state)}</small>
-            </div>
-          `).join('')}
-        </article>
-        <aside class="business-panel biz-formula-library">
-          <div class="business-panel-head"><h2>库存材料库</h2><span>${visibleMaterials.length} 项</span></div>
-          <div class="biz-formula-material-tabs">
-            ${materialCategories.map((category) => `
-              <button class="${category === formulaMaterialCategory ? 'is-active' : ''}" type="button" data-formula-material-category="${esc(category)}">${esc(category)}</button>
-            `).join('')}
-          </div>
-          <div class="biz-formula-material-list">
-            ${visibleMaterials.map(([name, type, category, supplier, quantity, state]) => `
-              <div class="biz-formula-material-card ${/紧急|预警/.test(state) ? 'is-warn' : ''}">
-                <strong>${esc(name)}</strong>
-                <span>${esc(category)} · ${esc(supplier)}</span>
-                <em>${esc(quantity)} / ${esc(state)}</em>
+      <section class="biz-formula-page">
+        <section class="biz-formula-layout">
+          <aside class="business-panel biz-formula-list">
+            <div class="business-panel-head"><h2>配方版本</h2><span>${visibleFormulaRecipes.length}/${formulaRecipes.length} 个</span></div>
+            <label class="biz-formula-search">
+              <i class="ti ti-search" aria-hidden="true"></i>
+              <input type="search" placeholder="搜索配方..." value="${esc(formulaSearchQuery)}" data-formula-search>
+            </label>
+            ${visibleFormulaRecipes.map((item) => `
+              <button class="${item.id === recipe.id ? 'is-active' : ''}" type="button" data-formula-id="${esc(item.id)}">
+                ${esc(item.id)}
+                <span>${esc(item.status)}</span>
+              </button>
+            `).join('') || '<div class="biz-formula-empty">没有匹配的配方</div>'}
+          </aside>
+          <article class="business-panel biz-recipe-card biz-formula-builder">
+            <div class="biz-issue-sheet">
+              <div class="biz-issue-head">
+                <div>
+                  <strong>宁波广俊塑料科技有限公司</strong>
+                  <span class="biz-formula-save-note">${esc(formulaDraftNote)}</span>
+                </div>
+                <div class="biz-formula-actions">
+                  <button type="button" data-formula-save>保存草稿</button>
+                  <button type="button" data-formula-reset>恢复默认</button>
+                </div>
               </div>
-            `).join('')}
-          </div>
-        </aside>
-      </section>
-      <section class="biz-formula-flow-grid">
-        <article class="business-panel biz-formula-process">
-          <div class="business-panel-head"><h2>配比流程</h2><span>${esc(recipe.batchSize)}</span></div>
-          ${recipe.process.map(([step, detail], index) => `
-            <div class="biz-formula-step">
-              <strong>${index + 1}</strong>
-              <span>${esc(step)}</span>
-              <em>${esc(detail)}</em>
+              <div class="biz-issue-meta-grid">
+                <label>
+                  <span>日期</span>
+                  <input type="text" value="${esc(getTodayCode())}" readonly>
+                </label>
+                <label>
+                  <span>所属产线</span>
+                  <select data-formula-field="line">${renderOptions(formulaLineOptions, currentLine)}</select>
+                </label>
+                <label class="is-name">
+                  <span>配方名称</span>
+                  <input type="text" data-formula-field="name" value="${esc(recipe.name)}">
+                </label>
+                <label>
+                  <span>批量</span>
+                  <input type="text" data-formula-field="batchSize" value="${esc(recipe.batchSize)}">
+                </label>
+                <label>
+                  <span>产量</span>
+                  <input type="text" value="0.5 吨/小时" readonly>
+                </label>
+                <label class="is-version">
+                  <span>版本</span>
+                  <select data-formula-version-select>
+                    ${(recipe.versions || []).map((versionItem) => `
+                      <option value="${esc(versionItem.id)}" ${versionItem.label === recipe.version ? 'selected' : ''}>${esc(versionItem.label)} · ${esc(versionItem.savedAt || '')}</option>
+                    `).join('')}
+                  </select>
+                </label>
+                <label class="is-note">
+                  <span>目标指标 / 备注</span>
+                  <textarea rows="2" data-formula-field="target">${esc(recipe.target)}</textarea>
+                </label>
+              </div>
+              <div class="biz-line-issue-grid">
+                    <section class="biz-line-issue-card">
+                      <div class="biz-line-issue-title">
+                        <strong>${esc(currentLine)} 线下料口</strong>
+                        <span>5 个下料口 / 计划 ${formatKgValue(lineTotal)} kg</span>
+                      </div>
+                      <div class="biz-line-table-wrap">
+                        <table class="biz-line-table">
+                          <colgroup>
+                            <col class="col-port">
+                            <col class="col-material">
+                            <col class="col-ratio">
+                            <col class="col-plan">
+                            <col class="col-stock">
+                            <col class="col-action">
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>料口</th>
+                              <th>物料名称</th>
+                              <th>配比</th>
+                              <th>计划 KG</th>
+                              <th>库存</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${feederPorts.map((port) => {
+                              const portRows = formulaRows
+                                .map((item, index) => ({ ...item, index }))
+                                .filter((item) => item.port === port);
+                              if (!portRows.length) {
+                                return `
+                                  <tr class="biz-line-hover-row" data-formula-empty-port="${port}">
+                                    <td class="biz-line-port-cell">
+                                      <strong>${currentLine}${port}</strong>
+                                    </td>
+                                    <td><span class="biz-line-empty">待加入材料</span></td>
+                                    <td>--</td>
+                                    <td>--</td>
+                                    <td><span class="is-ok">--</span></td>
+                                    <td><button class="biz-formula-add-row-btn" type="button" data-formula-add-port-row="${port}">增加</button></td>
+                                  </tr>
+                                `;
+                              }
+                              return portRows.map((item) => {
+                                const isFirstPortRow = item.index === portRows[0].index;
+                                const quantityKg = lineBatchKg * Number(item.ratio || 0) / 100;
+                                return `
+                                <tr class="biz-line-hover-row ${item.index === activeFormulaMaterialIndex ? 'is-picking-material' : ''}" data-formula-row-index="${item.index}">
+                                  ${isFirstPortRow ? `
+                                    <td class="biz-line-port-cell" rowspan="${portRows.length}">
+                                      <select data-formula-port-group="${port}">
+                                        ${renderPortOptions(currentLine, port)}
+                                      </select>
+                                    </td>
+                                  ` : ''}
+                                  <td>
+                                    <button class="biz-line-material-pick ${item.name ? '' : 'is-empty'}" type="button" data-formula-select-material-index="${item.index}">
+                                      <strong>${esc(item.name || '待选择材料')}</strong>
+                                    </button>
+                                  </td>
+                                  <td><label class="biz-line-ratio"><input type="number" min="0" max="100" step="0.1" data-formula-material-index="${item.index}" data-formula-material-field="ratio" value="${esc(item.ratio)}"><span>%</span></label></td>
+                                  <td>${formatKgValue(quantityKg)} kg</td>
+                                  <td><span class="${/紧急|预警|待检/.test(item.state) ? 'is-warn' : 'is-ok'}">${esc(item.quantity)} / ${esc(item.state)}</span></td>
+                                  <td>
+                                    <div class="biz-line-action-stack">
+                                      <button class="biz-formula-add-row-btn" type="button" data-formula-add-port-row="${port}" data-formula-add-after-index="${item.index}">增加</button>
+                                      <button class="biz-formula-remove-btn" type="button" data-formula-remove-index="${item.index}">移除</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              `;
+                              }).join('');
+                            }).join('')}
+                          </tbody>
+                          <tfoot>
+                            <tr>
+                              <td colspan="2">合计</td>
+                              <td>${totalRatioLabel}%</td>
+                              <td>${formatKgValue(lineTotal)} kg</td>
+                              <td colspan="2">${riskCount ? `${riskCount} 项库存风险` : '库存正常'}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </section>
+              </div>
             </div>
-          `).join('')}
-        </article>
-        <article class="business-panel biz-formula-checks">
-          <div class="business-panel-head"><h2>配方校验</h2><span>版本放行</span></div>
-          ${recipe.checks.map((item) => `
-            <div class="${/紧急|待|需/.test(item) ? 'is-warn' : 'is-ok'}">
-              <i class="ti ${/紧急|待|需/.test(item) ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i>
-              <span>${esc(item)}</span>
+          </article>
+          <aside class="business-panel biz-formula-library">
+            <div class="business-panel-head"><h2>库存材料库</h2><span>${visibleMaterials.length} 项</span></div>
+            <div class="biz-formula-material-tabs">
+              ${materialCategories.map((category) => `
+                <button class="${category === formulaMaterialCategory ? 'is-active' : ''}" type="button" data-formula-material-category="${esc(category)}">${esc(category)}</button>
+              `).join('')}
             </div>
-          `).join('')}
-        </article>
+            <div class="biz-formula-material-list">
+              ${visibleMaterials.map(([name, type, category, supplier, quantity, state]) => {
+                const isUsed = usedMaterialNames.has(name);
+                const isCurrent = hasActiveMaterialRow && recipe.materials[activeFormulaMaterialIndex]?.name === name;
+                return `
+                  <div class="biz-formula-material-card ${/紧急|预警/.test(state) ? 'is-warn' : ''} ${isUsed ? 'is-used' : ''} ${isCurrent ? 'is-current' : ''}">
+                    <strong>${esc(name)}</strong>
+                    <span>${esc(category)} · ${esc(supplier)}</span>
+                    <em>${esc(quantity)} / ${esc(state)}</em>
+                    <button type="button" data-formula-add-material="${esc(name)}" ${isCurrent || (!hasActiveMaterialRow && isUsed) ? 'disabled' : ''}>${hasActiveMaterialRow ? (isCurrent ? '当前材料' : '更换到此行') : (isUsed ? '已加入' : '加入配方')}</button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </aside>
+        </section>
       </section>
-      ${renderTable('配方 BOM 明细', ['库存材料', '角色', '分类', '供应商', '库存状态', '配比'], formulaRows.map((item) => [
-        item.name,
-        item.role,
-        item.category,
-        item.supplier,
-        `${item.quantity} / ${item.state}`,
-        `${item.ratio}%`,
-      ]))}
     `;
   };
 
@@ -534,10 +1046,166 @@
     `;
   };
 
+  const focusFormulaSearch = (selectionStart = formulaSearchQuery.length, selectionEnd = selectionStart) => {
+    requestAnimationFrame(() => {
+      const searchInput = refs.businessPageContent?.querySelector('[data-formula-search]');
+      if (!(searchInput instanceof HTMLInputElement)) return;
+      searchInput.focus();
+      searchInput.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+
+  const handleFormulaEdit = (target) => {
+    if (!target) return false;
+
+    if (target.hasAttribute('data-formula-search')) {
+      formulaSearchQuery = target.value;
+      return true;
+    }
+
+    if (target.hasAttribute('data-formula-version-select')) {
+      applyActiveFormulaVersion(target.value);
+      return true;
+    }
+
+    const formulaPortGroup = target.getAttribute('data-formula-port-group');
+    if (formulaPortGroup) {
+      updateActiveFormulaPortGroup(formulaPortGroup, target.value);
+      return true;
+    }
+
+    const formulaField = target.getAttribute('data-formula-field');
+    if (formulaField) {
+      updateActiveFormulaField(formulaField, target.value);
+      return true;
+    }
+
+    const formulaMaterialField = target.getAttribute('data-formula-material-field');
+    if (formulaMaterialField) {
+      updateActiveFormulaMaterial(
+        Number(target.getAttribute('data-formula-material-index')),
+        formulaMaterialField,
+        target.value,
+      );
+      return true;
+    }
+
+    const formulaProcessField = target.getAttribute('data-formula-process-field');
+    if (formulaProcessField) {
+      updateActiveFormulaProcess(
+        Number(target.getAttribute('data-formula-process-index')),
+        formulaProcessField,
+        target.value,
+      );
+      return true;
+    }
+
+    return false;
+  };
+
+  refs.businessPageContent?.addEventListener('input', (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (handleFormulaEdit(event.target) && event.target.hasAttribute('data-formula-search')) {
+      const selectionStart = event.target.selectionStart ?? formulaSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('formula-management');
+      focusFormulaSearch(selectionStart, selectionEnd);
+    }
+  });
+
+  refs.businessPageContent?.addEventListener('change', (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (handleFormulaEdit(event.target)) render('formula-management');
+  });
+
   refs.businessPageContent?.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+
+    const formulaSaveButton = event.target.closest('[data-formula-save]');
+    if (formulaSaveButton && refs.businessPageContent.contains(formulaSaveButton)) {
+      saveActiveFormulaVersion();
+      render('formula-management');
+      return;
+    }
+
+    const formulaResetButton = event.target.closest('[data-formula-reset]');
+    if (formulaResetButton && refs.businessPageContent.contains(formulaResetButton)) {
+      resetFormulaRecipes();
+      render('formula-management');
+      return;
+    }
+
+    const formulaRemoveButton = event.target.closest('[data-formula-remove-index]');
+    if (formulaRemoveButton && refs.businessPageContent.contains(formulaRemoveButton)) {
+      removeActiveFormulaMaterial(Number(formulaRemoveButton.getAttribute('data-formula-remove-index')));
+      render('formula-management');
+      return;
+    }
+
+    const formulaAddPortRowButton = event.target.closest('[data-formula-add-port-row]');
+    if (formulaAddPortRowButton && refs.businessPageContent.contains(formulaAddPortRowButton)) {
+      const afterIndex = formulaAddPortRowButton.hasAttribute('data-formula-add-after-index')
+        ? Number(formulaAddPortRowButton.getAttribute('data-formula-add-after-index'))
+        : null;
+      addActiveFormulaMaterialRow(Number(formulaAddPortRowButton.getAttribute('data-formula-add-port-row')), afterIndex);
+      render('formula-management');
+      return;
+    }
+
+    const formulaSelectMaterialButton = event.target.closest('[data-formula-select-material-index]');
+    if (formulaSelectMaterialButton && refs.businessPageContent.contains(formulaSelectMaterialButton)) {
+      activeFormulaMaterialIndex = Number(formulaSelectMaterialButton.getAttribute('data-formula-select-material-index'));
+      render('formula-management');
+      return;
+    }
+
+    const formulaEmptyRow = event.target.closest('[data-formula-empty-port]');
+    const isFormulaEmptyRowControl = event.target.closest('button, input, select, textarea, label');
+    if (formulaEmptyRow && refs.businessPageContent.contains(formulaEmptyRow) && !isFormulaEmptyRowControl) {
+      addActiveFormulaMaterialRow(Number(formulaEmptyRow.getAttribute('data-formula-empty-port')));
+      render('formula-management');
+      return;
+    }
+
+    const formulaRow = event.target.closest('[data-formula-row-index]');
+    const isFormulaRowControl = event.target.closest('button, input, select, textarea, label');
+    if (formulaRow && refs.businessPageContent.contains(formulaRow) && !isFormulaRowControl) {
+      activeFormulaMaterialIndex = Number(formulaRow.getAttribute('data-formula-row-index'));
+      render('formula-management');
+      return;
+    }
+
+    const formulaAddButton = event.target.closest('[data-formula-add-material]');
+    if (formulaAddButton && refs.businessPageContent.contains(formulaAddButton) && !formulaAddButton.disabled) {
+      const materialName = formulaAddButton.getAttribute('data-formula-add-material');
+      const recipe = getActiveFormula();
+      if (Number.isInteger(activeFormulaMaterialIndex) && recipe?.materials?.[activeFormulaMaterialIndex]) {
+        assignActiveFormulaMaterial(activeFormulaMaterialIndex, materialName);
+      } else {
+        addActiveFormulaMaterial(materialName);
+      }
+      render('formula-management');
+      return;
+    }
+
+    const formulaAddProcessButton = event.target.closest('[data-formula-add-process]');
+    if (formulaAddProcessButton && refs.businessPageContent.contains(formulaAddProcessButton)) {
+      addActiveFormulaProcess();
+      render('formula-management');
+      return;
+    }
+
+    const formulaRemoveProcessButton = event.target.closest('[data-formula-remove-process]');
+    if (formulaRemoveProcessButton && refs.businessPageContent.contains(formulaRemoveProcessButton) && !formulaRemoveProcessButton.disabled) {
+      removeActiveFormulaProcess(Number(formulaRemoveProcessButton.getAttribute('data-formula-remove-process')));
+      render('formula-management');
+      return;
+    }
+
     const formulaButton = event.target.closest('[data-formula-id]');
     if (formulaButton && refs.businessPageContent.contains(formulaButton)) {
       activeFormulaId = formulaButton.getAttribute('data-formula-id') || activeFormulaId;
+      activeFormulaMaterialIndex = null;
       render('formula-management');
       return;
     }

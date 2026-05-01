@@ -20,7 +20,7 @@
     .placeholder-eyebrow{
       display:inline-flex;
       align-items:center;
-      gap:8px;
+      gap:12px;
       height:30px;
       padding:0 12px;
       border-radius:999px;
@@ -44,7 +44,7 @@
     }
     .placeholder-actions{
       display:flex;
-      gap:10px;
+      gap:12px;
       flex-wrap:wrap;
       margin-top:20px;
     }
@@ -59,7 +59,7 @@
       margin:0;
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
     }
     .business-kpi-grid{
       display:grid;
@@ -78,7 +78,7 @@
       display:flex;
       flex-direction:column;
       justify-content:space-between;
-      gap:14px;
+      gap:12px;
     }
     .business-kpi-label{
       color:var(--muted);
@@ -94,7 +94,7 @@
     .business-kpi-meta{
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
     }
     .business-kpi-meta span{
       width:fit-content;
@@ -146,7 +146,7 @@
     .business-lanes{
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:10px;
+      gap:12px;
     }
     .business-lane{
       min-height:136px;
@@ -242,7 +242,7 @@
       display:flex;
       flex-direction:column;
       justify-content:space-between;
-      gap:10px;
+      gap:12px;
       padding:14px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -301,7 +301,7 @@
     .biz-risk-board{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
     }
     .biz-risk-card{
       padding:12px;
@@ -335,7 +335,7 @@
       padding:0;
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:10px;
+      gap:12px;
       list-style:none;
     }
     .biz-today-list li{
@@ -354,7 +354,7 @@
     .biz-today-list span{margin-top:7px;color:var(--text-2);line-height:1.55}
     .biz-order-toolbar{
       display:flex;
-      gap:8px;
+      gap:12px;
       overflow:auto;
       padding-bottom:2px;
     }
@@ -415,7 +415,7 @@
     .biz-order-card{
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:12px;
       padding:12px;
       margin-bottom:10px;
       border:1px solid var(--border);
@@ -434,13 +434,13 @@
     .biz-print-queue{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
     }
     .biz-template-card{
       min-height:82px;
       display:grid;
       grid-template-columns:36px minmax(0,1fr);
-      gap:8px 10px;
+      gap:12px;
       align-items:center;
       padding:12px;
       border:1px solid var(--border);
@@ -474,7 +474,7 @@
     .biz-print-queue ul{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
       margin:0;
       padding:0;
       list-style:none;
@@ -492,7 +492,7 @@
     .biz-warehouse-map{
       display:grid;
       grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:10px;
+      gap:12px;
     }
     .biz-warehouse-map .business-panel-head{
       grid-column:1 / -1;
@@ -514,12 +514,12 @@
     .biz-reserve-list{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
     }
     .biz-reserve-item{
       display:grid;
       grid-template-columns:72px minmax(0,1fr) auto;
-      gap:10px;
+      gap:12px;
       align-items:center;
       padding:12px;
       border:1px solid var(--border);
@@ -535,14 +535,14 @@
       display:flex;
       align-items:center;
       flex-wrap:wrap;
-      gap:10px;
+      gap:12px;
     }
     .biz-category-tabs button{
       min-height:38px;
       display:flex;
       align-items:center;
       justify-content:center;
-      gap:8px;
+      gap:12px;
       padding:0 13px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -575,9 +575,19 @@
       font-weight:900;
     }
     .biz-formula-layout{
+      flex:1 1 auto;
+      min-height:0;
       display:grid;
       grid-template-columns:248px minmax(420px,1fr) 320px;
       gap:12px;
+      overflow:hidden;
+    }
+    .biz-formula-page{
+      height:calc(100dvh - var(--topbar) - 32px);
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
     }
     .biz-formula-flow-grid{
       display:grid;
@@ -590,7 +600,18 @@
     .biz-audit-filter{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
+    }
+    .biz-formula-list,
+    .biz-formula-builder,
+    .biz-formula-library{
+      min-height:0;
+      overflow:auto;
+      scrollbar-width:thin;
+    }
+    .biz-formula-builder,
+    .biz-formula-library{
+      overscroll-behavior:contain;
     }
     .biz-formula-list button,
     .biz-directory button,
@@ -602,9 +623,46 @@
       padding:0 12px;
       text-align:left;
     }
+    .biz-formula-search{
+      flex:0 0 auto;
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--muted);
+      transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .biz-formula-search:focus-within{
+      border-color:var(--accent);
+      background:var(--surface);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-formula-search i{
+      flex:0 0 auto;
+      font-size:16px;
+    }
+    .biz-formula-search input{
+      width:100%;
+      min-width:0;
+      height:36px;
+      border:0;
+      outline:none;
+      background:transparent;
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+    }
+    .biz-formula-search input::placeholder{
+      color:var(--muted-2);
+    }
     .biz-formula-list button{
       min-height:54px;
-      gap:8px;
+      gap:12px;
     }
     .biz-formula-list button span{
       min-width:max-content;
@@ -619,10 +677,453 @@
       display:flex;
       flex-direction:column;
     }
+    .biz-issue-sheet{
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .biz-issue-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      min-height:44px;
+      padding-bottom:10px;
+      border-bottom:2px solid var(--text);
+    }
+    .biz-issue-head > div:first-child{
+      min-width:0;
+      display:grid;
+      gap:12px;
+    }
+    .biz-issue-head strong{
+      color:var(--text);
+      font-size:18px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-issue-head span{
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-issue-head .biz-formula-save-note{
+      color:var(--success);
+      font-size:11px;
+      line-height:1.2;
+      font-weight:850;
+    }
+    .biz-issue-meta-grid{
+      display:grid;
+      grid-template-columns:repeat(7,minmax(0,1fr));
+      border-top:1px solid var(--border-2);
+      border-left:1px solid var(--border-2);
+      background:var(--surface);
+    }
+    .biz-issue-meta-grid label{
+      min-width:0;
+      display:grid;
+      gap:12px;
+      padding:8px;
+      border-right:1px solid var(--border-2);
+      border-bottom:1px solid var(--border-2);
+    }
+    .biz-issue-meta-grid label.is-name{
+      grid-column:span 2;
+    }
+    .biz-issue-meta-grid label.is-version{
+      grid-column:span 2;
+    }
+    .biz-issue-meta-grid label.is-note{
+      grid-column:span 5;
+    }
+    .biz-issue-meta-grid span{
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .biz-issue-meta-grid input,
+    .biz-issue-meta-grid textarea,
+    .biz-line-table select,
+    .biz-line-table input{
+      min-width:0;
+      min-height:30px;
+      border:1px solid transparent;
+      border-radius:4px;
+      background:transparent;
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .biz-issue-meta-grid input,
+    .biz-issue-meta-grid textarea,
+    .biz-line-table select{
+      width:100%;
+      padding:0 6px;
+    }
+    .biz-line-table select{
+      text-align:center;
+      text-align-last:center;
+    }
+    .biz-issue-meta-grid textarea{
+      min-height:46px;
+      resize:vertical;
+      padding-top:6px;
+      line-height:1.45;
+    }
+    .biz-issue-meta-grid input:focus,
+    .biz-issue-meta-grid textarea:focus,
+    .biz-line-table select:focus,
+    .biz-line-table input:focus{
+      border-color:var(--accent);
+      background:var(--surface);
+      box-shadow:0 0 0 2px var(--accent-soft);
+    }
+    .biz-issue-meta-grid input[readonly]{
+      color:var(--muted);
+      cursor:default;
+    }
+    .biz-line-issue-grid{
+      min-height:0;
+      display:grid;
+      gap:12px;
+    }
+    .biz-line-issue-card{
+      min-width:0;
+      border:1px solid var(--border-2);
+      background:var(--surface);
+    }
+    .biz-line-issue-title{
+      min-height:38px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:0 10px;
+      border-bottom:1px solid var(--border-2);
+      background:var(--surface-2);
+    }
+    .biz-line-issue-title strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-line-issue-title span{
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:850;
+      white-space:nowrap;
+    }
+    .biz-line-table-wrap{
+      overflow:auto;
+    }
+    .biz-line-table{
+      width:100%;
+      min-width:820px;
+      table-layout:auto;
+      border-collapse:collapse;
+      color:var(--text);
+      font-size:12px;
+    }
+    .biz-line-table .col-port{width:76px}
+    .biz-line-table .col-material{width:auto}
+    .biz-line-table .col-ratio{width:96px}
+    .biz-line-table .col-plan{width:110px}
+    .biz-line-table .col-stock{width:190px}
+    .biz-line-table .col-action{width:124px}
+    .biz-line-table th,
+    .biz-line-table td{
+      padding:7px 8px;
+      border-right:1px solid var(--border-2);
+      border-bottom:1px solid var(--border-2);
+      text-align:center;
+      vertical-align:middle;
+    }
+    .biz-line-table th{
+      background:var(--surface-3);
+      color:var(--text-2);
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-line-table .biz-line-port-cell{
+      background:var(--surface-2);
+    }
+    .biz-line-table tr.biz-line-hover-row{
+      cursor:pointer;
+    }
+    .biz-line-table tr.biz-line-hover-row:hover td:not(.biz-line-port-cell){
+      background:color-mix(in srgb, var(--accent-soft) 38%, var(--surface));
+    }
+    .biz-line-table tr.biz-line-hover-row:hover .biz-line-port-cell{
+      background:var(--surface-2);
+    }
+    .biz-line-port-cell{
+      vertical-align:middle;
+      padding:6px 5px;
+    }
+    .biz-line-port-cell strong{
+      display:block;
+      margin-bottom:6px;
+      color:var(--text);
+      font-weight:950;
+    }
+    .biz-line-port-cell select{
+      width:64px;
+      max-width:100%;
+      font-weight:950;
+    }
+    .biz-line-table td,
+    .biz-line-table th{
+      white-space:nowrap;
+    }
+    .biz-line-table td:nth-child(2){
+      white-space:normal;
+    }
+    .biz-line-table td:nth-child(2) select{
+      max-width:190px;
+    }
+    .biz-line-material-pick{
+      width:auto;
+      max-width:100%;
+      min-height:36px;
+      display:inline-grid;
+      place-items:center;
+      gap:12px;
+      padding:5px 12px;
+      border:0;
+      border-radius:6px;
+      background:transparent;
+      color:var(--text);
+      font:inherit;
+      cursor:pointer;
+    }
+    .biz-line-material-pick:hover{
+      background:transparent;
+      color:var(--accent);
+    }
+    .biz-line-table tr.is-picking-material .biz-line-material-pick{
+      background:transparent;
+      color:var(--text);
+    }
+    .biz-line-material-pick strong{
+      max-width:220px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:950;
+    }
+    .biz-line-material-pick.is-empty{
+      color:var(--muted);
+      font-weight:900;
+    }
+    .biz-line-material-pick.is-empty strong{
+      color:var(--muted);
+      font-weight:900;
+    }
+    .biz-line-table small{
+      display:block;
+      margin-top:3px;
+      color:var(--muted);
+      font-size:10px;
+      line-height:1.35;
+      font-weight:800;
+    }
+    .biz-line-table tfoot td{
+      background:var(--surface-2);
+      font-weight:950;
+    }
+    .biz-line-ratio{
+      width:74px;
+      max-width:100%;
+      margin:0 auto;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+    }
+    .biz-line-ratio input{
+      width:48px;
+      min-height:28px;
+      padding:0 3px;
+      text-align:center;
+    }
+    .biz-line-ratio span{
+      color:var(--muted);
+      font-size:11px;
+      font-weight:900;
+    }
+    .biz-line-table .is-ok{
+      color:var(--success);
+      font-weight:900;
+    }
+    .biz-line-table .is-warn{
+      color:var(--warn);
+      font-weight:900;
+    }
+    .biz-line-table tr.is-picking-material td:not(.biz-line-port-cell){
+      background:color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
+    }
+    .biz-line-table tr.is-picking-material .biz-line-port-cell{
+      background:var(--surface-2);
+    }
+    .biz-line-action-stack .biz-formula-add-row-btn,
+    .biz-line-action-stack .biz-formula-remove-btn,
+    .biz-line-table > tbody > tr > td > .biz-formula-add-row-btn{
+      min-height:28px;
+      font-size:11px;
+      padding:0 8px;
+      width:50px;
+      min-width:50px;
+    }
+    .biz-line-action-stack{
+      display:flex;
+      justify-content:center;
+      flex-wrap:nowrap;
+      gap:12px;
+    }
+    .biz-formula-add-row-btn{
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--accent);
+      font-size:11px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-line-table em,
+    .biz-line-empty{
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      font-weight:850;
+    }
+    .biz-formula-edit-head{
+      align-items:flex-start;
+    }
+    .biz-formula-edit-head > div:first-child{
+      min-width:0;
+      display:grid;
+      gap:12px;
+    }
+    .biz-formula-edit-head > div:first-child span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      white-space:normal;
+    }
+    .biz-formula-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .biz-formula-actions button,
+    .biz-formula-material-card button,
+    .biz-formula-remove-btn,
+    .biz-formula-process-head button,
+    .biz-formula-step.is-editable > button{
+      min-height:34px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+      transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+    }
+    .biz-formula-actions button:first-child,
+    .biz-formula-material-card button:not(:disabled),
+    .biz-formula-process-head button{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .biz-formula-actions button:hover,
+    .biz-formula-material-card button:not(:disabled):hover,
+    .biz-formula-remove-btn:hover,
+    .biz-formula-process-head button:hover,
+    .biz-formula-step.is-editable > button:not(:disabled):hover{
+      transform:translateY(-1px);
+    }
+    .biz-formula-edit-grid{
+      display:grid;
+      grid-template-columns:1.25fr 1.25fr .8fr;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .biz-formula-edit-grid label,
+    .biz-recipe-controls label,
+    .biz-formula-step label{
+      min-width:0;
+      display:grid;
+      gap:12px;
+    }
+    .biz-formula-edit-grid label span,
+    .biz-recipe-controls label span,
+    .biz-formula-step label span{
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .biz-formula-edit-grid input,
+    .biz-formula-edit-grid select,
+    .biz-formula-edit-grid textarea,
+    .biz-recipe-controls input,
+    .biz-recipe-controls select,
+    .biz-formula-ratio-field input,
+    .biz-formula-step input{
+      width:100%;
+      min-width:0;
+      min-height:36px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .biz-formula-edit-grid input,
+    .biz-formula-edit-grid select,
+    .biz-recipe-controls input,
+    .biz-recipe-controls select,
+    .biz-formula-step input{
+      padding:0 10px;
+    }
+    .biz-formula-edit-grid textarea{
+      min-height:58px;
+      resize:vertical;
+      padding:9px 10px;
+      line-height:1.5;
+    }
+    .biz-formula-edit-grid input:focus,
+    .biz-formula-edit-grid select:focus,
+    .biz-formula-edit-grid textarea:focus,
+    .biz-recipe-controls input:focus,
+    .biz-recipe-controls select:focus,
+    .biz-formula-ratio-field input:focus,
+    .biz-formula-step input:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-formula-edit-grid .is-wide{
+      grid-column:1 / -1;
+    }
     .biz-formula-meta{
       display:flex;
       flex-wrap:wrap;
-      gap:8px;
+      gap:12px;
       margin:-2px 0 14px;
     }
     .biz-formula-meta span{
@@ -664,23 +1165,31 @@
       background:var(--accent);
     }
     .biz-recipe-material{
-      grid-template-columns:minmax(170px,.42fr) minmax(0,1fr) 54px;
-      align-items:center;
-      padding-bottom:12px;
-      margin-bottom:12px;
+      display:grid;
+      gap:12px;
+      padding:12px;
+      margin-bottom:10px;
       border-bottom:1px solid var(--border);
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
     }
     .biz-recipe-material:last-child{
-      border-bottom:0;
       margin-bottom:0;
-      padding-bottom:0;
     }
-    .biz-recipe-material > span{
-      display:grid;
-      gap:5px;
+    .biz-recipe-material-top{
       min-width:0;
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 86px;
+      align-items:start;
+      gap:12px;
     }
-    .biz-recipe-material > span strong{
+    .biz-recipe-material-top > span{
+      min-width:0;
+      display:grid;
+      gap:12px;
+    }
+    .biz-recipe-material-top strong{
       color:var(--text);
       font-size:13px;
       font-weight:900;
@@ -688,26 +1197,86 @@
       overflow:hidden;
       text-overflow:ellipsis;
     }
-    .biz-recipe-material > span em,
+    .biz-recipe-material-top em,
     .biz-recipe-material small{
       color:var(--muted);
       font-size:11px;
       font-style:normal;
       line-height:1.4;
     }
+    .biz-recipe-progress{
+      height:10px;
+      border-radius:999px;
+      background:var(--surface-3);
+      overflow:hidden;
+    }
+    .biz-recipe-progress em{
+      display:block;
+      height:100%;
+      border-radius:inherit;
+      background:linear-gradient(90deg,var(--accent),#38bdf8);
+    }
+    .biz-recipe-controls{
+      display:grid;
+      grid-template-columns:minmax(128px,1fr) minmax(104px,.78fr) 92px auto;
+      align-items:end;
+      gap:12px;
+    }
     .biz-recipe-material small{
-      grid-column:1 / -1;
+      display:block;
+    }
+    .biz-formula-ratio-field{
+      display:flex;
+      align-items:center;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      overflow:hidden;
+    }
+    .biz-formula-ratio-field:focus-within{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-formula-ratio-field input{
+      min-height:34px;
+      padding:0 4px 0 9px;
+      border:0;
+      border-radius:0;
+      text-align:right;
+      box-shadow:none;
+      background:transparent;
+    }
+    .biz-formula-ratio-field span{
+      padding-right:9px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-formula-remove-btn{
+      min-width:58px;
+      color:var(--danger);
+    }
+    .biz-formula-empty{
+      display:grid;
+      place-items:center;
+      min-height:84px;
+      border:1px dashed var(--border);
+      border-radius:8px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:850;
     }
     .biz-formula-library{
-      min-height:420px;
+      min-height:0;
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
+      overflow:hidden;
     }
     .biz-formula-material-tabs{
       display:flex;
       flex-wrap:wrap;
-      gap:8px;
+      gap:12px;
     }
     .biz-formula-material-tabs button{
       min-height:32px;
@@ -729,13 +1298,16 @@
     }
     .biz-formula-material-list{
       min-height:0;
+      flex:1 1 auto;
+      overflow:auto;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:12px;
+      padding-right:2px;
     }
     .biz-formula-material-card{
       display:grid;
-      gap:5px;
+      gap:12px;
       padding:10px;
       border:1px solid var(--border);
       border-left:4px solid var(--accent);
@@ -744,6 +1316,14 @@
     }
     .biz-formula-material-card.is-warn{
       border-left-color:var(--warn);
+    }
+    .biz-formula-material-card.is-used{
+      border-left-color:var(--success);
+      background:var(--surface);
+    }
+    .biz-formula-material-card.is-current{
+      border-color:var(--accent);
+      background:var(--accent-soft);
     }
     .biz-formula-material-card strong{
       color:var(--text);
@@ -757,17 +1337,43 @@
       font-style:normal;
       line-height:1.45;
     }
+    .biz-formula-material-card button{
+      justify-self:start;
+      min-height:30px;
+      margin-top:2px;
+      padding:0 10px;
+      font-size:11px;
+    }
+    .biz-formula-material-card button:disabled{
+      cursor:default;
+      color:var(--success);
+      background:rgba(101,163,13,.12);
+      border-color:var(--success);
+      transform:none;
+    }
     .biz-formula-process,
     .biz-formula-checks{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
+    }
+    .biz-formula-process-head > div{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .biz-formula-process-head button{
+      min-height:30px;
+      padding:0 10px;
+      font-size:11px;
     }
     .biz-formula-step{
       display:grid;
       grid-template-columns:32px 90px minmax(0,1fr);
       align-items:center;
-      gap:10px;
+      gap:12px;
       padding:10px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -795,10 +1401,28 @@
       font-style:normal;
       line-height:1.5;
     }
+    .biz-formula-step.is-editable{
+      grid-template-columns:32px minmax(100px,.28fr) minmax(0,1fr) auto;
+      align-items:end;
+    }
+    .biz-formula-step.is-editable input{
+      background:var(--surface);
+    }
+    .biz-formula-step.is-editable > button{
+      min-width:58px;
+      color:var(--danger);
+      align-self:end;
+    }
+    .biz-formula-step.is-editable > button:disabled{
+      cursor:default;
+      color:var(--muted-2);
+      background:var(--surface-3);
+      transform:none;
+    }
     .biz-formula-checks > div:not(.business-panel-head){
       display:flex;
       align-items:center;
-      gap:9px;
+      gap:12px;
       padding:10px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -823,7 +1447,7 @@
     .biz-line-board{
       display:flex;
       flex-direction:column;
-      gap:14px;
+      gap:12px;
     }
     .biz-line-row{
       display:grid;
@@ -837,7 +1461,7 @@
     .biz-line-row div{
       height:42px;
       display:flex;
-      gap:6px;
+      gap:12px;
       min-width:0;
     }
     .biz-line-row span{
@@ -854,7 +1478,7 @@
     .biz-material-ready{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
     }
     .biz-material-ready > div:not(.business-panel-head){
       display:flex;
@@ -881,7 +1505,7 @@
       display:grid;
       grid-template-columns:84px minmax(0,1fr);
       grid-template-rows:auto auto 1fr;
-      gap:10px 16px;
+      gap:12px;
       align-content:start;
     }
     .biz-avatar{
@@ -898,7 +1522,7 @@
     }
     .biz-profile h2{margin:0;color:var(--text);font-size:20px}
     .biz-profile p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}
-    .biz-tags{display:flex;gap:8px;flex-wrap:wrap;align-self:start}
+    .biz-tags{display:flex;gap:12px;flex-wrap:wrap;align-self:start}
     .biz-tags span{
       min-height:28px;
       display:inline-flex;
@@ -920,7 +1544,7 @@
     .biz-permission-row{
       display:grid;
       grid-template-columns:130px repeat(3,minmax(74px,1fr));
-      gap:8px;
+      gap:12px;
       align-items:center;
       padding:9px 0;
       border-bottom:1px solid var(--border);
@@ -948,7 +1572,7 @@
     .biz-audit-feed{
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:12px;
     }
     .biz-audit-event{
       display:grid;

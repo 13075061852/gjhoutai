@@ -22,6 +22,7 @@
     activeId: '',
     query: '',
     category: '全部',
+    categoryOrder: [],
     tag: '全部',
     mode: 'ALL',
     view: 'grid',
@@ -35,6 +36,7 @@
   const refs = {};
   let imageDbPromise = null;
   let detailResizeObserver = null;
+  let categoryDragActive = false;
   const DETAIL_AUTO_COLLAPSE_WIDTH = 1260;
 
   const initRefs = () => {
@@ -45,12 +47,11 @@
     refs.importInput = document.getElementById('spectrumImportInput');
     refs.exportBtn = document.getElementById('spectrumExportBtn');
     refs.printBtn = document.getElementById('spectrumPrintBtn');
+    refs.categorySearchInput = document.getElementById('spectrumCategorySearchInput');
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
     refs.tagFilters = document.getElementById('spectrumTagFilters');
     refs.clearSelectedBtn = document.getElementById('spectrumClearSelectedBtn');
     refs.deleteSelectedBtn = document.getElementById('spectrumDeleteSelectedBtn');
-    refs.batchTagInput = document.getElementById('spectrumBatchTagInput');
-    refs.batchTagBtn = document.getElementById('spectrumBatchTagBtn');
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
@@ -263,12 +264,16 @@
     const saved = utils.readJson(FILTER_STORAGE_KEY, {});
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
     state.category = String(saved.category || '全部');
+    state.categoryOrder = Array.isArray(saved.categoryOrder)
+      ? saved.categoryOrder.map((item) => String(item || '')).filter(Boolean)
+      : [];
     state.tag = String(saved.tag || '全部');
   };
 
   const saveFilterState = () => {
     utils.writeJson(FILTER_STORAGE_KEY, {
       category: state.category || '全部',
+      categoryOrder: state.categoryOrder || [],
       tag: state.tag || '全部',
     });
   };
@@ -438,13 +443,20 @@
     saveFilterState();
   };
 
+  const orderCategories = (categories) => {
+    const categorySet = new Set(categories);
+    const ordered = (state.categoryOrder || []).filter((category) => categorySet.has(category));
+    const rest = categories.filter((category) => !ordered.includes(category));
+    return [...ordered, ...rest];
+  };
+
   const renderFilterButton = (value, activeValue, count, attr) => {
     const active = value === activeValue ? ' is-active' : '';
     const selectedCount = value === '全部'
       ? getSelectedItems().length
       : getSelectedItems().filter((item) => item.category === value).length;
     return `
-      <button class="spectrum-filter-btn${active}" type="button" ${attr}="${utils.escapeHtml(value)}">
+      <button class="spectrum-filter-btn${active}" type="button" draggable="true" ${attr}="${utils.escapeHtml(value)}">
           <span>${utils.escapeHtml(value)}</span>
         <span class="spectrum-filter-counts">
           <em>${count}</em>
@@ -455,7 +467,11 @@
   };
 
   const renderFilters = () => {
-    const categories = ['全部', ...uniqueValues((item) => [item.category])];
+    const categories = orderCategories(['全部', ...uniqueValues((item) => [item.category])]);
+    const categoryQuery = String(refs.categorySearchInput?.value || '').trim().toLowerCase();
+    const visibleCategories = categoryQuery
+      ? categories.filter((category) => String(category).toLowerCase().includes(categoryQuery))
+      : categories;
     const itemsInSearchAndMode = state.items.filter(matchesSearchAndMode);
     const itemsInCategory = itemsInSearchAndMode.filter(matchesCategory);
     const tags = ['全部', ...new Set(itemsInCategory.flatMap((item) => item.tags).filter(Boolean))];
@@ -464,7 +480,7 @@
       saveFilterState();
     }
 
-    if (refs.categoryFilters) refs.categoryFilters.innerHTML = categories.map((category) => {
+    if (refs.categoryFilters) refs.categoryFilters.innerHTML = visibleCategories.map((category) => {
       const count = category === '全部'
         ? itemsInSearchAndMode.length
         : itemsInSearchAndMode.filter((item) => item.category === category).length;
@@ -582,26 +598,6 @@
     if (!ids.length) return;
 
     animateDeleteItems(ids, () => commitDeleteItems(ids));
-  };
-
-  const applyBatchTagsToSelected = () => {
-    const tags = normalizeTags(refs.batchTagInput?.value || '');
-    const selectedIds = new Set(state.selectedIds);
-    if (!tags.length || !selectedIds.size) return;
-
-    let uploadedChanged = false;
-    state.items = state.items.map((item) => {
-      if (!selectedIds.has(item.id)) return item;
-      const next = { ...item, tags: mergeTags(item.tags, tags) };
-      state.edits[next.id] = getEditableSnapshot(next);
-      if (next.uploaded) uploadedChanged = true;
-      return next;
-    });
-
-    if (refs.batchTagInput) refs.batchTagInput.value = '';
-    saveItemEdits();
-    if (uploadedChanged) saveUploadedItems();
-    render();
   };
 
   const closeDeleteDialog = () => {
@@ -800,6 +796,33 @@
       `;
     }).join('');
   };
+
+  const getCategoryButtons = () => [...(refs.categoryFilters?.querySelectorAll('[data-spectrum-category]') || [])];
+
+  const animateCategoryReorder = (mutate) => {
+    if (!refs.categoryFilters) return;
+    const before = new Map(getCategoryButtons().map((button) => [button, button.getBoundingClientRect()]));
+    mutate();
+    getCategoryButtons().forEach((button) => {
+      const from = before.get(button);
+      if (!from) return;
+      const to = button.getBoundingClientRect();
+      const deltaX = from.left - to.left;
+      const deltaY = from.top - to.top;
+      if (!deltaX && !deltaY) return;
+      button.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: 'translate(0, 0)' },
+        ],
+        { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' }
+      );
+    });
+  };
+
+  const getCurrentCategoryOrderFromDom = () => getCategoryButtons()
+    .map((button) => button.getAttribute('data-spectrum-category') || '')
+    .filter(Boolean);
 
   const renderDetail = () => {
     const item = getActiveItem();
@@ -1084,7 +1107,7 @@
             .print-card:last-child{break-after:auto;page-break-after:auto}
             .print-image-wrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center}
             img{width:100%;height:100%;object-fit:contain;display:block}
-            .print-meta{flex:0 0 auto;border-top:1px solid #e5ebf3;margin-top:8mm;padding-top:4mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12mm;color:#0f172a}
+            .print-meta{flex:0 0 auto;border-top:1px solid #e5ebf3;margin-top:8mm;padding-top:4mm;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;color:#0f172a}
             strong{font-size:13px;line-height:1.35;font-weight:800}
             span{font-size:11px;color:#64748b;font-weight:700;white-space:nowrap}
             @page{size:A4 landscape;margin:0}
@@ -2317,20 +2340,75 @@
       openDeleteDialog('', 'selected');
     });
 
-    refs.batchTagBtn?.addEventListener('click', applyBatchTagsToSelected);
-    refs.batchTagInput?.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      applyBatchTagsToSelected();
-    });
+    refs.categorySearchInput?.addEventListener('input', renderFilters);
 
     refs.categoryFilters?.addEventListener('click', (event) => {
+      if (categoryDragActive) {
+        event.preventDefault();
+        return;
+      }
       const button = event.target.closest('[data-spectrum-category]');
       if (!button) return;
       state.category = button.getAttribute('data-spectrum-category') || '全部';
       state.tag = '全部';
       saveFilterState();
       render();
+    });
+
+    refs.categoryFilters?.addEventListener('dragstart', (event) => {
+      const button = event.target.closest('[data-spectrum-category]');
+      if (!button) return;
+      const category = button.getAttribute('data-spectrum-category') || '';
+      event.dataTransfer?.setData('text/plain', category);
+      event.dataTransfer?.setData('application/x-spectrum-category', category);
+      event.dataTransfer.effectAllowed = 'move';
+      button.classList.add('is-dragging');
+      refs.categoryFilters?.classList.add('is-reordering');
+      categoryDragActive = true;
+    });
+
+    refs.categoryFilters?.addEventListener('dragend', (event) => {
+      event.target.closest('[data-spectrum-category]')?.classList.remove('is-dragging');
+      refs.categoryFilters?.querySelectorAll('.is-drag-over').forEach((item) => item.classList.remove('is-drag-over'));
+      refs.categoryFilters?.classList.remove('is-reordering');
+      state.categoryOrder = getCurrentCategoryOrderFromDom();
+      saveFilterState();
+      window.setTimeout(() => {
+        categoryDragActive = false;
+      }, 0);
+    });
+
+    refs.categoryFilters?.addEventListener('dragover', (event) => {
+      const button = event.target.closest('[data-spectrum-category]');
+      if (!button) return;
+      event.preventDefault();
+      const dragging = refs.categoryFilters?.querySelector('.is-dragging');
+      if (dragging && dragging !== button) {
+        const rect = button.getBoundingClientRect();
+        const insertAfter = event.clientY > rect.top + rect.height / 2;
+        animateCategoryReorder(() => {
+          if (insertAfter) button.after(dragging);
+          else button.before(dragging);
+        });
+      }
+      refs.categoryFilters?.querySelectorAll('.is-drag-over').forEach((item) => {
+        if (item !== button) item.classList.remove('is-drag-over');
+      });
+      button.classList.add('is-drag-over');
+    });
+
+    refs.categoryFilters?.addEventListener('drop', (event) => {
+      const target = event.target.closest('[data-spectrum-category]');
+      if (!target) return;
+      event.preventDefault();
+      const sourceCategory = event.dataTransfer?.getData('application/x-spectrum-category')
+        || event.dataTransfer?.getData('text/plain')
+        || '';
+      const targetCategory = target.getAttribute('data-spectrum-category') || '';
+      refs.categoryFilters?.querySelectorAll('.is-drag-over').forEach((item) => item.classList.remove('is-drag-over'));
+      if (!sourceCategory || !targetCategory || sourceCategory === targetCategory) return;
+      state.categoryOrder = getCurrentCategoryOrderFromDom();
+      saveFilterState();
     });
 
     refs.tagFilters?.addEventListener('click', (event) => {

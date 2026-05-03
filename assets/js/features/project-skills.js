@@ -927,7 +927,7 @@
   };
 
   const bind = () => {
-    refs.projectSkillPanel?.addEventListener('click', (event) => {
+    refs.projectSkillPanel?.addEventListener('click', async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
 
@@ -939,6 +939,12 @@
       }
 
       if (target.closest('#projectSkillClearHistoryBtn')) {
+        const confirmed = await App.confirmDialog?.confirmDelete?.({
+          title: '清空调用记录',
+          message: '确认清空项目技能调用记录？',
+          confirmText: '确认清空',
+        });
+        if (!confirmed) return;
         writeHistory([]);
         render();
       }

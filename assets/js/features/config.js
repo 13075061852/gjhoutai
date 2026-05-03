@@ -1017,7 +1017,13 @@
     }
   };
 
-  const clearConfig = () => {
+  const clearConfig = async () => {
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '清空本地配置',
+      message: '确认清空本地配置并恢复默认值？',
+      confirmText: '确认清空',
+    });
+    if (!confirmed) return;
     localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
     setFormConfig(constants.DEFAULT_CONFIG);
     updateSavedState(false);

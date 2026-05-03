@@ -29,8 +29,8 @@
         <h2>${esc(title)}</h2>
         <span>业务数据</span>
       </div>
-      <div class="business-table-wrap">
-        <table class="business-table">
+      <div class="business-table-wrap ui-table-wrap">
+        <table class="business-table ui-table">
           <thead><tr>${columns.map((column) => `<th>${esc(column)}</th>`).join('')}</tr></thead>
           <tbody>${renderRows(rows)}</tbody>
         </table>
@@ -296,14 +296,19 @@
     return true;
   };
 
-  const deleteInventoryMaterial = (name) => {
+  const deleteInventoryMaterial = async (name) => {
     const index = getInventoryMaterialIndex(name);
     if (index < 0) return;
-    if (!window.confirm(`确认删除材料「${name}」？相关配方中的引用也会移除。`)) return;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除材料',
+      message: `确认删除材料「${name}」？相关配方中的引用也会移除。`,
+    });
+    if (!confirmed) return false;
     inventoryRows.splice(index, 1);
     if (inventoryEditingMaterialName === name) inventoryEditingMaterialName = '';
     removeFormulaMaterialName(name);
     persistInventory(`已删除材料 ${name} · ${getTimeCode()}`);
+    return true;
   };
 
   const saveInventoryCategory = () => {
@@ -334,13 +339,17 @@
     persistInventory(`已新增分类 ${nextCategory} · ${getTimeCode()}`);
   };
 
-  const deleteInventoryCategory = (category) => {
+  const deleteInventoryCategory = async (category) => {
     if (!category || category === '全部') return;
     const usedCount = inventoryRows.filter((row) => row[2] === category).length;
     const message = usedCount
       ? `确认删除分类「${category}」？${usedCount} 个材料会移动到「未分类」。`
       : `确认删除分类「${category}」？`;
-    if (!window.confirm(message)) return;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除分类',
+      message,
+    });
+    if (!confirmed) return false;
     inventoryRows.forEach((row) => {
       if (row[2] === category) row[2] = '未分类';
     });
@@ -349,6 +358,7 @@
     inventoryCategory = '全部';
     inventoryEditingCategory = '';
     persistInventory(`已删除分类 ${category} · ${getTimeCode()}`);
+    return true;
   };
 
   const renderInventory = () => {
@@ -398,8 +408,8 @@
               </button>
             </div>
           </div>
-          <div class="biz-formula-table-wrap biz-inventory-table-wrap">
-            <table class="biz-formula-table biz-inventory-table">
+          <div class="biz-formula-table-wrap biz-inventory-table-wrap ui-table-wrap">
+            <table class="biz-formula-table biz-inventory-table ui-table">
               <thead><tr>${['材料', '类型', '分类', '供应商', '库存', '状态', '操作'].map((column) => `<th>${esc(column)}</th>`).join('')}</tr></thead>
               <tbody>
                 ${pagedRows.map((row) => `
@@ -1033,19 +1043,26 @@
     persistFormulaRecipes('已新建配方');
   };
 
-  const deleteFormulaRecipe = (recipeId) => {
+  const deleteFormulaRecipe = async (recipeId) => {
     if (formulaRecipes.length <= 1) {
       formulaDraftNote = '至少保留 1 个配方';
       return;
     }
     const index = formulaRecipes.findIndex((recipe) => recipe.id === recipeId);
     if (index < 0) return;
+    const recipe = formulaRecipes[index];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除配方',
+      message: `确认删除配方「${recipe.name || recipe.code || recipeId}」？删除后无法恢复。`,
+    });
+    if (!confirmed) return false;
     formulaRecipes.splice(index, 1);
     if (activeFormulaId === recipeId) {
       activeFormulaId = formulaRecipes[Math.min(index, formulaRecipes.length - 1)]?.id || formulaRecipes[0]?.id;
       activeFormulaMaterialIndex = null;
     }
     persistFormulaRecipes('已删除配方');
+    return true;
   };
 
   const renderOptions = (options, value) => options.map((option) => `
@@ -1228,8 +1245,8 @@
             </button>
           </div>
         </div>
-        <div class="biz-formula-table-wrap">
-          <table class="biz-formula-table">
+        <div class="biz-formula-table-wrap ui-table-wrap">
+          <table class="biz-formula-table ui-table">
             <thead>
               <tr>
                 <th>配方编号</th>
@@ -1390,8 +1407,8 @@
                     <strong>${esc(currentLine)} 线下料口</strong>
                     <span>5 个下料口 / 按 ${formulaReferenceKg}kg 参考，计划 ${formatKgValue(lineTotal)} kg</span>
                   </div>
-                  <div class="biz-line-table-wrap">
-                    <table class="biz-line-table">
+                  <div class="biz-line-table-wrap ui-table-wrap">
+                    <table class="biz-line-table ui-table">
                       <colgroup>
                         <col class="col-port">
                         <col class="col-material">
@@ -1537,7 +1554,10 @@
 
   const refreshFormulaBuilderPanel = () => {
     const builder = refs.businessPageContent?.querySelector('.biz-formula-builder');
-    if (builder) builder.outerHTML = renderFormulaBuilderPanel();
+    if (!builder) return;
+    builder.outerHTML = renderFormulaBuilderPanel();
+    const nextBuilder = refs.businessPageContent?.querySelector('.biz-formula-builder');
+    App.customSelects?.enhanceAll?.(nextBuilder);
   };
 
   const syncFormulaMaterialLibraryState = () => {
@@ -1702,6 +1722,7 @@
     refs.businessPageContent.innerHTML = `
       ${renderBody(pageId)}
     `;
+    App.customSelects?.enhanceAll?.(refs.businessPageContent);
   };
 
   const focusFormulaSearch = (selectionStart = formulaSearchQuery.length, selectionEnd = selectionStart) => {
@@ -1824,7 +1845,7 @@
     render('formula-management');
   });
 
-  refs.businessPageContent?.addEventListener('click', (event) => {
+  refs.businessPageContent?.addEventListener('click', async (event) => {
     if (!(event.target instanceof Element)) return;
 
     const formulaStatCard = event.target.closest('[data-formula-stat-page]');
@@ -1888,7 +1909,7 @@
 
     const formulaDeleteButton = event.target.closest('[data-formula-delete]');
     if (formulaDeleteButton && refs.businessPageContent.contains(formulaDeleteButton)) {
-      deleteFormulaRecipe(formulaDeleteButton.getAttribute('data-formula-delete'));
+      await deleteFormulaRecipe(formulaDeleteButton.getAttribute('data-formula-delete'));
       render('formula-management');
       return;
     }
@@ -1902,7 +1923,16 @@
 
     const formulaRemoveButton = event.target.closest('[data-formula-remove-index]');
     if (formulaRemoveButton && refs.businessPageContent.contains(formulaRemoveButton)) {
-      removeActiveFormulaMaterial(Number(formulaRemoveButton.getAttribute('data-formula-remove-index')));
+      const materialIndex = Number(formulaRemoveButton.getAttribute('data-formula-remove-index'));
+      const recipe = getActiveFormula();
+      const material = recipe?.materials?.[materialIndex];
+      const confirmed = await App.confirmDialog?.confirmDelete?.({
+        title: '移除配方材料',
+        message: `确认从当前配方中移除「${material?.name || '该材料行'}」？`,
+        confirmText: '确认移除',
+      });
+      if (!confirmed) return;
+      removeActiveFormulaMaterial(materialIndex);
       render('formula-management');
       return;
     }
@@ -1948,6 +1978,12 @@
       const recipe = getActiveFormula();
       const isUsed = recipe?.materials?.some((item) => item.name === materialName);
       if (isUsed) {
+        const confirmed = await App.confirmDialog?.confirmDelete?.({
+          title: '移除配方材料',
+          message: `确认从当前配方中移除「${materialName}」？`,
+          confirmText: '确认移除',
+        });
+        if (!confirmed) return;
         removeActiveFormulaMaterialByName(materialName);
       } else if (Number.isInteger(activeFormulaMaterialIndex) && recipe?.materials?.[activeFormulaMaterialIndex]) {
         assignActiveFormulaMaterial(activeFormulaMaterialIndex, materialName);
@@ -2064,7 +2100,7 @@
 
     const inventoryDeleteMaterialButton = event.target.closest('[data-inventory-delete-material]');
     if (inventoryDeleteMaterialButton && refs.businessPageContent.contains(inventoryDeleteMaterialButton)) {
-      deleteInventoryMaterial(inventoryDeleteMaterialButton.getAttribute('data-inventory-delete-material') || '');
+      await deleteInventoryMaterial(inventoryDeleteMaterialButton.getAttribute('data-inventory-delete-material') || '');
       render('inventory-management');
       return;
     }
@@ -2088,7 +2124,7 @@
 
     const inventoryDeleteCategoryButton = event.target.closest('[data-inventory-delete-category]');
     if (inventoryDeleteCategoryButton && refs.businessPageContent.contains(inventoryDeleteCategoryButton)) {
-      deleteInventoryCategory(inventoryDeleteCategoryButton.getAttribute('data-inventory-delete-category') || '');
+      await deleteInventoryCategory(inventoryDeleteCategoryButton.getAttribute('data-inventory-delete-category') || '');
       inventoryCategoryModalOpen = true;
       render('inventory-management');
     }

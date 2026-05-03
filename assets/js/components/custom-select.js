@@ -1,4 +1,6 @@
 (function () {
+  const App = window.GJHApp || (window.GJHApp = {});
+  const PublicApp = window.App = window.App || {};
   const enhancedSelects = new WeakMap();
   let openInstance = null;
 
@@ -146,8 +148,8 @@
     select.addEventListener('change', () => syncSelect(instance));
   };
 
-  const enhanceAll = () => {
-    document.querySelectorAll('select').forEach(enhanceSelect);
+  const enhanceAll = (root = document) => {
+    root.querySelectorAll?.('select').forEach(enhanceSelect);
   };
 
   document.addEventListener('click', (event) => {
@@ -160,6 +162,6 @@
   });
 
   document.addEventListener('DOMContentLoaded', enhanceAll);
-  window.App = window.App || {};
-  window.App.customSelects = { enhanceAll };
+  PublicApp.customSelects = { enhanceAll };
+  App.customSelects = PublicApp.customSelects;
 }());

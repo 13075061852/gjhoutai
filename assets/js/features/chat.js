@@ -570,11 +570,14 @@
     unmountConversationMenu();
   };
 
-  const deleteConversation = (sessionId) => {
+  const deleteConversation = async (sessionId) => {
     const session = state.chatSessions.find((item) => item.id === sessionId);
     if (!session) return;
 
-    const confirmed = window.confirm(`确定删除「${session.title || NEW_CONVERSATION_TITLE}」吗？此操作不可恢复。`);
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除对话',
+      message: `确定删除「${session.title || NEW_CONVERSATION_TITLE}」吗？此操作不可恢复。`,
+    });
     if (!confirmed) return;
 
     const remaining = state.chatSessions.filter((item) => item.id !== sessionId);
@@ -2202,9 +2205,15 @@
       renderDataAttachmentState();
     });
 
-    refs.clearChatBtn?.addEventListener('click', () => {
+    refs.clearChatBtn?.addEventListener('click', async () => {
       const session = getActiveSession();
       if (!session) return;
+      const confirmed = await App.confirmDialog?.confirmDelete?.({
+        title: '清空聊天',
+        message: `确认清空「${session.title || NEW_CONVERSATION_TITLE}」中的全部消息吗？`,
+        confirmText: '确认清空',
+      });
+      if (!confirmed) return;
       session.messages = [];
       session.title = NEW_CONVERSATION_TITLE;
       session.updatedAt = nowIso();

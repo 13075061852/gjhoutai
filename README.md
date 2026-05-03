@@ -30,11 +30,16 @@
 └─ assets
    ├─ css
    │  ├─ styles.css
-   │  ├─ base.css
-   │  ├─ sidebar.css
-   │  ├─ layout.css
-   │  ├─ responsive.css
    │  ├─ pages.css
+   │  ├─ foundation/
+   │  │  ├─ base.css
+   │  │  └─ iconpark-bridge.css
+   │  ├─ components/
+   │  │  └─ components.css
+   │  ├─ layout/
+   │  │  ├─ sidebar.css
+   │  │  ├─ layout.css
+   │  │  └─ responsive.css
    │  └─ pages/
    │     ├─ dashboard-chat.css
    │     ├─ business-pages.css
@@ -47,18 +52,31 @@
    │     ├─ ai-call-analysis.css
    │     └─ theme-overrides.css
    └─ js
+      ├─ bootstrap/
+      │  ├─ app-state.js
+      │  └─ app.js
       ├─ core/
       │  ├─ app-namespace.js
       │  ├─ dom-refs.js
       │  ├─ app-constants.js
       │  ├─ runtime-state.js
-      │  └─ utils.js
-      ├─ app-state.js
-      ├─ app.js
-      ├─ navigation.js
-      ├─ config.js
-      ├─ chat.js
-      └─ 功能模块脚本
+      │  ├─ utils.js
+      │  └─ animation-manager.js
+      ├─ components/
+      │  └─ custom-select.js
+      ├─ shell/
+      │  └─ navigation.js
+      └─ features/
+         ├─ business-pages.js
+         ├─ property-analysis.js
+         ├─ spectrum-analysis.js
+         ├─ image-cutout.js
+         ├─ theme-settings.js
+         ├─ config.js
+         ├─ ai-call-analysis.js
+         ├─ project-skills.js
+         ├─ agent-butler.js
+         └─ chat.js
 ```
 
 ## 文件职责
@@ -67,8 +85,8 @@
 - `assets/css/styles.css`：全局样式入口。
 - `assets/css/pages.css`：页面样式聚合入口，只负责 `@import` 页面级 CSS。
 - `assets/js/core/`：应用命名空间、DOM 引用、常量、运行态状态和通用工具。
-- `assets/js/app-state.js`：核心加载完整性检查，保留旧入口语义。
-- `assets/js/app.js`：启动入口，按顺序初始化功能模块。
+- `assets/js/bootstrap/app-state.js`：核心加载完整性检查，保留旧入口语义。
+- `assets/js/bootstrap/app.js`：启动入口，按顺序初始化功能模块。
 - `docs/architecture.md`：结构和模块边界说明。
 - `docs/extension-guide.md`：新增页面、模块、样式和安全约定。
 - `docs/security-audit.md`：安全检查结果和后续加固清单。
@@ -90,6 +108,6 @@
 
 - 新页面先补 `index.html` 页面结构和 `data-page` / `data-page-section` 映射。
 - 页面样式放到 `assets/css/pages/<feature>.css`，再由 `pages.css` 引入。
-- 业务逻辑优先新增独立 JS 文件，再由 `app.js` 统一初始化。
+- 业务逻辑优先新增到 `assets/js/features/<feature>.js`，再由 `bootstrap/app.js` 统一初始化。
 - 共享 DOM、常量、状态和工具优先放入 `assets/js/core/`。
 - 涉及密钥、OSS、模型调用和文件导入的功能，先阅读 `docs/security-audit.md`。

@@ -100,15 +100,23 @@
       overflow:hidden;
     }
     .nav-icon{
-      width:18px;height:18px;
+      width:20px;
+      height:20px;
       display:grid;place-items:center;
       flex:0 0 auto;
       color:var(--muted);
       justify-self:center;
+      overflow:visible;
     }
     .nav-icon .ti{
+      width:20px;
+      height:20px;
+      display:grid;
+      place-items:center;
       font-size:18px;
       line-height:1;
+      vertical-align:0;
+      overflow:visible;
     }
     .nav-item.active .nav-icon{color:var(--accent)}
     .nav-text{

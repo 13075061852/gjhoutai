@@ -313,17 +313,13 @@
     }
     .spectrum-sort-field .custom-select{
       width:max-content;
-      font-size:12px;
-      font-weight:700;
     }
     .spectrum-sort-field .custom-select-trigger{
       width:max-content;
       min-width:108px;
-      height:34px;
-      padding:0 8px 0 10px;
+      height:36px;
+      padding:0 12px;
       border-radius:8px;
-      font-size:12px;
-      font-weight:700;
     }
     .spectrum-sort-field .custom-select-menu{
       width:max-content;
@@ -333,10 +329,8 @@
       border-radius:10px;
     }
     .spectrum-sort-field .custom-select-option{
-      min-height:28px;
-      padding:0 8px;
-      font-size:12px;
-      font-weight:700;
+      min-height:36px;
+      padding:0 12px;
       white-space:nowrap;
     }
     .spectrum-detail-toggle{

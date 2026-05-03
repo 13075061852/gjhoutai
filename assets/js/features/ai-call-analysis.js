@@ -816,8 +816,13 @@
     URL.revokeObjectURL(url);
   };
 
-  const clearLogs = () => {
-    if (!window.confirm('确认清空所有 AI 调用分析记录？此操作只清空本地统计日志，不会删除聊天记录。')) return;
+  const clearLogs = async () => {
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '清空 AI 调用记录',
+      message: '确认清空所有 AI 调用分析记录？此操作只清空本地统计日志，不会删除聊天记录。',
+      confirmText: '确认清空',
+    });
+    if (!confirmed) return;
     writeLogs([]);
     render();
   };
@@ -876,8 +881,8 @@
               </button>
             </div>
           </div>
-          <div class="ai-call-analysis-table-wrap${logs.length ? '' : ' is-empty'}">
-            <table class="ai-call-analysis-table">
+          <div class="ai-call-analysis-table-wrap ui-table-wrap${logs.length ? '' : ' is-empty'}">
+            <table class="ai-call-analysis-table ui-table ui-table--comfortable ui-table--fixed ui-table--sticky-header">
               <thead>
                 <tr>
                   <th>时间/来源</th>

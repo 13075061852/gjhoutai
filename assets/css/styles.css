@@ -1,6 +1,7 @@
-@import url("./iconpark-bridge.css");
-@import url("./base.css");
-@import url("./sidebar.css");
-@import url("./layout.css");
+@import url("./foundation/iconpark-bridge.css");
+@import url("./foundation/base.css");
+@import url("./components/components.css");
+@import url("./layout/sidebar.css");
+@import url("./layout/layout.css");
 @import url("./pages.css");
-@import url("./responsive.css");
+@import url("./layout/responsive.css");

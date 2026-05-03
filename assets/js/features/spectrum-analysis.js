@@ -600,45 +600,20 @@
     animateDeleteItems(ids, () => commitDeleteItems(ids));
   };
 
-  const closeDeleteDialog = () => {
-    refs.deleteDialog?.remove();
-    refs.deleteDialog = null;
-    refs.deleteTargetId = '';
-    refs.deleteMode = '';
-  };
-
-  const openDeleteDialog = (id, mode = 'single') => {
+  const openDeleteDialog = async (id, mode = 'single') => {
     const item = state.items.find((entry) => entry.id === id);
     const selectedCount = state.selectedIds.size;
     if (mode === 'single' && !item) return;
     if (mode === 'selected' && !selectedCount) return;
 
     const title = mode === 'selected' ? '删除已选图片' : '删除图片';
-    const text = mode === 'selected'
+    const message = mode === 'selected'
       ? `确定删除已选列表中的 ${selectedCount} 张图片吗？删除后无法在图谱库中恢复。`
-      : `确定删除“${utils.escapeHtml(item.title)}”吗？删除后无法在图谱库中恢复。`;
-    const confirmText = '确认删除';
-
-    closeDeleteDialog();
-    const dialog = document.createElement('div');
-    dialog.className = 'spectrum-delete-dialog';
-    dialog.innerHTML = `
-      <div class="spectrum-delete-card" role="dialog" aria-modal="true" aria-labelledby="spectrumDeleteTitle">
-        <div class="spectrum-delete-icon"><i class="ti ti-trash" aria-hidden="true"></i></div>
-        <div class="spectrum-delete-main">
-          <div class="spectrum-delete-title" id="spectrumDeleteTitle">${title}</div>
-          <div class="spectrum-delete-text">${text}</div>
-        </div>
-        <div class="spectrum-delete-actions">
-          <button class="analysis-toolbar-btn" type="button" data-spectrum-delete-cancel>取消</button>
-          <button class="analysis-toolbar-btn spectrum-danger-btn" type="button" data-spectrum-delete-confirm>${confirmText}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(dialog);
-    refs.deleteDialog = dialog;
-    refs.deleteTargetId = id;
-    refs.deleteMode = mode;
+      : `确定删除「${item.title}」吗？删除后无法在图谱库中恢复。`;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({ title, message });
+    if (!confirmed) return;
+    if (mode === 'selected') deleteSelectedItems();
+    else deleteSpectrumItem(id);
   };
 
   const openUploadConflictDialog = (fileName) => new Promise((resolve) => {
@@ -1826,7 +1801,7 @@
     };
   };
 
-  const deleteByAgent = ({ target = '', mode = 'target', maxAffected = 12 } = {}) => {
+  const deleteByAgent = async ({ target = '', mode = 'target', maxAffected = 12 } = {}) => {
     const selected = getSelectedItems();
     const resolved = resolvePreciseSkillTargets({
       target,
@@ -1851,6 +1826,19 @@
     }
 
     const ids = [...new Set(targets.map((item) => item.id).filter(Boolean))];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: ids.length > 1 ? '删除图谱' : '删除图片',
+      message: ids.length > 1
+        ? `确认删除这 ${ids.length} 张图谱？删除后无法恢复。`
+        : `确认删除「${targets[0]?.title || targets[0]?.code || targets[0]?.id || '当前图谱'}」？删除后无法恢复。`,
+    });
+    if (!confirmed) {
+      return {
+        ok: false,
+        message: '已取消删除操作。',
+        data: { cancelled: true, items: targets.map(toSkillItem) },
+      };
+    }
     const deleted = targets.map(toSkillItem);
     commitDeleteItems(ids);
     App.projectSkills?.render?.();
@@ -2600,21 +2588,6 @@
     });
 
     document.addEventListener('click', (event) => {
-      if (refs.deleteDialog) {
-        if (event.target === refs.deleteDialog || event.target.closest('[data-spectrum-delete-cancel]')) {
-          closeDeleteDialog();
-          return;
-        }
-        if (event.target.closest('[data-spectrum-delete-confirm]')) {
-          const id = refs.deleteTargetId;
-          const mode = refs.deleteMode;
-          closeDeleteDialog();
-          if (mode === 'selected') deleteSelectedItems();
-          else deleteSpectrumItem(id);
-          return;
-        }
-      }
-
       if (!refs.previewDialog) return;
       if (event.target === refs.previewDialog || event.target.closest('[data-spectrum-preview-close]')) {
         closeImagePreview();
@@ -2638,11 +2611,6 @@
       if (refs.uploadIssueDialog && event.key === 'Escape') {
         refs.uploadIssueDialog.remove();
         refs.uploadIssueDialog = null;
-        return;
-      }
-
-      if (refs.deleteDialog && event.key === 'Escape') {
-        closeDeleteDialog();
         return;
       }
 

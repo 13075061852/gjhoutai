@@ -6,6 +6,24 @@
 
   const { refs, utils } = App;
   const esc = (value) => utils.escapeHtml(value);
+  let searchRenderTimer = null;
+
+  const renderSearchBox = (options) => App.searchBox?.render?.(options) || `
+    <label class="${esc(options.className || '')}">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input type="search" placeholder="${esc(options.placeholder || '搜索...')}" value="${esc(options.value || '')}" ${Object.entries(options.attributes || {}).map(([key, value]) => `${esc(key)}="${esc(value)}"`).join(' ')}>
+    </label>
+  `;
+
+  const scheduleSearchRender = (pageId, afterRender) => {
+    window.clearTimeout(searchRenderTimer);
+    searchRenderTimer = window.setTimeout(() => {
+      searchRenderTimer = null;
+      if (App.constants?.NAV_PAGE_KEY && localStorage.getItem(App.constants.NAV_PAGE_KEY) !== pageId) return;
+      render(pageId);
+      afterRender?.();
+    }, 160);
+  };
 
   const renderStatStrip = (items) => `
     <section class="biz-stat-strip">
@@ -222,6 +240,63 @@
   let formulaPageSize = 10;
   const formulaPageSizeOptions = [5, 10, 20, 50];
 
+  const SUPPLIER_STORAGE_KEY = 'gjh-suppliers-v1';
+  const supplierCategoryOptions = ['基础树脂', '改性添加剂', '销售成品', '增强填料', '稳定助剂', '色母助剂', '物流服务'];
+  const supplierStatusOptions = ['正常合作', '样品评估', '暂停合作'];
+  const defaultSupplierRows = [
+    { code: 'S001', name: '南通星辰合成材料', contact: '张经理', phone: '0513-88881234', email: 'zhang@ntxc.com', category: '基础树脂', status: '正常合作', address: '江苏省南通市经济技术开发区', note: '主供 ABS、PC 基础树脂，月度对账稳定。' },
+    { code: 'S002', name: '中石化仪征化纤', contact: '李工', phone: '0514-87654321', email: 'li@yizheng.com', category: '基础树脂', status: '正常合作', address: '江苏省扬州市仪征市胥浦工业区', note: 'PP、PET 原料长期供应，需提前锁定排产计划。' },
+    { code: 'S003', name: '巴斯夫中国', contact: '王经理', phone: '021-23456789', email: 'wang@basf.com', category: '基础树脂', status: '样品评估', address: '上海市浦东新区江心沙路 300 号', note: '高性能树脂与助剂样品跟进中。' },
+    { code: 'S004', name: '中石油独山子石化', contact: '赵工', phone: '0992-3888001', email: 'zhao@dsn.com', category: '基础树脂', status: '正常合作', address: '新疆克拉玛依市独山子区大庆东路', note: 'PP、PE 类原料，铁路到货周期需预留。' },
+    { code: 'S005', name: '巨石集团', contact: '陈经理', phone: '0573-88112233', email: 'chen@jushi.com', category: '改性添加剂', status: '正常合作', address: '浙江省嘉兴市桐乡经济开发区文华南路', note: '玻纤增强材料主供，关注批次含水率。' },
+    { code: 'S006', name: '以色列化工集团(ICL)', contact: 'David', phone: '+972-2-1234567', email: 'david@icl-group.com', category: '改性添加剂', status: '正常合作', address: 'Millennium Tower, Tel Aviv, Israel', note: '阻燃剂进口供应，年度资质文件待补齐。' },
+    { code: 'S007', name: '巴斯夫添加剂', contact: '孙经理', phone: '021-34567890', email: 'sun@basf-ada.com', category: '改性添加剂', status: '正常合作', address: '上海市浦东新区江心沙路 300 号', note: '抗氧剂、光稳定剂合作供应。' },
+    { code: 'S008', name: '陶氏化学', contact: '周经理', phone: '021-56789012', email: 'zhou@dow.com', category: '改性添加剂', status: '样品评估', address: '上海市浦东新区张江高科技园区', note: '相容剂、增韧剂样品测试中。' },
+    { code: 'S009', name: '科莱恩化工', contact: '吴经理', phone: '021-67890123', email: 'wu@clariant.com', category: '改性添加剂', status: '正常合作', address: '上海市闵行区申长路 988 号', note: '色母与功能助剂，交期需提前确认。' },
+    { code: 'S010', name: '南京曙光化工', contact: '钱工', phone: '025-84567890', email: 'qian@sgchem.com', category: '销售成品', status: '正常合作', address: '江苏省南京市六合区化工园区', note: '成品材料协同销售与区域渠道支持。' },
+  ];
+
+  const normalizeSupplier = (supplier = {}, index = 0) => {
+    const source = Array.isArray(supplier)
+      ? {
+        code: supplier[0],
+        name: supplier[1],
+        contact: supplier[2],
+        phone: supplier[3],
+        email: supplier[4],
+        category: supplier[5],
+        address: supplier[6],
+        status: supplier[7],
+        note: supplier[8],
+      }
+      : supplier;
+    return {
+      code: String(source.code || `S${String(index + 1).padStart(3, '0')}`).trim(),
+      name: String(source.name || '').trim(),
+      contact: String(source.contact || '').trim(),
+      phone: String(source.phone || '').trim(),
+      email: String(source.email || '').trim(),
+      category: String(source.category || '基础树脂').trim(),
+      status: supplierStatusOptions.includes(String(source.status || '').trim()) ? String(source.status || '').trim() : '正常合作',
+      address: String(source.address || '').trim(),
+      note: String(source.note || '').trim(),
+    };
+  };
+  const normalizeSuppliers = (value) => {
+    const rows = Array.isArray(value)
+      ? value.map(normalizeSupplier).filter((supplier) => supplier.code && supplier.name)
+      : [];
+    return rows.length ? rows : defaultSupplierRows.map(normalizeSupplier);
+  };
+  const supplierRows = normalizeSuppliers(utils.readJson(SUPPLIER_STORAGE_KEY, null));
+  let supplierCategoryFilter = '全部';
+  let supplierSearchQuery = '';
+  let supplierEditingCode = '';
+  let supplierModalOpen = false;
+  let supplierDraftNote = '供应商档案自动保存到本地';
+  let supplierListPage = 1;
+  let supplierPageSize = 10;
+
   const getInventoryCategories = () => [
     ...new Set([...inventoryCategories, ...inventoryRows.map((row) => row[2]).filter(Boolean)]),
   ];
@@ -393,10 +468,13 @@
               </div>
             </div>
             <div class="biz-formula-table-actions biz-inventory-table-actions">
-              <label class="biz-formula-search biz-formula-table-search biz-inventory-search">
-                <i class="ti ti-search" aria-hidden="true"></i>
-                <input type="search" placeholder="搜索材料、供应商、状态..." value="${esc(inventorySearchQuery)}" data-inventory-search>
-              </label>
+              ${renderSearchBox({
+                className: 'biz-formula-table-search biz-inventory-search',
+                value: inventorySearchQuery,
+                placeholder: '搜索材料、供应商、状态...',
+                label: '搜索库存材料',
+                attributes: { 'data-inventory-search': '' },
+              })}
               <select data-inventory-category-filter aria-label="库存分类筛选">
                 ${categoryTabs.map((category) => `
                   <option value="${esc(category)}" ${category === inventoryCategory ? 'selected' : ''}>${esc(category === '全部' ? '全部分类' : category)}</option>
@@ -1233,10 +1311,13 @@
             </div>
           </div>
           <div class="biz-formula-table-actions">
-            <label class="biz-formula-search biz-formula-table-search">
-              <i class="ti ti-search" aria-hidden="true"></i>
-              <input type="search" placeholder="搜索编号、名称、产品、基材..." value="${esc(formulaSearchQuery)}" data-formula-search>
-            </label>
+            ${renderSearchBox({
+              className: 'biz-formula-table-search',
+              value: formulaSearchQuery,
+              placeholder: '搜索编号、名称、产品、基材...',
+              label: '搜索配方',
+              attributes: { 'data-formula-search': '' },
+            })}
             <select data-formula-list-category aria-label="配方分类筛选">${renderFormulaFilterOptions(categories, formulaListCategory, '全部分类')}</select>
             <select data-formula-list-status aria-label="配方状态筛选">${renderFormulaFilterOptions(statuses, formulaListStatus, '全部状态')}</select>
             <button class="biz-formula-new-btn" type="button" data-formula-new>
@@ -1622,13 +1703,6 @@
   `;
 
   const archiveData = {
-    'supplier-archive': {
-      title: '供应商目录',
-      side: ['上海恒裕化工', '宁波华纤材料', '常州新禾助剂', '广州瑞丰树脂', '苏州蓝石物流'],
-      tags: ['基础树脂', '玻纤', '阻燃助剂', '改性助剂', '色母助剂', 'A级', '资质临期'],
-      rows: [['上海恒裕化工', '基础树脂 / 阻燃 ABS', 'A', '价格本周波动'], ['宁波华纤材料', '玻纤 / 增强 PP', 'B+', '交期需提前 5 天'], ['常州新禾助剂', '阻燃剂', 'A-', '库存低于安全线'], ['广州瑞丰树脂', 'PC/ABS 合金', 'A', '新品试样中'], ['苏州蓝石物流', '色母助剂 / 物流', 'A-', '华南线路满载']],
-      columns: ['供应商', '品类', '评级', '关注点'],
-    },
     'customer-archive': {
       title: '客户服务视图',
       side: ['宁波辰光电器', '杭州启明科技', '苏州瑞嘉材料'],
@@ -1643,6 +1717,257 @@
       rows: [['王敏', '销售部', '销售主管', '在岗'], ['陈工', '实验室', '质检工程师', '在岗'], ['刘洋', '仓储部', '仓储管理员', '权限待确认']],
       columns: ['姓名', '部门', '角色', '状态'],
     },
+  };
+
+  const getSupplierCategories = () => [
+    ...new Set([...supplierCategoryOptions, ...supplierRows.map((supplier) => supplier.category).filter(Boolean)]),
+  ];
+
+  const getSupplierByCode = (code) => supplierRows.find((supplier) => supplier.code === code);
+
+  const getSupplierStatusClass = (status) => {
+    if (/暂停/.test(status)) return 'is-danger';
+    if (/评估/.test(status)) return 'is-warn';
+    return 'is-ok';
+  };
+
+  const persistSuppliers = (note = '供应商档案已保存') => {
+    supplierDraftNote = note;
+    utils.writeJson(SUPPLIER_STORAGE_KEY, supplierRows);
+  };
+
+  const getNextSupplierCode = () => {
+    const maxNumber = supplierRows.reduce((max, supplier) => {
+      const match = String(supplier.code || '').match(/^S(\d+)$/i);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `S${String(maxNumber + 1).padStart(3, '0')}`;
+  };
+
+  const getSupplierFormData = () => {
+    const root = refs.businessPageContent;
+    const read = (field) => String(root?.querySelector(`[data-supplier-field="${field}"]`)?.value || '').trim();
+    return normalizeSupplier({
+      code: read('code'),
+      name: read('name'),
+      contact: read('contact'),
+      phone: read('phone'),
+      email: read('email'),
+      category: read('category'),
+      status: read('status'),
+      address: read('address'),
+      note: read('note'),
+    });
+  };
+
+  const saveSupplier = () => {
+    const supplier = getSupplierFormData();
+    if (!supplier.code) {
+      supplierDraftNote = '请先填写供应商编号';
+      return false;
+    }
+    if (!supplier.name) {
+      supplierDraftNote = '请先填写供应商名称';
+      return false;
+    }
+    const currentIndex = supplierEditingCode ? supplierRows.findIndex((row) => row.code === supplierEditingCode) : -1;
+    const duplicatedCodeIndex = supplierRows.findIndex((row) => row.code === supplier.code);
+    if (duplicatedCodeIndex >= 0 && duplicatedCodeIndex !== currentIndex) {
+      supplierDraftNote = '供应商编号已存在，请换一个编号';
+      return false;
+    }
+    const duplicatedNameIndex = supplierRows.findIndex((row) => row.name === supplier.name);
+    if (duplicatedNameIndex >= 0 && duplicatedNameIndex !== currentIndex) {
+      supplierDraftNote = '供应商名称已存在，请换一个名称';
+      return false;
+    }
+    if (currentIndex >= 0) {
+      supplierRows[currentIndex] = supplier;
+      supplierEditingCode = supplier.code;
+      supplierCategoryFilter = supplier.category;
+      persistSuppliers(`已更新供应商 ${supplier.name} · ${getTimeCode()}`);
+      return true;
+    }
+    supplierRows.unshift(supplier);
+    supplierEditingCode = supplier.code;
+    supplierCategoryFilter = supplier.category;
+    persistSuppliers(`已新增供应商 ${supplier.name} · ${getTimeCode()}`);
+    return true;
+  };
+
+  const deleteSupplier = async (code) => {
+    const index = supplierRows.findIndex((supplier) => supplier.code === code);
+    if (index < 0) return false;
+    const supplier = supplierRows[index];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除供应商',
+      message: `确认删除供应商「${supplier.name}」？删除后无法恢复。`,
+    });
+    if (!confirmed) return false;
+    supplierRows.splice(index, 1);
+    if (supplierEditingCode === code) supplierEditingCode = '';
+    persistSuppliers(`已删除供应商 ${supplier.name} · ${getTimeCode()}`);
+    return true;
+  };
+
+  const renderSupplierArchive = () => {
+    const categories = getSupplierCategories();
+    const categoryTabs = ['全部', ...categories];
+    if (!categoryTabs.includes(supplierCategoryFilter)) supplierCategoryFilter = '全部';
+    const normalizedSearch = supplierSearchQuery.trim().toLowerCase();
+    const visibleSuppliers = supplierRows.filter((supplier) => {
+      const matchedCategory = supplierCategoryFilter === '全部' || supplier.category === supplierCategoryFilter;
+      const values = [supplier.code, supplier.name, supplier.contact, supplier.phone, supplier.email, supplier.category, supplier.address, supplier.status, supplier.note];
+      const matchedSearch = !normalizedSearch || values.some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      return matchedCategory && matchedSearch;
+    });
+    const filteredCount = visibleSuppliers.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / supplierPageSize));
+    supplierListPage = Math.min(Math.max(1, supplierListPage), totalPages);
+    const pageStart = (supplierListPage - 1) * supplierPageSize;
+    const pagedSuppliers = visibleSuppliers.slice(pageStart, pageStart + supplierPageSize);
+    const editingSupplier = supplierEditingCode ? getSupplierByCode(supplierEditingCode) : null;
+    const supplierForm = editingSupplier || normalizeSupplier({ code: getNextSupplierCode(), category: supplierCategoryFilter === '全部' ? categories[0] || '基础树脂' : supplierCategoryFilter, status: '正常合作' });
+
+    return `
+      <div class="biz-supplier-page">
+        <section class="business-panel biz-supplier-table-panel">
+          <div class="biz-formula-table-head biz-supplier-table-head">
+            <div class="biz-formula-table-title">
+              <i class="ti ti-building-factory-2" aria-hidden="true"></i>
+              <div>
+                <h2>供应商管理</h2>
+              </div>
+            </div>
+            <div class="biz-formula-table-actions biz-supplier-table-actions">
+              ${renderSearchBox({
+                className: 'biz-supplier-search',
+                value: supplierSearchQuery,
+                placeholder: '搜索供应商、联系人、地址...',
+                label: '搜索供应商档案',
+                attributes: { 'data-supplier-search': '' },
+              })}
+              <select data-supplier-category-filter aria-label="供应商类别筛选">
+                ${categoryTabs.map((category) => `
+                  <option value="${esc(category)}" ${category === supplierCategoryFilter ? 'selected' : ''}>${esc(category === '全部' ? '全部类别' : category)}</option>
+                `).join('')}
+              </select>
+              <button class="biz-formula-new-btn" type="button" data-supplier-new>
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>新增供应商</span>
+              </button>
+            </div>
+          </div>
+          <div class="ui-table-wrap biz-supplier-table-wrap">
+            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table">
+              <thead>
+                <tr>${['编号', '供应商名称', '联系人', '电话', '邮箱', '供应类别', '状态', '操作'].map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${pagedSuppliers.map((supplier) => `
+                  <tr>
+                    <td>${esc(supplier.code)}</td>
+                    <td class="biz-supplier-name-cell">${esc(supplier.name)}</td>
+                    <td>${esc(supplier.contact || '--')}</td>
+                    <td>${esc(supplier.phone || '--')}</td>
+                    <td>${esc(supplier.email || '--')}</td>
+                    <td><span class="biz-formula-chip">${esc(supplier.category || '未分类')}</span></td>
+                    <td><span class="biz-formula-status ${getSupplierStatusClass(supplier.status)}">${esc(supplier.status)}</span></td>
+                    <td>
+                      <div class="biz-supplier-row-actions">
+                        <button type="button" title="编辑供应商" aria-label="编辑 ${esc(supplier.name)}" data-supplier-edit="${esc(supplier.code)}">
+                          <i class="ti ti-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button class="is-danger" type="button" title="删除供应商" aria-label="删除 ${esc(supplier.name)}" data-supplier-delete="${esc(supplier.code)}">
+                          <i class="ti ti-trash" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('') || '<tr><td colspan="8"><div class="biz-formula-empty">暂无匹配供应商</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="biz-formula-pagination biz-supplier-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-supplier-page-size aria-label="供应商每页条数">${formulaPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === supplierPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-supplier-page-prev ${supplierListPage <= 1 ? 'disabled' : ''} aria-label="供应商上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${supplierListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-supplier-page-next ${supplierListPage >= totalPages ? 'disabled' : ''} aria-label="供应商下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${supplierModalOpen ? `
+          <div class="biz-inventory-material-modal biz-supplier-modal" data-supplier-modal>
+            <div class="biz-inventory-material-dialog biz-supplier-dialog" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="supplierModalTitle">${supplierEditingCode ? '编辑供应商' : '新增供应商'}</h2>
+                  <span>${esc(supplierDraftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭供应商编辑" data-supplier-close>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-supplier-editor">
+                <label class="is-code">
+                  <span>供应商编号 *</span>
+                  <input type="text" value="${esc(supplierForm.code)}" placeholder="例如：S001" data-supplier-field="code">
+                </label>
+                <label class="is-name">
+                  <span>供应商名称 *</span>
+                  <input type="text" value="${esc(supplierForm.name)}" placeholder="供应商名称" data-supplier-field="name">
+                </label>
+                <label>
+                  <span>联系人</span>
+                  <input type="text" value="${esc(supplierForm.contact)}" placeholder="联系人" data-supplier-field="contact">
+                </label>
+                <label>
+                  <span>电话</span>
+                  <input type="text" value="${esc(supplierForm.phone)}" placeholder="联系电话" data-supplier-field="phone">
+                </label>
+                <label>
+                  <span>邮箱</span>
+                  <input type="email" value="${esc(supplierForm.email)}" placeholder="邮箱地址" data-supplier-field="email">
+                </label>
+                <label>
+                  <span>供应类别</span>
+                  <select data-supplier-field="category">${renderOptions(categories, supplierForm.category)}</select>
+                </label>
+                <label>
+                  <span>合作状态</span>
+                  <select data-supplier-field="status">${renderOptions(supplierStatusOptions, supplierForm.status)}</select>
+                </label>
+                <label class="is-address">
+                  <span>地址</span>
+                  <textarea placeholder="供应商地址" data-supplier-field="address">${esc(supplierForm.address)}</textarea>
+                </label>
+                <label class="is-note">
+                  <span>备注</span>
+                  <textarea placeholder="资质、供货范围、交期等档案备注" data-supplier-field="note">${esc(supplierForm.note)}</textarea>
+                </label>
+                <div class="biz-inventory-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-supplier-cancel>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-supplier-save>保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
   };
 
   const renderArchive = (pageId) => {
@@ -1706,7 +2031,7 @@
       'formula-management': renderFormula,
       'production-plan': renderProduction,
       'inventory-management': renderInventory,
-      'supplier-archive': () => renderArchive('supplier-archive'),
+      'supplier-archive': renderSupplierArchive,
       'customer-archive': () => renderArchive('customer-archive'),
       'personnel-archive': () => renderArchive('personnel-archive'),
       'permission-management': renderPermission,
@@ -1717,8 +2042,9 @@
 
   const render = (pageId, def = {}) => {
     if (!refs.businessPageContent) return;
-    refs.businessPageContent.classList.toggle('biz-inventory-shell', pageId === 'inventory-management');
-    refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', pageId === 'inventory-management');
+    const usesFullHeightTable = pageId === 'inventory-management' || pageId === 'supplier-archive';
+    refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
+    refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.innerHTML = `
       ${renderBody(pageId)}
     `;
@@ -1728,6 +2054,15 @@
   const focusFormulaSearch = (selectionStart = formulaSearchQuery.length, selectionEnd = selectionStart) => {
     requestAnimationFrame(() => {
       const searchInput = refs.businessPageContent?.querySelector('[data-formula-search]');
+      if (!(searchInput instanceof HTMLInputElement)) return;
+      searchInput.focus();
+      searchInput.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+
+  const restoreSearchInputState = (selector, value, selectionStart = value.length, selectionEnd = selectionStart) => {
+    requestAnimationFrame(() => {
+      const searchInput = refs.businessPageContent?.querySelector(selector);
       if (!(searchInput instanceof HTMLInputElement)) return;
       searchInput.focus();
       searchInput.setSelectionRange(selectionStart, selectionEnd);
@@ -1797,11 +2132,58 @@
     if (event.target.hasAttribute('data-inventory-search')) {
       inventorySearchQuery = event.target.value;
       inventoryListPage = 1;
-      render('inventory-management');
-      refs.businessPageContent?.querySelector('[data-inventory-search]')?.focus();
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? inventorySearchQuery.length) : inventorySearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        'inventory-management',
+        () => restoreSearchInputState('[data-inventory-search]', inventorySearchQuery, selectionStart, selectionEnd),
+      );
+      return;
+    }
+    if (event.target.hasAttribute('data-supplier-search')) {
+      supplierSearchQuery = event.target.value;
+      supplierListPage = 1;
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? supplierSearchQuery.length) : supplierSearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        'supplier-archive',
+        () => restoreSearchInputState('[data-supplier-search]', supplierSearchQuery, selectionStart, selectionEnd),
+      );
       return;
     }
     if (handleFormulaEdit(event.target) && event.target.hasAttribute('data-formula-search')) {
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? formulaSearchQuery.length) : formulaSearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender('formula-management', () => focusFormulaSearch(selectionStart, selectionEnd));
+    }
+  });
+
+  refs.businessPageContent?.addEventListener('compositionend', (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    if (event.target.hasAttribute('data-inventory-search')) {
+      inventorySearchQuery = event.target.value;
+      inventoryListPage = 1;
+      const selectionStart = event.target.selectionStart ?? inventorySearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('inventory-management');
+      restoreSearchInputState('[data-inventory-search]', inventorySearchQuery, selectionStart, selectionEnd);
+      return;
+    }
+    if (event.target.hasAttribute('data-supplier-search')) {
+      supplierSearchQuery = event.target.value;
+      supplierListPage = 1;
+      const selectionStart = event.target.selectionStart ?? supplierSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('supplier-archive');
+      restoreSearchInputState('[data-supplier-search]', supplierSearchQuery, selectionStart, selectionEnd);
+      return;
+    }
+    if (event.target.hasAttribute('data-formula-search')) {
+      formulaSearchQuery = event.target.value;
+      formulaListPage = 1;
       const selectionStart = event.target.selectionStart ?? formulaSearchQuery.length;
       const selectionEnd = event.target.selectionEnd ?? selectionStart;
       render('formula-management');
@@ -1826,6 +2208,18 @@
       inventoryPageSize = Number(event.target.value) || 10;
       inventoryListPage = 1;
       render('inventory-management');
+      return;
+    }
+    if (event.target.hasAttribute('data-supplier-category-filter')) {
+      supplierCategoryFilter = event.target.value || '全部';
+      supplierListPage = 1;
+      render('supplier-archive');
+      return;
+    }
+    if (event.target.hasAttribute('data-supplier-page-size')) {
+      supplierPageSize = Number(event.target.value) || 10;
+      supplierListPage = 1;
+      render('supplier-archive');
       return;
     }
     if (!handleFormulaEdit(event.target)) return;
@@ -1866,6 +2260,20 @@
     if (inventoryPageNext && refs.businessPageContent.contains(inventoryPageNext) && !inventoryPageNext.disabled) {
       inventoryListPage += 1;
       render('inventory-management');
+      return;
+    }
+
+    const supplierPagePrev = event.target.closest('[data-supplier-page-prev]');
+    if (supplierPagePrev && refs.businessPageContent.contains(supplierPagePrev) && !supplierPagePrev.disabled) {
+      supplierListPage -= 1;
+      render('supplier-archive');
+      return;
+    }
+
+    const supplierPageNext = event.target.closest('[data-supplier-page-next]');
+    if (supplierPageNext && refs.businessPageContent.contains(supplierPageNext) && !supplierPageNext.disabled) {
+      supplierListPage += 1;
+      render('supplier-archive');
       return;
     }
 
@@ -2105,6 +2513,59 @@
       return;
     }
 
+    const supplierNewButton = event.target.closest('[data-supplier-new]');
+    if (supplierNewButton && refs.businessPageContent.contains(supplierNewButton)) {
+      supplierEditingCode = '';
+      supplierDraftNote = '正在新增供应商';
+      supplierModalOpen = true;
+      render('supplier-archive');
+      refs.businessPageContent?.querySelector('[data-supplier-field="name"]')?.focus();
+      return;
+    }
+
+    const supplierEditButton = event.target.closest('[data-supplier-edit]');
+    if (supplierEditButton && refs.businessPageContent.contains(supplierEditButton)) {
+      supplierEditingCode = supplierEditButton.getAttribute('data-supplier-edit') || '';
+      supplierDraftNote = `正在编辑供应商 ${getSupplierByCode(supplierEditingCode)?.name || supplierEditingCode}`;
+      supplierModalOpen = true;
+      render('supplier-archive');
+      refs.businessPageContent?.querySelector('[data-supplier-field="name"]')?.focus();
+      return;
+    }
+
+    const supplierDeleteButton = event.target.closest('[data-supplier-delete]');
+    if (supplierDeleteButton && refs.businessPageContent.contains(supplierDeleteButton)) {
+      await deleteSupplier(supplierDeleteButton.getAttribute('data-supplier-delete') || '');
+      render('supplier-archive');
+      return;
+    }
+
+    const supplierSaveButton = event.target.closest('[data-supplier-save]');
+    if (supplierSaveButton && refs.businessPageContent.contains(supplierSaveButton)) {
+      const saved = saveSupplier();
+      supplierModalOpen = !saved;
+      render('supplier-archive');
+      if (!saved) refs.businessPageContent?.querySelector('[data-supplier-field="name"]')?.focus();
+      return;
+    }
+
+    const supplierCloseButton = event.target.closest('[data-supplier-close], [data-supplier-cancel]');
+    if (supplierCloseButton && refs.businessPageContent.contains(supplierCloseButton)) {
+      supplierEditingCode = '';
+      supplierModalOpen = false;
+      supplierDraftNote = '已取消供应商编辑';
+      render('supplier-archive');
+      return;
+    }
+
+    const supplierModal = event.target.closest('[data-supplier-modal]');
+    if (supplierModal && event.target === supplierModal) {
+      supplierEditingCode = '';
+      supplierModalOpen = false;
+      render('supplier-archive');
+      return;
+    }
+
     const inventorySaveCategoryButton = event.target.closest('[data-inventory-save-category]');
     if (inventorySaveCategoryButton && refs.businessPageContent.contains(inventorySaveCategoryButton)) {
       saveInventoryCategory();
@@ -2142,6 +2603,12 @@
       inventoryCategoryModalOpen = false;
       inventoryEditingCategory = '';
       render('inventory-management');
+      return;
+    }
+    if (event.key === 'Escape' && supplierModalOpen) {
+      supplierEditingCode = '';
+      supplierModalOpen = false;
+      render('supplier-archive');
       return;
     }
     const formulaStatCard = event.target.closest('[data-formula-stat-page]');

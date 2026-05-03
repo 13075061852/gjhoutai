@@ -16,6 +16,15 @@
     }[char]));
   };
 
+  const normalizeDeleteMessage = (message) => {
+    const text = String(message ?? '').trim();
+    if (!text) return '删除后无法恢复，请确认是否继续。';
+    if (text.includes('\n')) return text;
+    const match = text.match(/^(.+?[？?])\s*(.+)$/);
+    if (!match) return text;
+    return `${match[1]}\n${match[2]}`;
+  };
+
   const closeActive = (value = false) => {
     if (!activeDialog) return;
     const { overlay, cleanup, resolve } = activeDialog;
@@ -75,7 +84,7 @@
 
   const confirmDelete = (options = {}) => open({
     title: options.title || '确认删除',
-    message: options.message || '删除后无法恢复，请确认是否继续。',
+    message: normalizeDeleteMessage(options.message || '删除后无法恢复，请确认是否继续。'),
     confirmText: options.confirmText || '确认删除',
     cancelText: options.cancelText || '取消',
     variant: 'danger',

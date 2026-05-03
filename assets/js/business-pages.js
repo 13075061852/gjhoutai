@@ -1334,7 +1334,6 @@
           <div class="biz-issue-head">
             <div>
               <strong>宁波广俊塑料科技有限公司</strong>
-              <span class="biz-formula-save-note">${esc(formulaDraftNote)}</span>
             </div>
             <div class="biz-formula-actions">
               <button type="button" data-formula-back-list>返回列表</button>
@@ -1501,16 +1500,12 @@
     return `
       <aside class="business-panel biz-formula-library">
         <div class="business-panel-head biz-formula-library-head">
-          <div>
-            <h2>库存材料库</h2>
-            <span>${hasActiveMaterialRow ? '选择材料替换当前下料行' : '点击材料加入配方'}</span>
+          <h2>库存材料库</h2>
+          <div class="biz-formula-library-filter">
+            <select data-formula-material-category-select>
+              ${renderFormulaFilterOptions(materialCategories, formulaMaterialCategory, '全部分类')}
+            </select>
           </div>
-          <strong>${visibleMaterials.length} 项</strong>
-        </div>
-        <div class="biz-formula-material-tabs">
-          ${materialCategories.map((category) => `
-            <button class="${category === formulaMaterialCategory ? 'is-active' : ''}" type="button" data-formula-material-category="${esc(category)}">${esc(category)}</button>
-          `).join('')}
         </div>
         <div class="biz-formula-material-list">
           ${visibleMaterials.map(([name, type, category, supplier, quantity, state]) => {
@@ -1801,6 +1796,11 @@
       render('inventory-management');
       return;
     }
+    if (event.target.hasAttribute('data-formula-material-category-select')) {
+      formulaMaterialCategory = event.target.value || '全部';
+      render('formula-management');
+      return;
+    }
     if (event.target.hasAttribute('data-inventory-page-size')) {
       inventoryPageSize = Number(event.target.value) || 10;
       inventoryListPage = 1;
@@ -1963,13 +1963,6 @@
     if (formulaButton && refs.businessPageContent.contains(formulaButton)) {
       activeFormulaId = formulaButton.getAttribute('data-formula-id') || activeFormulaId;
       activeFormulaMaterialIndex = null;
-      render('formula-management');
-      return;
-    }
-
-    const formulaMaterialButton = event.target.closest('[data-formula-material-category]');
-    if (formulaMaterialButton && refs.businessPageContent.contains(formulaMaterialButton)) {
-      formulaMaterialCategory = formulaMaterialButton.getAttribute('data-formula-material-category') || '全部';
       render('formula-management');
       return;
     }

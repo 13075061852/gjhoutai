@@ -621,6 +621,8 @@
     body[data-theme="dark"] .biz-formula-list button,
     body[data-theme="dark"] .biz-formula-row-actions button,
     body[data-theme="dark"] .biz-formula-table-actions select,
+    body[data-theme="dark"] .biz-formula-page-size select,
+    body[data-theme="dark"] .biz-formula-page-btn,
     body[data-theme="dark"] .biz-permission-row span{
       background:var(--surface-2);
       border-color:var(--border);

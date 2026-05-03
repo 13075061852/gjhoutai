@@ -208,6 +208,8 @@
   let inventoryDraftNote = '库存数据自动保存到本地';
   let inventoryCategoryModalOpen = false;
   let inventoryMaterialModalOpen = false;
+  let inventoryListPage = 1;
+  let inventoryPageSize = 10;
   let activeFormulaId = 'FM-ABS-FR-760';
   let formulaMaterialCategory = '全部';
   let formulaDraftNote = '草稿自动保存';
@@ -216,6 +218,9 @@
   let formulaViewMode = 'list';
   let formulaListCategory = '全部';
   let formulaListStatus = '全部';
+  let formulaListPage = 1;
+  let formulaPageSize = 10;
+  const formulaPageSizeOptions = [5, 10, 20, 50];
 
   const getInventoryCategories = () => [
     ...new Set([...inventoryCategories, ...inventoryRows.map((row) => row[2]).filter(Boolean)]),
@@ -356,74 +361,91 @@
       const matchedSearch = !normalizedSearch || row.some((cell) => String(cell).toLowerCase().includes(normalizedSearch));
       return matchedCategory && matchedSearch;
     });
+    const filteredCount = visibleRows.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / inventoryPageSize));
+    inventoryListPage = Math.min(Math.max(1, inventoryListPage), totalPages);
+    const pageStart = (inventoryListPage - 1) * inventoryPageSize;
+    const pagedRows = visibleRows.slice(pageStart, pageStart + inventoryPageSize);
+    const rangeStart = filteredCount === 0 ? 0 : pageStart + 1;
+    const rangeEnd = pageStart + pagedRows.length;
     const editingRow = normalizeInventoryRow(inventoryRows[getInventoryMaterialIndex(inventoryEditingMaterialName)] || []);
     const materialFormRow = inventoryEditingMaterialName ? editingRow : ['', '原材料', inventoryCategory === '全部' ? categories[0] || '基础树脂' : inventoryCategory, '', '', '正常'];
     const categoryFormValue = inventoryEditingCategory || (inventoryCategory === '全部' ? '' : inventoryCategory);
 
     return `
       <div class="biz-inventory-page">
-        <section class="business-panel biz-category-flow">
-          <div class="business-panel-head biz-inventory-category-head">
-            <div>
-              <h2>分类视图</h2>
-              <span>${esc(inventoryCategory)} · ${visibleRows.length} 项</span>
+        <section class="business-panel biz-formula-table-panel biz-inventory-table-panel">
+          <div class="biz-formula-table-head biz-inventory-table-head">
+            <div class="biz-formula-table-title">
+              <i class="ti ti-list-details" aria-hidden="true"></i>
+              <div>
+                <h2>库存列表</h2>
+              </div>
             </div>
-            <button class="biz-inventory-ghost-btn" type="button" data-inventory-open-category-modal>
-              <i class="ti ti-category" aria-hidden="true"></i>
-              <span>分类管理</span>
-            </button>
-          </div>
-          <div class="biz-category-tabs">
-          ${categoryTabs.map((category) => {
-            const count = category === '全部'
-                ? inventoryRows.length
-                : inventoryRows.filter((row) => row[2] === category).length;
-              return `
-                <button
-                  class="${category === inventoryCategory ? 'is-active' : ''}"
-                  type="button"
-                  data-inventory-category="${esc(category)}">
-                  <span>${esc(category)}</span>
-                  <strong>${count}</strong>
-                </button>
-              `;
-            }).join('')}
-          </div>
-        </section>
-        <section class="business-panel biz-table-panel biz-inventory-table-panel">
-          <div class="biz-inventory-table-head">
-            <div>
-              <h2>材料明细</h2>
-              <span>${esc(inventoryDraftNote)}</span>
-            </div>
-            <div class="biz-inventory-table-actions">
-              <label class="biz-inventory-search">
+            <div class="biz-formula-table-actions biz-inventory-table-actions">
+              <label class="biz-formula-search biz-formula-table-search biz-inventory-search">
                 <i class="ti ti-search" aria-hidden="true"></i>
                 <input type="search" placeholder="搜索材料、供应商、状态..." value="${esc(inventorySearchQuery)}" data-inventory-search>
               </label>
-              <button class="biz-inventory-primary-btn" type="button" data-inventory-new-material>
+              <select data-inventory-category-filter aria-label="库存分类筛选">
+                ${categoryTabs.map((category) => `
+                  <option value="${esc(category)}" ${category === inventoryCategory ? 'selected' : ''}>${esc(category === '全部' ? '全部分类' : category)}</option>
+                `).join('')}
+              </select>
+              <button class="biz-formula-new-btn" type="button" data-inventory-new-material>
                 <i class="ti ti-plus" aria-hidden="true"></i>
                 <span>新增材料</span>
               </button>
             </div>
           </div>
-          <div class="business-table-wrap biz-inventory-table-wrap">
-            <table class="business-table">
+          <div class="biz-formula-table-wrap biz-inventory-table-wrap">
+            <table class="biz-formula-table biz-inventory-table">
               <thead><tr>${['材料', '类型', '分类', '供应商', '库存', '状态', '操作'].map((column) => `<th>${esc(column)}</th>`).join('')}</tr></thead>
               <tbody>
-                ${visibleRows.map((row) => `
+                ${pagedRows.map((row) => `
                   <tr>
-                    ${row.map((cell) => `<td>${esc(cell)}</td>`).join('')}
+                    <td class="biz-inventory-material-cell">${esc(row[0])}</td>
+                    <td><span class="biz-formula-chip">${esc(row[1])}</span></td>
+                    <td><span class="biz-formula-chip">${esc(row[2])}</span></td>
+                    <td>${esc(row[3])}</td>
+                    <td><span class="biz-formula-version-only">${esc(row[4])}</span></td>
+                    <td><span class="biz-formula-status ${getInventoryStateClass(row[5])}">${esc(row[5])}</span></td>
                     <td>
-                      <div class="biz-inventory-row-actions">
-                        <button type="button" data-inventory-edit-material="${esc(row[0])}">编辑</button>
-                        <button class="is-danger" type="button" data-inventory-delete-material="${esc(row[0])}">删除</button>
+                      <div class="biz-formula-row-actions biz-inventory-row-actions">
+                        <button type="button" data-inventory-edit-material="${esc(row[0])}">
+                          <i class="ti ti-pencil" aria-hidden="true"></i>
+                          <span>编辑</span>
+                        </button>
+                        <button class="is-danger" type="button" data-inventory-delete-material="${esc(row[0])}">
+                          <i class="ti ti-trash" aria-hidden="true"></i>
+                          <span>删除</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr><td colspan="7">暂无匹配材料</td></tr>'}
+                `).join('') || '<tr><td colspan="7"><div class="biz-formula-empty">暂无匹配材料</div></td></tr>'}
               </tbody>
             </table>
+          </div>
+          <div class="biz-formula-pagination biz-inventory-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-inventory-page-size aria-label="库存每页条数">${formulaPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === inventoryPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-inventory-page-prev ${inventoryListPage <= 1 ? 'disabled' : ''} aria-label="库存上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${inventoryListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-inventory-page-next ${inventoryListPage >= totalPages ? 'disabled' : ''} aria-label="库存下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
         ${inventoryMaterialModalOpen ? `
@@ -1103,16 +1125,30 @@
       cost: getFormulaCost(recipe),
     };
   };
-  const renderFormulaMiniStats = (items) => `
-    <div class="biz-formula-mini-stats">
-      ${items.map(([label, value, note, icon = 'ti ti-chart-bar']) => `
-        <article>
-          <i class="${esc(icon)}" aria-hidden="true"></i>
-          <span>${esc(label)}</span>
-          <strong>${esc(value)}</strong>
-          <em>${esc(note)}</em>
-        </article>
-      `).join('')}
+  const renderFormulaMiniStats = (items, modifierClass = '') => `
+    <div class="biz-formula-mini-stats${modifierClass ? ` ${modifierClass}` : ''}">
+      ${items.map(([label, value, note, icon = 'ti ti-chart-bar', tone = '', meta = '', page = '']) => (
+        modifierClass.includes('--list')
+          ? `
+            <article${tone ? ` class="${esc(tone)}"` : ''}${page ? ` data-formula-stat-page="${esc(page)}" role="button" tabindex="0"` : ''}>
+              <div class="biz-formula-mini-stat-body">
+                <span>${esc(label)}</span>
+                <strong>${esc(value)}</strong>
+                <em>${esc(note)}</em>
+                ${meta ? `<small>${esc(meta)}</small>` : ''}
+              </div>
+              <i class="${esc(icon)}" aria-hidden="true"></i>
+            </article>
+          `
+          : `
+            <article>
+              <i class="${esc(icon)}" aria-hidden="true"></i>
+              <span>${esc(label)}</span>
+              <strong>${esc(value)}</strong>
+              <em>${esc(note)}</em>
+            </article>
+          `
+      )).join('')}
     </div>
   `;
 
@@ -1141,10 +1177,22 @@
       ].some((value) => String(value || '').toLowerCase().includes(normalizedFormulaSearch));
       return matchedCategory && matchedStatus && matchedSearch;
     });
+    const filteredCount = visibleFormulaRecipes.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / formulaPageSize));
+    formulaListPage = Math.min(Math.max(1, formulaListPage), totalPages);
+    const pageStart = (formulaListPage - 1) * formulaPageSize;
+    const pagedFormulaRecipes = visibleFormulaRecipes.slice(pageStart, pageStart + formulaPageSize);
+    const rangeStart = filteredCount === 0 ? 0 : pageStart + 1;
+    const rangeEnd = pageStart + pagedFormulaRecipes.length;
     const formulaSummaries = formulaRecipes.map(getFormulaSummary);
     const experimentCount = formulaSummaries.filter((item) => item.status === '实验').length;
     const riskFormulaCount = formulaSummaries.filter((item) => item.riskCount > 0).length;
-    const materialTotal = formulaRecipes.reduce((sum, recipe) => sum + recipe.materials.length, 0);
+    const filterProgress = Math.round((visibleFormulaRecipes.length / Math.max(formulaRecipes.length, 1)) * 100);
+    const stableFormulaCount = Math.max(0, formulaRecipes.length - experimentCount);
+    const stableProgress = Math.round((stableFormulaCount / Math.max(formulaRecipes.length, 1)) * 100);
+    const healthyFormulaCount = Math.max(0, formulaRecipes.length - riskFormulaCount);
+    const healthyProgress = Math.round((healthyFormulaCount / Math.max(formulaRecipes.length, 1)) * 100);
+    const pendingOrderCount = 4;
     const latestUpdated = formulaRecipes
       .map((recipe) => recipe.updated || '')
       .filter(Boolean)
@@ -1153,28 +1201,18 @@
 
     return `
       <section class="biz-formula-page biz-formula-list-page">
-        <section class="business-panel biz-formula-overview-panel">
-          <div class="biz-formula-overview-copy">
-            <div>
-              <i class="ti ti-flask-2" aria-hidden="true"></i>
-              <h2>配方管理</h2>
-            </div>
-            <p>集中维护配方版本、基材分类、下料口材料与库存风险，进入编辑后可直接从材料库补齐或替换原料。</p>
-          </div>
-          ${renderFormulaMiniStats([
-            ['配方总数', `${formulaRecipes.length} 个`, `当前显示 ${visibleFormulaRecipes.length} 个`, 'ti ti-clipboard-list'],
-            ['材料行数', `${materialTotal} 行`, '按配方材料明细统计', 'ti ti-list-check'],
-            ['实验版本', `${experimentCount} 个`, '需确认后再排产', 'ti ti-test-pipe'],
-            ['待处理', `${riskFormulaCount} 个`, `最近更新 ${latestUpdated}`, 'ti ti-alert-triangle'],
-          ])}
-        </section>
+        ${renderFormulaMiniStats([
+          ['配方总数', `${formulaRecipes.length} 个`, `命中 ${visibleFormulaRecipes.length} 个`, 'ti ti-clipboard-list', 'is-blue', '当前筛选范围', filterProgress],
+          ['待处理订单', `${pendingOrderCount} 单`, '点击查看订单', 'ti ti-shopping-cart', 'is-cyan', '待补全 2 / 审核 2', 'order-management'],
+          ['实验版本', `${experimentCount} 个`, `${stableFormulaCount} 个可排产`, 'ti ti-test-pipe', 'is-amber', '实验配方需确认', stableProgress],
+          ['库存风险', `${riskFormulaCount} 个`, `更新 ${latestUpdated}`, riskFormulaCount ? 'ti ti-alert-triangle' : 'ti ti-shield-check', riskFormulaCount ? 'is-red' : 'is-green', healthyFormulaCount ? `${healthyFormulaCount} 个状态正常` : '全部待处理', healthyProgress],
+        ], 'biz-formula-mini-stats--list')}
         <section class="business-panel biz-formula-table-panel">
         <div class="biz-formula-table-head">
           <div class="biz-formula-table-title">
-            <i class="ti ti-table-options" aria-hidden="true"></i>
+            <i class="ti ti-list-details" aria-hidden="true"></i>
             <div>
-              <h2>配方台账</h2>
-              <span>${esc(formulaDraftNote)} · ${visibleFormulaRecipes.length} / ${formulaRecipes.length}</span>
+              <h2>配方列表</h2>
             </div>
           </div>
           <div class="biz-formula-table-actions">
@@ -1195,8 +1233,8 @@
             <thead>
               <tr>
                 <th>配方编号</th>
-                <th>日期</th>
                 <th>配方名称</th>
+                <th>日期</th>
                 <th>分类</th>
                 <th>产线</th>
                 <th>成本(¥/KG)</th>
@@ -1207,17 +1245,17 @@
               </tr>
             </thead>
             <tbody>
-              ${visibleFormulaRecipes.map((recipe) => {
+              ${pagedFormulaRecipes.map((recipe) => {
                 const summary = getFormulaSummary(recipe);
                 return `
                   <tr>
                     <td>
                       <span class="biz-formula-code">${esc(recipe.code || recipe.id.replace(/^FM-/, ''))}</span>
                     </td>
-                    <td><span class="biz-formula-version-only">${esc(recipe.updated || getTodayCode())}</span></td>
                     <td class="biz-formula-title-cell">
                       <button class="biz-formula-name-link" type="button" data-formula-edit="${esc(recipe.id)}">${esc(recipe.name)}</button>
                     </td>
+                    <td><span class="biz-formula-version-only">${esc(recipe.updated || getTodayCode())}</span></td>
                     <td><span class="biz-formula-chip">${esc(summary.category)}</span></td>
                     <td><span class="biz-formula-chip">${esc(`${recipe.line || 'A'}线`)}</span></td>
                     <td>${esc(summary.cost)}</td>
@@ -1249,6 +1287,26 @@
               `}
             </tbody>
           </table>
+        </div>
+        <div class="biz-formula-pagination">
+          <div class="biz-formula-pagination-actions">
+            <label class="biz-formula-page-size">
+              <span>每页</span>
+              <select data-formula-page-size aria-label="每页条数">${formulaPageSizeOptions.map((n) => `
+                <option value="${n}" ${n === formulaPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+              </select>
+              <span>条</span>
+            </label>
+            <div class="biz-formula-page-buttons">
+              <button type="button" class="biz-formula-page-btn" data-formula-page-prev ${formulaListPage <= 1 ? 'disabled' : ''} aria-label="上一页">
+                <i class="ti ti-chevron-left" aria-hidden="true"></i>
+              </button>
+              <span class="biz-formula-page-indicator">${formulaListPage} / ${totalPages}</span>
+              <button type="button" class="biz-formula-page-btn" data-formula-page-next ${formulaListPage >= totalPages ? 'disabled' : ''} aria-label="下一页">
+                <i class="ti ti-chevron-right" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
       </section>
@@ -1665,6 +1723,7 @@
 
     if (target.hasAttribute('data-formula-search')) {
       formulaSearchQuery = target.value;
+      formulaListPage = 1;
       return true;
     }
 
@@ -1675,11 +1734,19 @@
 
     if (target.hasAttribute('data-formula-list-category')) {
       formulaListCategory = target.value || '全部';
+      formulaListPage = 1;
       return true;
     }
 
     if (target.hasAttribute('data-formula-list-status')) {
       formulaListStatus = target.value || '全部';
+      formulaListPage = 1;
+      return true;
+    }
+
+    if (target.hasAttribute('data-formula-page-size')) {
+      formulaPageSize = Number(target.value) || 10;
+      formulaListPage = 1;
       return true;
     }
 
@@ -1713,6 +1780,7 @@
     if (event.target.matches('select')) return;
     if (event.target.hasAttribute('data-inventory-search')) {
       inventorySearchQuery = event.target.value;
+      inventoryListPage = 1;
       render('inventory-management');
       refs.businessPageContent?.querySelector('[data-inventory-search]')?.focus();
       return;
@@ -1727,6 +1795,18 @@
 
   refs.businessPageContent?.addEventListener('change', (event) => {
     if (!(event.target instanceof Element)) return;
+    if (event.target.hasAttribute('data-inventory-category-filter')) {
+      inventoryCategory = event.target.value || '全部';
+      inventoryListPage = 1;
+      render('inventory-management');
+      return;
+    }
+    if (event.target.hasAttribute('data-inventory-page-size')) {
+      inventoryPageSize = Number(event.target.value) || 10;
+      inventoryListPage = 1;
+      render('inventory-management');
+      return;
+    }
     if (!handleFormulaEdit(event.target)) return;
 
     if (
@@ -1746,6 +1826,41 @@
 
   refs.businessPageContent?.addEventListener('click', (event) => {
     if (!(event.target instanceof Element)) return;
+
+    const formulaStatCard = event.target.closest('[data-formula-stat-page]');
+    if (formulaStatCard && refs.businessPageContent.contains(formulaStatCard)) {
+      const pageId = formulaStatCard.getAttribute('data-formula-stat-page') || '';
+      if (pageId) App.navigation?.showPage?.(pageId);
+      return;
+    }
+
+    const inventoryPagePrev = event.target.closest('[data-inventory-page-prev]');
+    if (inventoryPagePrev && refs.businessPageContent.contains(inventoryPagePrev) && !inventoryPagePrev.disabled) {
+      inventoryListPage -= 1;
+      render('inventory-management');
+      return;
+    }
+
+    const inventoryPageNext = event.target.closest('[data-inventory-page-next]');
+    if (inventoryPageNext && refs.businessPageContent.contains(inventoryPageNext) && !inventoryPageNext.disabled) {
+      inventoryListPage += 1;
+      render('inventory-management');
+      return;
+    }
+
+    const formulaPagePrev = event.target.closest('[data-formula-page-prev]');
+    if (formulaPagePrev && refs.businessPageContent.contains(formulaPagePrev) && !formulaPagePrev.disabled) {
+      formulaListPage -= 1;
+      render('formula-management');
+      return;
+    }
+
+    const formulaPageNext = event.target.closest('[data-formula-page-next]');
+    if (formulaPageNext && refs.businessPageContent.contains(formulaPageNext) && !formulaPageNext.disabled) {
+      formulaListPage += 1;
+      render('formula-management');
+      return;
+    }
 
     const formulaBackButton = event.target.closest('[data-formula-back-list]');
     if (formulaBackButton && refs.businessPageContent.contains(formulaBackButton)) {
@@ -1862,6 +1977,7 @@
     const categoryButton = event.target.closest('[data-inventory-category]');
     if (categoryButton && refs.businessPageContent.contains(categoryButton)) {
       inventoryCategory = categoryButton.getAttribute('data-inventory-category') || '全部';
+      inventoryListPage = 1;
       render('inventory-management');
       return;
     }
@@ -1997,6 +2113,13 @@
       inventoryCategoryModalOpen = false;
       inventoryEditingCategory = '';
       render('inventory-management');
+      return;
+    }
+    const formulaStatCard = event.target.closest('[data-formula-stat-page]');
+    if (formulaStatCard && refs.businessPageContent.contains(formulaStatCard)) {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      formulaStatCard.click();
       return;
     }
     const formulaAddCard = event.target.closest('[data-formula-add-material]');

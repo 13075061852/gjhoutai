@@ -259,12 +259,25 @@
     .biz-inventory-material-editor{
       flex:0 0 auto;
     }
+    .biz-inventory-table-head.biz-formula-table-head{
+      padding:10px 18px;
+      align-items:center;
+      flex-direction:row;
+      justify-content:space-between;
+      flex-wrap:nowrap;
+    }
     .biz-inventory-category-head{
-      align-items:flex-start;
+      align-items:center;
       margin-bottom:12px;
     }
     .biz-inventory-category-head > div{
       min-width:0;
+      display:flex;
+      align-items:center;
+    }
+    .biz-inventory-category-head h2{
+      margin:0;
+      line-height:1;
     }
     .biz-inventory-category-head .biz-inventory-ghost-btn{
       flex:0 0 auto;
@@ -286,6 +299,15 @@
       border-bottom:1px solid var(--border);
       background:var(--surface);
     }
+    .biz-inventory-table-head .biz-formula-table-title h2{
+      font-size:17px;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-inventory-table-head .biz-formula-table-title{
+      flex:0 0 auto;
+      min-width:120px;
+    }
     .biz-inventory-table-head h2{
       margin:0;
       color:var(--text);
@@ -293,7 +315,8 @@
       line-height:1.3;
       font-weight:900;
     }
-    .biz-inventory-table-head span{
+    .biz-inventory-table-head > div > span,
+    .biz-inventory-table-head .biz-formula-table-title > div > span{
       display:block;
       margin-top:4px;
       color:var(--muted);
@@ -308,8 +331,30 @@
       gap:10px;
       flex-wrap:wrap;
     }
+    .biz-inventory-table-actions.biz-formula-table-actions{
+      align-items:center;
+      flex:1 1 auto;
+      justify-content:flex-end;
+      flex-wrap:nowrap;
+      gap:12px;
+    }
+    .biz-inventory-table-actions select{
+      width:auto;
+      min-width:108px;
+      min-height:36px;
+      padding:0 34px 0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+      outline:none;
+    }
     .biz-inventory-search{
-      width:min(300px, 42vw);
+      width:220px;
       min-height:36px;
       display:flex;
       align-items:center;
@@ -320,9 +365,46 @@
       background:var(--surface-2);
       color:var(--muted);
     }
+    .biz-inventory-search.biz-formula-table-search{
+      width:clamp(220px, 28vw, 360px);
+      flex:0 1 360px;
+    }
+    .biz-inventory-table-actions select{
+      flex:0 0 132px;
+    }
+    .biz-inventory-table-actions .biz-formula-new-btn{
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+    .biz-inventory-table-actions .biz-formula-new-btn,
+    .biz-inventory-table-actions .biz-formula-new-btn span,
+    .biz-inventory-table-actions .biz-formula-new-btn i{
+      color:#fff;
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-inventory-table-actions .biz-formula-new-btn{
+      min-height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      line-height:1;
+    }
+    .biz-inventory-table-actions .biz-formula-new-btn span,
+    .biz-inventory-table-actions .biz-formula-new-btn i{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      line-height:1;
+    }
     .biz-inventory-search:focus-within{
       border-color:var(--accent);
       background:var(--surface);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-inventory-table-actions select:focus{
+      border-color:var(--accent);
       box-shadow:0 0 0 3px var(--accent-soft);
     }
     .biz-inventory-search input{
@@ -599,10 +681,29 @@
       flex:1 1 auto;
       min-height:0;
     }
-    .biz-inventory-table-wrap .business-table thead th{
+    .biz-inventory-pagination{
+      flex:0 0 auto;
+    }
+    .biz-inventory-table-wrap .biz-inventory-table thead th{
       position:sticky;
       top:0;
       z-index:1;
+    }
+    .biz-inventory-table{
+      min-width:980px;
+    }
+    .biz-inventory-table th,
+    .biz-inventory-table td{
+      text-align:center;
+    }
+    .biz-inventory-material-cell{
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-inventory-row-actions{
+      justify-content:center;
     }
     .biz-inventory-row-actions{
       display:flex;
@@ -1075,51 +1176,8 @@
       overflow:hidden;
       box-shadow:0 1px 2px rgba(15,23,42,.08);
     }
-    .biz-formula-overview-panel{
-      display:grid;
-      grid-template-columns:minmax(260px,.72fr) minmax(0,1.28fr);
-      gap:14px;
-      align-items:stretch;
-      padding:14px;
-    }
-    .biz-formula-overview-copy{
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      gap:10px;
-      padding:2px 4px;
-    }
-    .biz-formula-overview-copy > div{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      min-width:0;
-    }
-    .biz-formula-overview-copy i{
-      width:34px;
-      height:34px;
-      display:grid;
-      place-items:center;
-      border-radius:8px;
-      background:var(--accent-soft);
-      color:var(--accent);
-      font-size:20px;
-    }
-    .biz-formula-overview-copy h2{
-      margin:0;
-      color:var(--text);
-      font-size:20px;
-      line-height:1.2;
-      font-weight:950;
-    }
-    .biz-formula-overview-copy p{
-      max-width:620px;
-      margin:0;
-      color:var(--text-2);
-      font-size:13px;
-      line-height:1.7;
-      font-weight:800;
+    .biz-formula-list-page > .biz-formula-mini-stats{
+      width:100%;
     }
     .biz-formula-mini-stats{
       display:grid;
@@ -1139,6 +1197,50 @@
       border-radius:8px;
       background:var(--surface-2);
     }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article{
+      position:relative;
+      isolation:isolate;
+      overflow:hidden;
+      cursor:default;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--stat-color, var(--accent)) 5%, #fff) 0%, #fff 72%),
+        var(--surface);
+      grid-template-columns:minmax(0,1fr) 34px;
+      grid-template-rows:minmax(0,1fr);
+      gap:10px 12px;
+      align-content:stretch;
+      align-items:start;
+      min-height:112px;
+      padding:14px;
+      border-color:color-mix(in srgb, var(--stat-color, var(--accent)) 24%, var(--border));
+      box-shadow:none;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article[data-formula-stat-page]{
+      cursor:pointer;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article[data-formula-stat-page]:hover{
+      border-color:color-mix(in srgb, var(--stat-color, var(--accent)) 42%, var(--border));
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article[data-formula-stat-page]:focus-visible{
+      outline:3px solid color-mix(in srgb, var(--stat-color, var(--accent)) 18%, transparent);
+      outline-offset:2px;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article.is-blue{--stat-color:#2563eb}
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article.is-cyan{--stat-color:#0891b2}
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article.is-amber{--stat-color:#d97706}
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article.is-green{--stat-color:#059669}
+    .biz-formula-mini-stats.biz-formula-mini-stats--list article.is-red{--stat-color:#dc2626}
+    .biz-formula-mini-stat-body{
+      min-width:0;
+      display:grid;
+      gap:5px;
+    }
+    body[data-theme="dark"] .biz-formula-mini-stats.biz-formula-mini-stats--list article{
+      background:
+        linear-gradient(145deg, color-mix(in srgb, var(--stat-color, var(--accent)) 13%, var(--surface)) 0%, var(--surface) 54%),
+        var(--surface);
+      box-shadow:none;
+    }
     .biz-formula-mini-stats i{
       grid-row:1 / span 3;
       width:28px;
@@ -1149,6 +1251,20 @@
       background:var(--surface);
       color:var(--accent);
       font-size:17px;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list i{
+      grid-row:1;
+      grid-column:2;
+      align-self:start;
+      justify-self:end;
+      width:32px;
+      height:32px;
+      font-size:17px;
+      line-height:1;
+      border-radius:8px;
+      background:color-mix(in srgb, var(--stat-color, var(--accent)) 12%, #fff);
+      color:var(--stat-color, var(--accent));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--stat-color, var(--accent)) 18%, transparent);
     }
     .biz-formula-mini-stats span{
       min-width:0;
@@ -1181,6 +1297,32 @@
       overflow:hidden;
       text-overflow:ellipsis;
     }
+    .biz-formula-mini-stats small{
+      min-width:0;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.35;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list span{
+      color:color-mix(in srgb, var(--stat-color, var(--accent)) 74%, var(--text-2));
+      font-size:12px;
+      letter-spacing:0;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list strong{
+      font-size:26px;
+      line-height:1.05;
+      letter-spacing:0;
+    }
+    .biz-formula-mini-stats.biz-formula-mini-stats--list em{
+      color:var(--text-2);
+      font-size:11px;
+      line-height:1.35;
+      font-weight:900;
+    }
     .biz-formula-table-head{
       min-height:64px;
       display:flex;
@@ -1211,15 +1353,6 @@
       font-size:17px;
       line-height:1.2;
       font-weight:950;
-    }
-    .biz-formula-table-title span{
-      min-width:0;
-      color:var(--muted);
-      font-size:12px;
-      font-weight:850;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
     }
     .biz-formula-table-actions{
       min-width:0;
@@ -1276,11 +1409,111 @@
     }
     .biz-formula-table-wrap{
       width:100%;
-      overflow:auto;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scrollbar-width:thin;
+    }
+    .biz-formula-pagination{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:flex-end;
+      gap:12px 16px;
+      padding:14px 18px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-formula-pagination-meta{
+      margin:0;
+      display:inline-flex;
+      align-items:center;
+      color:var(--text-2);
+      font-size:13px;
+      line-height:1.4;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .biz-formula-pagination-actions{
+      display:flex;
+      flex-wrap:nowrap;
+      align-items:center;
+      justify-content:flex-end;
+      gap:18px;
+    }
+    .biz-formula-page-size{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      margin:0;
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .biz-formula-page-size select{
+      min-width:52px;
+      min-height:32px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+      cursor:pointer;
+      outline:none;
+    }
+    .biz-formula-page-size select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-formula-page-buttons{
+      display:inline-flex;
+      align-items:center;
+      gap:2px;
+      min-height:32px;
+    }
+    .biz-formula-page-indicator{
+      min-width:44px;
+      padding:0 10px;
+      text-align:center;
+      font-size:13px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-formula-page-btn{
+      width:30px;
+      min-width:30px;
+      height:30px;
+      display:grid;
+      place-items:center;
+      padding:0;
+      border:1px solid transparent;
+      border-radius:8px;
+      background:transparent;
+      color:var(--text-2);
+      font:inherit;
+      font-size:13px;
+      font-weight:900;
+      cursor:pointer;
+      transition:border-color .18s ease, background .18s ease, color .18s ease;
+    }
+    .biz-formula-page-btn i{
+      font-size:13px;
+    }
+    .biz-formula-page-btn:hover:not(:disabled){
+      border-color:var(--border);
+      background:var(--surface-2);
+      color:var(--accent);
+    }
+    .biz-formula-page-btn:disabled{
+      opacity:.45;
+      cursor:not-allowed;
     }
     .biz-formula-table{
       width:100%;
-      min-width:0;
+      min-width:980px;
       border-collapse:collapse;
       table-layout:auto;
       font-size:14px;
@@ -1288,7 +1521,7 @@
     .biz-formula-table th,
     .biz-formula-table td{
       height:62px;
-      padding:0 14px;
+      padding:0 clamp(8px, .75vw, 14px);
       border-bottom:1px solid var(--border);
       color:var(--text);
       text-align:center;
@@ -1320,10 +1553,6 @@
     .biz-formula-table td:nth-child(2){
       white-space:nowrap;
     }
-    .biz-formula-table th:nth-child(3),
-    .biz-formula-table td:nth-child(3){
-      text-align:left;
-    }
     .biz-formula-table th:nth-child(8),
     .biz-formula-table td:nth-child(8){
       white-space:nowrap;
@@ -1354,15 +1583,16 @@
     }
     .biz-formula-name-link{
       max-width:100%;
+      margin:0 auto;
       padding:0;
       border:0;
       background:transparent;
-      color:var(--accent);
+      color:var(--text);
       font:inherit;
       font-size:15px;
       font-weight:950;
       cursor:pointer;
-      text-align:left;
+      text-align:center;
       white-space:normal;
       overflow-wrap:anywhere;
       line-height:1.4;

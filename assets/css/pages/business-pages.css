@@ -232,6 +232,407 @@
     .business-table tr:last-child td{
       border-bottom:0;
     }
+    .page-section.active.business-page.biz-inventory-active{
+      height:100%;
+      min-height:0;
+    }
+    .business-page-shell.biz-inventory-shell{
+      height:100%;
+      min-height:0;
+    }
+    .biz-inventory-page{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .biz-inventory-table-panel{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-inventory-table-head,
+    .biz-inventory-material-editor{
+      flex:0 0 auto;
+    }
+    .biz-inventory-category-head{
+      align-items:flex-start;
+      margin-bottom:12px;
+    }
+    .biz-inventory-category-head > div{
+      min-width:0;
+    }
+    .biz-inventory-category-head .biz-inventory-ghost-btn{
+      flex:0 0 auto;
+    }
+    .biz-inventory-category-head .biz-inventory-ghost-btn span{
+      margin:0;
+      color:inherit;
+      font-size:inherit;
+      font-weight:inherit;
+      white-space:nowrap;
+    }
+    .biz-inventory-table-head{
+      min-height:62px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-inventory-table-head h2{
+      margin:0;
+      color:var(--text);
+      font-size:15px;
+      line-height:1.3;
+      font-weight:900;
+    }
+    .biz-inventory-table-head span{
+      display:block;
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-inventory-table-actions{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .biz-inventory-search{
+      width:min(300px, 42vw);
+      min-height:36px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--muted);
+    }
+    .biz-inventory-search:focus-within{
+      border-color:var(--accent);
+      background:var(--surface);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-inventory-search input{
+      width:100%;
+      min-width:0;
+      height:34px;
+      border:0;
+      outline:0;
+      background:transparent;
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+    }
+    .biz-inventory-category-editor,
+    .biz-inventory-material-editor{
+      display:grid;
+      gap:10px;
+      padding:12px;
+      border-top:1px solid var(--border);
+      background:var(--surface-2);
+    }
+    .biz-inventory-category-editor{
+      grid-template-columns:minmax(220px, 1fr) auto auto auto;
+      align-items:end;
+      margin:12px -2px -2px;
+      border:1px solid var(--border);
+      border-radius:8px;
+    }
+    .biz-inventory-category-modal{
+      position:fixed;
+      inset:0;
+      z-index:1300;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(15,23,42,.34);
+    }
+    .biz-inventory-material-modal{
+      position:fixed;
+      inset:0;
+      z-index:1300;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background:rgba(15,23,42,.34);
+    }
+    .biz-inventory-category-dialog{
+      width:min(680px, 100%);
+      max-height:min(82vh, 680px);
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:16px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      box-shadow:0 24px 68px rgba(15,23,42,.18);
+      overflow:auto;
+    }
+    .biz-inventory-material-dialog{
+      width:min(880px, 100%);
+      max-height:min(82vh, 760px);
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:16px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      box-shadow:0 24px 68px rgba(15,23,42,.18);
+      overflow:auto;
+    }
+    .biz-inventory-dialog-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .biz-inventory-dialog-head h2{
+      margin:0;
+      color:var(--text);
+      font-size:16px;
+      line-height:1.3;
+      font-weight:900;
+    }
+    .biz-inventory-dialog-head span{
+      display:block;
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+      font-weight:800;
+    }
+    .biz-inventory-icon-btn{
+      width:34px;
+      height:34px;
+      flex:0 0 auto;
+      display:grid;
+      place-items:center;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      cursor:pointer;
+    }
+    .biz-inventory-icon-btn:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-inventory-category-list{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px;
+    }
+    .biz-inventory-category-list button{
+      min-width:0;
+      min-height:42px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+    }
+    .biz-inventory-category-list button:hover,
+    .biz-inventory-category-list button.is-active{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-inventory-category-list span{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .biz-inventory-category-list strong{
+      min-width:24px;
+      height:24px;
+      display:grid;
+      place-items:center;
+      border-radius:999px;
+      background:var(--surface);
+      color:var(--accent);
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+    }
+    .biz-inventory-category-dialog .biz-inventory-category-editor{
+      margin:0;
+      background:var(--surface-2);
+    }
+    .biz-inventory-material-editor{
+      grid-template-columns:minmax(170px,1.2fr) minmax(118px,.7fr) minmax(132px,.85fr) minmax(160px,1fr) minmax(120px,.72fr) minmax(112px,.7fr) auto auto;
+      align-items:end;
+    }
+    .biz-inventory-material-dialog .biz-inventory-material-editor{
+      grid-template-columns:repeat(12, minmax(0, 1fr));
+      gap:14px 12px;
+      padding:0;
+      border-top:0;
+      background:transparent;
+      align-items:start;
+    }
+    .biz-inventory-material-dialog .biz-inventory-material-editor label{
+      grid-column:span 3;
+    }
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier{
+      grid-column:span 6;
+    }
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+      grid-column:span 3;
+    }
+    .biz-inventory-category-editor label,
+    .biz-inventory-material-editor label{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:900;
+    }
+    .biz-inventory-category-editor input,
+    .biz-inventory-material-editor input,
+    .biz-inventory-material-editor select{
+      width:100%;
+      min-width:0;
+      min-height:36px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      outline:0;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+    }
+    .biz-inventory-category-editor input:focus,
+    .biz-inventory-material-editor input:focus,
+    .biz-inventory-material-editor select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-inventory-primary-btn,
+    .biz-inventory-ghost-btn,
+    .biz-inventory-danger-btn{
+      min-height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+      cursor:pointer;
+      transition:border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+    }
+    .biz-inventory-primary-btn{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .biz-inventory-danger-btn{
+      color:var(--danger);
+    }
+    .biz-inventory-primary-btn:hover,
+    .biz-inventory-ghost-btn:hover,
+    .biz-inventory-danger-btn:hover{
+      transform:translateY(-1px);
+    }
+    .biz-inventory-ghost-btn:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-inventory-danger-btn:hover{
+      border-color:var(--danger);
+      color:var(--danger);
+    }
+    .biz-inventory-modal-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      grid-column:1 / -1;
+      padding-top:8px;
+      border-top:1px solid var(--border);
+      margin-top:2px;
+    }
+    .biz-inventory-table-wrap{
+      flex:1 1 auto;
+      min-height:0;
+    }
+    .biz-inventory-table-wrap .business-table thead th{
+      position:sticky;
+      top:0;
+      z-index:1;
+    }
+    .biz-inventory-row-actions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .biz-inventory-row-actions button{
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .biz-inventory-row-actions button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-inventory-row-actions button.is-danger{
+      color:var(--danger);
+    }
+    .biz-inventory-row-actions button.is-danger:hover{
+      border-color:var(--danger);
+      color:var(--danger);
+    }
     .biz-stat-strip{
       display:grid;
       grid-template-columns:repeat(4,minmax(0,1fr));
@@ -590,7 +991,13 @@
       min-height:0;
       display:flex;
       flex-direction:column;
+      gap:12px;
       overflow:hidden;
+    }
+    .biz-formula-list-page{
+      height:auto;
+      min-height:0;
+      overflow:visible;
     }
     .biz-formula-flow-grid{
       display:grid;
@@ -668,6 +1075,112 @@
       overflow:hidden;
       box-shadow:0 1px 2px rgba(15,23,42,.08);
     }
+    .biz-formula-overview-panel{
+      display:grid;
+      grid-template-columns:minmax(260px,.72fr) minmax(0,1.28fr);
+      gap:14px;
+      align-items:stretch;
+      padding:14px;
+    }
+    .biz-formula-overview-copy{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:10px;
+      padding:2px 4px;
+    }
+    .biz-formula-overview-copy > div{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .biz-formula-overview-copy i{
+      width:34px;
+      height:34px;
+      display:grid;
+      place-items:center;
+      border-radius:8px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      font-size:20px;
+    }
+    .biz-formula-overview-copy h2{
+      margin:0;
+      color:var(--text);
+      font-size:20px;
+      line-height:1.2;
+      font-weight:950;
+    }
+    .biz-formula-overview-copy p{
+      max-width:620px;
+      margin:0;
+      color:var(--text-2);
+      font-size:13px;
+      line-height:1.7;
+      font-weight:800;
+    }
+    .biz-formula-mini-stats{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+    }
+    .biz-formula-mini-stats article{
+      min-width:0;
+      min-height:88px;
+      display:grid;
+      grid-template-columns:28px minmax(0,1fr);
+      grid-template-rows:auto auto auto;
+      gap:2px 9px;
+      align-content:center;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-formula-mini-stats i{
+      grid-row:1 / span 3;
+      width:28px;
+      height:28px;
+      display:grid;
+      place-items:center;
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--accent);
+      font-size:17px;
+    }
+    .biz-formula-mini-stats span{
+      min-width:0;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.2;
+      font-weight:900;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .biz-formula-mini-stats strong{
+      min-width:0;
+      color:var(--text);
+      font-size:18px;
+      line-height:1.2;
+      font-weight:950;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .biz-formula-mini-stats em{
+      min-width:0;
+      color:var(--text-2);
+      font-size:11px;
+      line-height:1.35;
+      font-style:normal;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
     .biz-formula-table-head{
       min-height:64px;
       display:flex;
@@ -688,11 +1201,25 @@
     .biz-formula-table-title i{
       font-size:20px;
     }
+    .biz-formula-table-title > div{
+      min-width:0;
+      display:grid;
+      gap:3px;
+    }
     .biz-formula-table-title h2{
       margin:0;
       font-size:17px;
       line-height:1.2;
       font-weight:950;
+    }
+    .biz-formula-table-title span{
+      min-width:0;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:850;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
     }
     .biz-formula-table-actions{
       min-width:0;
@@ -753,7 +1280,7 @@
     }
     .biz-formula-table{
       width:100%;
-      min-width:960px;
+      min-width:0;
       border-collapse:collapse;
       table-layout:auto;
       font-size:14px;
@@ -761,12 +1288,26 @@
     .biz-formula-table th,
     .biz-formula-table td{
       height:62px;
-      padding:0 18px;
+      padding:0 14px;
       border-bottom:1px solid var(--border);
       color:var(--text);
       text-align:center;
       vertical-align:middle;
       background:var(--surface);
+    }
+    .biz-formula-table td > em{
+      display:block;
+      margin-top:5px;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.25;
+      font-style:normal;
+      font-weight:850;
+    }
+    .biz-formula-table .biz-formula-version-only{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:850;
     }
     .biz-formula-table th{
       height:50px;
@@ -775,8 +1316,41 @@
       font-size:13px;
       font-weight:950;
     }
+    .biz-formula-table th:nth-child(2),
+    .biz-formula-table td:nth-child(2){
+      white-space:nowrap;
+    }
+    .biz-formula-table th:nth-child(3),
+    .biz-formula-table td:nth-child(3){
+      text-align:left;
+    }
+    .biz-formula-table th:nth-child(8),
+    .biz-formula-table td:nth-child(8){
+      white-space:nowrap;
+    }
     .biz-formula-table tr:last-child td{
       border-bottom:0;
+    }
+    .biz-formula-code{
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-formula-title-cell{
+      min-width:0;
+    }
+    .biz-formula-title-cell > span{
+      display:block;
+      max-width:420px;
+      margin-top:5px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.4;
+      font-weight:800;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
     }
     .biz-formula-name-link{
       max-width:100%;
@@ -788,7 +1362,7 @@
       font-size:15px;
       font-weight:950;
       cursor:pointer;
-      text-align:center;
+      text-align:left;
       white-space:normal;
       overflow-wrap:anywhere;
       line-height:1.4;
@@ -812,6 +1386,12 @@
     .biz-formula-chip{
       background:color-mix(in srgb, var(--accent) 14%, transparent);
       color:var(--accent);
+    }
+    .biz-formula-chip-stack{
+      display:flex;
+      justify-content:center;
+      gap:6px;
+      flex-wrap:wrap;
     }
     .biz-formula-status.is-ok{
       background:rgba(16,185,129,.16);
@@ -878,6 +1458,16 @@
     .biz-formula-builder{
       display:flex;
       flex-direction:column;
+    }
+    .biz-formula-builder .biz-formula-mini-stats{
+      grid-template-columns:repeat(4,minmax(0,1fr));
+    }
+    .biz-formula-builder .biz-formula-mini-stats article{
+      min-height:76px;
+      padding:10px;
+    }
+    .biz-formula-builder .biz-formula-mini-stats strong{
+      font-size:16px;
     }
     .biz-issue-sheet{
       min-height:0;
@@ -1257,7 +1847,6 @@
     }
     .biz-formula-actions button,
     .biz-formula-remove-btn,
-    .biz-formula-process-head button,
     .biz-formula-step.is-editable > button{
       min-height:34px;
       padding:0 12px;
@@ -1270,15 +1859,12 @@
       cursor:pointer;
       transition:background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
     }
-    .biz-formula-actions button[data-formula-save],
-    .biz-formula-process-head button{
+    .biz-formula-actions button[data-formula-save]{
       border-color:var(--accent);
       background:var(--accent);
       color:#fff;
     }
-    .biz-formula-actions button:hover,
     .biz-formula-remove-btn:hover,
-    .biz-formula-process-head button:hover,
     .biz-formula-step.is-editable > button:not(:disabled):hover{
       transform:translateY(-1px);
     }
@@ -1308,7 +1894,6 @@
     .biz-formula-edit-grid textarea,
     .biz-recipe-controls input,
     .biz-recipe-controls select,
-    .biz-formula-ratio-field input,
     .biz-formula-step input{
       width:100%;
       min-width:0;
@@ -1341,7 +1926,6 @@
     .biz-formula-edit-grid textarea:focus,
     .biz-recipe-controls input:focus,
     .biz-recipe-controls select:focus,
-    .biz-formula-ratio-field input:focus,
     .biz-formula-step input:focus{
       border-color:var(--accent);
       box-shadow:0 0 0 3px var(--accent-soft);
@@ -1454,33 +2038,6 @@
     .biz-recipe-material small{
       display:block;
     }
-    .biz-formula-ratio-field{
-      display:flex;
-      align-items:center;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-      overflow:hidden;
-    }
-    .biz-formula-ratio-field:focus-within{
-      border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
-    }
-    .biz-formula-ratio-field input{
-      min-height:34px;
-      padding:0 4px 0 9px;
-      border:0;
-      border-radius:0;
-      text-align:right;
-      box-shadow:none;
-      background:transparent;
-    }
-    .biz-formula-ratio-field span{
-      padding-right:9px;
-      color:var(--muted);
-      font-size:12px;
-      font-weight:900;
-    }
     .biz-formula-remove-btn{
       min-width:58px;
       color:var(--danger);
@@ -1501,6 +2058,27 @@
       flex-direction:column;
       gap:12px;
       overflow:hidden;
+    }
+    .biz-formula-library-head{
+      align-items:flex-start;
+    }
+    .biz-formula-library-head > div{
+      min-width:0;
+      display:grid;
+      gap:4px;
+    }
+    .biz-formula-library-head strong{
+      min-width:46px;
+      min-height:28px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:999px;
+      background:var(--accent-soft);
+      color:var(--accent);
+      font-size:12px;
+      font-weight:950;
+      white-space:nowrap;
     }
     .biz-formula-material-tabs{
       display:flex;
@@ -1644,12 +2222,20 @@
       overflow-wrap:anywhere;
     }
     .biz-formula-material-card span,
-    .biz-formula-material-card em{
+    .biz-formula-material-card em,
+    .biz-formula-material-card small{
       color:var(--muted);
       font-size:11px;
       font-style:normal;
       line-height:1.35;
       max-width:100%;
+    }
+    .biz-formula-material-card small{
+      display:block;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-weight:800;
     }
     .biz-formula-material-stock,
     .biz-formula-material-state{
@@ -1666,24 +2252,6 @@
     .biz-formula-material-stock.is-danger,
     .biz-formula-material-card em > .biz-formula-material-state.is-danger{
       color:#dc2626;
-    }
-    .biz-formula-process,
-    .biz-formula-checks{
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
-    .biz-formula-process-head > div{
-      display:flex;
-      align-items:center;
-      justify-content:flex-end;
-      gap:12px;
-      flex-wrap:wrap;
-    }
-    .biz-formula-process-head button{
-      min-height:30px;
-      padding:0 10px;
-      font-size:11px;
     }
     .biz-formula-step{
       display:grid;
@@ -1734,25 +2302,6 @@
       color:var(--muted-2);
       background:var(--surface-3);
       transform:none;
-    }
-    .biz-formula-checks > div:not(.business-panel-head){
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:10px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface-2);
-      color:var(--text-2);
-      font-size:12px;
-      font-weight:850;
-    }
-    .biz-formula-checks i{
-      color:var(--success);
-      font-size:17px;
-    }
-    .biz-formula-checks .is-warn i{
-      color:var(--warn);
     }
     .biz-lab-notes p{
       margin:0;

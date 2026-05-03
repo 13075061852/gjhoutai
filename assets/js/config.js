@@ -630,6 +630,12 @@
     }
   };
 
+  const refreshPricingContext = async () => {
+    await fetchUsdToCnyRate();
+    syncModelDropdown();
+    syncPreview();
+  };
+
   const getModelTriggerLabel = () => {
     if (!refs.modelSelect) return constants.DEFAULT_CONFIG.modelChoice;
     if (isLmStudioProvider(getAiProvider()) && !refs.modelSelect.value) {
@@ -1210,7 +1216,7 @@
     syncOssSecretToggleIcon();
     syncTemperatureLabel();
     syncPreview();
-    fetchUsdToCnyRate().finally(() => fetchModels());
+    setStatus('配置已加载；模型列表和实时汇率将在手动刷新时联网获取。', 'success');
   };
 
   App.config = {
@@ -1228,6 +1234,7 @@
     getUsdToCnyRate,
     buildModelSelect,
     fetchModels,
+    refreshPricingContext,
     testConfig,
   };
 })();

@@ -328,9 +328,7 @@
   };
 
   const parseExcelWorkbook = async (file) => {
-    if (!window.XLSX) {
-      throw new Error('Excel解析库未加载，请检查网络后重试。');
-    }
+    await ensureXlsxLoaded();
 
     const buffer = await file.arrayBuffer();
     const workbook = window.XLSX.read(buffer, {
@@ -380,17 +378,19 @@
   };
 
   const getOssConfig = () => {
-    const config = App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG || {};
-    const bucket = String(config.ossBucket || '').trim();
-    const endpoint = String(config.ossEndpoint || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    const objectKey = String(config.ossObjectKey || '').trim().replace(/^\/+/, '');
+    const savedConfig = App.config?.loadSavedConfig?.() || {};
+    const defaultConfig = constants.DEFAULT_CONFIG || {};
+    const getValue = (key) => String(savedConfig[key] || defaultConfig[key] || '').trim();
+    const bucket = getValue('ossBucket');
+    const endpoint = getValue('ossEndpoint').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    const objectKey = getValue('ossObjectKey').replace(/^\/+/, '');
     return {
       bucket,
       endpoint,
       objectKey,
-      accessKeyId: String(config.ossAccessKeyId || '').trim(),
-      accessKeySecret: String(config.ossAccessKeySecret || '').trim(),
-      excelBackupPrefix: String(config.ossExcelBackupPrefix || '').trim().replace(/^\/+/, ''),
+      accessKeyId: getValue('ossAccessKeyId'),
+      accessKeySecret: getValue('ossAccessKeySecret'),
+      excelBackupPrefix: getValue('ossExcelBackupPrefix').replace(/^\/+/, ''),
     };
   };
 
@@ -455,6 +455,43 @@
     );
     const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
     return arrayBufferToBase64(signature);
+  };
+
+  const loadScriptOnce = (src, globalName) => new Promise((resolve, reject) => {
+    if (globalName && window[globalName]) {
+      resolve(window[globalName]);
+      return;
+    }
+
+    const existing = Array.from(document.scripts).find((script) => script.src === src);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+      existing.addEventListener('error', () => reject(new Error('脚本加载失败')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve(globalName ? window[globalName] : true);
+    script.onerror = () => reject(new Error('脚本加载失败'));
+    document.head.appendChild(script);
+  });
+
+  const ensureXlsxLoaded = async () => {
+    if (window.XLSX) return window.XLSX;
+
+    try {
+      await loadScriptOnce('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js', 'XLSX');
+    } catch {
+      throw new Error('Excel解析库未加载。当前网络或代理无法访问 SheetJS CDN，请稍后重试或使用可联网环境导入。');
+    }
+
+    if (!window.XLSX) {
+      throw new Error('Excel解析库加载异常，请刷新页面后重试。');
+    }
+
+    return window.XLSX;
   };
 
   const utf8ToBase64 = (value) => {
@@ -1523,7 +1560,7 @@
       await uploadPropertyDataToOss(parsed, file, (percent) => {
         setUploadStatus(`上传中 ${percent}%`);
       });
-      await loadData({ bustCache: true });
+      await loadData({ bustCache: true, useOss: true });
       setUploadStatus('已同步成功');
     } catch (error) {
       setUploadStatus(`同步失败：${error?.message || '文件格式错误'}`);
@@ -1562,7 +1599,9 @@
     try {
       setUploadStatus('读取中', 'loading');
       const ossConfig = getOssConfig();
-      const shouldReadOss = hasOssReadConfig(ossConfig);
+      const shouldReadOss = options.useOss === false
+        ? false
+        : hasOssReadConfig(ossConfig);
       const dataUrl = shouldReadOss
         ? getOssObjectUrl(ossConfig)
         : encodeURI(constants.PROPERTY_ANALYSIS_DATA_URL);

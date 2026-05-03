@@ -509,7 +509,7 @@
     refs.selectedList.innerHTML = selected.map((item) => `
       <article class="spectrum-selected-item" data-spectrum-selected-item="${utils.escapeHtml(item.id)}">
         <button class="spectrum-selected-thumb" type="button" data-spectrum-open="${utils.escapeHtml(item.id)}">
-          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" loading="lazy" />
+          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
         </button>
         <button class="spectrum-selected-main" type="button" data-spectrum-open="${utils.escapeHtml(item.id)}">
           <span>${utils.escapeHtml(item.title)}</span>
@@ -778,7 +778,7 @@
       return `
         <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
           <div class="spectrum-card-image">
-            <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" loading="lazy" />
+            <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
           </div>
           <div class="spectrum-card-body">
             <div class="spectrum-card-top">
@@ -2035,9 +2035,48 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const exportSpectrumPackage = async () => {
+  const loadScriptOnce = (src, globalName) => new Promise((resolve, reject) => {
+    if (globalName && window[globalName]) {
+      resolve(window[globalName]);
+      return;
+    }
+
+    const existing = Array.from(document.scripts).find((script) => script.src === src);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true });
+      existing.addEventListener('error', () => reject(new Error('脚本加载失败')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve(globalName ? window[globalName] : true);
+    script.onerror = () => reject(new Error('脚本加载失败'));
+    document.head.appendChild(script);
+  });
+
+  const ensureJsZipLoaded = async () => {
+    if (window.JSZip) return window.JSZip;
+
+    try {
+      await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'JSZip');
+    } catch {
+      throw new Error('ZIP 处理库未加载。当前网络或代理无法访问 jsDelivr CDN，请稍后重试或使用可联网环境导入/导出。');
+    }
+
     if (!window.JSZip) {
-      window.alert('ZIP 导出库尚未加载，请检查网络后重试。');
+      throw new Error('ZIP 处理库加载异常，请刷新页面后重试。');
+    }
+
+    return window.JSZip;
+  };
+
+  const exportSpectrumPackage = async () => {
+    try {
+      await ensureJsZipLoaded();
+    } catch (error) {
+      window.alert(error?.message || 'ZIP 导出库尚未加载，请检查网络后重试。');
       return;
     }
 
@@ -2091,8 +2130,10 @@
 
   const importSpectrumPackage = async (file) => {
     if (!file) return;
-    if (!window.JSZip) {
-      window.alert('ZIP 导入库尚未加载，请检查网络后重试。');
+    try {
+      await ensureJsZipLoaded();
+    } catch (error) {
+      window.alert(error?.message || 'ZIP 导入库尚未加载，请检查网络后重试。');
       return;
     }
 

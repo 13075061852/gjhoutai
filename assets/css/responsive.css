@@ -100,6 +100,10 @@
       .biz-formula-editor-layout{
         grid-template-rows:minmax(360px,1fr) minmax(240px,.62fr);
       }
+      .biz-formula-overview-panel,
+      .biz-formula-builder .biz-formula-mini-stats{
+        grid-template-columns:1fr;
+      }
       .biz-formula-table-head{
         align-items:flex-start;
         flex-direction:column;
@@ -112,6 +116,9 @@
       .biz-formula-table-actions select,
       .biz-formula-new-btn{
         flex:1 1 180px;
+      }
+      .biz-formula-mini-stats{
+        grid-template-columns:repeat(2,minmax(0,1fr));
       }
       .biz-today-list ol{grid-template-columns:1fr}
       .biz-archive-layout .biz-table-panel{grid-column:auto}
@@ -360,6 +367,43 @@
       .placeholder-card{padding:20px}
       .business-lanes{
         grid-template-columns:1fr;
+      }
+      .biz-inventory-table-head{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .biz-inventory-category-head{
+        flex-direction:column;
+      }
+      .biz-inventory-category-head .biz-inventory-ghost-btn{
+        width:100%;
+      }
+      .biz-inventory-table-actions,
+      .biz-inventory-search{
+        width:100%;
+      }
+      .biz-inventory-category-editor,
+      .biz-inventory-material-editor{
+        grid-template-columns:1fr 1fr;
+      }
+      .biz-inventory-category-editor label,
+      .biz-inventory-material-editor label{
+        grid-column:auto;
+      }
+      .biz-inventory-material-dialog .biz-inventory-material-editor{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .biz-inventory-material-dialog .biz-inventory-material-editor label,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+        grid-column:auto;
+      }
+      .biz-formula-mini-stats{
+        grid-template-columns:1fr 1fr;
       }
       .biz-formula-edit-grid{
         grid-template-columns:repeat(2,minmax(0,1fr));
@@ -681,6 +725,47 @@
       .business-kpi-grid{grid-template-columns:1fr}
       .biz-stat-strip,
       .biz-warehouse-map{grid-template-columns:1fr}
+      .biz-inventory-category-editor,
+      .biz-inventory-material-editor{
+        grid-template-columns:1fr;
+      }
+      .biz-inventory-material-dialog .biz-inventory-material-editor{
+        grid-template-columns:1fr;
+      }
+      .biz-inventory-material-dialog .biz-inventory-material-editor label,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+        grid-column:auto;
+      }
+      .biz-inventory-category-modal{
+        padding:12px;
+      }
+      .biz-inventory-material-modal{
+        padding:12px;
+      }
+      .biz-inventory-category-dialog{
+        max-height:88vh;
+      }
+      .biz-inventory-material-dialog{
+        max-height:88vh;
+      }
+      .biz-inventory-category-list{
+        grid-template-columns:1fr;
+      }
+      .biz-inventory-category-editor .biz-inventory-primary-btn,
+      .biz-inventory-category-editor .biz-inventory-ghost-btn,
+      .biz-inventory-category-editor .biz-inventory-danger-btn,
+      .biz-inventory-material-editor .biz-inventory-primary-btn,
+      .biz-inventory-material-editor .biz-inventory-ghost-btn{
+        width:100%;
+      }
+      .biz-formula-mini-stats{
+        grid-template-columns:1fr;
+      }
       .biz-formula-page{
         min-height:calc(100dvh - var(--topbar) - 20px);
       }

@@ -481,7 +481,7 @@
                 const imageUrl = String(image?.image_url?.url || image?.url || '').trim();
                 if (!imageUrl) return '';
                 const previewUrl = String(image?.preview_url || image?.previewUrl || imageUrl).trim();
-                return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" loading="lazy" /></button>`;
+                return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" /></button>`;
               }).join('')}</div>`
             : '';
           const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
@@ -2321,4 +2321,3 @@
     draftPrompt,
   };
 })();
-

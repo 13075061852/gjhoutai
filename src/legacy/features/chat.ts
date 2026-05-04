@@ -604,6 +604,7 @@
     saveChatState();
     renderChat();
     if (conversationMenuOpen) renderConversationMenu();
+    App.notify?.success?.('已删除对话', { key: `chat-delete:${sessionId}` });
   };
 
   const formatRelativeAge = (isoValue) => {
@@ -2222,6 +2223,7 @@
       state.chatHistory = session.messages;
       saveChatState();
       renderChat();
+      App.notify?.warn?.('已清空当前聊天', { key: `chat-clear:${session.id}` });
     });
 
     refs.conversationMenuBtn?.addEventListener('click', (event) => {

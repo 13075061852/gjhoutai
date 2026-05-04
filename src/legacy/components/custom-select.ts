@@ -162,7 +162,11 @@
     if (event.key === 'Escape') closeInstance(openInstance);
   });
 
-  document.addEventListener('DOMContentLoaded', enhanceAll);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => enhanceAll(), { once: true });
+  } else {
+    enhanceAll();
+  }
   PublicApp.customSelects = { enhanceAll };
   App.customSelects = PublicApp.customSelects;
 }());

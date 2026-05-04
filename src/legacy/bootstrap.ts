@@ -8,6 +8,8 @@ import './core/animation-manager';
 import './components/custom-select';
 import './components/search-box';
 import './components/confirm-dialog';
+import './components/dialog-consent-animation';
+import './components/system-notify';
 import './features/business-pages';
 import './shell/navigation';
 import './features/property-analysis';

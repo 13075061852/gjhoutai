@@ -221,6 +221,7 @@
     const imageStored = await putStoredImage(dataUrl);
     if (!imageStored) {
       setStatus('确认结果保存失败，本地存储不可用', 'error');
+      App.notify?.error?.('确认结果保存失败，本地存储不可用', { key: 'image-cutout-confirm-failed' });
       return;
     }
     state.imageStored = true;
@@ -230,6 +231,7 @@
     syncActionButtons();
     refs.previewSubtitle.textContent = '已确认并保存当前结果，刷新后会恢复此状态';
     setStatus('已确认并保存当前结果', 'success');
+    App.notify?.success?.('已确认并保存当前结果', { key: 'image-cutout-confirm-save' });
   };
 
   const syncRangeLabels = () => {

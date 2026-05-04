@@ -14,6 +14,7 @@
   let draggedVisitedOriginalNext = null;
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
+  let navigationBound = false;
   const DEFAULT_PAGE_ID = 'ai-config';
   const SIDEBAR_TRANSITION_MS = 520;
   const MAX_RECENT_PAGES = 8;
@@ -673,6 +674,9 @@
   };
 
   const bindNavigation = () => {
+    if (navigationBound) return;
+    navigationBound = true;
+
     if (refs.sidebarToggle) {
       refs.sidebarToggle.addEventListener('click', () => {
         const willCollapse = !refs.shell?.classList.contains('sidebar-collapsed');

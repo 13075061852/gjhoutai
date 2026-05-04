@@ -239,6 +239,8 @@
   let formulaListStatus = '全部';
   let formulaListPage = 1;
   let formulaPageSize = 10;
+  let formulaEditorDraft = null;
+  let formulaEditorOriginalKey = '';
   const formulaPageSizeOptions = [5, 10, 20, 50];
 
   const SUPPLIER_STORAGE_KEY = 'gjh-suppliers-v1';
@@ -297,10 +299,52 @@
   let supplierDraftNote = '供应商档案自动保存到本地';
   let supplierListPage = 1;
   let supplierPageSize = 10;
+  const normalizeArchiveRecord = (config, record = {}, index = 0) => {
+    const source = Array.isArray(record)
+      ? {
+        code: record[0],
+        name: record[1],
+        contact: record[2],
+        phone: record[3],
+        email: record[4],
+        category: record[5],
+        status: record[6],
+        address: record[7],
+        note: record[8],
+      }
+      : record;
+    const status = String(source.status || '').trim();
+    return {
+      code: String(source.code || `${config.codePrefix}${String(index + 1).padStart(3, '0')}`).trim(),
+      name: String(source.name || '').trim(),
+      contact: String(source.contact || '').trim(),
+      phone: String(source.phone || '').trim(),
+      email: String(source.email || '').trim(),
+      category: String(source.category || config.categories[0]).trim(),
+      status: config.statuses.includes(status) ? status : config.statuses[0],
+      address: String(source.address || '').trim(),
+      note: String(source.note || '').trim(),
+    };
+  };
+  const normalizeArchiveRows = (config, value) => {
+    const rows = Array.isArray(value)
+      ? value.map((record, index) => normalizeArchiveRecord(config, record, index)).filter((record) => record.code && record.name)
+      : [];
+    return rows.length ? rows : config.defaults.map((record, index) => normalizeArchiveRecord(config, record, index));
+  };
 
   const getInventoryCategories = () => [
     ...new Set([...inventoryCategories, ...inventoryRows.map((row) => row[2]).filter(Boolean)]),
   ];
+
+  const notifyAction = (message, tone = 'success', key = '') => {
+    App.notify?.show?.({
+      title: tone === 'warn' ? '需要处理' : '操作完成',
+      message,
+      tone,
+      key: key || `${tone}:${message}`,
+    });
+  };
 
   const persistInventory = (note = '库存数据已保存') => {
     inventoryDraftNote = note;
@@ -348,12 +392,14 @@
     const row = getInventoryFormRow();
     if (!row[0]) {
       inventoryDraftNote = '请先填写材料名称';
+      notifyAction(inventoryDraftNote, 'warn', 'inventory-material-name-required');
       return false;
     }
     const currentIndex = inventoryEditingMaterialName ? getInventoryMaterialIndex(inventoryEditingMaterialName) : -1;
     const duplicatedIndex = getInventoryMaterialIndex(row[0]);
     if (duplicatedIndex >= 0 && duplicatedIndex !== currentIndex) {
       inventoryDraftNote = '材料名称已存在，请换一个名称';
+      notifyAction(inventoryDraftNote, 'warn', 'inventory-material-name-duplicated');
       return false;
     }
     if (currentIndex >= 0) {
@@ -363,12 +409,14 @@
       inventoryEditingMaterialName = row[0];
       inventoryCategory = row[2];
       persistInventory(`已更新材料 ${row[0]} · ${getTimeCode()}`);
+      notifyAction(`已保存材料 ${row[0]}`, 'success', `inventory-material-save:${row[0]}`);
       return true;
     }
     inventoryRows.unshift(row);
     inventoryEditingMaterialName = row[0];
     inventoryCategory = row[2];
     persistInventory(`已新增材料 ${row[0]} · ${getTimeCode()}`);
+    notifyAction(`已新增材料 ${row[0]}`, 'success', `inventory-material-save:${row[0]}`);
     return true;
   };
 
@@ -384,6 +432,7 @@
     if (inventoryEditingMaterialName === name) inventoryEditingMaterialName = '';
     removeFormulaMaterialName(name);
     persistInventory(`已删除材料 ${name} · ${getTimeCode()}`);
+    notifyAction(`已删除材料 ${name}`, 'success', `inventory-material-delete:${name}`);
     return true;
   };
 
@@ -392,12 +441,14 @@
     const nextCategory = String(input?.value || '').trim();
     if (!nextCategory) {
       inventoryDraftNote = '请先填写分类名称';
+      notifyAction(inventoryDraftNote, 'warn', 'inventory-category-name-required');
       return;
     }
     const categories = getInventoryCategories();
     if (inventoryEditingCategory && inventoryEditingCategory !== nextCategory) {
       if (categories.includes(nextCategory)) {
         inventoryDraftNote = '分类名称已存在，请换一个名称';
+        notifyAction(inventoryDraftNote, 'warn', 'inventory-category-name-duplicated');
         return;
       }
       inventoryRows.forEach((row) => {
@@ -407,12 +458,14 @@
       inventoryCategory = nextCategory;
       inventoryEditingCategory = nextCategory;
       persistInventory(`已重命名分类为 ${nextCategory} · ${getTimeCode()}`);
+      notifyAction(`已保存分类 ${nextCategory}`, 'success', `inventory-category-save:${nextCategory}`);
       return;
     }
     if (!categories.includes(nextCategory)) inventoryCategories.push(nextCategory);
     inventoryCategory = nextCategory;
     inventoryEditingCategory = nextCategory;
     persistInventory(`已新增分类 ${nextCategory} · ${getTimeCode()}`);
+    notifyAction(`已新增分类 ${nextCategory}`, 'success', `inventory-category-save:${nextCategory}`);
   };
 
   const deleteInventoryCategory = async (category) => {
@@ -434,6 +487,7 @@
     inventoryCategory = '全部';
     inventoryEditingCategory = '';
     persistInventory(`已删除分类 ${category} · ${getTimeCode()}`);
+    notifyAction(`已删除分类 ${category}`, 'success', `inventory-category-delete:${category}`);
     return true;
   };
 
@@ -884,12 +938,86 @@
     activeFormulaId = formulaRecipes[0].id;
   }
 
+  const getFormulaDraftKey = (recipe) => JSON.stringify(getRecipeVersionSnapshot(recipe || {}));
+
+  const isFormulaDraftActive = () => Boolean(formulaEditorDraft && formulaViewMode === 'edit' && formulaEditorDraft.id === activeFormulaId);
+
+  const getEditableFormulaRecipe = () => (isFormulaDraftActive()
+    ? formulaEditorDraft
+    : formulaRecipes[getActiveFormulaIndex()]);
+
+  const clearFormulaEditorDraft = () => {
+    formulaEditorDraft = null;
+    formulaEditorOriginalKey = '';
+  };
+
+  const beginFormulaEdit = (recipe, { isNew = false } = {}) => {
+    formulaEditorDraft = cloneFormulaData(recipe);
+    formulaEditorOriginalKey = isNew ? getFormulaDraftKey(formulaEditorDraft) : getFormulaDraftKey(recipe);
+    activeFormulaId = formulaEditorDraft.id;
+    activeFormulaMaterialIndex = null;
+    formulaViewMode = 'edit';
+  };
+
+  const createEmptyFormulaRecipe = () => {
+    const id = `FM-${getTodayCode().replace(/-/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const recipe = {
+      id,
+      code: '',
+      name: '',
+      product: '',
+      version: 'V1.0',
+      status: '实验',
+      line: 'A',
+      owner: '',
+      updated: getTodayCode(),
+      target: '',
+      batchSize: '',
+      materials: [],
+      process: [],
+      checks: [],
+    };
+    recipe.versions = [createFormulaVersionRecord(recipe, recipe.version, '初始版本')];
+    return recipe;
+  };
+
+  const hasFormulaDraftContent = (recipe) => {
+    if (!recipe) return false;
+    const textFields = ['code', 'name', 'product', 'owner', 'batchSize', 'target'];
+    const hasText = textFields.some((field) => String(recipe[field] || '').trim());
+    const hasMaterials = (recipe.materials || []).some((material) => (
+      String(material.name || '').trim()
+      || Number(material.ratio || 0)
+      || String(material.role || '').trim() !== '配方材料'
+      || String(material.stage || '').trim() !== '待设定'
+    ));
+    const hasProcess = (recipe.process || []).some((item) => (
+      String(Array.isArray(item) ? item[0] : item?.step || '').trim()
+      || String(Array.isArray(item) ? item[1] : item?.detail || '').trim()
+    ));
+    return hasText || hasMaterials || hasProcess || (recipe.checks || []).length > 0;
+  };
+
+  const isFormulaDraftChanged = () => isFormulaDraftActive()
+    && getFormulaDraftKey(formulaEditorDraft) !== formulaEditorOriginalKey;
+
   const persistFormulaRecipes = (note = '草稿自动保存') => {
     formulaDraftNote = note;
     utils.writeJson(FORMULA_STORAGE_KEY, formulaRecipes);
   };
 
   const saveActiveFormulaVersion = () => {
+    const draft = isFormulaDraftActive() ? cloneFormulaData(formulaEditorDraft) : null;
+    if (draft) {
+      const existingIndex = formulaRecipes.findIndex((recipe) => recipe.id === draft.id);
+      if (existingIndex >= 0) {
+        formulaRecipes[existingIndex] = draft;
+      } else {
+        formulaRecipes.unshift(draft);
+      }
+      activeFormulaId = draft.id;
+      formulaEditorDraft = null;
+    }
     const recipe = formulaRecipes[getActiveFormulaIndex()];
     if (!recipe) return;
     const currentKey = getRecipeVersionKey(recipe);
@@ -898,6 +1026,8 @@
       recipe.version = matchedVersion.label;
       recipe.updated = getTodayCode();
       persistFormulaRecipes(`已保存基础信息，配料未变化 · ${getTimeCode()}`);
+      notifyAction(`已保存配方 ${recipe.name || recipe.code || recipe.id}`, 'success', `formula-save:${recipe.id}`);
+      clearFormulaEditorDraft();
       return;
     }
     const latestVersion = recipe.versions?.[recipe.versions.length - 1];
@@ -906,10 +1036,12 @@
     recipe.updated = getTodayCode();
     recipe.versions = [...(recipe.versions || []), createFormulaVersionRecord(recipe, nextLabel, '手动保存')];
     persistFormulaRecipes(`已新增版本 ${nextLabel} · ${getTimeCode()}`);
+    notifyAction(`已保存配方版本 ${nextLabel}`, 'success', `formula-save:${recipe.id}`);
+    clearFormulaEditorDraft();
   };
 
   const applyActiveFormulaVersion = (versionId) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     const versionRecord = recipe?.versions?.find((item) => item.id === versionId);
     if (!recipe || !versionRecord?.snapshot) return;
     const snapshot = cloneFormulaData(versionRecord.snapshot);
@@ -927,7 +1059,7 @@
     recipe.version = versionRecord.label;
     recipe.updated = String(versionRecord.savedAt || '').split(' ')[0] || recipe.updated;
     activeFormulaMaterialIndex = null;
-    persistFormulaRecipes(`正在查看 ${versionRecord.label} · ${getTimeCode()}`);
+    formulaDraftNote = `正在查看 ${versionRecord.label} · ${getTimeCode()}`;
   };
 
   const getActiveFormulaIndex = () => {
@@ -935,7 +1067,9 @@
     return index >= 0 ? index : 0;
   };
 
-  const getActiveFormula = () => formulaRecipes.find((recipe) => recipe.id === activeFormulaId) || formulaRecipes[0];
+  const getActiveFormula = () => (isFormulaDraftActive()
+    ? formulaEditorDraft
+    : formulaRecipes.find((recipe) => recipe.id === activeFormulaId) || formulaRecipes[0]);
 
   const getLeastUsedPort = (materials) => {
     const counts = feederPorts.map((port) => [
@@ -983,18 +1117,24 @@
 
   const updateActiveFormulaField = (field, value) => {
     if (!formulaEditableFields.has(field)) return;
-    const index = getActiveFormulaIndex();
-    formulaRecipes[index] = {
-      ...formulaRecipes[index],
+    const recipe = getEditableFormulaRecipe();
+    if (!recipe) return;
+    const nextRecipe = {
+      ...recipe,
       [field]: value,
       updated: getTodayCode(),
     };
-    persistFormulaRecipes('已自动保存');
+    if (isFormulaDraftActive()) {
+      formulaEditorDraft = nextRecipe;
+    } else {
+      formulaRecipes[getActiveFormulaIndex()] = nextRecipe;
+    }
+    formulaDraftNote = '草稿未保存';
   };
 
   const updateActiveFormulaMaterial = (materialIndex, field, value) => {
     if (!formulaMaterialFields.has(field)) return;
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     const material = recipe?.materials?.[materialIndex];
     if (!material) return;
     if (field === 'ratio') {
@@ -1005,11 +1145,11 @@
       material[field] = value;
     }
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已自动保存');
+    formulaDraftNote = '草稿未保存';
   };
 
   const updateActiveFormulaPortGroup = (fromPort, toPort) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     const sourcePort = normalizeFeederPort(fromPort);
     const targetPort = normalizeFeederPort(toPort, sourcePort);
     if (!recipe || sourcePort === targetPort) return;
@@ -1019,19 +1159,19 @@
       if (currentPort === targetPort) material.port = sourcePort;
     });
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已调整下料口');
+    formulaDraftNote = '草稿未保存';
   };
 
   const addActiveFormulaMaterial = (name) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     if (!recipe || recipe.materials.some((item) => item.name === name)) return;
     recipe.materials.push(getDefaultFormulaMaterial(name, getLeastUsedPort(recipe.materials)));
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已加入库存材料');
+    formulaDraftNote = '草稿未保存';
   };
 
   const addActiveFormulaMaterialRow = (port, afterIndex = null) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     if (!recipe) return;
     const targetPort = normalizeFeederPort(port);
     const explicitMaterial = recipe.materials[afterIndex];
@@ -1051,11 +1191,11 @@
     recipe.materials.splice(insertIndex, 0, getEmptyFormulaMaterial(targetPort));
     activeFormulaMaterialIndex = insertIndex;
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已增加下料口行');
+    formulaDraftNote = '草稿未保存';
   };
 
   const assignActiveFormulaMaterial = (materialIndex, name) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     const material = recipe?.materials?.[materialIndex];
     if (!material || !name) return;
     const nextMaterial = getDefaultFormulaMaterial(name, material.port);
@@ -1065,26 +1205,26 @@
     };
     activeFormulaMaterialIndex = materialIndex;
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已更换配方材料');
+    formulaDraftNote = '草稿未保存';
   };
 
   const removeActiveFormulaMaterial = (materialIndex) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     if (!recipe?.materials?.[materialIndex]) return;
     recipe.materials.splice(materialIndex, 1);
     activeFormulaMaterialIndex = null;
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已移除配方材料');
+    formulaDraftNote = '草稿未保存';
   };
 
   const removeActiveFormulaMaterialByName = (name) => {
-    const recipe = formulaRecipes[getActiveFormulaIndex()];
+    const recipe = getEditableFormulaRecipe();
     const materialIndex = recipe?.materials?.findIndex((item) => item.name === name) ?? -1;
     if (materialIndex < 0) return false;
     recipe.materials.splice(materialIndex, 1);
     activeFormulaMaterialIndex = null;
     recipe.updated = getTodayCode();
-    persistFormulaRecipes('已移除配方材料');
+    formulaDraftNote = '草稿未保存';
     return true;
   };
 
@@ -1093,38 +1233,19 @@
     activeFormulaId = formulaRecipes[0]?.id || activeFormulaId;
     formulaMaterialCategory = '全部';
     activeFormulaMaterialIndex = null;
+    clearFormulaEditorDraft();
     persistFormulaRecipes('已恢复默认配方');
   };
 
   const createFormulaRecipe = () => {
-    const id = `FM-${getTodayCode().replace(/-/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-    const recipe = {
-      id,
-      code: id.replace('FM-', ''),
-      name: '新建配方',
-      product: id.replace('FM-', 'GJ-'),
-      version: 'V1.0',
-      status: '实验',
-      line: 'A',
-      owner: '待分配',
-      updated: getTodayCode(),
-      target: '填写目标指标、客户要求或实验备注',
-      batchSize: '500 kg',
-      materials: [],
-      process: [['称量', '填写领料与复核要求']],
-      checks: [],
-    };
-    recipe.versions = [createFormulaVersionRecord(recipe, recipe.version, '初始版本')];
-    formulaRecipes.unshift(recipe);
-    activeFormulaId = recipe.id;
-    activeFormulaMaterialIndex = null;
-    formulaViewMode = 'edit';
-    persistFormulaRecipes('已新建配方');
+    beginFormulaEdit(createEmptyFormulaRecipe(), { isNew: true });
+    formulaDraftNote = '新建配方未保存';
   };
 
   const deleteFormulaRecipe = async (recipeId) => {
     if (formulaRecipes.length <= 1) {
       formulaDraftNote = '至少保留 1 个配方';
+      notifyAction(formulaDraftNote, 'warn', 'formula-delete-last');
       return;
     }
     const index = formulaRecipes.findIndex((recipe) => recipe.id === recipeId);
@@ -1141,6 +1262,7 @@
       activeFormulaMaterialIndex = null;
     }
     persistFormulaRecipes('已删除配方');
+    notifyAction(`已删除配方 ${recipe.name || recipe.code || recipeId}`, 'success', `formula-delete:${recipeId}`);
     return true;
   };
 
@@ -1677,6 +1799,37 @@
 
   const renderFormula = () => (formulaViewMode === 'edit' ? renderFormulaEditor() : renderFormulaList());
 
+  const returnFormulaList = () => {
+    formulaViewMode = 'list';
+    activeFormulaMaterialIndex = null;
+    clearFormulaEditorDraft();
+    render('formula-management');
+  };
+
+  const handleFormulaBackToList = async () => {
+    if (!isFormulaDraftActive()) {
+      returnFormulaList();
+      return;
+    }
+
+    if (!hasFormulaDraftContent(formulaEditorDraft) || !isFormulaDraftChanged()) {
+      returnFormulaList();
+      return;
+    }
+
+    const confirmed = await App.confirmDialog?.open?.({
+      title: '保存当前配方',
+      message: '当前配方内容已修改，是否保存后返回列表？',
+      confirmText: '保存',
+      cancelText: '不保存',
+      variant: 'normal',
+      icon: 'ti-device-floppy',
+    });
+
+    if (confirmed) saveActiveFormulaVersion();
+    returnFormulaList();
+  };
+
   const renderProduction = () => `
     <section class="biz-production-layout">
       <article class="business-panel biz-line-board">
@@ -1703,26 +1856,193 @@
     ])}
   `;
 
-  const archiveData = {
-    'customer-archive': {
-      title: '客户服务视图',
-      side: ['宁波辰光电器', '杭州启明科技', '苏州瑞嘉材料'],
-      tags: ['重点客户', '样品跟进', '账期复核', '阻燃 ABS'],
-      rows: [['宁波辰光电器', '重点', '阻燃 ABS 样品确认', '王敏'], ['杭州启明科技', '活跃', 'PC/ABS 报价更新', '赵磊'], ['苏州瑞嘉材料', '重点', '账期复核', '李娜']],
-      columns: ['客户', '等级', '最近事项', '负责人'],
+  const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
+  const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
+  const archiveConfigs = {
+    customer: {
+      pageId: 'customer-archive',
+      storageKey: CUSTOMER_STORAGE_KEY,
+      title: '客户管理',
+      icon: 'ti-users-group',
+      entityName: '客户',
+      codePrefix: 'C',
+      codeLabel: '客户编号',
+      nameLabel: '客户名称',
+      namePlaceholder: '客户名称',
+      filterLabel: '客户等级',
+      filterAllLabel: '全部等级',
+      categoryLabel: '客户等级',
+      statusLabel: '服务状态',
+      searchPlaceholder: '搜索客户、联系人、地址...',
+      searchLabel: '搜索客户档案',
+      addText: '新增客户',
+      emptyText: '暂无匹配客户',
+      categories: ['重点客户', '活跃客户', '潜在客户', '账期复核', '样品跟进'],
+      statuses: ['正常服务', '样品跟进', '账期复核', '暂停服务'],
+      columns: ['编号', '客户名称', '联系人', '电话', '邮箱', '客户等级', '状态', '操作'],
+      defaults: [
+        { code: 'C001', name: '宁波辰光电器', contact: '王总', phone: '0574-88223311', email: 'wang@cg-electric.com', category: '重点客户', status: '正常服务', address: '浙江省宁波市鄞州区启明路', note: '阻燃 ABS 长期客户，本月样品确认后转量产。' },
+        { code: 'C002', name: '杭州启明科技', contact: '周经理', phone: '0571-88990012', email: 'zhou@qm-tech.com', category: '活跃客户', status: '正常服务', address: '浙江省杭州市滨江区江南大道', note: 'PC/ABS 报价已更新，关注交期承诺。' },
+        { code: 'C003', name: '苏州瑞嘉材料', contact: '李娜', phone: '0512-67881234', email: 'lina@ruijia.com', category: '重点客户', status: '账期复核', address: '江苏省苏州市工业园区星湖街', note: '增强 PP 订单稳定，账期额度待财务复核。' },
+        { code: 'C004', name: '昆山明拓模塑', contact: '陈工', phone: '0512-55112233', email: 'chen@mt-mold.com', category: '样品跟进', status: '样品跟进', address: '江苏省昆山市开发区前进东路', note: '高光 ABS 试样中，需补充色差报告。' },
+        { code: 'C005', name: '常州宏远电装', contact: '赵经理', phone: '0519-86667788', email: 'zhao@hy-wire.com', category: '活跃客户', status: '正常服务', address: '江苏省常州市武进区湖塘镇', note: '线束材料季度需求稳定，发货前同步质检报告。' },
+      ],
     },
-    'personnel-archive': {
-      title: '组织与权限',
-      side: ['王敏 / 销售主管', '陈工 / 质检工程师', '刘洋 / 仓储管理员'],
-      tags: ['在岗', '权限待确认', '实验室', '销售部'],
-      rows: [['王敏', '销售部', '销售主管', '在岗'], ['陈工', '实验室', '质检工程师', '在岗'], ['刘洋', '仓储部', '仓储管理员', '权限待确认']],
-      columns: ['姓名', '部门', '角色', '状态'],
+    personnel: {
+      pageId: 'personnel-archive',
+      storageKey: PERSONNEL_STORAGE_KEY,
+      title: '人员管理',
+      icon: 'ti-id-badge-2',
+      entityName: '人员',
+      codePrefix: 'P',
+      codeLabel: '人员编号',
+      nameLabel: '姓名',
+      namePlaceholder: '姓名',
+      filterLabel: '部门',
+      filterAllLabel: '全部部门',
+      categoryLabel: '部门',
+      statusLabel: '在岗状态',
+      searchPlaceholder: '搜索姓名、部门、岗位...',
+      searchLabel: '搜索人员档案',
+      addText: '新增人员',
+      emptyText: '暂无匹配人员',
+      categories: ['销售部', '实验室', '仓储部', '生产部', '财务部', '系统管理'],
+      statuses: ['在岗', '试用', '权限待确认', '停用'],
+      columns: ['编号', '姓名', '部门', '岗位', '电话', '邮箱', '状态', '操作'],
+      defaults: [
+        { code: 'P001', name: '王敏', contact: '销售主管', phone: '13800010001', email: 'wangmin@gj-plastic.com', category: '销售部', status: '在岗', address: '销售部 / 华东客户组', note: '负责重点客户、报价审批和客户跟进列表。' },
+        { code: 'P002', name: '陈工', contact: '质检工程师', phone: '13800010002', email: 'chengong@gj-plastic.com', category: '实验室', status: '在岗', address: '实验室 / 物性检测', note: '负责物性、图谱异常复核和报告归档。' },
+        { code: 'P003', name: '刘洋', contact: '仓储管理员', phone: '13800010003', email: 'liuyang@gj-plastic.com', category: '仓储部', status: '权限待确认', address: '仓储部 / 原料仓', note: '负责库存盘点、出入库复核和仓库预警。' },
+        { code: 'P004', name: '赵磊', contact: '销售经理', phone: '13800010004', email: 'zhaolei@gj-plastic.com', category: '销售部', status: '在岗', address: '销售部 / 华南客户组', note: '负责 PC/ABS 客户报价与交付协调。' },
+        { code: 'P005', name: '何佳', contact: '生产计划员', phone: '13800010005', email: 'hejia@gj-plastic.com', category: '生产部', status: '试用', address: '生产部 / 排产中心', note: '跟进产线排程、齐套状态和插单评估。' },
+      ],
     },
   };
 
   const getSupplierCategories = () => [
     ...new Set([...supplierCategoryOptions, ...supplierRows.map((supplier) => supplier.category).filter(Boolean)]),
   ];
+
+  const archiveStates = Object.fromEntries(Object.entries(archiveConfigs).map(([kind, config]) => [kind, {
+    rows: normalizeArchiveRows(config, utils.readJson(config.storageKey, null)),
+    filter: '全部',
+    search: '',
+    editingCode: '',
+    modalOpen: false,
+    draftNote: `${config.entityName}档案自动保存到本地`,
+    page: 1,
+    pageSize: 10,
+  }]));
+
+  const getArchiveCategories = (config, state) => [
+    ...new Set([...config.categories, ...state.rows.map((record) => record.category).filter(Boolean)]),
+  ];
+
+  const getArchiveByCode = (kind, code) => archiveStates[kind]?.rows.find((record) => record.code === code);
+
+  const getArchiveStatusClass = (status) => {
+    if (/暂停|停用/.test(status)) return 'is-danger';
+    if (/复核|确认|试用|样品/.test(status)) return 'is-warn';
+    return 'is-ok';
+  };
+
+  const persistArchive = (kind, note) => {
+    const config = archiveConfigs[kind];
+    const state = archiveStates[kind];
+    if (!config || !state) return;
+    state.draftNote = note || `${config.entityName}档案已保存`;
+    utils.writeJson(config.storageKey, state.rows);
+  };
+
+  const getNextArchiveCode = (kind) => {
+    const config = archiveConfigs[kind];
+    const state = archiveStates[kind];
+    const prefix = config.codePrefix;
+    const matcher = new RegExp(`^${prefix}(\\d+)$`, 'i');
+    const maxNumber = state.rows.reduce((max, record) => {
+      const match = String(record.code || '').match(matcher);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 0);
+    return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`;
+  };
+
+  const getArchiveFormData = (kind) => {
+    const config = archiveConfigs[kind];
+    const root = refs.businessPageContent;
+    const read = (field) => String(root?.querySelector(`[data-archive-field="${field}"]`)?.value || '').trim();
+    return normalizeArchiveRecord(config, {
+      code: read('code'),
+      name: read('name'),
+      contact: read('contact'),
+      phone: read('phone'),
+      email: read('email'),
+      category: read('category'),
+      status: read('status'),
+      address: read('address'),
+      note: read('note'),
+    });
+  };
+
+  const saveArchiveRecord = (kind) => {
+    const config = archiveConfigs[kind];
+    const state = archiveStates[kind];
+    const record = getArchiveFormData(kind);
+    if (!record.code) {
+      state.draftNote = `请先填写${config.codeLabel}`;
+      notifyAction(state.draftNote, 'warn', `${kind}-code-required`);
+      return false;
+    }
+    if (!record.name) {
+      state.draftNote = `请先填写${config.nameLabel}`;
+      notifyAction(state.draftNote, 'warn', `${kind}-name-required`);
+      return false;
+    }
+    const currentIndex = state.editingCode ? state.rows.findIndex((row) => row.code === state.editingCode) : -1;
+    const duplicatedCodeIndex = state.rows.findIndex((row) => row.code === record.code);
+    if (duplicatedCodeIndex >= 0 && duplicatedCodeIndex !== currentIndex) {
+      state.draftNote = `${config.codeLabel}已存在，请换一个编号`;
+      notifyAction(state.draftNote, 'warn', `${kind}-code-duplicated`);
+      return false;
+    }
+    const duplicatedNameIndex = state.rows.findIndex((row) => row.name === record.name);
+    if (duplicatedNameIndex >= 0 && duplicatedNameIndex !== currentIndex) {
+      state.draftNote = `${config.nameLabel}已存在，请换一个名称`;
+      notifyAction(state.draftNote, 'warn', `${kind}-name-duplicated`);
+      return false;
+    }
+    if (currentIndex >= 0) {
+      state.rows[currentIndex] = record;
+      state.editingCode = record.code;
+      state.filter = record.category;
+      persistArchive(kind, `已更新${config.entityName} ${record.name} · ${getTimeCode()}`);
+      notifyAction(`已保存${config.entityName} ${record.name}`, 'success', `${kind}-save:${record.code}`);
+      return true;
+    }
+    state.rows.unshift(record);
+    state.editingCode = record.code;
+    state.filter = record.category;
+    persistArchive(kind, `已新增${config.entityName} ${record.name} · ${getTimeCode()}`);
+    notifyAction(`已新增${config.entityName} ${record.name}`, 'success', `${kind}-save:${record.code}`);
+    return true;
+  };
+
+  const deleteArchiveRecord = async (kind, code) => {
+    const config = archiveConfigs[kind];
+    const state = archiveStates[kind];
+    const index = state.rows.findIndex((record) => record.code === code);
+    if (index < 0) return false;
+    const record = state.rows[index];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: `删除${config.entityName}`,
+      message: `确认删除${config.entityName}「${record.name}」？删除后无法恢复。`,
+    });
+    if (!confirmed) return false;
+    state.rows.splice(index, 1);
+    if (state.editingCode === code) state.editingCode = '';
+    persistArchive(kind, `已删除${config.entityName} ${record.name} · ${getTimeCode()}`);
+    notifyAction(`已删除${config.entityName} ${record.name}`, 'success', `${kind}-delete:${code}`);
+    return true;
+  };
 
   const getSupplierByCode = (code) => supplierRows.find((supplier) => supplier.code === code);
 
@@ -1765,21 +2085,25 @@
     const supplier = getSupplierFormData();
     if (!supplier.code) {
       supplierDraftNote = '请先填写供应商编号';
+      notifyAction(supplierDraftNote, 'warn', 'supplier-code-required');
       return false;
     }
     if (!supplier.name) {
       supplierDraftNote = '请先填写供应商名称';
+      notifyAction(supplierDraftNote, 'warn', 'supplier-name-required');
       return false;
     }
     const currentIndex = supplierEditingCode ? supplierRows.findIndex((row) => row.code === supplierEditingCode) : -1;
     const duplicatedCodeIndex = supplierRows.findIndex((row) => row.code === supplier.code);
     if (duplicatedCodeIndex >= 0 && duplicatedCodeIndex !== currentIndex) {
       supplierDraftNote = '供应商编号已存在，请换一个编号';
+      notifyAction(supplierDraftNote, 'warn', 'supplier-code-duplicated');
       return false;
     }
     const duplicatedNameIndex = supplierRows.findIndex((row) => row.name === supplier.name);
     if (duplicatedNameIndex >= 0 && duplicatedNameIndex !== currentIndex) {
       supplierDraftNote = '供应商名称已存在，请换一个名称';
+      notifyAction(supplierDraftNote, 'warn', 'supplier-name-duplicated');
       return false;
     }
     if (currentIndex >= 0) {
@@ -1787,12 +2111,14 @@
       supplierEditingCode = supplier.code;
       supplierCategoryFilter = supplier.category;
       persistSuppliers(`已更新供应商 ${supplier.name} · ${getTimeCode()}`);
+      notifyAction(`已保存供应商 ${supplier.name}`, 'success', `supplier-save:${supplier.code}`);
       return true;
     }
     supplierRows.unshift(supplier);
     supplierEditingCode = supplier.code;
     supplierCategoryFilter = supplier.category;
     persistSuppliers(`已新增供应商 ${supplier.name} · ${getTimeCode()}`);
+    notifyAction(`已新增供应商 ${supplier.name}`, 'success', `supplier-save:${supplier.code}`);
     return true;
   };
 
@@ -1808,6 +2134,7 @@
     supplierRows.splice(index, 1);
     if (supplierEditingCode === code) supplierEditingCode = '';
     persistSuppliers(`已删除供应商 ${supplier.name} · ${getTimeCode()}`);
+    notifyAction(`已删除供应商 ${supplier.name}`, 'success', `supplier-delete:${code}`);
     return true;
   };
 
@@ -1971,22 +2298,169 @@
     `;
   };
 
-  const renderArchive = (pageId) => {
-    const data = archiveData[pageId];
+  const renderArchive = (kind) => {
+    const config = archiveConfigs[kind];
+    const state = archiveStates[kind];
+    const categories = getArchiveCategories(config, state);
+    const categoryTabs = ['全部', ...categories];
+    if (!categoryTabs.includes(state.filter)) state.filter = '全部';
+    const normalizedSearch = state.search.trim().toLowerCase();
+    const visibleRows = state.rows.filter((record) => {
+      const matchedCategory = state.filter === '全部' || record.category === state.filter;
+      const values = [record.code, record.name, record.contact, record.phone, record.email, record.category, record.address, record.status, record.note];
+      const matchedSearch = !normalizedSearch || values.some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      return matchedCategory && matchedSearch;
+    });
+    const filteredCount = visibleRows.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / state.pageSize));
+    state.page = Math.min(Math.max(1, state.page), totalPages);
+    const pageStart = (state.page - 1) * state.pageSize;
+    const pagedRows = visibleRows.slice(pageStart, pageStart + state.pageSize);
+    const editingRecord = state.editingCode ? getArchiveByCode(kind, state.editingCode) : null;
+    const formRecord = editingRecord || normalizeArchiveRecord(config, {
+      code: getNextArchiveCode(kind),
+      category: state.filter === '全部' ? categories[0] || config.categories[0] : state.filter,
+      status: config.statuses[0],
+    });
+
     return `
-      <section class="biz-archive-layout">
-        <aside class="business-panel biz-directory">
-          <div class="business-panel-head"><h2>${esc(data.title)}</h2><span>快速定位</span></div>
-          ${data.side.map((item, index) => `<button class="${index === 0 ? 'is-active' : ''}" type="button">${esc(item)}</button>`).join('')}
-        </aside>
-        <article class="business-panel biz-profile">
-          <div class="biz-avatar">${esc(data.side[0].slice(0, 2))}</div>
-          <h2>${esc(data.side[0])}</h2>
-          <p>这里展示基础资料、联系人、业务关系、历史记录和待处理事项。</p>
-          <div class="biz-tags">${data.tags.map((tag) => `<span>${esc(tag)}</span>`).join('')}</div>
-        </article>
-        ${renderTable('最近记录', data.columns, data.rows)}
-      </section>
+      <div class="biz-supplier-page biz-archive-table-page">
+        <section class="business-panel biz-supplier-table-panel biz-archive-table-panel">
+          <div class="biz-formula-table-head biz-supplier-table-head">
+            <div class="biz-formula-table-title">
+              <i class="ti ${esc(config.icon)}" aria-hidden="true"></i>
+              <div>
+                <h2>${esc(config.title)}</h2>
+              </div>
+            </div>
+            <div class="biz-formula-table-actions biz-supplier-table-actions">
+              ${renderSearchBox({
+                className: 'biz-supplier-search',
+                value: state.search,
+                placeholder: config.searchPlaceholder,
+                label: config.searchLabel,
+                attributes: { 'data-archive-search': kind },
+              })}
+              <select data-archive-filter="${esc(kind)}" aria-label="${esc(config.filterLabel)}筛选">
+                ${categoryTabs.map((category) => `
+                  <option value="${esc(category)}" ${category === state.filter ? 'selected' : ''}>${esc(category === '全部' ? config.filterAllLabel : category)}</option>
+                `).join('')}
+              </select>
+              <button class="biz-formula-new-btn" type="button" data-archive-new="${esc(kind)}">
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>${esc(config.addText)}</span>
+              </button>
+            </div>
+          </div>
+          <div class="ui-table-wrap biz-supplier-table-wrap">
+            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table biz-archive-table">
+              <thead>
+                <tr>${config.columns.map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${pagedRows.map((record) => `
+                  <tr>
+                    <td>${esc(record.code)}</td>
+                    <td class="biz-supplier-name-cell">${esc(record.name)}</td>
+                    <td>${esc(record.contact || '--')}</td>
+                    <td>${esc(record.phone || '--')}</td>
+                    <td>${esc(record.email || '--')}</td>
+                    <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
+                    <td><span class="biz-formula-status ${getArchiveStatusClass(record.status)}">${esc(record.status)}</span></td>
+                    <td>
+                      <div class="biz-supplier-row-actions">
+                        <button type="button" title="编辑${esc(config.entityName)}" aria-label="编辑 ${esc(record.name)}" data-archive-edit="${esc(kind)}" data-archive-code="${esc(record.code)}">
+                          <i class="ti ti-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button class="is-danger" type="button" title="删除${esc(config.entityName)}" aria-label="删除 ${esc(record.name)}" data-archive-delete="${esc(kind)}" data-archive-code="${esc(record.code)}">
+                          <i class="ti ti-trash" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('') || `<tr><td colspan="${config.columns.length}"><div class="biz-formula-empty">${esc(config.emptyText)}</div></td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="biz-formula-pagination biz-supplier-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-archive-page-size="${esc(kind)}" aria-label="${esc(config.entityName)}每页条数">${formulaPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === state.pageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-archive-page-prev="${esc(kind)}" ${state.page <= 1 ? 'disabled' : ''} aria-label="${esc(config.entityName)}上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${state.page} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-archive-page-next="${esc(kind)}" ${state.page >= totalPages ? 'disabled' : ''} aria-label="${esc(config.entityName)}下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${state.modalOpen ? `
+          <div class="biz-inventory-material-modal biz-supplier-modal" data-archive-modal="${esc(kind)}">
+            <div class="biz-inventory-material-dialog biz-supplier-dialog" role="dialog" aria-modal="true" aria-labelledby="${esc(kind)}ModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="${esc(kind)}ModalTitle">${state.editingCode ? `编辑${config.entityName}` : config.addText}</h2>
+                  <span>${esc(state.draftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭${esc(config.entityName)}编辑" data-archive-close="${esc(kind)}">
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-supplier-editor">
+                <label class="is-code">
+                  <span>${esc(config.codeLabel)} *</span>
+                  <input type="text" value="${esc(formRecord.code)}" placeholder="例如：${esc(config.codePrefix)}001" data-archive-field="code">
+                </label>
+                <label class="is-name">
+                  <span>${esc(config.nameLabel)} *</span>
+                  <input type="text" value="${esc(formRecord.name)}" placeholder="${esc(config.namePlaceholder)}" data-archive-field="name">
+                </label>
+                <label>
+                  <span>${kind === 'personnel' ? '岗位' : '联系人'}</span>
+                  <input type="text" value="${esc(formRecord.contact)}" placeholder="${kind === 'personnel' ? '岗位' : '联系人'}" data-archive-field="contact">
+                </label>
+                <label>
+                  <span>电话</span>
+                  <input type="text" value="${esc(formRecord.phone)}" placeholder="联系电话" data-archive-field="phone">
+                </label>
+                <label>
+                  <span>邮箱</span>
+                  <input type="email" value="${esc(formRecord.email)}" placeholder="邮箱地址" data-archive-field="email">
+                </label>
+                <label>
+                  <span>${esc(config.categoryLabel)}</span>
+                  <select data-archive-field="category">${renderOptions(categories, formRecord.category)}</select>
+                </label>
+                <label>
+                  <span>${esc(config.statusLabel)}</span>
+                  <select data-archive-field="status">${renderOptions(config.statuses, formRecord.status)}</select>
+                </label>
+                <label class="is-address">
+                  <span>${kind === 'personnel' ? '组织归属' : '地址'}</span>
+                  <textarea placeholder="${kind === 'personnel' ? '组织归属、权限范围' : '客户地址'}" data-archive-field="address">${esc(formRecord.address)}</textarea>
+                </label>
+                <label class="is-note">
+                  <span>备注</span>
+                  <textarea placeholder="${esc(config.entityName)}档案备注" data-archive-field="note">${esc(formRecord.note)}</textarea>
+                </label>
+                <div class="biz-inventory-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-archive-cancel="${esc(kind)}">取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-archive-save="${esc(kind)}">保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
     `;
   };
 
@@ -2033,8 +2507,8 @@
       'production-plan': renderProduction,
       'inventory-management': renderInventory,
       'supplier-archive': renderSupplierArchive,
-      'customer-archive': () => renderArchive('customer-archive'),
-      'personnel-archive': () => renderArchive('personnel-archive'),
+      'customer-archive': () => renderArchive('customer'),
+      'personnel-archive': () => renderArchive('personnel'),
       'permission-management': renderPermission,
       'audit-log': renderAudit,
     };
@@ -2043,7 +2517,7 @@
 
   const render = (pageId, def = {}) => {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'inventory-management' || pageId === 'supplier-archive';
+    const usesFullHeightTable = pageId === 'inventory-management' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.innerHTML = `
@@ -2154,6 +2628,22 @@
       );
       return;
     }
+    if (event.target.hasAttribute('data-archive-search')) {
+      const kind = event.target.getAttribute('data-archive-search');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.search = event.target.value;
+      state.page = 1;
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? state.search.length) : state.search.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        config.pageId,
+        () => restoreSearchInputState(`[data-archive-search="${kind}"]`, state.search, selectionStart, selectionEnd),
+      );
+      return;
+    }
     if (handleFormulaEdit(event.target) && event.target.hasAttribute('data-formula-search')) {
       if (event.target instanceof HTMLInputElement && event.isComposing) return;
       const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? formulaSearchQuery.length) : formulaSearchQuery.length;
@@ -2180,6 +2670,19 @@
       const selectionEnd = event.target.selectionEnd ?? selectionStart;
       render('supplier-archive');
       restoreSearchInputState('[data-supplier-search]', supplierSearchQuery, selectionStart, selectionEnd);
+      return;
+    }
+    if (event.target.hasAttribute('data-archive-search')) {
+      const kind = event.target.getAttribute('data-archive-search');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.search = event.target.value;
+      state.page = 1;
+      const selectionStart = event.target.selectionStart ?? state.search.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render(config.pageId);
+      restoreSearchInputState(`[data-archive-search="${kind}"]`, state.search, selectionStart, selectionEnd);
       return;
     }
     if (event.target.hasAttribute('data-formula-search')) {
@@ -2221,6 +2724,26 @@
       supplierPageSize = Number(event.target.value) || 10;
       supplierListPage = 1;
       render('supplier-archive');
+      return;
+    }
+    if (event.target.hasAttribute('data-archive-filter')) {
+      const kind = event.target.getAttribute('data-archive-filter');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.filter = event.target.value || '全部';
+      state.page = 1;
+      render(config.pageId);
+      return;
+    }
+    if (event.target.hasAttribute('data-archive-page-size')) {
+      const kind = event.target.getAttribute('data-archive-page-size');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.pageSize = Number(event.target.value) || 10;
+      state.page = 1;
+      render(config.pageId);
       return;
     }
     if (!handleFormulaEdit(event.target)) return;
@@ -2278,6 +2801,28 @@
       return;
     }
 
+    const archivePagePrev = event.target.closest('[data-archive-page-prev]');
+    if (archivePagePrev && refs.businessPageContent.contains(archivePagePrev) && !archivePagePrev.disabled) {
+      const kind = archivePagePrev.getAttribute('data-archive-page-prev');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.page -= 1;
+      render(config.pageId);
+      return;
+    }
+
+    const archivePageNext = event.target.closest('[data-archive-page-next]');
+    if (archivePageNext && refs.businessPageContent.contains(archivePageNext) && !archivePageNext.disabled) {
+      const kind = archivePageNext.getAttribute('data-archive-page-next');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.page += 1;
+      render(config.pageId);
+      return;
+    }
+
     const formulaPagePrev = event.target.closest('[data-formula-page-prev]');
     if (formulaPagePrev && refs.businessPageContent.contains(formulaPagePrev) && !formulaPagePrev.disabled) {
       formulaListPage -= 1;
@@ -2294,9 +2839,7 @@
 
     const formulaBackButton = event.target.closest('[data-formula-back-list]');
     if (formulaBackButton && refs.businessPageContent.contains(formulaBackButton)) {
-      formulaViewMode = 'list';
-      activeFormulaMaterialIndex = null;
-      render('formula-management');
+      await handleFormulaBackToList();
       return;
     }
 
@@ -2309,9 +2852,9 @@
 
     const formulaEditButton = event.target.closest('[data-formula-edit]');
     if (formulaEditButton && refs.businessPageContent.contains(formulaEditButton)) {
-      activeFormulaId = formulaEditButton.getAttribute('data-formula-edit') || activeFormulaId;
-      activeFormulaMaterialIndex = null;
-      formulaViewMode = 'edit';
+      const nextRecipeId = formulaEditButton.getAttribute('data-formula-edit') || activeFormulaId;
+      const nextRecipe = formulaRecipes.find((recipe) => recipe.id === nextRecipeId);
+      if (nextRecipe) beginFormulaEdit(nextRecipe);
       render('formula-management');
       return;
     }
@@ -2567,6 +3110,83 @@
       return;
     }
 
+    const archiveNewButton = event.target.closest('[data-archive-new]');
+    if (archiveNewButton && refs.businessPageContent.contains(archiveNewButton)) {
+      const kind = archiveNewButton.getAttribute('data-archive-new');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.editingCode = '';
+      state.draftNote = `正在新增${config.entityName}`;
+      state.modalOpen = true;
+      render(config.pageId);
+      refs.businessPageContent?.querySelector('[data-archive-field="name"]')?.focus();
+      return;
+    }
+
+    const archiveEditButton = event.target.closest('[data-archive-edit]');
+    if (archiveEditButton && refs.businessPageContent.contains(archiveEditButton)) {
+      const kind = archiveEditButton.getAttribute('data-archive-edit');
+      const code = archiveEditButton.getAttribute('data-archive-code') || '';
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.editingCode = code;
+      state.draftNote = `正在编辑${config.entityName} ${getArchiveByCode(kind, code)?.name || code}`;
+      state.modalOpen = true;
+      render(config.pageId);
+      refs.businessPageContent?.querySelector('[data-archive-field="name"]')?.focus();
+      return;
+    }
+
+    const archiveDeleteButton = event.target.closest('[data-archive-delete]');
+    if (archiveDeleteButton && refs.businessPageContent.contains(archiveDeleteButton)) {
+      const kind = archiveDeleteButton.getAttribute('data-archive-delete');
+      const config = archiveConfigs[kind];
+      if (!config) return;
+      await deleteArchiveRecord(kind, archiveDeleteButton.getAttribute('data-archive-code') || '');
+      render(config.pageId);
+      return;
+    }
+
+    const archiveSaveButton = event.target.closest('[data-archive-save]');
+    if (archiveSaveButton && refs.businessPageContent.contains(archiveSaveButton)) {
+      const kind = archiveSaveButton.getAttribute('data-archive-save');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      const saved = saveArchiveRecord(kind);
+      state.modalOpen = !saved;
+      render(config.pageId);
+      if (!saved) refs.businessPageContent?.querySelector('[data-archive-field="name"]')?.focus();
+      return;
+    }
+
+    const archiveCloseButton = event.target.closest('[data-archive-close], [data-archive-cancel]');
+    if (archiveCloseButton && refs.businessPageContent.contains(archiveCloseButton)) {
+      const kind = archiveCloseButton.getAttribute('data-archive-close') || archiveCloseButton.getAttribute('data-archive-cancel');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.editingCode = '';
+      state.modalOpen = false;
+      state.draftNote = `已取消${config.entityName}编辑`;
+      render(config.pageId);
+      return;
+    }
+
+    const archiveModal = event.target.closest('[data-archive-modal]');
+    if (archiveModal && event.target === archiveModal) {
+      const kind = archiveModal.getAttribute('data-archive-modal');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.editingCode = '';
+      state.modalOpen = false;
+      render(config.pageId);
+      return;
+    }
+
     const inventorySaveCategoryButton = event.target.closest('[data-inventory-save-category]');
     if (inventorySaveCategoryButton && refs.businessPageContent.contains(inventorySaveCategoryButton)) {
       saveInventoryCategory();
@@ -2610,6 +3230,13 @@
       supplierEditingCode = '';
       supplierModalOpen = false;
       render('supplier-archive');
+      return;
+    }
+    const openArchiveKind = Object.keys(archiveStates).find((kind) => archiveStates[kind].modalOpen);
+    if (event.key === 'Escape' && openArchiveKind) {
+      archiveStates[openArchiveKind].editingCode = '';
+      archiveStates[openArchiveKind].modalOpen = false;
+      render(archiveConfigs[openArchiveKind].pageId);
       return;
     }
     const formulaStatCard = event.target.closest('[data-formula-stat-page]');

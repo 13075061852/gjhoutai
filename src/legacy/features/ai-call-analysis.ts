@@ -826,6 +826,7 @@
     if (!confirmed) return;
     writeLogs([]);
     render();
+    App.notify?.warn?.('已清空 AI 调用记录', { key: 'ai-call-clear-logs' });
   };
 
   const render = () => {

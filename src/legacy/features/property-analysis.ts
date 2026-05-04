@@ -46,6 +46,15 @@
     'T2[0.8mm]',
   ];
   const SEARCH_KEYS = ['型号', '批次'];
+  const METRIC_COLUMNS = [
+    '熔指',
+    '拉伸强度[Mpa]',
+    '断裂伸长率[%]',
+    '弯曲强度[Mpa]',
+    '弯曲模量[Mpa]',
+    '冲击强度[Mpa]',
+    '灰份',
+  ];
   const AGENT_CONTEXT_ROW_LIMIT = 12;
   const AGENT_CONTEXT_SIMILAR_LIMIT = 8;
   const AGENT_STOP_TERMS = new Set([
@@ -860,6 +869,11 @@
     return rows.every((row) => state.selectedKeys.has(row.__rowKey));
   };
 
+  const getSelectedRowsForActiveSheet = () => {
+    const sheetName = getActiveSheet(state.data);
+    return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
+  };
+
   const getModelTypeCount = (rows) => {
     const models = new Set();
     rows.forEach((row) => {
@@ -870,7 +884,7 @@
   };
 
   const updateToolbarState = (filteredRows) => {
-    const selectedCount = state.selectedKeys.size;
+    const selectedCount = getSelectedRowsForActiveSheet().length;
     const allSelected = isAllFilteredSelected(filteredRows);
 
     if (refs.selectionMeta) {
@@ -879,8 +893,8 @@
 
     if (refs.compareBtn) {
       refs.compareBtn.disabled = selectedCount < 2;
-      refs.compareBtn.classList.toggle('is-active', state.compareOnly);
-      refs.compareBtn.querySelector('span').textContent = state.compareOnly ? '退出对比' : '对比';
+      refs.compareBtn.classList.remove('is-active');
+      refs.compareBtn.querySelector('span').textContent = '对比';
     }
 
     if (refs.selectAllBtn) {
@@ -893,11 +907,6 @@
     }
 
     if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
-  };
-
-  const getSelectedRowsForActiveSheet = () => {
-    const sheetName = getActiveSheet(state.data);
-    return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
   };
 
   const formatSelectedRowsTableForAi = (sheetName, rows, columns) => {
@@ -946,6 +955,246 @@
         .join('；');
       return `${index + 1}. ${cells}`;
     });
+  };
+
+  const getCompareColumns = (rows) => {
+    const columns = getColumns(rows);
+    const mustShow = ['型号', '批次', '测试温度'].filter((column) => columns.includes(column));
+    const metricColumns = METRIC_COLUMNS.filter((column) => columns.includes(column));
+    const rest = columns.filter((column) => !mustShow.includes(column) && !metricColumns.includes(column));
+    return [...mustShow, ...metricColumns, ...rest].filter((column) => column !== '__rowKey');
+  };
+
+  const getCompareCellText = (row, column) => {
+    const value = row?.[column];
+    if (Array.isArray(value)) {
+      const main = value.map((item) => `[${valueToText(item)}]`).join(' ');
+      const averageText = getAverageText(value);
+      return `${main}${averageText ? ` (${averageText})` : ''}`;
+    }
+    return valueToText(value) || '--';
+  };
+
+  const createCompareImageBlob = async (rows) => {
+    const columns = getCompareColumns(rows);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('当前浏览器无法创建图片画布。');
+
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const fontFamily = '"Microsoft YaHei", "PingFang SC", Arial, sans-serif';
+    const font = `700 14px ${fontFamily}`;
+    const headerFont = `900 14px ${fontFamily}`;
+    const titleFont = `950 20px ${fontFamily}`;
+    const horizontalPadding = 16;
+    const titleHeight = 58;
+    const rowHeight = 46;
+    const headerHeight = 48;
+    const minColumnWidth = 92;
+    const maxColumnWidth = 280;
+
+    context.font = font;
+    const measureTextWidth = (text, activeFont = font) => {
+      context.font = activeFont;
+      return Math.ceil(context.measureText(String(text || '')).width);
+    };
+
+    const columnWidths = columns.map((column) => {
+      const headerWidth = measureTextWidth(formatHeader(column), headerFont);
+      const cellWidth = Math.max(...rows.map((row) => measureTextWidth(getCompareCellText(row, column), font)), 0);
+      return Math.max(
+        minColumnWidth,
+        Math.min(Math.max(headerWidth, cellWidth) + horizontalPadding * 2, maxColumnWidth)
+      );
+    });
+
+    const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    const imageWidth = tableWidth + 2;
+    const imageHeight = titleHeight + headerHeight + rows.length * rowHeight + 2;
+
+    canvas.width = Math.ceil(imageWidth * dpr);
+    canvas.height = Math.ceil(imageHeight * dpr);
+    canvas.style.width = `${imageWidth}px`;
+    canvas.style.height = `${imageHeight}px`;
+    context.scale(dpr, dpr);
+
+    const drawCell = ({ x, y, width, height, text, fill, color = '#0f2748', activeFont = font, align = 'center' }) => {
+      context.fillStyle = fill;
+      context.fillRect(x, y, width, height);
+      context.strokeStyle = '#e7edf5';
+      context.lineWidth = 1;
+      context.strokeRect(x + .5, y + .5, width, height);
+
+      context.font = activeFont;
+      context.fillStyle = color;
+      context.textBaseline = 'middle';
+      context.textAlign = align;
+
+      const safeText = String(text || '--');
+      const maxTextWidth = Math.max(20, width - horizontalPadding * 2);
+      let displayText = safeText;
+      while (measureTextWidth(displayText, activeFont) > maxTextWidth && displayText.length > 1) {
+        displayText = `${displayText.slice(0, -2)}...`;
+      }
+
+      const textX = align === 'left' ? x + horizontalPadding : x + width / 2;
+      context.fillText(displayText, textX, y + height / 2);
+    };
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, imageWidth, imageHeight);
+    context.fillStyle = '#0f2748';
+    context.font = titleFont;
+    context.textAlign = 'left';
+    context.textBaseline = 'middle';
+    context.fillText('广俊数据对比', 16, titleHeight / 2);
+
+    let x = 1;
+    let y = titleHeight;
+    columns.forEach((column, index) => {
+      drawCell({
+        x,
+        y,
+        width: columnWidths[index],
+        height: headerHeight,
+        text: formatHeader(column),
+        fill: '#f8fbff',
+        color: '#1f3150',
+        activeFont: headerFont,
+      });
+      x += columnWidths[index];
+    });
+
+    y += headerHeight;
+    rows.forEach((row) => {
+      x = 1;
+      columns.forEach((column, index) => {
+        drawCell({
+          x,
+          y,
+          width: columnWidths[index],
+          height: rowHeight,
+          text: getCompareCellText(row, column),
+          fill: '#ffffff',
+          color: '#0b356b',
+          activeFont: font,
+        });
+        x += columnWidths[index];
+      });
+      y += rowHeight;
+    });
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('图片生成失败。'));
+      }, 'image/png');
+    });
+  };
+
+  const copyCompareImage = async (button) => {
+    const rows = getSelectedRowsForActiveSheet();
+    if (rows.length < 2) return;
+    if (!navigator.clipboard?.write || !window.ClipboardItem) {
+      App.notify?.error?.('当前浏览器不支持复制图片到剪贴板。');
+      return;
+    }
+
+    try {
+      if (button) {
+        button.disabled = true;
+        button.querySelector('span').textContent = '复制中';
+      }
+      const blob = await createCompareImageBlob(rows);
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      App.notify?.success?.('对比图片已复制到剪贴板');
+    } catch (error) {
+      console.error('[property-analysis] Failed to copy compare image:', error);
+      App.notify?.error?.(error?.message || '复制图片失败');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.querySelector('span').textContent = '复制图片';
+      }
+    }
+  };
+
+  const buildCompareDialogHtml = (rows) => {
+    const columns = getCompareColumns(rows);
+
+    return `
+      <div class="analysis-compare-dialog" role="dialog" aria-modal="true" aria-label="物性数据对比">
+        <div class="analysis-compare-card">
+          <div class="analysis-compare-head">
+            <div class="analysis-compare-title">广俊数据对比</div>
+            <div class="analysis-compare-actions">
+              <button class="analysis-compare-copy" type="button" data-analysis-compare-copy>
+                <i class="ti ti-clipboard-copy" aria-hidden="true"></i>
+                <span>复制图片</span>
+              </button>
+              <button class="analysis-compare-close" type="button" aria-label="关闭对比弹窗" data-analysis-compare-close>
+                <i class="ti ti-x" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div class="analysis-compare-body">
+            <section class="analysis-compare-section">
+              <div class="analysis-compare-table-wrap">
+                <table class="analysis-compare-table">
+                  <thead>
+                    <tr>
+                      ${columns.map((column) => `<th>${escapeHtml(formatHeader(column))}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows.map((row) => `
+                      <tr>
+                        ${columns.map((column) => {
+                          const cell = getCellDisplay(row[column], column);
+                          return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
+                        }).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const closeCompareDialog = () => {
+    document.querySelector('.analysis-compare-dialog')?.remove();
+    document.removeEventListener('keydown', handleCompareDialogKeydown);
+  };
+
+  function handleCompareDialogKeydown(event) {
+    if (event.key === 'Escape') closeCompareDialog();
+  }
+
+  const openCompareDialog = () => {
+    const rows = getSelectedRowsForActiveSheet();
+    if (rows.length < 2) return;
+
+    closeCompareDialog();
+    document.body.insertAdjacentHTML('beforeend', buildCompareDialogHtml(rows));
+    const dialog = document.querySelector('.analysis-compare-dialog');
+    dialog?.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const copyButton = target.closest('[data-analysis-compare-copy]');
+      if (copyButton) {
+        copyCompareImage(copyButton);
+        return;
+      }
+      if (target.closest('[data-analysis-compare-close]') || target === dialog) closeCompareDialog();
+    });
+    document.addEventListener('keydown', handleCompareDialogKeydown);
+    dialog?.querySelector('[data-analysis-compare-close]')?.focus({ preventScroll: true });
   };
 
   const escapeMarkdownTableCell = (value) => String(value ?? '')
@@ -1398,8 +1647,10 @@
               </tr>
             </thead>
             <tbody>
-              ${rows.map((row) => `
-                <tr class="${state.selectedKeys.has(row.__rowKey) ? 'is-selected' : ''}" data-row-key="${escapeHtml(row.__rowKey)}">
+              ${rows.map((row) => {
+                const selected = state.selectedKeys.has(row.__rowKey);
+                return `
+                <tr class="${selected ? 'is-selected' : ''}" data-row-key="${escapeHtml(row.__rowKey)}" aria-selected="${selected ? 'true' : 'false'}">
                   ${columns.map((column) => {
                     const cell = getCellDisplay(row[column], column);
                     return `
@@ -1409,7 +1660,8 @@
                     `;
                   }).join('')}
                 </tr>
-              `).join('')}
+              `;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -1589,10 +1841,7 @@
   };
 
   const toggleCompareMode = () => {
-    if (state.selectedKeys.size < 2) return;
-    state.compareOnly = !state.compareOnly;
-    state.page = 1;
-    render();
+    openCompareDialog();
   };
 
   const loadData = async (options = {}) => {
@@ -1775,11 +2024,15 @@
         if (state.compareOnly && state.selectedKeys.size < 2) {
           state.compareOnly = false;
         }
+        row.classList.remove('is-selected');
+        row.setAttribute('aria-selected', 'false');
       } else {
         state.selectedKeys.add(rowKey);
+        row.classList.add('is-selected');
+        row.setAttribute('aria-selected', 'true');
       }
 
-      render();
+      updateToolbarState(getVisibleRows().filteredRows);
     });
 
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);

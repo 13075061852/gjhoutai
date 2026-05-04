@@ -999,22 +999,27 @@
       updateSavedState(true);
       syncPreview();
       setStatus('已导入配置', 'success');
+      App.notify?.success?.('已导入配置', { key: 'config-import' });
     } catch (error) {
       setStatus(`导入失败：${error?.message || '文件格式错误'}`, 'warn');
+      App.notify?.warn?.(`导入失败：${error?.message || '文件格式错误'}`, { key: 'config-import-failed' });
     }
   };
 
   const exportConfig = () => {
     utils.downloadUtf8Json(`openrouter-config-${new Date().toISOString().slice(0, 10)}.json`, redactSensitiveConfig(getFormConfig()));
     setStatus('已导出配置（密钥已脱敏）', 'success');
+    App.notify?.success?.('已导出配置（密钥已脱敏）', { key: 'config-export' });
   };
 
   const copyConfig = async () => {
     try {
       const copied = await utils.copyText(JSON.stringify(redactSensitiveConfig(getFormConfig()), null, 2));
       setStatus(copied ? '配置已复制到剪贴板（密钥已脱敏）' : '当前环境不支持剪贴板复制', copied ? 'success' : 'warn');
+      App.notify?.[copied ? 'success' : 'warn']?.(copied ? '配置已复制到剪贴板（密钥已脱敏）' : '当前环境不支持剪贴板复制', { key: 'config-copy' });
     } catch (error) {
       setStatus(`复制失败：${error?.message || '未知错误'}`, 'warn');
+      App.notify?.warn?.(`复制失败：${error?.message || '未知错误'}`, { key: 'config-copy-failed' });
     }
   };
 
@@ -1030,6 +1035,7 @@
     updateSavedState(false);
     syncPreview();
     setStatus('已清空本地配置', 'warn');
+    App.notify?.warn?.('已清空本地配置', { key: 'config-clear' });
   };
 
   const syncConfigBindings = () => {
@@ -1110,11 +1116,13 @@
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
       if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig) {
         setStatus('请先填写 OpenRouter API 密钥或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写 OpenRouter API 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       persistConfig(config);
       updateSavedState(true);
       syncPreview();
+      App.notify?.success?.('配置已保存', { key: 'config-save' });
     });
 
     refs.apiKeyToggle?.addEventListener('click', () => {

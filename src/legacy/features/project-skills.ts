@@ -223,6 +223,28 @@
     };
   };
 
+  const extractSpectrumSearchInput = (prompt) => {
+    const text = String(prompt || '');
+    const selected = /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(text);
+    const filtered = /(?:当前筛选|筛选结果|当前列表|当前分类)/.test(text);
+    const active = /(?:当前图谱|当前图片|当前这张|这张)/.test(text);
+    const query = stripCommandNoise(text)
+      .replace(/(查找|搜索|检索|找|分析|对比|比较|查看|看|图谱|谱图|图片|图像|曲线|图谱库|里面|中的|一下|帮我|请|我|当前已选|当前选中|已选中|已选|选中|选择的|选出来的|当前筛选|筛选结果|当前列表|当前分类|当前这张|这张|当前)/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return {
+      query,
+      mode: selected ? 'selected' : filtered ? 'filtered' : active ? 'active' : 'query',
+    };
+  };
+
+  const hasSpectrumVisualAnalysisIntent = (prompt) => {
+    const text = String(prompt || '');
+    const wantsAnalysis = /(?:分析|对比|比较|看看|查看|看一下|看|判断|总结|解读)/.test(text);
+    const mentionsSpectrum = /(?:图谱|谱图|图片|图像|曲线|dsc|tga|当前已选|当前选中|已选中|已选|选中|选择的|选出来的|当前图谱|当前图片|当前这张|这张)/i.test(text);
+    return wantsAnalysis && mentionsSpectrum;
+  };
+
   const getPageAliasEntries = () => {
     const fromPageDefs = Object.entries(constants.PAGE_DEFS || {}).flatMap(([pageId, def]) => {
       const title = String(def?.title || '').trim();
@@ -498,17 +520,13 @@
       icon: 'ti-photo-search',
       level: '查询型',
       summary: '按标题、编号、分类、标签、DSC/TGA 类型或备注检索图谱，并返回可上传给视觉模型的图谱图片。',
-      inputSpec: '{ "query": "关键词", "limit": "可选，只有用户明确要求数量时才填写" }',
+      inputSpec: '{ "query": "关键词", "mode": "query | selected | filtered | active", "limit": "可选，只有用户明确要求数量时才填写" }',
       outputSpec: '{ "ok": true, "items": [{ "title": "...", "type": "DSC" }], "images": ["图谱图片"] }',
       examples: ['查找 320G6 的 DSC 图谱', '检索标签里有异常的 TGA 图片'],
       infer(prompt) {
         const text = String(prompt || '');
         if (!/(?:查找|搜索|检索|找|分析|对比|比较|查看|看).*(?:图谱|谱图|图片|曲线|dsc|tga)|(?:图谱|谱图|图片|曲线|dsc|tga).*(?:查找|搜索|检索|找|分析|对比|比较|查看|看)/i.test(text)) return null;
-        const query = stripCommandNoise(text)
-          .replace(/(查找|搜索|检索|找|分析|对比|比较|查看|看|图谱|谱图|图片|图像|曲线|图谱库|里面|中的|一下|帮我|请)/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        return { skillId: this.id, confidence: 0.76, input: { query } };
+        return { skillId: this.id, confidence: 0.76, input: extractSpectrumSearchInput(text) };
       },
       async handler(input = {}) {
         if (!App.spectrumAnalysis?.searchByAgent) {
@@ -818,6 +836,16 @@
   const executeSkillCallFromText = async (text = '', meta = {}) => {
     const call = parseSkillCallFromText(text);
     if (!call) return null;
+    if (call.skillId === 'spectrum.selectImages' && hasSpectrumVisualAnalysisIntent(meta.prompt)) {
+      call.skillId = 'spectrum.searchImages';
+      call.input = {
+        ...extractSpectrumSearchInput(meta.prompt),
+        ...call.input,
+        mode: call.input?.mode === 'filtered' || call.input?.mode === 'active'
+          ? call.input.mode
+          : 'selected',
+      };
+    }
     if (typeof meta.onBeforeExecute === 'function') {
       try {
         meta.onBeforeExecute(call);
@@ -852,7 +880,9 @@
       '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
       '凡是调用 spectrum.searchImages 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
       '图谱图片默认上传所有符合条件的匹配图片；只有用户明确说“前 N 张/只要 N 张/显示 N 个”等数量限制时，才给 spectrum.searchImages 填写 limit。',
+      '用户说“当前、选中、已选、本页、筛选结果、这张”等范围词并且要分析图谱时，调用 spectrum.searchImages 时必须填写 mode，例如选中范围用 mode=selected，不要把“选中”当成 query 关键词。',
       '图谱数据处理按 CRUD 选择技能：查询用 spectrum.searchImages；新增待上传记录用 spectrum.createImageRecord；选择范围用 spectrum.selectImages；修改标题/分类/日期/备注/标签用 spectrum.updateImages 或专用标签/分类技能；删除用 spectrum.deleteImage。',
+      '注意：spectrum.selectImages 只用于改变左侧图谱库的勾选状态，不会上传图片、不会做视觉分析。用户说“分析选中的图谱/看一下已选图谱/对比当前选中图片”时，必须调用 spectrum.searchImages 并设置 mode=selected。',
       '所有增删改都必须给出明确 target 或 mode。单个对象优先使用名称/编号精确匹配；用户说“当前选中”用 mode=selected，说“当前筛选/当前分类”用 mode=filtered。',
       '如果目标可能命中无关数据，先调用 spectrum.searchImages 或 spectrum.selectImages 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',
       '如果技能返回多个候选对象，前端会生成可点击的候选按钮，用户点击后再执行对应对象。',
@@ -948,6 +978,7 @@
         if (!confirmed) return;
         writeHistory([]);
         render();
+        App.notify?.warn?.('已清空项目技能调用记录', { key: 'project-skills-clear-history' });
       }
     });
   };

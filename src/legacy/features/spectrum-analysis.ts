@@ -560,6 +560,7 @@
     saveUploadedItems();
     saveItemEdits();
     render();
+    App.notify?.success?.(`已删除 ${targets.size} 张图谱`, { key: `spectrum-delete:${[...targets].sort().join('|')}` });
   };
 
   const animateDeleteItems = (ids, onDone) => {
@@ -1330,15 +1331,41 @@
     ].filter(Boolean).join('\n');
   };
 
-  const searchByAgent = ({ query = '', limit = null } = {}) => {
+  const normalizeAgentSearchMode = (mode, query = '') => {
+    const value = String(mode || '').trim().toLowerCase();
+    if (['selected', 'active', 'filtered', 'query'].includes(value)) return value;
+    const text = String(query || '');
+    if (/(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(text)) return 'selected';
+    if (/(?:当前筛选|筛选结果|当前列表|当前分类)/.test(text)) return 'filtered';
+    if (/(?:当前图谱|当前图片|当前这张|这张)/.test(text)) return 'active';
+    return 'query';
+  };
+
+  const searchByAgent = ({ query = '', limit = null, mode = 'query' } = {}) => {
     const parsedLimit = Number.parseInt(limit, 10);
     const hasExplicitLimit = Number.isFinite(parsedLimit) && parsedLimit > 0;
-    const scoredItems = state.items
-      .map((item) => ({ item, score: scoreSkillItem(item, query) }))
-      .filter((entry) => entry.score > 0 || !String(query || '').trim())
-      .sort((a, b) => b.score - a.score);
-    const matchedItems = (hasExplicitLimit ? scoredItems.slice(0, parsedLimit) : scoredItems)
-      .map((entry) => entry.item);
+    const searchMode = normalizeAgentSearchMode(mode, query);
+    let matchedItems = [];
+    let reason = query ? `按关键词“${query}”检索` : '未提供关键词，返回图谱库概览';
+
+    if (searchMode === 'selected') {
+      matchedItems = getSelectedItems();
+      reason = '使用当前已选图谱';
+    } else if (searchMode === 'active') {
+      matchedItems = [getActiveItem()].filter(Boolean);
+      reason = '使用当前激活图谱';
+    } else if (searchMode === 'filtered') {
+      matchedItems = getFilteredItems();
+      reason = '使用当前筛选结果';
+    } else {
+      const scoredItems = state.items
+        .map((item) => ({ item, score: scoreSkillItem(item, query) }))
+        .filter((entry) => entry.score > 0 || !String(query || '').trim())
+        .sort((a, b) => b.score - a.score);
+      matchedItems = scoredItems.map((entry) => entry.item);
+    }
+
+    if (hasExplicitLimit) matchedItems = matchedItems.slice(0, parsedLimit);
     const entries = matchedItems.map((item) => toSkillItem(item));
     const images = getAiImages(matchedItems);
 
@@ -1348,9 +1375,10 @@
       details: entries.map((item, index) => `${index + 1}. ${item.title || item.code}；类型=${item.type || '-'}；分类=${item.category || '-'}`),
       data: {
         items: entries,
-        context: buildSpectrumContext('图谱库检索结果', entries, query ? `按关键词“${query}”检索` : '未提供关键词，返回图谱库概览'),
+        context: buildSpectrumContext('图谱库检索结果', entries, reason),
         images,
         imageCount: images.length,
+        mode: searchMode,
       },
       candidates: entries,
     };
@@ -2065,7 +2093,7 @@
     try {
       await ensureJsZipLoaded();
     } catch (error) {
-      window.alert(error?.message || 'ZIP 导出库尚未加载，请检查网络后重试。');
+      App.notify?.error?.(error?.message || 'ZIP 导出库尚未加载，请检查网络后重试。', { key: 'spectrum-export-zip-failed' });
       return;
     }
 
@@ -2122,7 +2150,7 @@
     try {
       await ensureJsZipLoaded();
     } catch (error) {
-      window.alert(error?.message || 'ZIP 导入库尚未加载，请检查网络后重试。');
+      App.notify?.error?.(error?.message || 'ZIP 导入库尚未加载，请检查网络后重试。', { key: 'spectrum-import-zip-failed' });
       return;
     }
 

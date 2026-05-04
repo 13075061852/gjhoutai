@@ -1,7 +1,5 @@
 # AGENT.md
 
-面向 AI 代码代理的项目启动手册。接手本仓库前先读本文件，再读 `README.md`、`docs/architecture.md`、`docs/extension-guide.md` 和 `docs/security-audit.md`。
-
 ## 1. 开工前必须先做
 
 1. 查看当前工作区状态，确认已有未提交改动，不要覆盖用户改过的文件。

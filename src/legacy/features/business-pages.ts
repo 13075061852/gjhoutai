@@ -205,6 +205,11 @@
       String(cells[3] || '未关联供应商').trim() || '未关联供应商',
       String(cells[4] || '--').trim() || '--',
       String(cells[5] || '待确认').trim() || '待确认',
+      String(cells[6] || '').trim(),
+      String(cells[7] || '').trim(),
+      String(cells[8] || '').trim(),
+      String(cells[9] || '').trim(),
+      String(cells[10] || '').trim(),
     ];
   };
   const normalizeInventoryRows = (value) => {
@@ -378,13 +383,19 @@
   const getInventoryFormRow = () => {
     const root = refs.businessPageContent;
     const read = (field) => String(root?.querySelector(`[data-inventory-material-field="${field}"]`)?.value || '').trim();
+    const currentRow = normalizeInventoryRow(inventoryRows[getInventoryMaterialIndex(inventoryEditingMaterialName)] || []);
     return [
       read('name'),
-      read('type') || '原材料',
+      read('type') || currentRow[1] || '原材料',
       read('category') || '未分类',
       read('supplier') || '未关联供应商',
       read('quantity') || '--',
-      read('state') || '待确认',
+      read('state') || currentRow[5] || '待确认',
+      read('model'),
+      read('batch'),
+      read('unitPrice'),
+      read('safetyStock'),
+      read('spec'),
     ];
   };
 
@@ -605,32 +616,44 @@
               </div>
               <div class="biz-inventory-material-editor">
                 <label class="is-name">
-                  <span>材料</span>
-                  <input type="text" value="${esc(materialFormRow[0])}" placeholder="材料名称" data-inventory-material-field="name">
+                  <span>材料名称 *</span>
+                  <input type="text" value="${esc(materialFormRow[0])}" placeholder="请输入材料名称" data-inventory-material-field="name">
                 </label>
-                <label class="is-type">
-                  <span>类型</span>
-                  <select data-inventory-material-field="type">${renderOptions(inventoryTypeOptions, materialFormRow[1])}</select>
+                <label class="is-model">
+                  <span>型号/牌号</span>
+                  <input type="text" value="${esc(materialFormRow[6])}" placeholder="例如：KH-550" data-inventory-material-field="model">
+                </label>
+                <label class="is-batch">
+                  <span>批次</span>
+                  <input type="text" value="${esc(materialFormRow[7])}" placeholder="例如：LOT-20260120-999" data-inventory-material-field="batch">
                 </label>
                 <label class="is-category">
-                  <span>分类</span>
+                  <span>产品类别</span>
                   <select data-inventory-material-field="category">${renderOptions(categories.length ? categories : ['未分类'], materialFormRow[2])}</select>
                 </label>
                 <label class="is-supplier">
                   <span>供应商</span>
-                  <input type="text" value="${esc(materialFormRow[3])}" placeholder="供应商名称" data-inventory-material-field="supplier">
+                  <input type="text" value="${esc(materialFormRow[3])}" placeholder="请输入供应商名称" data-inventory-material-field="supplier">
                 </label>
                 <label class="is-quantity">
-                  <span>库存</span>
-                  <input type="text" value="${esc(materialFormRow[4])}" placeholder="例如：12.4 吨" data-inventory-material-field="quantity">
+                  <span>当前库存 (kg) *</span>
+                  <input type="text" value="${esc(materialFormRow[4])}" placeholder="例如：200" data-inventory-material-field="quantity">
                 </label>
-                <label class="is-state">
-                  <span>状态</span>
-                  <select data-inventory-material-field="state">${renderOptions(inventoryStateOptions, materialFormRow[5])}</select>
+                <label class="is-unit-price">
+                  <span>单价 (¥/kg) *</span>
+                  <input type="text" value="${esc(materialFormRow[8])}" placeholder="例如：42" data-inventory-material-field="unitPrice">
+                </label>
+                <label class="is-safety-stock">
+                  <span>安全库存 (kg)</span>
+                  <input type="text" value="${esc(materialFormRow[9])}" placeholder="例如：50" data-inventory-material-field="safetyStock">
+                </label>
+                <label class="is-spec">
+                  <span>规格说明</span>
+                  <textarea placeholder="补充规格、化学名称、包装或储存说明" data-inventory-material-field="spec">${esc(materialFormRow[10])}</textarea>
                 </label>
                 <div class="biz-inventory-modal-actions">
-                  <button class="biz-inventory-primary-btn" type="button" data-inventory-save-material>${inventoryEditingMaterialName ? '保存材料' : '添加材料'}</button>
                   <button class="biz-inventory-ghost-btn" type="button" data-inventory-cancel-material>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-inventory-save-material>保存</button>
                 </div>
               </div>
             </div>

@@ -500,10 +500,13 @@
       .biz-inventory-material-dialog .biz-inventory-material-editor label,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier,
-      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-model,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-batch,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
-      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-unit-price,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-safety-stock,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-spec{
         grid-column:auto;
       }
       .biz-formula-mini-stats{
@@ -856,10 +859,13 @@
       .biz-inventory-material-dialog .biz-inventory-material-editor label,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier,
-      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-model,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-batch,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
       .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
-      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-unit-price,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-safety-stock,
+      .biz-inventory-material-dialog .biz-inventory-material-editor label.is-spec{
         grid-column:auto;
       }
       .biz-inventory-category-modal{

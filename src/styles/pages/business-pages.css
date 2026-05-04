@@ -445,17 +445,17 @@
       overflow:auto;
     }
     .biz-inventory-material-dialog{
-      width:min(880px, 100%);
-      max-height:min(82vh, 760px);
+      width:min(686px, calc(100vw - 28px));
+      max-height:min(88vh, 760px);
       display:flex;
       flex-direction:column;
-      gap:14px;
-      padding:16px;
+      gap:0;
+      padding:0;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface);
       box-shadow:0 24px 68px rgba(15,23,42,.18);
-      overflow:auto;
+      overflow:hidden;
     }
     .biz-inventory-dialog-head{
       display:flex;
@@ -464,6 +464,11 @@
       gap:12px;
       padding-bottom:12px;
       border-bottom:1px solid var(--border);
+    }
+    .biz-inventory-material-dialog .biz-inventory-dialog-head{
+      align-items:center;
+      min-height:74px;
+      padding:18px 22px;
     }
     .biz-inventory-dialog-head h2{
       margin:0;
@@ -495,6 +500,13 @@
     .biz-inventory-icon-btn:hover{
       border-color:var(--accent);
       color:var(--accent);
+    }
+    .biz-inventory-material-dialog .biz-inventory-icon-btn{
+      border:0;
+      background:transparent;
+    }
+    .biz-inventory-material-dialog .biz-inventory-icon-btn:hover{
+      background:var(--accent-soft);
     }
     .biz-inventory-category-list{
       display:grid;
@@ -552,23 +564,27 @@
     }
     .biz-inventory-material-dialog .biz-inventory-material-editor{
       grid-template-columns:repeat(12, minmax(0, 1fr));
-      gap:14px 12px;
-      padding:0;
+      gap:18px 20px;
+      padding:28px 22px 0;
       border-top:0;
       background:transparent;
       align-items:start;
+      overflow:auto;
     }
     .biz-inventory-material-dialog .biz-inventory-material-editor label{
-      grid-column:span 3;
+      grid-column:span 4;
     }
     .biz-inventory-material-dialog .biz-inventory-material-editor label.is-name,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-model,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-batch,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-spec,
     .biz-inventory-material-dialog .biz-inventory-material-editor label.is-supplier{
       grid-column:span 6;
     }
-    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-type,
     .biz-inventory-material-dialog .biz-inventory-material-editor label.is-category,
     .biz-inventory-material-dialog .biz-inventory-material-editor label.is-quantity,
-    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-state{
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-unit-price,
+    .biz-inventory-material-dialog .biz-inventory-material-editor label.is-safety-stock{
       grid-column:span 3;
     }
     .biz-inventory-category-editor label,
@@ -581,25 +597,40 @@
       font-size:11px;
       font-weight:900;
     }
+    .biz-inventory-material-dialog .biz-inventory-material-editor label{
+      gap:8px;
+      color:var(--text-2);
+      font-size:14px;
+      font-weight:600;
+    }
     .biz-inventory-category-editor input,
     .biz-inventory-material-editor input,
-    .biz-inventory-material-editor select{
+    .biz-inventory-material-editor select,
+    .biz-inventory-material-editor textarea{
       width:100%;
       min-width:0;
-      min-height:36px;
-      padding:0 10px;
+      min-height:46px;
+      padding:0 14px;
       border:1px solid var(--border);
       border-radius:8px;
       outline:0;
       background:var(--surface);
       color:var(--text);
       font:inherit;
-      font-size:12px;
-      font-weight:850;
+      font-size:14px;
+      font-weight:500;
+    }
+    .biz-inventory-material-editor textarea{
+      min-height:68px;
+      padding-top:10px;
+      padding-bottom:10px;
+      resize:vertical;
+      line-height:1.5;
     }
     .biz-inventory-category-editor input:focus,
     .biz-inventory-material-editor input:focus,
-    .biz-inventory-material-editor select:focus{
+    .biz-inventory-material-editor select:focus,
+    .biz-inventory-material-editor textarea:focus{
       border-color:var(--accent);
       box-shadow:0 0 0 3px var(--accent-soft);
     }
@@ -650,9 +681,10 @@
       justify-content:flex-end;
       gap:10px;
       grid-column:1 / -1;
-      padding-top:8px;
+      margin:10px -22px 0;
+      padding:14px 12px 14px;
       border-top:1px solid var(--border);
-      margin-top:2px;
+      background:var(--surface);
     }
     .biz-formula-table-wrap.biz-inventory-table-wrap{
       flex:1 1 auto;

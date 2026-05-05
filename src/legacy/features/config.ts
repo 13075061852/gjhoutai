@@ -12,6 +12,9 @@
   const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
   let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
   const providerDrafts = {};
+  let openRouterModelRefreshTimer = null;
+  let lastLoadedOpenRouterApiKey = '';
+  let modelSearchQuery = '';
 
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
@@ -89,8 +92,15 @@
     return /\/v1$/i.test(normalized) ? normalized : `${normalized}/v1`;
   };
 
+  const isLocalBaseUrl = (value) => /(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.)/i.test(String(value || ''));
+
+  const normalizeOpenRouterBaseUrl = (value) => {
+    const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL);
+    return isLocalBaseUrl(normalized) ? constants.DEFAULT_BASE_URL : normalized;
+  };
+
   const normalizeProviderBaseUrl = (provider, value) => (
-    isLmStudioProvider(provider) ? normalizeLmStudioBaseUrl(value) : utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL)
+    isLmStudioProvider(provider) ? normalizeLmStudioBaseUrl(value) : normalizeOpenRouterBaseUrl(value)
   );
 
   const makeProviderDraft = (provider, config = {}) => {
@@ -106,13 +116,12 @@
   };
 
   const ensureProviderDrafts = () => {
-    providerDrafts[PROVIDER_OPENROUTER] = {
-      ...makeProviderDraft(PROVIDER_OPENROUTER),
-      ...(providerDrafts[PROVIDER_OPENROUTER] || {}),
-    };
+    providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(
+      PROVIDER_OPENROUTER,
+      providerDrafts[PROVIDER_OPENROUTER] || {}
+    );
     providerDrafts[PROVIDER_LM_STUDIO] = {
-      ...makeProviderDraft(PROVIDER_LM_STUDIO),
-      ...(providerDrafts[PROVIDER_LM_STUDIO] || {}),
+      ...makeProviderDraft(PROVIDER_LM_STUDIO, providerDrafts[PROVIDER_LM_STUDIO] || {}),
       apiKey: '',
       appTitle: 'LM Studio',
     };
@@ -120,7 +129,7 @@
 
   const inferProviderFromConfig = (config = {}) => {
     if (config.aiProvider) return normalizeProvider(config.aiProvider);
-    return /localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\./i.test(String(config.baseUrl || ''))
+    return isLocalBaseUrl(config.baseUrl)
       ? PROVIDER_LM_STUDIO
       : PROVIDER_OPENROUTER;
   };
@@ -169,7 +178,9 @@
     activeProvider = normalizeProvider(provider);
     const draft = providerDrafts[activeProvider];
     setProviderRadio(activeProvider);
-    if (refs.openrouterApiKey) refs.openrouterApiKey.value = draft.apiKey || '';
+    if (refs.openrouterApiKey && !isLmStudioProvider(activeProvider)) {
+      refs.openrouterApiKey.value = draft.apiKey || '';
+    }
     if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = draft.baseUrl || getProviderDefaults(activeProvider).baseUrl;
     if (refs.appTitle) refs.appTitle.value = draft.appTitle || getProviderDefaults(activeProvider).appTitle;
     if (refs.modelSelect) {
@@ -262,7 +273,11 @@
     activeProvider = provider;
     setProviderRadio(activeProvider);
     const activeDraft = providerDrafts[activeProvider];
-    if (refs.openrouterApiKey) refs.openrouterApiKey.value = activeDraft.apiKey || '';
+    if (refs.openrouterApiKey) {
+      refs.openrouterApiKey.value = isLmStudioProvider(activeProvider)
+        ? providerDrafts[PROVIDER_OPENROUTER]?.apiKey || ''
+        : activeDraft.apiKey || '';
+    }
     if (refs.openrouterBaseUrl) refs.openrouterBaseUrl.value = activeDraft.baseUrl || getProviderDefaults(activeProvider).baseUrl;
     if (refs.appTitle) refs.appTitle.value = activeDraft.appTitle || getProviderDefaults(activeProvider).appTitle;
     if (refs.httpReferer) refs.httpReferer.value = next.httpReferer || '';
@@ -427,6 +442,52 @@
         model: getResolvedModel(),
         baseUrl: config.baseUrl,
       });
+    }
+  };
+
+  const clearOpenRouterModelRefreshTimer = () => {
+    if (openRouterModelRefreshTimer) {
+      window.clearTimeout(openRouterModelRefreshTimer);
+      openRouterModelRefreshTimer = null;
+    }
+  };
+
+  const recordLoadedOpenRouterApiKey = (config = getFormConfig()) => {
+    if (!config || isLmStudioProvider(config.aiProvider)) return;
+    lastLoadedOpenRouterApiKey = String(config.apiKey || '').trim();
+  };
+
+  const shouldRefreshOpenRouterModels = (config = getFormConfig()) => {
+    if (!config || isLmStudioProvider(config.aiProvider)) return false;
+    const apiKey = String(config.apiKey || '').trim();
+    return apiKey.length >= 20 && apiKey !== lastLoadedOpenRouterApiKey;
+  };
+
+  const refreshOpenRouterModelsAfterApiKeyUpdate = () => {
+    clearOpenRouterModelRefreshTimer();
+    const config = getFormConfig();
+    if (!shouldRefreshOpenRouterModels(config)) return;
+
+    openRouterModelRefreshTimer = window.setTimeout(() => {
+      openRouterModelRefreshTimer = null;
+      const nextConfig = getFormConfig();
+      if (!shouldRefreshOpenRouterModels(nextConfig)) return;
+      fetchModels().then((loaded) => {
+        if (loaded) recordLoadedOpenRouterApiKey(nextConfig);
+      });
+    }, 450);
+  };
+
+  const readApiErrorMessage = async (response) => {
+    const fallback = `HTTP ${response.status}`;
+    const text = await response.text().catch(() => '');
+    if (!text) return fallback;
+    try {
+      const payload = JSON.parse(text);
+      const message = payload?.error?.message || payload?.message || payload?.error;
+      return message ? `${fallback}：${String(message).slice(0, 240)}` : `${fallback}：${text.slice(0, 240)}`;
+    } catch {
+      return `${fallback}：${text.slice(0, 240)}`;
     }
   };
 
@@ -620,7 +681,7 @@
   const fetchUsdToCnyRate = async () => {
     try {
       const response = await fetch('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await readApiErrorMessage(response));
       const payload = await response.json();
       const rate = Number(payload?.rates?.CNY);
       if (Number.isFinite(rate) && rate > 0) {
@@ -654,7 +715,13 @@
     refs.modelSelectTrigger.setAttribute('aria-expanded', String(open));
   };
 
-  const closeModelDropdown = () => setModelDropdownOpen(false);
+  const closeModelDropdown = () => {
+    setModelDropdownOpen(false);
+    if (modelSearchQuery) {
+      modelSearchQuery = '';
+      syncModelDropdown();
+    }
+  };
 
   const scrollActiveModelIntoView = () => {
     const panel = refs.modelSelectPanel;
@@ -674,14 +741,34 @@
   };
 
   const openModelDropdown = () => {
+    syncModelDropdown();
     setModelDropdownOpen(true);
-    requestAnimationFrame(() => requestAnimationFrame(scrollActiveModelIntoView));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      refs.modelSelectPanel?.querySelector('.model-dropdown-search-input')?.focus();
+      scrollActiveModelIntoView();
+    }));
+  };
+
+  const normalizeModelSearchText = (value) => String(value || '').trim().toLowerCase();
+
+  const modelMatchesSearch = (option, provider, query) => {
+    if (!query) return true;
+    return [
+      option.title,
+      option.value,
+      option.label,
+      provider,
+      option.category,
+      option.pricingLabel,
+      option.contextLabel,
+    ].some((value) => normalizeModelSearchText(value).includes(query));
   };
 
   const syncModelDropdown = () => {
     if (!refs.modelDropdown || !refs.modelSelectPanel || !refs.modelSelectTriggerLabel) return;
     const currentValue = refs.modelSelect?.value || constants.DEFAULT_CONFIG.modelChoice;
     const isLocal = isLmStudioProvider(getAiProvider());
+    const searchQuery = normalizeModelSearchText(modelSearchQuery);
     refs.modelSelectTriggerLabel.textContent = getModelTriggerLabel();
 
     const options = getModelOptions();
@@ -710,7 +797,13 @@
       grouped.set(provider, items);
     });
 
-    refs.modelSelectPanel.innerHTML = Array.from(grouped.entries()).map(([provider, items]) => {
+    const filteredGroups = Array.from(grouped.entries())
+      .map(([provider, items]) => [provider, items.filter((option) => modelMatchesSearch(option, provider, searchQuery))])
+      .filter(([, items]) => items.length);
+    const resultCount = filteredGroups.reduce((count, [, items]) => count + items.length, 0);
+    const searchValue = utils.escapeHtml(modelSearchQuery);
+    const resultsHtml = resultCount
+      ? filteredGroups.map(([provider, items]) => {
       const rows = items.map((option) => {
         const isActive = option.value === currentValue;
         const showSubline = !isLocal && (option.pricingLabel || option.contextLabel);
@@ -739,7 +832,21 @@
           <div class="model-dropdown-group-body">${rows}</div>
         </div>
       `;
-    }).join('');
+    }).join('')
+      : '<div class="model-dropdown-empty">没有匹配的模型</div>';
+
+    refs.modelSelectPanel.innerHTML = `
+      <label class="model-dropdown-search">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input
+          class="model-dropdown-search-input"
+          type="search"
+          placeholder="搜索模型、供应商或分类"
+          aria-label="搜索模型"
+          value="${searchValue}">
+      </label>
+      <div class="model-dropdown-results">${resultsHtml}</div>
+    `;
   };
 
   const buildModelSelect = (models) => {
@@ -876,16 +983,21 @@
           modelChoice: refs.modelSelect.value,
         };
       }
+      if (!isLocal) {
+        recordLoadedOpenRouterApiKey(config);
+      }
       setStatus(isLocal
         ? `已加载 LM Studio 本地模型列表：${models.length || 0} 项`
         : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
+      return true;
     } catch (error) {
       if (isStaleProviderRequest()) return;
       if (isLocal) setLmStudioModelPlaceholder();
       setStatus(isLocal
         ? `本地模型加载失败：请确认 LM Studio 已启动并加载模型（${error?.message || '未知错误'}）`
         : `模型加载失败：${error?.message || '未知错误'}`, 'warn');
+      return false;
     } finally {
       clearTimeout(timeout);
     }
@@ -926,7 +1038,7 @@
           stream: false,
         }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(await readApiErrorMessage(response));
       const payload = await response.json();
       const answer = payload?.choices?.[0]?.message?.content?.trim();
       setStatus(answer
@@ -1030,8 +1142,10 @@
       confirmText: '确认清空',
     });
     if (!confirmed) return;
+    clearOpenRouterModelRefreshTimer();
     localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
     setFormConfig(constants.DEFAULT_CONFIG);
+    lastLoadedOpenRouterApiKey = '';
     updateSavedState(false);
     syncPreview();
     setStatus('已清空本地配置', 'warn');
@@ -1053,6 +1167,7 @@
 
     Array.from(refs.aiProviderInputs || []).forEach((input) => {
       input.addEventListener('change', () => {
+        clearOpenRouterModelRefreshTimer();
         const nextProvider = normalizeProvider(input.value);
         if (nextProvider === activeProvider) {
           setProviderRadio(activeProvider);
@@ -1091,6 +1206,9 @@
         syncProviderUi();
         storeActiveProviderDraft();
         syncPreview();
+        if (input === refs.openrouterApiKey) {
+          refreshOpenRouterModelsAfterApiKeyUpdate();
+        }
       }));
 
     refs.temperature?.addEventListener('input', () => {
@@ -1120,6 +1238,10 @@
         return;
       }
       persistConfig(config);
+      clearOpenRouterModelRefreshTimer();
+      if (!isLmStudioProvider(config.aiProvider) && config.apiKey) {
+        fetchModels();
+      }
       updateSavedState(true);
       syncPreview();
       App.notify?.success?.('配置已保存', { key: 'config-save' });
@@ -1163,6 +1285,19 @@
       } else if (event.key === 'Escape') {
         closeModelDropdown();
       }
+    });
+
+    refs.modelSelectPanel?.addEventListener('input', (event) => {
+      const searchInput = event.target.closest('.model-dropdown-search-input');
+      if (!searchInput) return;
+      modelSearchQuery = searchInput.value || '';
+      syncModelDropdown();
+      requestAnimationFrame(() => {
+        const nextInput = refs.modelSelectPanel?.querySelector('.model-dropdown-search-input');
+        if (!nextInput) return;
+        nextInput.focus();
+        nextInput.setSelectionRange(modelSearchQuery.length, modelSearchQuery.length);
+      });
     });
 
     refs.modelSelectPanel?.addEventListener('click', (event) => {
@@ -1226,12 +1361,20 @@
       setFormConfig(constants.DEFAULT_CONFIG);
       updateSavedState(false);
     }
+    lastLoadedOpenRouterApiKey = '';
 
     syncApiKeyToggleIcon();
     syncOssSecretToggleIcon();
     syncTemperatureLabel();
     syncPreview();
-    setStatus('配置已加载；模型列表和实时汇率将在手动刷新时联网获取。', 'success');
+    const initialConfig = getFormConfig();
+    if (!isLmStudioProvider(initialConfig.aiProvider) && initialConfig.apiKey) {
+      window.setTimeout(() => {
+        fetchModels();
+      }, 0);
+    } else {
+      setStatus('配置已加载；模型列表和实时汇率将在手动刷新时联网获取。', 'success');
+    }
   };
 
   App.config = {

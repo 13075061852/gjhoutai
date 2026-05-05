@@ -865,11 +865,259 @@
     }
     .biz-today-list strong{color:var(--accent);font-weight:900}
     .biz-today-list span{margin-top:7px;color:var(--text-2);line-height:1.55}
-    .biz-order-toolbar{
+    .biz-order-page{
+      flex:1 1 auto;
+      min-height:0;
       display:flex;
+      flex-direction:column;
       gap:12px;
-      overflow:auto;
-      padding-bottom:2px;
+    }
+    .biz-order-table-panel{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-order-table-head{
+      min-height:70px;
+    }
+    .biz-order-table-actions{
+      flex:1 1 auto;
+    }
+    .biz-order-table-actions .custom-select{
+      width:140px;
+      flex:0 0 140px;
+    }
+    .biz-order-table-actions .custom-select-trigger{
+      width:100%;
+      height:36px;
+    }
+    .biz-order-table-actions input[type="date"]{
+      width:140px;
+      min-height:36px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+      outline:0;
+    }
+    .biz-order-table-actions input[type="date"]:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-order-table-wrap{
+      flex:1 1 auto;
+      min-height:0;
+    }
+    .biz-order-table{
+      min-width:1060px;
+      font-size:14px;
+    }
+    .biz-order-table th,
+    .biz-order-table td{
+      text-align:center;
+      white-space:nowrap;
+    }
+    .biz-order-table tr:last-child td{
+      border-bottom:1px solid var(--border);
+    }
+    .biz-order-code{
+      border:0;
+      background:transparent;
+      color:var(--accent);
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-order-code:hover{
+      text-decoration:underline;
+    }
+    .biz-order-amount{
+      color:var(--text);
+      font-weight:950;
+    }
+    .biz-order-status{
+      min-height:24px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:0 8px;
+      border-radius:6px;
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-order-status.is-running{
+      background:#dbeafe;
+      color:#2563eb;
+    }
+    .biz-order-status.is-pending{
+      background:#fef3c7;
+      color:#d97706;
+    }
+    .biz-order-status.is-shipped,
+    .biz-order-status.is-complete{
+      background:#d1fae5;
+      color:#059669;
+    }
+    .biz-order-row-actions button.is-success{
+      min-width:66px;
+      width:auto;
+      padding:0 10px;
+      border-color:#059669;
+      background:#059669;
+      color:#fff;
+    }
+    .biz-order-row-actions button.is-success:hover{
+      border-color:#047857;
+      color:#fff;
+      background:#047857;
+    }
+    .biz-order-pagination{
+      flex:0 0 auto;
+    }
+    .biz-order-modal{
+      position:fixed;
+      inset:0;
+      z-index:70;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      background:rgba(15,23,42,.22);
+      backdrop-filter:blur(4px);
+      animation:dialog-overlay-in .18s ease-out both;
+    }
+    .biz-order-dialog{
+      width:min(560px, 100%);
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-order-editor{
+      display:grid;
+      grid-template-columns:repeat(6,minmax(0,1fr));
+      gap:14px 16px;
+      padding:20px 18px 0;
+    }
+    .biz-order-editor label{
+      min-width:0;
+      grid-column:span 3;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:850;
+    }
+    .biz-order-editor label:nth-of-type(3),
+    .biz-order-editor label:nth-of-type(4),
+    .biz-order-editor label:nth-of-type(5){
+      grid-column:span 2;
+    }
+    .biz-order-editor .is-note,
+    .biz-order-stock-check,
+    .biz-order-modal-actions{
+      grid-column:1 / -1;
+    }
+    .biz-order-editor input,
+    .biz-order-editor select,
+    .biz-order-editor textarea{
+      width:100%;
+      min-width:0;
+      min-height:38px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      outline:0;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:14px;
+    }
+    .biz-order-editor textarea{
+      min-height:56px;
+      padding:10px 12px;
+      line-height:1.55;
+      resize:vertical;
+    }
+    .biz-order-editor input:focus,
+    .biz-order-editor select:focus,
+    .biz-order-editor textarea:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-order-editor .custom-select{
+      width:100%;
+      display:block;
+    }
+    .biz-order-editor .custom-select-trigger{
+      width:100%;
+      height:38px;
+    }
+    .biz-order-stock-check{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+      color:#059669;
+    }
+    .biz-order-stock-check i{
+      margin-top:1px;
+      font-size:22px;
+    }
+    .biz-order-stock-check strong,
+    .biz-order-stock-check span{
+      display:block;
+    }
+    .biz-order-stock-check strong{
+      color:var(--text);
+      font-size:14px;
+      font-weight:950;
+    }
+    .biz-order-stock-check span{
+      margin-top:3px;
+      color:#059669;
+      font-size:13px;
+      font-weight:800;
+    }
+    .biz-order-modal-actions{
+      margin:6px -18px 0;
+      padding:14px 18px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    @media (max-width:720px){
+      .biz-order-table-head{
+        align-items:flex-start;
+      }
+      .biz-order-table-actions{
+        width:100%;
+        justify-content:flex-start;
+      }
+      .biz-order-table-actions .custom-select,
+      .biz-order-table-actions input[type="date"],
+      .biz-order-table-actions .biz-formula-new-btn{
+        flex:1 1 150px;
+        width:auto;
+      }
+      .biz-order-modal{
+        align-items:flex-start;
+        overflow:auto;
+        padding:14px;
+      }
+      .biz-order-editor{
+        grid-template-columns:1fr;
+      }
+      .biz-order-editor label,
+      .biz-order-editor label:nth-of-type(3),
+      .biz-order-editor label:nth-of-type(4),
+      .biz-order-editor label:nth-of-type(5){
+        grid-column:1;
+      }
     }
     .biz-order-toolbar button,
     .biz-directory button,
@@ -886,10 +1134,6 @@
       font-weight:850;
       cursor:pointer;
     }
-    .biz-order-toolbar button{
-      padding:0 13px;
-      white-space:nowrap;
-    }
     .biz-order-toolbar .is-active,
     .biz-directory .is-active,
     .biz-role-list .is-active,
@@ -899,109 +1143,323 @@
       background:var(--accent-soft);
       color:var(--accent);
     }
-    .biz-kanban{
-      display:grid;
-      grid-template-columns:repeat(4,minmax(210px,1fr));
-      gap:12px;
-      overflow:auto;
-      padding-bottom:2px;
-    }
-    .biz-kanban-column{
-      min-height:330px;
-      padding:12px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-    }
-    .biz-kanban-column h2{
-      margin:0 0 12px;
-      display:flex;
-      justify-content:space-between;
-      color:var(--text);
-      font-size:14px;
-      font-weight:900;
-    }
-    .biz-kanban-column h2 span{
-      color:var(--muted);
-      font-size:12px;
-    }
-    .biz-order-card{
+    .biz-invoice-workbench{
       display:flex;
       flex-direction:column;
       gap:12px;
-      padding:12px;
-      margin-bottom:10px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface-2);
     }
-    .biz-order-card strong{color:var(--text);font-size:13px}
-    .biz-order-card span{color:var(--text-2);font-size:12px}
-    .biz-order-card em{width:fit-content;padding:4px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-style:normal;font-weight:900}
     .biz-invoice-layout{
       display:grid;
-      grid-template-columns:240px minmax(0,1fr) 280px;
+      grid-template-columns:280px minmax(640px,1fr);
       gap:12px;
+      align-items:start;
     }
-    .biz-template-gallery,
-    .biz-print-queue{
+    .biz-invoice-orders{
+      position:sticky;
+      top:12px;
+    }
+    .biz-invoice-order-list{
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:10px;
     }
-    .biz-template-card{
-      min-height:82px;
-      display:grid;
-      grid-template-columns:36px minmax(0,1fr);
-      gap:12px;
-      align-items:center;
+    .biz-invoice-order-list button{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:6px;
       padding:12px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface-2);
+      color:var(--text-2);
+      text-align:left;
+      font:inherit;
+      cursor:pointer;
     }
-    .biz-template-card i{grid-row:1 / span 2;color:var(--accent);font-size:24px}
-    .biz-template-card strong{color:var(--text);font-size:13px}
-    .biz-template-card span{color:var(--muted);font-size:12px}
-    .biz-template-card.is-active{border-color:var(--accent);background:var(--accent-soft)}
-    .biz-paper{
-      max-width:560px;
-      min-height:360px;
-      margin:0 auto;
-      padding:26px;
+    .biz-invoice-order-list button:hover,
+    .biz-invoice-order-list button.is-active{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-invoice-order-list strong{
+      max-width:100%;
+      overflow:hidden;
+      color:var(--text);
+      font-size:13px;
+      line-height:1.35;
+      font-weight:950;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .biz-invoice-order-list span,
+    .biz-invoice-order-list em{
+      max-width:100%;
+      overflow:hidden;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.4;
+      font-style:normal;
+      font-weight:750;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .biz-invoice-preview{
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-invoice-toolbar{
+      min-height:64px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      background:var(--surface);
+    }
+    .biz-invoice-toolbar h2{
+      margin:0;
+      color:var(--text);
+      font-size:16px;
+      font-weight:950;
+    }
+    .biz-invoice-toolbar span{
+      display:block;
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-invoice-toolbar > label{
+      width:clamp(170px, 18vw, 240px);
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-invoice-toolbar > label span{
+      margin:0;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-invoice-toolbar select{
+      width:100%;
+      min-height:36px;
+      padding:0 11px;
       border:1px solid var(--border);
-      border-radius:4px;
+      border-radius:8px;
+      outline:0;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+    }
+    .biz-invoice-toolbar select:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-invoice-preview-actions{
+      flex:0 0 auto;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .biz-invoice-preview-actions button{
+      min-height:34px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-invoice-preview-actions button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-invoice-preview-actions button.is-primary{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .biz-operation-sheet{
+      width:min(100%, 980px);
+      margin:0 auto;
+      padding:18px;
       background:#fff;
       color:#111827;
-      box-shadow:0 18px 35px rgba(15,23,42,.08);
     }
-    .biz-paper div{
-      display:flex;
-      justify-content:space-between;
-      border-bottom:2px solid #111827;
+    .biz-operation-sheet header{
+      display:grid;
+      grid-template-columns:minmax(220px,1fr) minmax(360px,1.4fr);
+      gap:16px;
+      align-items:end;
       padding-bottom:12px;
-      margin-bottom:18px;
+      border-bottom:2px solid #111827;
     }
-    .biz-paper p{margin:16px 0;color:#334155;font-size:14px}
-    .biz-paper footer{margin-top:56px;color:#64748b;font-size:12px}
-    .biz-print-queue ul{
+    .biz-operation-sheet header strong{
+      display:block;
+      color:#111827;
+      font-size:20px;
+      line-height:1.2;
+      font-weight:950;
+    }
+    .biz-operation-sheet header span{
+      display:block;
+      margin-top:6px;
+      color:#334155;
+      font-size:13px;
+      font-weight:850;
+    }
+    .biz-operation-sheet dl{
+      display:grid;
+      grid-template-columns:48px minmax(0,1fr) 42px minmax(0,.75fr);
+      gap:7px 10px;
+      margin:0;
+      color:#111827;
+      font-size:12px;
+    }
+    .biz-operation-sheet dt{
+      color:#64748b;
+      font-weight:850;
+    }
+    .biz-operation-sheet dd{
+      min-width:0;
+      margin:0;
+      overflow:hidden;
+      font-weight:900;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .biz-operation-table-wrap,
+    .biz-operation-batch-table{
+      overflow:auto;
+      margin-top:12px;
+    }
+    .biz-operation-sheet table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:11px;
+      line-height:1.35;
+    }
+    .biz-operation-sheet th,
+    .biz-operation-sheet td{
+      padding:7px 8px;
+      border:1px solid #1f2937;
+      text-align:center;
+      white-space:nowrap;
+    }
+    .biz-operation-sheet th{
+      background:#f1f5f9;
+      color:#0f172a;
+      font-weight:950;
+    }
+    .biz-operation-sheet td{
+      color:#111827;
+      font-weight:750;
+    }
+    .biz-operation-sheet tr.is-split-basis td{
+      background:#eff6ff;
+    }
+    .biz-operation-sheet tr.is-total td{
+      background:#f8fafc;
+      font-weight:950;
+    }
+    .biz-operation-batch-table > div{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:8px;
+      color:#111827;
+      font-size:12px;
+    }
+    .biz-operation-batch-table strong{
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-operation-batch-table span{
+      color:#475569;
+      font-weight:850;
+    }
+    .biz-operation-sheet footer{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:12px;
+      margin-top:16px;
+      padding-top:12px;
+      border-top:1px solid #1f2937;
+      color:#111827;
+      font-size:12px;
+      font-weight:900;
+    }
+    .biz-invoice-process{
       display:flex;
       flex-direction:column;
-      gap:12px;
-      margin:0;
-      padding:0;
-      list-style:none;
-    }
-    .biz-print-queue li{
+      gap:8px;
       padding:12px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface-2);
     }
-    .biz-print-queue strong,
-    .biz-print-queue span{display:block;font-size:12px}
-    .biz-print-queue strong{color:var(--text)}
-    .biz-print-queue span{margin-top:6px;color:var(--muted)}
+    .biz-invoice-process strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-invoice-process p{
+      margin:0;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.55;
+      font-weight:750;
+    }
+    .biz-invoice-process p span{
+      margin-right:7px;
+      color:var(--accent);
+      font-weight:950;
+    }
+    @media (max-width:720px){
+      .biz-invoice-toolbar,
+      .biz-operation-batch-table > div{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .biz-invoice-preview-actions{
+        width:100%;
+      }
+      .biz-invoice-preview-actions button{
+        flex:1 1 0;
+      }
+      .biz-operation-sheet{
+        padding:12px;
+      }
+      .biz-operation-sheet header{
+        grid-template-columns:1fr;
+      }
+      .biz-operation-sheet dl{
+        grid-template-columns:42px minmax(0,1fr);
+      }
+      .biz-operation-sheet footer{
+        grid-template-columns:1fr;
+      }
+      .biz-invoice-orders{
+        position:static;
+      }
+    }
     .biz-warehouse-map{
       display:grid;
       grid-template-columns:repeat(2,minmax(0,1fr));

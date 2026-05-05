@@ -92,69 +92,438 @@
     </section>
   `;
 
+  const ORDER_STORAGE_KEY = 'gjh-orders-v1';
+  const orderStatusOptions = ['生产中', '待处理', '已发货', '已完成'];
+  const orderPageSizeOptions = [5, 10, 20, 50];
+  const defaultOrderRows = [
+    { id: 'ORD-20260320', customer: '美的集团', formula: 'PP 滑石粉填充', quantity: 5000, unitPrice: 18, status: '生产中', deliveryDate: '2026-04-10', note: '家电外壳批量单' },
+    { id: 'ORD-20260315', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 3000, unitPrice: 35, status: '待处理', deliveryDate: '2026-04-01', note: '等待客户确认交货窗口' },
+    { id: 'ORD-20260310', customer: '泰科电子', formula: 'PET 无卤阻燃', quantity: 800, unitPrice: 42, status: '已发货', deliveryDate: '2026-03-25', note: '已同步物流单号' },
+    { id: 'ORD-20260305', customer: '东成电动工具', formula: 'PA6-GF25 增韧增强', quantity: 1500, unitPrice: 38, status: '已发货', deliveryDate: '2026-03-20', note: '客户要求附质检报告' },
+    { id: 'ORD-20260301', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 2000, unitPrice: 35, status: '已发货', deliveryDate: '2026-03-15', note: '常规补货单' },
+    { id: 'ORD-20260226', customer: '格力电器', formula: 'ABS 阻燃高光', quantity: 2600, unitPrice: 28, status: '已完成', deliveryDate: '2026-03-12', note: '财务已归档' },
+  ];
+  const orderCustomerOptions = ['美的集团', '博世汽车零部件', '泰科电子', '东成电动工具', '格力电器', '宁波辰光电器', '苏州瑞嘉材料'];
+  const orderFormulaOptions = [
+    'PP 滑石粉填充',
+    'PBT-GF30 高强度增强',
+    'PET 无卤阻燃',
+    'PA6-GF25 增韧增强',
+    'ABS 阻燃高光',
+    'PC/ABS 耐热合金',
+  ];
+  const getOrderFallbackDate = () => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  };
+  const normalizeOrder = (order = {}, index = 0) => ({
+    id: String(order.id || `ORD-${getOrderFallbackDate().replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
+    customer: String(order.customer || orderCustomerOptions[0]).trim(),
+    formula: String(order.formula || orderFormulaOptions[0]).trim(),
+    quantity: Math.max(0, Number(order.quantity || 0)),
+    unitPrice: Math.max(0, Number(order.unitPrice || 0)),
+    status: orderStatusOptions.includes(order.status) ? order.status : orderStatusOptions[0],
+    deliveryDate: String(order.deliveryDate || getOrderFallbackDate()).trim(),
+    note: String(order.note || '').trim(),
+  });
+  const normalizeOrders = (value) => {
+    const rows = Array.isArray(value)
+      ? value.map(normalizeOrder).filter((order) => order.id)
+      : [];
+    return rows.length ? rows : defaultOrderRows.map(normalizeOrder);
+  };
+  let orderRows = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
+  let orderStatusFilter = '全部';
+  let orderDateFilter = '';
+  let orderListPage = 1;
+  let orderPageSize = 10;
+  let orderModalOpen = false;
+  let orderEditingId = '';
+  let orderDraftNote = '订单数据自动保存到本地';
+  let invoiceSelectedOrderId = orderRows.find((order) => order.status === '待处理' || order.status === '生产中')?.id || orderRows[0]?.id || '';
+  let invoiceSplitPort = 1;
+  let invoiceBatchCount = 10;
+
+  const getOrderIndex = (id) => orderRows.findIndex((order) => order.id === id);
+  const getOrderAmount = (order) => Number(order.quantity || 0) * Number(order.unitPrice || 0);
+  const formatOrderAmount = (value) => `¥${Number(value || 0).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+  const formatOrderNumber = (value) => Number(value || 0).toLocaleString('zh-CN');
+  const getOrderStatusClass = (status) => ({
+    生产中: 'is-running',
+    待处理: 'is-pending',
+    已发货: 'is-shipped',
+    已完成: 'is-complete',
+  }[status] || 'is-pending');
+  const persistOrders = (note = '订单数据已保存') => {
+    orderDraftNote = note;
+    utils.writeJson(ORDER_STORAGE_KEY, orderRows);
+  };
+  const getOrderFormRecord = () => {
+    const root = refs.businessPageContent;
+    const read = (field) => String(root?.querySelector(`[data-order-field="${field}"]`)?.value || '').trim();
+    const editingOrder = orderRows[getOrderIndex(orderEditingId)] || {};
+    return normalizeOrder({
+      id: editingOrder.id || `ORD-${getTodayCode().replace(/-/g, '')}${String(orderRows.length + 1).padStart(2, '0')}`,
+      customer: read('customer'),
+      formula: read('formula'),
+      quantity: read('quantity'),
+      unitPrice: read('unitPrice'),
+      deliveryDate: read('deliveryDate'),
+      status: read('status'),
+      note: read('note'),
+    });
+  };
+  const saveOrder = () => {
+    const order = getOrderFormRecord();
+    if (!order.customer || !order.formula || !order.quantity || !order.unitPrice || !order.deliveryDate) {
+      orderDraftNote = '请完整填写客户、配方、数量、单价和交货日期';
+      notifyAction(orderDraftNote, 'warn', 'order-required-fields');
+      return false;
+    }
+    const index = getOrderIndex(orderEditingId);
+    if (index >= 0) {
+      orderRows[index] = order;
+      persistOrders(`已更新订单 ${order.id} · ${getTimeCode()}`);
+      notifyAction(`已保存订单 ${order.id}`, 'success', `order-save:${order.id}`);
+      return true;
+    }
+    orderRows.unshift(order);
+    persistOrders(`已新增订单 ${order.id} · ${getTimeCode()}`);
+    notifyAction(`已新增订单 ${order.id}`, 'success', `order-save:${order.id}`);
+    return true;
+  };
+  const deleteOrder = async (id) => {
+    const index = getOrderIndex(id);
+    if (index < 0) return;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除订单',
+      message: `确认删除订单「${id}」？删除后无法恢复。`,
+      confirmText: '确认删除',
+    });
+    if (!confirmed) return;
+    orderRows.splice(index, 1);
+    persistOrders(`已删除订单 ${id} · ${getTimeCode()}`);
+    notifyAction(`已删除订单 ${id}`, 'success', `order-delete:${id}`);
+  };
+
   const renderOrders = () => {
-    const columns = [
-      ['待补全', [['SO-018', '宁波辰光', '客户回签'], ['SO-021', '昆山明拓', '缺收货地址']]],
-      ['审核中', [['SO-014', '苏州瑞嘉', '信用复核'], ['SO-019', '杭州启明', '价格审批']]],
-      ['执行中', [['SO-032', '杭州启明', '备货'], ['SO-027', '常州宏远', '排产']]],
-      ['交付中', [['SO-011', '上海锐塑', '司机已接单']]],
-    ];
+    const visibleOrders = orderRows.filter((order) => {
+      const matchedStatus = orderStatusFilter === '全部' || order.status === orderStatusFilter;
+      const matchedDate = !orderDateFilter || order.deliveryDate === orderDateFilter;
+      return matchedStatus && matchedDate;
+    });
+    const filteredCount = visibleOrders.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / orderPageSize));
+    orderListPage = Math.min(Math.max(1, orderListPage), totalPages);
+    const pageStart = (orderListPage - 1) * orderPageSize;
+    const pagedOrders = visibleOrders.slice(pageStart, pageStart + orderPageSize);
+    const modalOrder = normalizeOrder(orderRows[getOrderIndex(orderEditingId)] || {
+      customer: orderCustomerOptions[0],
+      formula: orderFormulaOptions[0],
+      quantity: '',
+      unitPrice: '',
+      status: '生产中',
+      deliveryDate: getTodayCode(),
+      note: '',
+    });
+    const amountPreview = getOrderAmount(modalOrder);
+    const runningCount = orderRows.filter((order) => order.status === '生产中').length;
+    const pendingCount = orderRows.filter((order) => order.status === '待处理').length;
+    const totalAmount = orderRows.reduce((sum, order) => sum + getOrderAmount(order), 0);
+
     return `
-      <section class="biz-order-toolbar">
-        <button class="is-active" type="button">全部订单</button><button type="button">加急</button><button type="button">待审核</button><button type="button">交期风险</button>
-      </section>
-      <section class="biz-kanban">
-        ${columns.map(([title, cards]) => `
-          <article class="biz-kanban-column">
-            <h2>${esc(title)} <span>${cards.length}</span></h2>
-            ${cards.map(([code, customer, state]) => `
-              <div class="biz-order-card">
-                <strong>${esc(code)}</strong>
-                <span>${esc(customer)}</span>
-                <em>${esc(state)}</em>
+      <section class="biz-order-page">
+        ${renderStatStrip([
+          ['订单总数', `${orderRows.length} 单`, `筛选 ${visibleOrders.length} 单`],
+          ['生产中', `${runningCount} 单`, pendingCount ? `${pendingCount} 单待处理` : '暂无待处理'],
+          ['订单金额', formatOrderAmount(totalAmount), '按当前订单估算'],
+          ['最近交付', orderRows.map((order) => order.deliveryDate).sort().at(-1) || '--', '交货日期'],
+        ])}
+        <section class="business-panel biz-order-table-panel">
+          <div class="biz-formula-table-head biz-order-table-head">
+            <div class="biz-formula-table-title">
+              <i class="ti ti-package" aria-hidden="true"></i>
+              <div>
+                <h2>订单管理</h2>
               </div>
-            `).join('')}
-          </article>
-        `).join('')}
+            </div>
+            <div class="biz-formula-table-actions biz-order-table-actions">
+              <select data-order-status-filter aria-label="订单状态筛选">
+                ${renderOptions(['全部', ...orderStatusOptions], orderStatusFilter)}
+              </select>
+              <input type="date" value="${esc(orderDateFilter)}" data-order-date-filter aria-label="交货日期筛选">
+              <button class="biz-formula-new-btn" type="button" data-order-new>
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>新建订单</span>
+              </button>
+            </div>
+          </div>
+          <div class="biz-formula-table-wrap biz-order-table-wrap ui-table-wrap">
+            <table class="biz-formula-table biz-order-table ui-table">
+              <thead>
+                <tr>
+                  <th>订单号</th>
+                  <th>客户</th>
+                  <th>配方</th>
+                  <th>数量(KG)</th>
+                  <th>单价(¥/KG)</th>
+                  <th>总金额(¥)</th>
+                  <th>状态</th>
+                  <th>交货日期</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pagedOrders.map((order) => `
+                  <tr>
+                    <td><button class="biz-order-code" type="button" data-order-edit="${esc(order.id)}">${esc(order.id)}</button></td>
+                    <td>${esc(order.customer)}</td>
+                    <td>${esc(order.formula)}</td>
+                    <td>${esc(formatOrderNumber(order.quantity))}</td>
+                    <td>¥${esc(Number(order.unitPrice || 0).toFixed(2))}</td>
+                    <td><strong class="biz-order-amount">${esc(formatOrderAmount(getOrderAmount(order)))}</strong></td>
+                    <td><span class="biz-order-status ${getOrderStatusClass(order.status)}">${esc(order.status)}</span></td>
+                    <td>${esc(order.deliveryDate)}</td>
+                    <td>
+                      <div class="biz-supplier-row-actions biz-order-row-actions">
+                        <button type="button" data-order-edit="${esc(order.id)}" aria-label="编辑${esc(order.id)}">
+                          <i class="ti ti-pencil" aria-hidden="true"></i>
+                        </button>
+                        ${order.status === '待处理' ? `
+                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
+                            <i class="ti ti-player-play" aria-hidden="true"></i>
+                          </button>
+                        ` : ''}
+                        ${order.status === '生产中' ? `
+                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成${esc(order.id)}">
+                            <i class="ti ti-check" aria-hidden="true"></i>
+                          </button>
+                        ` : ''}
+                        <button class="is-danger" type="button" data-order-delete="${esc(order.id)}" aria-label="删除${esc(order.id)}">
+                          <i class="ti ti-x" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('') || '<tr><td colspan="9"><div class="biz-formula-empty">暂无匹配订单</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="biz-formula-pagination biz-order-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-order-page-size aria-label="订单每页条数">${orderPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === orderPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-order-page-prev ${orderListPage <= 1 ? 'disabled' : ''} aria-label="订单上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${orderListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-order-page-next ${orderListPage >= totalPages ? 'disabled' : ''} aria-label="订单下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${orderModalOpen ? `
+          <div class="biz-order-modal" data-order-modal>
+            <div class="biz-inventory-material-dialog biz-order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="orderModalTitle">${orderEditingId ? '编辑订单' : '新建订单'}</h2>
+                  <span>${esc(orderDraftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭订单弹窗" data-order-close>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-order-editor">
+                <label>
+                  <span>客户 *</span>
+                  <select data-order-field="customer">${renderOptions(orderCustomerOptions, modalOrder.customer)}</select>
+                </label>
+                <label>
+                  <span>配方 *</span>
+                  <select data-order-field="formula">${renderOptions(orderFormulaOptions, modalOrder.formula)}</select>
+                </label>
+                <label>
+                  <span>数量 (kg) *</span>
+                  <input type="number" min="0" step="1" value="${esc(modalOrder.quantity || '')}" data-order-field="quantity">
+                </label>
+                <label>
+                  <span>单价 (¥/kg) *</span>
+                  <input type="number" min="0" step="0.01" value="${esc(modalOrder.unitPrice || '')}" data-order-field="unitPrice">
+                </label>
+                <label>
+                  <span>总金额 (¥)</span>
+                  <input type="text" value="${esc(formatOrderAmount(amountPreview))}" readonly data-order-total-preview>
+                </label>
+                <label>
+                  <span>交货日期 *</span>
+                  <input type="date" value="${esc(modalOrder.deliveryDate)}" data-order-field="deliveryDate">
+                </label>
+                <label>
+                  <span>状态</span>
+                  <select data-order-field="status">${renderOptions(orderStatusOptions, modalOrder.status)}</select>
+                </label>
+                <label class="is-note">
+                  <span>备注</span>
+                  <textarea placeholder="补充客户要求、交付说明或生产备注" data-order-field="note">${esc(modalOrder.note)}</textarea>
+                </label>
+                <div class="biz-order-stock-check">
+                  <i class="ti ti-circle-check" aria-hidden="true"></i>
+                  <div>
+                    <strong>库存检查</strong>
+                    <span>所有材料库存充足</span>
+                  </div>
+                </div>
+                <div class="biz-inventory-modal-actions biz-order-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-order-cancel>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-order-save>保存订单</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
       </section>
-      ${renderTable('交期风险订单', ['订单号', '客户', '产品', '下一步'], [
-        ['SO-20260427-018', '宁波辰光电器', '阻燃 ABS / 2.4 吨', '确认客户回签'],
-        ['SO-20260427-014', '苏州瑞嘉材料', '增强 PP / 5 吨', '主管审核价格'],
-        ['SO-20260426-032', '杭州启明科技', 'PC/ABS 合金 / 1.8 吨', '仓库备货'],
-      ])}
     `;
   };
 
-  const renderInvoice = () => `
-    <section class="biz-invoice-layout">
-      <div class="business-panel biz-template-gallery">
-        <div class="business-panel-head"><h2>单据模板</h2><span>随货资料</span></div>
-        ${['销售出库单', '送货单', '质检报告', '样品标签'].map((name, index) => `
-          <article class="biz-template-card ${index === 0 ? 'is-active' : ''}">
-            <i class="ti ti-file-description" aria-hidden="true"></i>
-            <strong>${esc(name)}</strong>
-            <span>${index === 0 ? '默认模板' : '可选模板'}</span>
-          </article>
-        `).join('')}
-      </div>
-      <div class="business-panel biz-print-preview">
-        <div class="business-panel-head"><h2>打印预览</h2><span>A4 横版</span></div>
-        <div class="biz-paper">
-          <div><strong>广俊塑料科技</strong><span>销售出库单</span></div>
-          <p>客户：宁波辰光电器</p><p>产品：阻燃 ABS / 2.4 吨</p><p>批号：GJ260427-A08</p>
-          <footer>质检报告、图谱编号、物流信息已关联</footer>
+  const renderInvoice = () => {
+    const openOrders = orderRows.filter((order) => ['待处理', '生产中'].includes(order.status));
+    const invoiceOrders = openOrders.length ? openOrders : orderRows;
+    if (!invoiceOrders.some((order) => order.id === invoiceSelectedOrderId)) {
+      invoiceSelectedOrderId = invoiceOrders[0]?.id || '';
+    }
+    const order = invoiceOrders.find((item) => item.id === invoiceSelectedOrderId) || invoiceOrders[0] || normalizeOrder({});
+    const recipe = getRecipeForOrder(order);
+    const formulaRows = getFormulaRows(recipe);
+    const totalKg = Number(order.quantity || 0);
+    const batchOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12];
+    const portOptions = feederPorts.map((port) => {
+      const portTotal = formulaRows
+        .filter((item) => item.port === port)
+        .reduce((sum, item) => sum + getInvoiceMaterialKg(item, totalKg), 0);
+      return [String(port), `${port}号下料口 · ${formatKgValue(portTotal)} kg`];
+    });
+    const maxPreviewBatches = Math.min(invoiceBatchCount, 8);
+    const hiddenBatchCount = Math.max(0, invoiceBatchCount - maxPreviewBatches);
+
+    return `
+      <section class="biz-invoice-workbench">
+        <div class="business-panel biz-invoice-toolbar">
+          <div>
+            <h2>配料操作图</h2>
+            <span>仅显示材料与重量</span>
+          </div>
+          <label>
+            <span>依据下料口</span>
+            <select data-invoice-port>${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+          </label>
+          <label>
+            <span>划分批次</span>
+            <select data-invoice-batch-count>${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
+          </label>
+          <div class="biz-invoice-preview-actions">
+            <button type="button" data-invoice-print><i class="ti ti-printer" aria-hidden="true"></i><span>打印开单</span></button>
+            <button class="is-primary" type="button" data-invoice-export><i class="ti ti-photo-down" aria-hidden="true"></i><span>生成图片</span></button>
+          </div>
         </div>
-      </div>
-      <div class="business-panel biz-print-queue">
-        <div class="business-panel-head"><h2>打印队列</h2><span>23 份待处理</span></div>
-        <ul>
-          <li><strong>PR-0427-021</strong><span>送货单 / 待复核</span></li>
-          <li><strong>PR-0427-019</strong><span>质检报告 / 可打印</span></li>
-          <li><strong>PR-0427-011</strong><span>销售出库单 / 已打印</span></li>
-        </ul>
-      </div>
-    </section>
-  `;
+        <div class="biz-invoice-layout">
+          <aside class="business-panel biz-invoice-orders">
+            <div class="business-panel-head">
+              <h2>待开单配方</h2>
+              <span>订单调取</span>
+            </div>
+            <div class="biz-invoice-order-list">
+              ${invoiceOrders.map((item) => {
+                const itemRecipe = getRecipeForOrder(item);
+                return `
+                  <button class="${item.id === order.id ? 'is-active' : ''}" type="button" data-invoice-order="${esc(item.id)}">
+                    <strong>${esc(item.formula)}</strong>
+                    <span>${formatKgValue(item.quantity)} kg · ${esc(itemRecipe.code || itemRecipe.name)}</span>
+                    <em>${esc(item.id)} / ${esc(item.status)}</em>
+                  </button>
+                `;
+              }).join('') || '<div class="biz-formula-empty">暂无待开单订单</div>'}
+            </div>
+          </aside>
+          <section class="business-panel biz-print-preview biz-invoice-preview">
+            <div class="biz-operation-sheet">
+              <header>
+                <div>
+                  <strong>配料操作图</strong>
+                  <span>按材料重量执行</span>
+                </div>
+                <dl>
+                  <dt>总量</dt><dd>${formatKgValue(totalKg)} kg</dd>
+                  <dt>批次</dt><dd>${invoiceBatchCount} 批</dd>
+                </dl>
+              </header>
+              <div class="biz-operation-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>下料口</th>
+                      <th>材料名称</th>
+                      <th>重量(KG)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${formulaRows.map((item) => `
+                      <tr class="${item.port === invoiceSplitPort ? 'is-split-basis' : ''}">
+                        <td>${item.port}号</td>
+                        <td>${esc(item.name)}</td>
+                        <td>${formatKgValue(getInvoiceMaterialKg(item, totalKg))}</td>
+                      </tr>
+                    `).join('')}
+                    <tr class="is-total"><td colspan="2">合计</td><td>${formatKgValue(totalKg)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="biz-operation-batch-table">
+                <div><strong>分批次投料计划</strong><span>按${invoiceSplitPort}号下料口划分 ${invoiceBatchCount} 批</span></div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>材料名称</th>
+                      ${Array.from({ length: maxPreviewBatches }, (_, index) => `<th>批次${index + 1}</th>`).join('')}
+                      ${hiddenBatchCount ? `<th>其余${hiddenBatchCount}批</th>` : ''}
+                      <th>小计(KG)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${formulaRows.map((item) => {
+                      const materialKg = getInvoiceMaterialKg(item, totalKg);
+                      const batchKg = materialKg / Math.max(invoiceBatchCount, 1);
+                      return `
+                        <tr class="${item.port === invoiceSplitPort ? 'is-split-basis' : ''}">
+                          <td>${esc(item.name)}</td>
+                          ${Array.from({ length: maxPreviewBatches }, () => `<td>${formatKgValue(batchKg)}</td>`).join('')}
+                          ${hiddenBatchCount ? `<td>${formatKgValue(batchKg)} / 批</td>` : ''}
+                          <td>${formatKgValue(materialKg)}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    `;
+  };
 
   const renderStock = () => `
     ${renderStatStrip([['可售库存', '186.5 吨', '-4.2%'], ['锁库订单', '31', '执行中'], ['低库存', '9 项', '需采购'], ['周转天数', '18.6', '天']])}
@@ -1311,6 +1680,106 @@
     const [name, type, category, supplier, quantity, state] = getInventoryMaterial(item.name);
     return { ...item, port: normalizeFeederPort(item.port), name, type, category, supplier, quantity, state };
   });
+
+  const normalizeFormulaMatchText = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/[\s/_-]+/g, '');
+
+  const getRecipeForOrder = (order) => {
+    const formulaText = normalizeFormulaMatchText(order?.formula);
+    const exactRecipe = formulaRecipes.find((recipe) => [
+      recipe.name,
+      recipe.code,
+      recipe.product,
+      recipe.id,
+    ].some((value) => normalizeFormulaMatchText(value) === formulaText));
+    if (exactRecipe) return exactRecipe;
+
+    const fuzzyRecipe = formulaRecipes.find((recipe) => {
+      const recipeText = normalizeFormulaMatchText(`${recipe.name} ${recipe.code} ${recipe.product}`);
+      return formulaText && (recipeText.includes(formulaText) || formulaText.includes(normalizeFormulaMatchText(recipe.code)));
+    });
+    if (fuzzyRecipe) return fuzzyRecipe;
+
+    const familyText = String(order?.formula || '').toUpperCase();
+    return formulaRecipes.find((recipe) => familyText.includes(getFormulaCategory(recipe).toUpperCase()))
+      || formulaRecipes[0]
+      || defaultFormulaRecipes[0];
+  };
+
+  const getInvoiceMaterialKg = (material, totalKg) => (
+    Number(totalKg || 0) * Number(material?.ratio || 0) / 100
+  );
+
+  const escapeSvgText = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const downloadInvoiceOperationImage = () => {
+    const invoiceOrders = orderRows.filter((order) => ['待处理', '生产中'].includes(order.status));
+    const order = (invoiceOrders.length ? invoiceOrders : orderRows).find((item) => item.id === invoiceSelectedOrderId)
+      || orderRows[0];
+    if (!order) return false;
+    const recipe = getRecipeForOrder(order);
+    const rows = getFormulaRows(recipe);
+    const totalKg = Number(order.quantity || 0);
+    const batchCount = Math.max(1, invoiceBatchCount);
+    const rowHeight = 34;
+    const materialTableY = 250;
+    const batchTableY = materialTableY + 52 + rows.length * rowHeight;
+    const height = Math.max(760, batchTableY + 112 + rows.length * 30);
+    const materialRows = rows.map((item, index) => {
+      const y = materialTableY + 52 + index * rowHeight;
+      return `
+        <rect x="48" y="${y}" width="1064" height="${rowHeight}" fill="${item.port === invoiceSplitPort ? '#eff6ff' : '#ffffff'}" stroke="#1f2937"/>
+        <text x="86" y="${y + 22}">${item.port}号</text>
+        <text x="220" y="${y + 22}">${escapeSvgText(item.name)}</text>
+        <text x="930" y="${y + 22}">${formatKgValue(getInvoiceMaterialKg(item, totalKg))}</text>
+      `;
+    }).join('');
+    const batchRows = rows.map((item, index) => {
+      const y = batchTableY + 46 + index * 30;
+      const materialKg = getInvoiceMaterialKg(item, totalKg);
+      return `
+        <rect x="48" y="${y}" width="1064" height="30" fill="${item.port === invoiceSplitPort ? '#eff6ff' : '#ffffff'}" stroke="#1f2937"/>
+        <text x="74" y="${y + 20}">${escapeSvgText(item.name)}</text>
+        <text x="520" y="${y + 20}">${formatKgValue(materialKg / batchCount)} kg / 批</text>
+        <text x="790" y="${y + 20}">${batchCount} 批</text>
+        <text x="990" y="${y + 20}">${formatKgValue(materialKg)}</text>
+      `;
+    }).join('');
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="1160" height="${height}" viewBox="0 0 1160 ${height}">
+        <rect width="1160" height="${height}" fill="#ffffff"/>
+        <style>text{font-family:Arial,'Microsoft YaHei',sans-serif;font-size:14px;fill:#111827}.small{font-size:12px;fill:#475569}.title{font-size:26px;font-weight:900}.head{font-size:18px;font-weight:900}</style>
+        <text x="48" y="58" class="title">配料操作图</text>
+        <text x="48" y="88" class="head">仅显示材料与重量</text>
+        <text x="672" y="66">总重量：${formatKgValue(totalKg)} kg</text>
+        <text x="672" y="96">批次数：${batchCount} 批</text>
+        <text x="48" y="${materialTableY}" class="head">投料明细</text>
+        <rect x="48" y="${materialTableY + 16}" width="1064" height="36" fill="#f1f5f9" stroke="#1f2937"/>
+        <text x="82" y="${materialTableY + 40}">下料口</text><text x="220" y="${materialTableY + 40}">材料名称</text><text x="910" y="${materialTableY + 40}">重量(KG)</text>
+        ${materialRows}
+        <text x="48" y="${batchTableY}" class="head">分批次投料计划</text>
+        <text x="240" y="${batchTableY}" class="small">按${invoiceSplitPort}号下料口划分 ${batchCount} 批</text>
+        <rect x="48" y="${batchTableY + 16}" width="1064" height="30" fill="#f1f5f9" stroke="#1f2937"/>
+        <text x="74" y="${batchTableY + 36}">材料名称</text><text x="520" y="${batchTableY + 36}">单批投料</text><text x="790" y="${batchTableY + 36}">批次数</text><text x="990" y="${batchTableY + 36}">小计(KG)</text>
+        ${batchRows}
+      </svg>
+    `;
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${order.id}-生产操作图.svg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
+    return true;
+  };
 
   const getFormulaRiskCount = (rows) => rows.filter((row) => /紧急|预警|待检/.test(row.state)).length;
   const getFormulaCategory = (recipe) => {
@@ -2545,7 +3014,7 @@
 
   const render = (pageId, def = {}) => {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'inventory-management' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.innerHTML = `
@@ -2672,6 +3141,13 @@
       );
       return;
     }
+    if (event.target.hasAttribute('data-order-field')) {
+      const quantity = Number(refs.businessPageContent?.querySelector('[data-order-field="quantity"]')?.value || 0);
+      const unitPrice = Number(refs.businessPageContent?.querySelector('[data-order-field="unitPrice"]')?.value || 0);
+      const preview = refs.businessPageContent?.querySelector('[data-order-total-preview]');
+      if (preview) preview.value = formatOrderAmount(quantity * unitPrice);
+      return;
+    }
     if (handleFormulaEdit(event.target) && event.target.hasAttribute('data-formula-search')) {
       if (event.target instanceof HTMLInputElement && event.isComposing) return;
       const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? formulaSearchQuery.length) : formulaSearchQuery.length;
@@ -2725,6 +3201,34 @@
 
   refs.businessPageContent?.addEventListener('change', (event) => {
     if (!(event.target instanceof Element)) return;
+    if (event.target.hasAttribute('data-order-status-filter')) {
+      orderStatusFilter = event.target.value || '全部';
+      orderListPage = 1;
+      render('order-management');
+      return;
+    }
+    if (event.target.hasAttribute('data-order-date-filter')) {
+      orderDateFilter = event.target.value || '';
+      orderListPage = 1;
+      render('order-management');
+      return;
+    }
+    if (event.target.hasAttribute('data-order-page-size')) {
+      orderPageSize = Number(event.target.value) || 10;
+      orderListPage = 1;
+      render('order-management');
+      return;
+    }
+    if (event.target.hasAttribute('data-invoice-port')) {
+      invoiceSplitPort = normalizeFeederPort(event.target.value, 1);
+      render('invoice-print');
+      return;
+    }
+    if (event.target.hasAttribute('data-invoice-batch-count')) {
+      invoiceBatchCount = Math.max(1, Number(event.target.value) || 1);
+      render('invoice-print');
+      return;
+    }
     if (event.target.hasAttribute('data-inventory-category-filter')) {
       inventoryCategory = event.target.value || '全部';
       inventoryListPage = 1;
@@ -2793,6 +3297,107 @@
 
   refs.businessPageContent?.addEventListener('click', async (event) => {
     if (!(event.target instanceof Element)) return;
+
+    const orderPagePrev = event.target.closest('[data-order-page-prev]');
+    if (orderPagePrev && refs.businessPageContent.contains(orderPagePrev) && !orderPagePrev.disabled) {
+      orderListPage -= 1;
+      render('order-management');
+      return;
+    }
+
+    const orderPageNext = event.target.closest('[data-order-page-next]');
+    if (orderPageNext && refs.businessPageContent.contains(orderPageNext) && !orderPageNext.disabled) {
+      orderListPage += 1;
+      render('order-management');
+      return;
+    }
+
+    const orderNewButton = event.target.closest('[data-order-new]');
+    if (orderNewButton && refs.businessPageContent.contains(orderNewButton)) {
+      orderEditingId = '';
+      orderDraftNote = '正在新建订单';
+      orderModalOpen = true;
+      render('order-management');
+      refs.businessPageContent?.querySelector('[data-order-field="customer"]')?.focus();
+      return;
+    }
+
+    const orderEditButton = event.target.closest('[data-order-edit]');
+    if (orderEditButton && refs.businessPageContent.contains(orderEditButton)) {
+      orderEditingId = orderEditButton.getAttribute('data-order-edit') || '';
+      orderDraftNote = `正在编辑订单 ${orderEditingId}`;
+      orderModalOpen = true;
+      render('order-management');
+      refs.businessPageContent?.querySelector('[data-order-field="customer"]')?.focus();
+      return;
+    }
+
+    const orderStatusButton = event.target.closest('[data-order-status]');
+    if (orderStatusButton && refs.businessPageContent.contains(orderStatusButton)) {
+      const id = orderStatusButton.getAttribute('data-order-status') || '';
+      const nextStatus = orderStatusButton.getAttribute('data-order-next-status') || '';
+      const index = getOrderIndex(id);
+      if (index >= 0 && orderStatusOptions.includes(nextStatus)) {
+        orderRows[index].status = nextStatus;
+        persistOrders(`已更新订单状态 ${id} · ${getTimeCode()}`);
+        notifyAction(`订单 ${id} 已更新为${nextStatus}`, 'success', `order-status:${id}:${nextStatus}`);
+        render('order-management');
+      }
+      return;
+    }
+
+    const orderDeleteButton = event.target.closest('[data-order-delete]');
+    if (orderDeleteButton && refs.businessPageContent.contains(orderDeleteButton)) {
+      await deleteOrder(orderDeleteButton.getAttribute('data-order-delete'));
+      render('order-management');
+      return;
+    }
+
+    const orderSaveButton = event.target.closest('[data-order-save]');
+    if (orderSaveButton && refs.businessPageContent.contains(orderSaveButton)) {
+      const saved = saveOrder();
+      orderModalOpen = !saved;
+      if (saved) orderEditingId = '';
+      render('order-management');
+      return;
+    }
+
+    const orderCloseButton = event.target.closest('[data-order-close], [data-order-cancel]');
+    if (orderCloseButton && refs.businessPageContent.contains(orderCloseButton)) {
+      orderEditingId = '';
+      orderDraftNote = '已取消订单编辑';
+      orderModalOpen = false;
+      render('order-management');
+      return;
+    }
+
+    const orderModal = event.target.closest('[data-order-modal]');
+    if (orderModal && event.target === orderModal) {
+      orderEditingId = '';
+      orderModalOpen = false;
+      render('order-management');
+      return;
+    }
+
+    const invoiceOrderButton = event.target.closest('[data-invoice-order]');
+    if (invoiceOrderButton && refs.businessPageContent.contains(invoiceOrderButton)) {
+      invoiceSelectedOrderId = invoiceOrderButton.getAttribute('data-invoice-order') || invoiceSelectedOrderId;
+      render('invoice-print');
+      return;
+    }
+
+    const invoicePrintButton = event.target.closest('[data-invoice-print]');
+    if (invoicePrintButton && refs.businessPageContent.contains(invoicePrintButton)) {
+      window.print();
+      return;
+    }
+
+    const invoiceExportButton = event.target.closest('[data-invoice-export]');
+    if (invoiceExportButton && refs.businessPageContent.contains(invoiceExportButton)) {
+      const exported = downloadInvoiceOperationImage();
+      notifyAction(exported ? '生产操作图已导出' : '暂无可导出的开单数据', exported ? 'success' : 'warn', 'invoice-export');
+      return;
+    }
 
     const formulaStatCard = event.target.closest('[data-formula-stat-page]');
     if (formulaStatCard && refs.businessPageContent.contains(formulaStatCard)) {

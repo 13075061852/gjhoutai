@@ -15,6 +15,7 @@
   let streamRenderTimer = 0;
   let activeChatAbortController = null;
   let chatAbortRequested = false;
+  let webSearchEnabled = true;
   const imageUploadAuthResolvers = new Map();
 
   const nowIso = () => new Date().toISOString();
@@ -30,6 +31,114 @@
   };
 
   const isAbortError = (error) => error?.name === 'AbortError' || /aborted|abort|终止/i.test(String(error?.message || ''));
+
+  const getCurrentDateTimeLabel = () => new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date());
+
+  const shouldAnswerCurrentDateLocally = (prompt) => {
+    const text = String(prompt || '').trim();
+    if (!text || text.length > 30) return false;
+    return /^(?:今天|现在|当前)?(?:是)?(?:几号|几月几号|星期几|周几|日期|时间)(?:了|呢|啊|\?|？)?$/.test(text)
+      || /^(?:今天|现在|当前)(?:是)?(?:什么日期|什么时间)(?:了|呢|啊|\?|？)?$/.test(text);
+  };
+
+  const buildCurrentDateLocalAnswer = () => `今天是 ${getCurrentDateTimeLabel()}。`;
+
+  const buildPromptWithCurrentDate = (prompt) => [
+    '【当前日期时间】',
+    `${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
+    '',
+    '【用户问题】',
+    prompt,
+    '',
+    '【日期要求】',
+    '用户说“今天”“当前”“现在”等相对日期时，必须以上面的当前日期时间为准；不要把搜索结果中的旧日期或模型训练日期当作今天。',
+  ].join('\n');
+
+  const normalizeSearchResults = (payload) => {
+    const results = Array.isArray(payload?.results) ? payload.results : [];
+    return results.map((item, index) => {
+      const title = String(item?.title || item?.url || `搜索结果 ${index + 1}`).trim();
+      const url = String(item?.url || '').trim();
+      const content = String(item?.content || item?.raw_content || '').trim();
+      const publishedDate = String(item?.published_date || item?.publishedDate || '').trim();
+      if (!title && !url && !content) return null;
+      return {
+        title,
+        url,
+        content: content.slice(0, 1200),
+        publishedDate,
+      };
+    }).filter(Boolean);
+  };
+
+  const formatSearchContext = (results) => {
+    const items = normalizeSearchResults({ results }).slice(0, 10);
+    if (!items.length) return '';
+    return [
+      '【联网搜索资料，用户不可见】',
+      `【当前日期时间】${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
+      '以下资料来自实时搜索结果。回答时优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化，并在答案末尾列出来源链接。',
+      '如果搜索结果没有覆盖今天，请明确说“未检索到今天的结果”，但仍必须把上面的当前日期当作今天；禁止把旧结果日期改写为今天。',
+      ...items.map((item, index) => [
+        `【来源 ${index + 1}】${item.title}`,
+        item.url ? `URL：${item.url}` : '',
+        item.publishedDate ? `日期：${item.publishedDate}` : '',
+        item.content ? `摘要：${item.content}` : '',
+      ].filter(Boolean).join('\n')),
+    ].join('\n\n');
+  };
+
+  const shouldSearchForPrompt = (config, prompt) => {
+    if (!webSearchEnabled || !config.searchApiKey) return false;
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+    return /(?:搜索|联网|网上|查一下|查找|最新|最近|今天|昨日|昨天|新闻|价格|报价|政策|法规|官网|资料|来源|链接|引用|现在|当前|版本|发布|趋势|市场)/i.test(text);
+  };
+
+  const searchWebForPrompt = async (config, prompt, options = {}) => {
+    const provider = String(config.searchProvider || 'tavily').toLowerCase();
+    if (provider !== 'tavily') return { results: [], context: '' };
+    const datedQuery = [
+      prompt,
+      `当前日期：${getCurrentDateTimeLabel()}（北京时间）。`,
+      '优先查找今天或最近发布的资料。',
+    ].join(' ');
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.searchApiKey}`,
+      },
+      signal: options.signal,
+      body: JSON.stringify({
+        query: datedQuery,
+        topic: config.searchTopic || 'general',
+        search_depth: config.searchDepth || 'basic',
+        max_results: Math.max(1, Math.min(10, Number(config.searchMaxResults || 5))),
+        include_answer: false,
+        include_raw_content: false,
+      }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`联网搜索失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 220)}` : ''}`);
+    }
+    const payload = await response.json();
+    const results = normalizeSearchResults(payload);
+    return {
+      results,
+      context: formatSearchContext(results),
+    };
+  };
 
   const makeSessionId = () => {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -1125,7 +1234,17 @@
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     const projectAccessEnabled = isProjectAccessEnabled();
     const attachedDataContext = projectAccessEnabled && prompt ? getAttachedDataContext(prompt) : '';
-    const messages = [{ role: 'system', content: basePrompt }];
+    const currentDateTime = getCurrentDateTimeLabel();
+    const messages = [
+      { role: 'system', content: basePrompt },
+      {
+        role: 'system',
+        content: [
+          `当前日期时间是 ${currentDateTime}（北京时间，Asia/Shanghai）。`,
+          '如果用户询问今天、昨天、明天、当前日期、当前时间或相对日期，必须以这条日期时间为准，不要使用模型训练数据中的日期。',
+        ].join('\n'),
+      },
+    ];
     const skillProtocolContext = projectAccessEnabled ? (App.projectSkills?.getAiProtocolContext?.() || '') : '';
 
     if (projectAccessEnabled) {
@@ -1795,6 +1914,50 @@
     state.dataAttachmentEnabled = Boolean(utils.readJson(constants.CHAT_DATA_ATTACHMENT_KEY, false));
   };
 
+  const saveWebSearchState = () => {
+    utils.writeJson(constants.CHAT_SEARCH_ENABLED_KEY, webSearchEnabled);
+  };
+
+  const loadWebSearchState = () => {
+    webSearchEnabled = Boolean(utils.readJson(constants.CHAT_SEARCH_ENABLED_KEY, true));
+  };
+
+  const ensureWebSearchToggleButton = () => {
+    if (document.getElementById('assistantSearchToggleBtn')) return;
+    const button = document.createElement('button');
+    button.className = 'tiny-btn search-toggle-btn';
+    button.type = 'button';
+    button.id = 'assistantSearchToggleBtn';
+    button.setAttribute('aria-pressed', 'true');
+    button.innerHTML = '<i class="ti ti-world-search" aria-hidden="true"></i><span>联网搜索</span>';
+    refs.assistantDataToggleBtn?.insertAdjacentElement('afterend', button);
+  };
+
+  const renderWebSearchState = () => {
+    const button = document.getElementById('assistantSearchToggleBtn');
+    if (!button) return;
+    button.classList.toggle('is-active', webSearchEnabled);
+    button.setAttribute('aria-pressed', String(webSearchEnabled));
+    const icon = button.querySelector('.ti');
+    const label = button.querySelector('span');
+    if (icon) {
+      icon.classList.toggle('ti-world-search', webSearchEnabled);
+      icon.classList.toggle('ti-world-off', !webSearchEnabled);
+    }
+    if (label) label.textContent = webSearchEnabled ? '联网搜索' : '不搜索';
+  };
+
+  const moveClearChatButtonToHeader = () => {
+    if (!refs.clearChatBtn) return;
+    const headActions = document.querySelector('.assistant-head-actions');
+    if (!headActions || headActions.contains(refs.clearChatBtn)) return;
+    refs.clearChatBtn.className = 'icon-btn assistant-icon-btn';
+    refs.clearChatBtn.setAttribute('aria-label', '清空聊天');
+    refs.clearChatBtn.setAttribute('title', '清空聊天');
+    refs.clearChatBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+    headActions.insertBefore(refs.clearChatBtn, refs.assistantExpandBtn || refs.assistantCloseBtn || null);
+  };
+
   const renderChatSubmitState = () => {
     if (!refs.chatSendBtn) return;
     const busy = Boolean(state.chatBusy);
@@ -1833,6 +1996,13 @@
     if (!prompt) return;
 
     const projectAccessEnabled = isProjectAccessEnabled();
+    if (shouldAnswerCurrentDateLocally(prompt)) {
+      pushChatMessage('user', prompt);
+      if (refs.chatInput) refs.chatInput.value = '';
+      pushChatMessage('assistant', buildCurrentDateLocalAnswer());
+      return;
+    }
+
     const localPlan = projectAccessEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
     if (localPlan?.skillId === 'assistant.openPage') {
       await runLocalSkillPlan(prompt, localPlan);
@@ -1887,6 +2057,8 @@
     let finishReason = '';
     let attachedDataFile = null;
     let attachedDataContext = '';
+    let webSearchContext = '';
+    let webSearchResults = [];
     let usedStream = false;
     let skillExecution = null;
     let skipAiRequest = false;
@@ -1896,6 +2068,24 @@
     try {
       attachedDataFile = projectAccessEnabled ? getAttachedDataFile(prompt) : null;
       attachedDataContext = projectAccessEnabled ? getAttachedDataContext(prompt) : '';
+      if (shouldSearchForPrompt(config, prompt)) {
+        flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
+        const searchResult = await searchWebForPrompt(config, prompt, {
+          signal: activeChatAbortController?.signal,
+        });
+        webSearchContext = searchResult.context || '';
+        webSearchResults = searchResult.results || [];
+        flushStreamRender(
+          pendingIndex,
+          webSearchResults.length
+            ? `已获取 ${webSearchResults.length} 条联网资料，正在整理回答...`
+            : '联网搜索没有返回可用结果，正在直接思考...',
+          {
+            pending: true,
+            pendingStatus: webSearchResults.length ? '正在整理联网资料' : '正在思考',
+          }
+        );
+      }
       if (rawAttachedImages.length) {
         const approved = await requestImageUploadAuthorization(rawAttachedImages, {
           pendingIndex,
@@ -1931,7 +2121,9 @@
           const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
           return toApiMessage(item, {
             content: isCurrentUserMessage
-              ? (attachedDataFile ? buildUserPromptWithFile(item.content, attachedDataFile) : buildUserPromptWithData(item.content, attachedDataContext))
+              ? (attachedDataFile
+                ? buildUserPromptWithFile(buildPromptWithCurrentDate(item.content), attachedDataFile)
+                : buildUserPromptWithData(buildPromptWithCurrentDate(item.content), attachedDataContext))
               : item.content,
             files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
             images: isCurrentUserMessage ? attachedImages : item.images,
@@ -1939,6 +2131,10 @@
         });
       apiMessages = [
         ...getContextMessages(config, ''),
+        ...(webSearchContext ? [
+          { role: 'user', content: webSearchContext },
+          { role: 'assistant', content: '已读取联网搜索资料。我会结合资料回答，并在需要时列出来源链接。' },
+        ] : []),
         ...requestMessages,
       ];
 
@@ -2148,6 +2344,7 @@
           images: attachedImages.length,
           files: attachedDataFile ? 1 : 0,
           attachedData: Boolean(attachedDataContext || attachedDataFile),
+          webSearch: webSearchResults.length,
           stream: usedStream,
         },
       });
@@ -2191,6 +2388,7 @@
           images: attachedImages.length,
           files: attachedDataFile ? 1 : 0,
           attachedData: Boolean(attachedDataContext || attachedDataFile),
+          webSearch: webSearchResults.length,
           stream: usedStream,
         },
       });
@@ -2202,10 +2400,18 @@
   };
 
   const bindChat = () => {
+    ensureWebSearchToggleButton();
+    moveClearChatButtonToHeader();
     refs.assistantDataToggleBtn?.addEventListener('click', () => {
       state.dataAttachmentEnabled = !state.dataAttachmentEnabled;
       saveDataAttachmentState();
       renderDataAttachmentState();
+    });
+
+    document.getElementById('assistantSearchToggleBtn')?.addEventListener('click', () => {
+      webSearchEnabled = !webSearchEnabled;
+      saveWebSearchState();
+      renderWebSearchState();
     });
 
     refs.clearChatBtn?.addEventListener('click', async () => {
@@ -2314,6 +2520,9 @@
 
   const init = () => {
     loadDataAttachmentState();
+    loadWebSearchState();
+    ensureWebSearchToggleButton();
+    moveClearChatButtonToHeader();
     const loaded = loadChatState();
     state.chatSessions = loaded.sessions;
     state.chatSessionId = loaded.activeId;
@@ -2322,6 +2531,7 @@
     bindChat();
     renderChat();
     renderDataAttachmentState();
+    renderWebSearchState();
     renderChatSubmitState();
     updateHeaderState();
   };

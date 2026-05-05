@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { LegacyShell } from './pages/LegacyShell';
+import { mountIconParkAdapter } from './utils/iconParkAdapter';
 import { applyInitialThemeState } from './utils/themeBootstrap';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     let disposed = false;
+    const cleanupIcons = mountIconParkAdapter();
 
     void import('./legacy/bootstrap').then(({ bootLegacyApp, teardownLegacyApp }) => {
       if (disposed) return;
@@ -23,6 +25,7 @@ function App() {
 
     return () => {
       disposed = true;
+      cleanupIcons();
       cleanup?.();
       void import('./legacy/bootstrap').then(({ teardownLegacyApp }) => {
         teardownLegacyApp();

@@ -21,7 +21,22 @@
   mask:var(--ip-icon) center / contain no-repeat;
 }
 
+.ti[data-icon-park-rendered="true"]::before{
+  display:none;
+}
+
+.ti[data-icon-park-rendered="true"] svg{
+  display:block;
+  width:1em;
+  height:1em;
+  flex:none;
+}
+
 .ti-loader-2::before{
+  animation:ip-spin 1s linear infinite;
+}
+
+.ti-loader-2[data-icon-park-rendered="true"] svg{
   animation:ip-spin 1s linear infinite;
 }
 

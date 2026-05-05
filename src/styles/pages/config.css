@@ -157,6 +157,9 @@
     .config-module-ai:has(#aiProviderLmStudio:checked) #apiKeyField{
       display:none !important;
     }
+    .config-module-search .search-key-field{
+      grid-column:span 2;
+    }
     .field.full{grid-column:1 / -1}
     .hidden-field{display:none}
     .provider-segment{

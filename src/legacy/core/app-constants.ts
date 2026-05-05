@@ -15,6 +15,7 @@
     CHAT_SESSIONS_KEY: 'openrouter-ai-chat-sessions-v1',
     CHAT_ACTIVE_SESSION_KEY: 'openrouter-ai-chat-active-session-v1',
     CHAT_DATA_ATTACHMENT_KEY: 'openrouter-ai-chat-data-attachment-v1',
+    CHAT_SEARCH_ENABLED_KEY: 'openrouter-ai-chat-search-enabled-v1',
     AI_CALL_LOG_KEY: 'openrouter-ai-call-log-v1',
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     DEFAULT_LM_STUDIO_BASE_URL: 'http://127.0.0.1:1234/v1',
@@ -31,6 +32,11 @@
       streamEnabled: true,
       jsonMode: false,
       logEnabled: true,
+      searchProvider: 'tavily',
+      searchApiKey: '',
+      searchDepth: 'basic',
+      searchMaxResults: 5,
+      searchTopic: 'general',
       ossBucket: 'gjhoutai',
       ossEndpoint: 'oss-cn-shanghai.aliyuncs.com',
       ossObjectKey: '测试数据.json',
@@ -139,4 +145,3 @@
 
   App.constants = constants;
 })();
-

@@ -16,6 +16,106 @@
   let lastLoadedOpenRouterApiKey = '';
   let modelSearchQuery = '';
 
+  const getSearchRefs = () => ({
+    provider: document.getElementById('searchProvider'),
+    apiKey: document.getElementById('searchApiKey'),
+    depth: document.getElementById('searchDepth'),
+    maxResults: document.getElementById('searchMaxResults'),
+    topic: document.getElementById('searchTopic'),
+    apiKeyToggle: document.getElementById('searchApiKeyToggle'),
+    apiKeyIcon: document.querySelector('#searchApiKeyToggle .search-key-toggle-icon'),
+  });
+
+  const mountSearchConfigSection = () => {
+    if (!refs.aiConfigForm || document.getElementById('searchConfigModule')) return;
+    const anchor = refs.aiConfigForm.querySelector('.config-module-assistant');
+    const article = document.createElement('article');
+    article.className = 'panel config-module config-module-search';
+    article.id = 'searchConfigModule';
+    article.innerHTML = `
+      <div class="config-module-head">
+        <div class="config-module-title">
+          <span class="config-module-icon"><i class="ti ti-world-search" aria-hidden="true"></i></span>
+          <div>
+            <div class="config-module-kicker">联网搜索</div>
+            <h2>搜索增强</h2>
+          </div>
+        </div>
+        <a class="panel-help" href="https://docs.tavily.com/documentation/api-reference/endpoint/search" target="_blank" rel="noreferrer">Tavily 文档</a>
+      </div>
+      <div class="form-grid">
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label for="searchProvider">
+              <span class="field-label-main">
+                <i class="field-label-icon ti ti-search" aria-hidden="true"></i>
+                <span>搜索引擎</span>
+              </span>
+            </label>
+            <select id="searchProvider" name="searchProvider">
+              <option value="tavily">Tavily Search</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="searchDepth">
+              <span class="field-label-main">
+                <i class="field-label-icon ti ti-adjustments" aria-hidden="true"></i>
+                <span>搜索深度</span>
+              </span>
+            </label>
+            <select id="searchDepth" name="searchDepth">
+              <option value="basic">basic</option>
+              <option value="advanced">advanced</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="searchMaxResults">
+              <span class="field-label-main">
+                <i class="field-label-icon ti ti-list-numbers" aria-hidden="true"></i>
+                <span>结果数量</span>
+              </span>
+            </label>
+            <input id="searchMaxResults" name="searchMaxResults" type="number" min="1" max="10" value="5" />
+          </div>
+        </div>
+        <div class="form-grid form-grid-3">
+          <div class="field">
+            <label for="searchTopic">
+              <span class="field-label-main">
+                <i class="field-label-icon ti ti-category" aria-hidden="true"></i>
+                <span>搜索主题</span>
+              </span>
+            </label>
+            <select id="searchTopic" name="searchTopic">
+              <option value="general">general</option>
+              <option value="news">news</option>
+            </select>
+          </div>
+          <div class="field full search-key-field">
+            <label class="field-label-row" for="searchApiKey">
+              <span class="field-label-main">
+                <i class="field-label-icon ti ti-key" aria-hidden="true"></i>
+                <span>Tavily API Key</span>
+              </span>
+              <span class="field-label-note">仅保存在本机浏览器</span>
+            </label>
+            <div class="password-row">
+              <input id="searchApiKey" name="searchApiKey" type="password" placeholder="tvly-..." autocomplete="off" />
+              <button class="password-toggle" id="searchApiKeyToggle" type="button" aria-label="显示或隐藏 Tavily API 密钥">
+                <i class="search-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    if (anchor) {
+      refs.aiConfigForm.insertBefore(article, anchor);
+    } else {
+      refs.aiConfigForm.appendChild(article);
+    }
+  };
+
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
     refs.configStatus.textContent = message;
@@ -219,6 +319,11 @@
       streamEnabled: Boolean(refs.streamEnabled?.checked),
       jsonMode: Boolean(refs.jsonMode?.checked),
       logEnabled: Boolean(refs.logEnabled?.checked),
+      searchProvider: getSearchRefs().provider?.value || constants.DEFAULT_CONFIG.searchProvider,
+      searchApiKey: (getSearchRefs().apiKey?.value || '').trim(),
+      searchDepth: getSearchRefs().depth?.value || constants.DEFAULT_CONFIG.searchDepth,
+      searchMaxResults: Math.max(1, Math.min(10, Number(getSearchRefs().maxResults?.value || constants.DEFAULT_CONFIG.searchMaxResults))),
+      searchTopic: getSearchRefs().topic?.value || constants.DEFAULT_CONFIG.searchTopic,
       ossBucket: (refs.ossBucket?.value || '').trim(),
       ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
       ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
@@ -235,6 +340,7 @@
     if (isRedactedValue(next.apiKey)) next.apiKey = '';
     if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
     if (isRedactedValue(next.ossAccessKeySecret)) next.ossAccessKeySecret = '';
+    if (isRedactedValue(next.searchApiKey)) next.searchApiKey = '';
     if (next.openrouterConfig && typeof next.openrouterConfig === 'object') {
       next.openrouterConfig = { ...next.openrouterConfig };
       if (isRedactedValue(next.openrouterConfig.apiKey)) next.openrouterConfig.apiKey = '';
@@ -254,6 +360,7 @@
     redact(next, 'apiKey');
     redact(next, 'ossAccessKeyId');
     redact(next, 'ossAccessKeySecret');
+    redact(next, 'searchApiKey');
     redact(next.openrouterConfig, 'apiKey');
     redact(next.lmStudioConfig, 'apiKey');
     return next;
@@ -293,6 +400,12 @@
     if (refs.streamEnabled) refs.streamEnabled.checked = Boolean(next.streamEnabled);
     if (refs.jsonMode) refs.jsonMode.checked = Boolean(next.jsonMode);
     if (refs.logEnabled) refs.logEnabled.checked = Boolean(next.logEnabled);
+    const searchRefs = getSearchRefs();
+    if (searchRefs.provider) searchRefs.provider.value = next.searchProvider || constants.DEFAULT_CONFIG.searchProvider;
+    if (searchRefs.apiKey) searchRefs.apiKey.value = next.searchApiKey || '';
+    if (searchRefs.depth) searchRefs.depth.value = next.searchDepth || constants.DEFAULT_CONFIG.searchDepth;
+    if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
+    if (searchRefs.topic) searchRefs.topic.value = next.searchTopic || constants.DEFAULT_CONFIG.searchTopic;
     if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
     if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
     if (refs.ossObjectKey) refs.ossObjectKey.value = next.ossObjectKey || '';
@@ -393,6 +506,7 @@
         config.streamEnabled ? 'stream' : 'no-stream',
         config.jsonMode ? 'json' : 'text',
         config.logEnabled ? 'log' : 'no-log',
+        config.searchApiKey ? 'web-search' : 'no-search',
       ].join(' / ');
     }
     const isLocal = isLmStudioProvider(config.aiProvider);
@@ -421,6 +535,14 @@
       icon.classList.toggle('ti-eye', !isVisible);
       icon.classList.toggle('ti-eye-off', isVisible);
     }
+  };
+
+  const syncSearchKeyToggleIcon = () => {
+    const searchRefs = getSearchRefs();
+    if (!searchRefs.apiKeyIcon) return;
+    const isVisible = searchRefs.apiKey?.type === 'text';
+    searchRefs.apiKeyIcon.classList.toggle('ti-eye', !isVisible);
+    searchRefs.apiKeyIcon.classList.toggle('ti-eye-off', isVisible);
   };
 
   const updateSavedState = (saved) => {
@@ -1194,6 +1316,11 @@
       refs.httpReferer,
       refs.systemPrompt,
       refs.maxTokens,
+      getSearchRefs().provider,
+      getSearchRefs().apiKey,
+      getSearchRefs().depth,
+      getSearchRefs().maxResults,
+      getSearchRefs().topic,
       refs.ossBucket,
       refs.ossEndpoint,
       refs.ossObjectKey,
@@ -1267,6 +1394,18 @@
       );
       refs.ossSecretToggle.classList.toggle('is-visible', refs.ossAccessKeySecret.type === 'text');
       syncOssSecretToggleIcon();
+    });
+
+    getSearchRefs().apiKeyToggle?.addEventListener('click', () => {
+      const searchRefs = getSearchRefs();
+      if (!searchRefs.apiKey) return;
+      searchRefs.apiKey.type = searchRefs.apiKey.type === 'password' ? 'text' : 'password';
+      searchRefs.apiKeyToggle.setAttribute(
+        'aria-label',
+        searchRefs.apiKey.type === 'password' ? '显示 Tavily API 密钥' : '隐藏 Tavily API 密钥',
+      );
+      searchRefs.apiKeyToggle.classList.toggle('is-visible', searchRefs.apiKey.type === 'text');
+      syncSearchKeyToggleIcon();
     });
 
     refs.modelSelectTrigger?.addEventListener('click', () => {
@@ -1351,6 +1490,7 @@
   };
 
   const init = () => {
+    mountSearchConfigSection();
     syncConfigBindings();
 
     const savedConfig = loadSavedConfig();
@@ -1365,6 +1505,7 @@
 
     syncApiKeyToggleIcon();
     syncOssSecretToggleIcon();
+    syncSearchKeyToggleIcon();
     syncTemperatureLabel();
     syncPreview();
     const initialConfig = getFormConfig();

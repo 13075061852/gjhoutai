@@ -2880,11 +2880,10 @@
         ?? layout?.classList.toggle('is-library-collapsed', formulaLibraryCollapsed);
       library?.setAttribute('aria-hidden', String(formulaLibraryCollapsed));
       if (formulaLibraryCollapsed) {
-        window.App?.motionEffects?.exitToRight?.(library, { duration: 0.32 });
+        window.App?.motionEffects?.exitToRight?.(library, { duration: 0.22 });
       } else {
-        window.App?.motionEffects?.enterFromRight?.(library, { duration: 0.36 });
+        window.App?.motionEffects?.enterFromRight?.(library, { duration: 0.24 });
       }
-      window.App?.motionEffects?.pulse?.(layout, { duration: 0.24 });
       formulaLibraryToggle.setAttribute('aria-pressed', String(formulaLibraryCollapsed));
       const icon = formulaLibraryToggle.querySelector('i');
       const label = formulaLibraryToggle.querySelector('span');

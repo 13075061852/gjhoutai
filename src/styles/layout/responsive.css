@@ -69,12 +69,12 @@
     }
     :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
     @media (max-width: 1320px){
-      .config-form{grid-template-columns:1fr}
+      .config-lower-grid{grid-template-columns:1fr}
     }
     @media (max-width: 1200px){
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}
-      .config-form{grid-template-columns:1fr}
+      .config-lower-grid{grid-template-columns:1fr}
       .placeholder-page{min-height:auto}
       .business-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .business-grid{grid-template-columns:1fr}
@@ -437,7 +437,7 @@
       .assistant{display:none}
       .dashboard{min-width:0}
       .content{padding:12px}
-      .config-form{
+      .config-lower-grid{
         grid-template-columns:1fr;
       }
       .form-grid{grid-template-columns:1fr}

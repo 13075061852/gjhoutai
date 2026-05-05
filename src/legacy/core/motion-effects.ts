@@ -42,18 +42,19 @@ import { animate } from 'motion/mini';
 
   const enterFromRight = (element, options = {}) => run(element, {
     opacity: [0, 1],
-    transform: ['translateX(18px)', 'translateX(0px)'],
+    transform: ['translateX(10px)', 'translateX(0px)'],
   }, options);
 
   const exitToRight = (element, options = {}) => run(element, {
     opacity: [1, 0],
-    transform: ['translateX(0px)', 'translateX(18px)'],
+    transform: ['translateX(0px)', 'translateX(10px)'],
   }, options);
 
-  const pulse = (element, options = {}) => run(element, {
-    scale: [1, 1.018, 1],
+  const softSettle = (element, options = {}) => run(element, {
+    opacity: [0.94, 1],
+    transform: ['translateY(3px)', 'translateY(0px)'],
   }, {
-    duration: 0.22,
+    duration: 0.2,
     ...options,
   });
 
@@ -67,7 +68,7 @@ import { animate } from 'motion/mini';
     stop,
     enterFromRight,
     exitToRight,
-    pulse,
+    softSettle,
     cleanup,
   };
 

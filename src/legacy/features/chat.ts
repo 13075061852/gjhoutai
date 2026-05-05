@@ -86,8 +86,10 @@
     return [
       '【联网搜索资料，用户不可见】',
       `【当前日期时间】${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
-      '以下资料来自实时搜索结果。回答时优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化，并在答案末尾列出来源链接。',
+      '以下资料来自实时搜索结果。回答时必须优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化，并在答案末尾列出简短来源标题。',
+      '来源只写文章/网页标题，不要单独输出 URL，也不要把 URL 放在括号里追加到标题后面。',
       '如果搜索结果没有覆盖今天，请明确说“未检索到今天的结果”，但仍必须把上面的当前日期当作今天；禁止把旧结果日期改写为今天。',
+      '禁止编造未出现在搜索资料中的事件、时间、机构、产品、价格或链接；资料不足时必须说明“搜索资料不足，无法确认”。',
       ...items.map((item, index) => [
         `【来源 ${index + 1}】${item.title}`,
         item.url ? `URL：${item.url}` : '',
@@ -97,11 +99,83 @@
     ].join('\n\n');
   };
 
-  const shouldSearchForPrompt = (config, prompt) => {
-    if (!webSearchEnabled || !config.searchApiKey) return false;
+  const promptRequiresWebSearch = (prompt) => {
     const text = String(prompt || '').trim();
     if (!text) return false;
-    return /(?:搜索|联网|网上|查一下|查找|最新|最近|今天|昨日|昨天|新闻|价格|报价|政策|法规|官网|资料|来源|链接|引用|现在|当前|版本|发布|趋势|市场)/i.test(text);
+    return /(?:搜索|联网|网上|查一下|查找|最新|最近|今天|今日|昨日|昨天|明天|新闻|价格|报价|油价|汇率|天气|股价|行情|政策|法规|官网|资料|来源|链接|引用|现在|当前|版本|发布|趋势|市场)/i.test(text);
+  };
+
+  const buildSearchUnavailableAnswer = (reason) => [
+    '这个问题涉及最新或实时信息，必须先联网搜索才能可靠回答。',
+    '',
+    `当前无法完成搜索：${reason}`,
+    '',
+    '我不会在没有搜索资料的情况下编造答案。请开启“联网搜索”并在配置中心填写 Tavily API Key 后再试。',
+  ].join('\n');
+
+  const parseSearchDecision = (content) => {
+    const text = String(content || '').trim();
+    if (!text) return null;
+    const jsonText = text.match(/\{[\s\S]*\}/)?.[0] || text;
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (typeof parsed?.needsSearch === 'boolean') {
+        return {
+          needsSearch: parsed.needsSearch,
+          reason: String(parsed.reason || '').trim(),
+        };
+      }
+    } catch {
+      // Fall through to a conservative text parse.
+    }
+    if (/needsSearch\s*[:：]\s*true|需要搜索|需要联网|yes|true/i.test(text)) {
+      return { needsSearch: true, reason: 'AI 判断需要联网搜索' };
+    }
+    if (/needsSearch\s*[:：]\s*false|不需要搜索|不需要联网|no|false/i.test(text)) {
+      return { needsSearch: false, reason: 'AI 判断不需要联网搜索' };
+    }
+    return null;
+  };
+
+  const decideSearchWithAi = async (config, model, prompt, options = {}) => {
+    const messages = [
+      {
+        role: 'system',
+        content: [
+          '你是“联网搜索技能路由器”，只判断用户问题是否必须先调用联网搜索。',
+          '如果问题涉及今天/最新/当前/最近、新闻、价格、油价、汇率、天气、股价、政策、法规、版本、官网资料、来源引用、实时行情或可能变化的信息，needsSearch 必须为 true。',
+          '如果问题只需要常识、写作、翻译、代码、固定历史知识、本地项目数据或用户已提供的资料，needsSearch 为 false。',
+          '只输出严格 JSON，不要解释，不要 Markdown。',
+          '格式：{"needsSearch":true,"reason":"一句话原因"}',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          `当前日期时间：${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
+          `用户问题：${prompt}`,
+        ].join('\n'),
+      },
+    ];
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      signal: options.signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0,
+        max_tokens: 120,
+        stream: false,
+      }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`搜索决策失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 180)}` : ''}`);
+    }
+    const payload = await response.json();
+    const content = payload?.choices?.[0]?.message?.content || '';
+    return parseSearchDecision(content);
   };
 
   const searchWebForPrompt = async (config, prompt, options = {}) => {
@@ -576,6 +650,14 @@
     `;
   };
 
+  const stripVerboseSourceUrls = (content) => {
+    let text = String(content || '');
+    text = text.replace(/\]\((https?:\/\/[^)\s]+)\)/g, ']');
+    text = text.replace(/(^|\n)\s*\((?:https?:\/\/|www\.)[^)\s]+\)\s*(?=\n|$)/gi, '$1');
+    text = text.replace(/(^|\n)\s*(?:URL|链接|网址)[:：]\s*(?:https?:\/\/|www\.)\S+\s*(?=\n|$)/gi, '$1');
+    return text.trim();
+  };
+
   const renderChatMessages = (options = {}) => {
     if (!refs.chatMessages) return;
     const shouldStickToBottom = options.forceScroll || (options.autoScroll !== false && isChatNearBottom());
@@ -599,7 +681,8 @@
           const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
           const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
           const pending = item.role === 'assistant' && item.pending;
-          const contentHtml = pending ? renderPendingContent(item) : utils.markdownLite(item.content);
+          const displayContent = item.role === 'assistant' ? stripVerboseSourceUrls(item.content) : item.content;
+          const contentHtml = pending ? renderPendingContent({ ...item, content: displayContent }) : utils.markdownLite(displayContent);
           return `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
         }).join('')
       : '';
@@ -2059,6 +2142,8 @@
     let attachedDataContext = '';
     let webSearchContext = '';
     let webSearchResults = [];
+    let searchDecision = null;
+    let needsWebSearch = false;
     let usedStream = false;
     let skillExecution = null;
     let skipAiRequest = false;
@@ -2068,25 +2153,60 @@
     try {
       attachedDataFile = projectAccessEnabled ? getAttachedDataFile(prompt) : null;
       attachedDataContext = projectAccessEnabled ? getAttachedDataContext(prompt) : '';
-      if (shouldSearchForPrompt(config, prompt)) {
+      flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
+      try {
+        searchDecision = await decideSearchWithAi(config, model, prompt, {
+          signal: activeChatAbortController?.signal,
+        });
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        searchDecision = null;
+        console.warn('[chat] Search decision failed, fallback to local rules:', error);
+      }
+      const localSearchRequired = promptRequiresWebSearch(prompt);
+      needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
+
+      if (needsWebSearch && !webSearchEnabled) {
+        streamedContent = buildSearchUnavailableAnswer('聊天框的“联网搜索”已关闭');
+        finishReason = 'web_search_disabled';
+        skipAiRequest = true;
+        flushStreamRender(pendingIndex, streamedContent);
+      } else if (needsWebSearch && !config.searchApiKey) {
+        streamedContent = buildSearchUnavailableAnswer('未配置 Tavily API Key');
+        finishReason = 'web_search_missing_key';
+        skipAiRequest = true;
+        flushStreamRender(pendingIndex, streamedContent);
+      } else if (needsWebSearch) {
         flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
         const searchResult = await searchWebForPrompt(config, prompt, {
           signal: activeChatAbortController?.signal,
         });
         webSearchContext = searchResult.context || '';
         webSearchResults = searchResult.results || [];
-        flushStreamRender(
-          pendingIndex,
-          webSearchResults.length
-            ? `已获取 ${webSearchResults.length} 条联网资料，正在整理回答...`
-            : '联网搜索没有返回可用结果，正在直接思考...',
-          {
-            pending: true,
-            pendingStatus: webSearchResults.length ? '正在整理联网资料' : '正在思考',
-          }
-        );
+        if (!webSearchResults.length) {
+          streamedContent = [
+            '联网搜索没有返回可用结果，因此本次不继续让 AI 直接猜测。',
+            '',
+            '请稍后重试，或换一个更具体的关键词。',
+          ].join('\n');
+          finishReason = 'web_search_empty';
+          skipAiRequest = true;
+          flushStreamRender(pendingIndex, streamedContent);
+        } else {
+          flushStreamRender(
+            pendingIndex,
+            `已获取 ${webSearchResults.length} 条联网资料，正在整理回答...`,
+            {
+              pending: true,
+              pendingStatus: '正在整理联网资料',
+            }
+          );
+        }
       }
-      if (rawAttachedImages.length) {
+      if (!skipAiRequest && !needsWebSearch) {
+        flushStreamRender(pendingIndex, '正在思考...', { pending: true, pendingStatus: '正在思考' });
+      }
+      if (!skipAiRequest && rawAttachedImages.length) {
         const approved = await requestImageUploadAuthorization(rawAttachedImages, {
           pendingIndex,
           source: '本次消息',
@@ -2345,6 +2465,8 @@
           files: attachedDataFile ? 1 : 0,
           attachedData: Boolean(attachedDataContext || attachedDataFile),
           webSearch: webSearchResults.length,
+          webSearchNeeded: needsWebSearch,
+          webSearchDecision: searchDecision,
           stream: usedStream,
         },
       });
@@ -2389,6 +2511,8 @@
           files: attachedDataFile ? 1 : 0,
           attachedData: Boolean(attachedDataContext || attachedDataFile),
           webSearch: webSearchResults.length,
+          webSearchNeeded: needsWebSearch,
+          webSearchDecision: searchDecision,
           stream: usedStream,
         },
       });

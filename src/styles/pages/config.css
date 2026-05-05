@@ -3,7 +3,9 @@
       display:grid;
       grid-template-columns:1fr;
       gap:12px;
-      align-items:start;
+      align-items:stretch;
+      height:100%;
+      min-height:0;
     }
     .config-column{
       display:flex;
@@ -59,21 +61,67 @@
     }
     .panel-help:hover{text-decoration:underline}
     .config-form{
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-width:0;
+      height:100%;
+      min-height:0;
+      overflow:hidden;
+    }
+    .config-content-panel{
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-width:0;
+      min-height:0;
+      border-radius:8px;
+      overflow:auto;
+      padding-bottom:0;
+      scrollbar-width:none;
+    }
+    .config-content-panel::-webkit-scrollbar{
+      display:none;
+    }
+    .config-content-panel > .config-module,
+    .config-content-panel > .config-lower-grid{
+      flex:0 0 auto;
+    }
+    .config-lower-grid{
       display:grid;
       grid-template-columns:minmax(0,1.02fr) minmax(360px,.98fr);
       gap:12px;
       align-items:stretch;
+      align-content:start;
+      min-width:0;
     }
     .config-module{
+      position:relative;
       min-width:0;
       min-height:0;
-      height:100%;
+      height:auto;
       padding:22px;
       display:flex;
       flex-direction:column;
       gap:12px;
       border-radius:8px;
-      box-shadow:0 18px 45px rgba(15,23,42,.05);
+      box-shadow:none;
+    }
+    .config-lower-grid > .config-module{
+      height:100%;
+    }
+    .content:has(.ai-config.active){
+      overflow:hidden;
+    }
+    .ai-config{
+      height:100%;
+      min-height:0;
+      overflow:hidden;
+    }
+    .ai-config > .bottom-space{
+      display:none;
     }
     .config-module-ai,
     .config-actions-panel{
@@ -130,11 +178,14 @@
       line-height:1.7;
     }
     .config-actions-panel{
+      order:-1;
+      flex:0 0 auto;
+      width:100%;
       padding:16px 18px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface);
-      box-shadow:0 12px 28px rgba(15,23,42,.04);
+      box-shadow:none;
     }
     .form-grid{
       display:grid;

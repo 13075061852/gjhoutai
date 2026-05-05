@@ -129,6 +129,30 @@
     head.appendChild(link);
   };
 
+  const mountConfigContentPanel = () => {
+    if (!refs.aiConfigForm || refs.aiConfigForm.querySelector(':scope > .config-content-panel')) return;
+    const actionPanel = refs.aiConfigForm.querySelector(':scope > .config-actions-panel');
+    const contentPanel = document.createElement('div');
+    const lowerPanel = document.createElement('div');
+    contentPanel.className = 'config-content-panel';
+    lowerPanel.className = 'config-lower-grid';
+    const contentNodes = Array.from(refs.aiConfigForm.children).filter((node) => node !== actionPanel);
+    refs.aiConfigForm.insertBefore(contentPanel, actionPanel || null);
+    contentPanel.appendChild(lowerPanel);
+    contentNodes.forEach((node) => {
+      if (node.classList?.contains('config-module-ai')) {
+        contentPanel.insertBefore(node, lowerPanel);
+      } else {
+        lowerPanel.appendChild(node);
+      }
+    });
+    const assistantModule = lowerPanel.querySelector('.config-module-assistant');
+    const ossModule = lowerPanel.querySelector('.oss-config-block');
+    if (assistantModule && ossModule) {
+      lowerPanel.insertBefore(ossModule, assistantModule);
+    }
+  };
+
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
     refs.configStatus.textContent = message;
@@ -1505,6 +1529,7 @@
   const init = () => {
     mountSearchConfigSection();
     mountOssHelpLink();
+    mountConfigContentPanel();
     syncConfigBindings();
 
     const savedConfig = loadSavedConfig();

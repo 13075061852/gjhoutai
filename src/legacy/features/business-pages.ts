@@ -408,7 +408,21 @@
     const order = invoiceOrders.find((item) => item.id === invoiceSelectedOrderId) || invoiceOrders[0] || normalizeOrder({});
     const recipe = getRecipeForOrder(order);
     const formulaRows = getFormulaRows(recipe);
+    const splitFormulaRows = formulaRows.filter((item) => item.port === invoiceSplitPort);
     const totalKg = Number(order.quantity || 0);
+    const splitTotalKg = splitFormulaRows.reduce((sum, item) => sum + getInvoiceMaterialKg(item, totalKg), 0);
+    const splitBatchKg = splitTotalKg / Math.max(invoiceBatchCount, 1);
+    const invoiceDate = order.deliveryDate || getTodayCode();
+    const invoiceLine = recipe.line ? `${recipe.line}线` : 'A线';
+    const invoiceNo = order.id?.replace(/^ORD-?/, '') || 'A1';
+    const outputRate = totalKg >= 1000 ? `${formatKgValue(totalKg / 1000)}吨/小时` : `${formatKgValue(totalKg)} kg/小时`;
+    const getRowSpan = (rows, index, getter) => {
+      const value = getter(rows[index]);
+      if (index > 0 && getter(rows[index - 1]) === value) return 0;
+      let span = 1;
+      while (index + span < rows.length && getter(rows[index + span]) === value) span += 1;
+      return span;
+    };
     const batchOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12];
     const portOptions = feederPorts.map((port) => {
       const portTotal = formulaRows
@@ -416,16 +430,24 @@
         .reduce((sum, item) => sum + getInvoiceMaterialKg(item, totalKg), 0);
       return [String(port), `${port}号下料口 · ${formatKgValue(portTotal)} kg`];
     });
-    const maxPreviewBatches = Math.min(invoiceBatchCount, 8);
-    const hiddenBatchCount = Math.max(0, invoiceBatchCount - maxPreviewBatches);
+    const maxBatchColumnsPerTable = 6;
+    const batchTableCount = Math.max(1, Math.ceil(invoiceBatchCount / maxBatchColumnsPerTable));
+    const baseBatchColumns = Math.floor(invoiceBatchCount / batchTableCount);
+    const extraBatchColumns = invoiceBatchCount % batchTableCount;
+    let nextBatchNo = 1;
+    const batchColumnGroups = Array.from({ length: batchTableCount }, (_, groupIndex) => {
+      const groupSize = baseBatchColumns + (groupIndex < extraBatchColumns ? 1 : 0);
+      return Array.from({ length: groupSize }, () => nextBatchNo++);
+    });
 
     return `
       <section class="biz-invoice-workbench">
         <div class="business-panel biz-invoice-toolbar">
-          <div>
+          <div class="biz-invoice-toolbar-title">
             <h2>配料操作图</h2>
-            <span>仅显示材料与重量</span>
           </div>
+          <div class="biz-invoice-toolbar-main">
+          <div class="biz-invoice-toolbar-controls">
           <label>
             <span>依据下料口</span>
             <select data-invoice-port>${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
@@ -434,9 +456,11 @@
             <span>划分批次</span>
             <select data-invoice-batch-count>${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
           </label>
+          </div>
           <div class="biz-invoice-preview-actions">
             <button type="button" data-invoice-print><i class="ti ti-printer" aria-hidden="true"></i><span>打印开单</span></button>
-            <button class="is-primary" type="button" data-invoice-export><i class="ti ti-photo-down" aria-hidden="true"></i><span>生成图片</span></button>
+            <button class="is-primary" type="button" data-invoice-export><i class="ti ti-download" aria-hidden="true"></i><span>生成图片</span></button>
+          </div>
           </div>
         </div>
         <div class="biz-invoice-layout">
@@ -459,64 +483,80 @@
             </div>
           </aside>
           <section class="business-panel biz-print-preview biz-invoice-preview">
-            <div class="biz-operation-sheet">
-              <header>
-                <div>
-                  <strong>配料操作图</strong>
-                  <span>按材料重量执行</span>
-                </div>
-                <dl>
-                  <dt>总量</dt><dd>${formatKgValue(totalKg)} kg</dd>
-                  <dt>批次</dt><dd>${invoiceBatchCount} 批</dd>
-                </dl>
-              </header>
-              <div class="biz-operation-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>下料口</th>
-                      <th>材料名称</th>
-                      <th>重量(KG)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${formulaRows.map((item) => `
-                      <tr class="${item.port === invoiceSplitPort ? 'is-split-basis' : ''}">
-                        <td>${item.port}号</td>
-                        <td>${esc(item.name)}</td>
-                        <td>${formatKgValue(getInvoiceMaterialKg(item, totalKg))}</td>
+            <div class="biz-operation-sheet biz-requisition-sheet">
+              <div class="biz-requisition-main">
+                <section class="biz-requisition-left">
+                  <div class="biz-requisition-company">宁波广俊塑料科技有限公司</div>
+                  <div class="biz-requisition-meta">
+                    <span>领料单&nbsp;&nbsp;${esc(invoiceNo)}</span>
+                    <span>${esc(invoiceDate)}</span>
+                  </div>
+                  <table class="biz-requisition-material-table">
+                    <thead>
+                      <tr>
+                        <th>产线</th>
+                        <th>料仓</th>
+                        <th>物料名称</th>
+                        <th>计划数量</th>
+                        <th>数量</th>
                       </tr>
-                    `).join('')}
-                    <tr class="is-total"><td colspan="2">合计</td><td>${formatKgValue(totalKg)}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="biz-operation-batch-table">
-                <div><strong>分批次投料计划</strong><span>按${invoiceSplitPort}号下料口划分 ${invoiceBatchCount} 批</span></div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>材料名称</th>
-                      ${Array.from({ length: maxPreviewBatches }, (_, index) => `<th>批次${index + 1}</th>`).join('')}
-                      ${hiddenBatchCount ? `<th>其余${hiddenBatchCount}批</th>` : ''}
-                      <th>小计(KG)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${formulaRows.map((item) => {
-                      const materialKg = getInvoiceMaterialKg(item, totalKg);
-                      const batchKg = materialKg / Math.max(invoiceBatchCount, 1);
+                    </thead>
+                    <tbody>
+                      ${formulaRows.map((item, index) => {
+                        const lineSpan = index === 0 ? formulaRows.length : 0;
+                        const portSpan = getRowSpan(formulaRows, index, (row) => row.port);
+                        return `
+                          <tr>
+                            ${lineSpan ? `<td rowspan="${lineSpan}">${esc(invoiceLine)}</td>` : ''}
+                            ${portSpan ? `<td rowspan="${portSpan}">${item.port}号</td>` : ''}
+                            <td>${esc(item.name)}</td>
+                            <td>${formatKgValue(getInvoiceMaterialKg(item, totalKg))}</td>
+                            <td></td>
+                          </tr>
+                        `;
+                      }).join('')}
+                      <tr class="is-total"><td></td><td></td><td>合计</td><td>${formatKgValue(totalKg)}</td><td></td></tr>
+                      <tr><td></td><td>产量:</td><td colspan="3">${esc(outputRate)}</td></tr>
+                      <tr><td></td><td>备注:</td><td colspan="3">${esc(order.note || '')}</td></tr>
+                      ${Array.from({ length: Math.max(2, 10 - formulaRows.length) }, () => '<tr class="is-blank"><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
+                    </tbody>
+                  </table>
+                  <div class="biz-requisition-sign">领料人：<span></span></div>
+                </section>
+                <aside class="biz-requisition-right">
+                  <div class="biz-requisition-batch-card">
+                    <div class="biz-requisition-batch-title">${formatKgValue(totalKg)} kg</div>
+                    ${batchColumnGroups.map((batchColumns, groupIndex) => {
+                      const isLastGroup = groupIndex === batchColumnGroups.length - 1;
                       return `
-                        <tr class="${item.port === invoiceSplitPort ? 'is-split-basis' : ''}">
-                          <td>${esc(item.name)}</td>
-                          ${Array.from({ length: maxPreviewBatches }, () => `<td>${formatKgValue(batchKg)}</td>`).join('')}
-                          ${hiddenBatchCount ? `<td>${formatKgValue(batchKg)} / 批</td>` : ''}
-                          <td>${formatKgValue(materialKg)}</td>
-                        </tr>
+                        <table class="biz-requisition-batch-table">
+                          <thead>
+                            <tr>
+                              <th>物料名称</th>
+                              ${batchColumns.map((batchNo) => `<th>第${batchNo}缸</th>`).join('')}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${splitFormulaRows.map((item) => {
+                              const materialKg = getInvoiceMaterialKg(item, totalKg);
+                              const batchKg = materialKg / Math.max(invoiceBatchCount, 1);
+                              return `
+                                <tr>
+                                  <td>${esc(item.name)}</td>
+                                  ${batchColumns.map(() => `<td>${formatKgValue(batchKg)}</td>`).join('')}
+                                </tr>
+                              `;
+                            }).join('') || `<tr><td colspan="${batchColumns.length + 1}">暂无${invoiceSplitPort}号下料口材料</td></tr>`}
+                            <tr class="is-total">
+                              <td>合计</td>
+                              ${batchColumns.map(() => `<td>${formatKgValue(splitBatchKg)}</td>`).join('')}
+                            </tr>
+                          </tbody>
+                        </table>
                       `;
                     }).join('')}
-                  </tbody>
-                </table>
+                  </div>
+                </aside>
               </div>
             </div>
           </section>
@@ -1724,12 +1764,16 @@
     if (!order) return false;
     const recipe = getRecipeForOrder(order);
     const rows = getFormulaRows(recipe);
+    const splitRows = rows.filter((item) => item.port === invoiceSplitPort);
     const totalKg = Number(order.quantity || 0);
     const batchCount = Math.max(1, invoiceBatchCount);
+    const splitTotalKg = splitRows.reduce((sum, item) => sum + getInvoiceMaterialKg(item, totalKg), 0);
+    const splitBatchKg = splitTotalKg / batchCount;
     const rowHeight = 34;
     const materialTableY = 250;
     const batchTableY = materialTableY + 52 + rows.length * rowHeight;
-    const height = Math.max(760, batchTableY + 112 + rows.length * 30);
+    const batchRowCount = Math.max(splitRows.length, 1) + 1;
+    const height = Math.max(760, batchTableY + 112 + batchRowCount * 30);
     const materialRows = rows.map((item, index) => {
       const y = materialTableY + 52 + index * rowHeight;
       return `
@@ -1739,7 +1783,7 @@
         <text x="930" y="${y + 22}">${formatKgValue(getInvoiceMaterialKg(item, totalKg))}</text>
       `;
     }).join('');
-    const batchRows = rows.map((item, index) => {
+    const batchRows = (splitRows.length ? splitRows : [{ name: `暂无${invoiceSplitPort}号下料口材料`, port: invoiceSplitPort, ratio: 0 }]).map((item, index) => {
       const y = batchTableY + 46 + index * 30;
       const materialKg = getInvoiceMaterialKg(item, totalKg);
       return `
@@ -1750,6 +1794,14 @@
         <text x="990" y="${y + 20}">${formatKgValue(materialKg)}</text>
       `;
     }).join('');
+    const batchTotalY = batchTableY + 46 + Math.max(splitRows.length, 1) * 30;
+    const batchTotalRow = `
+      <rect x="48" y="${batchTotalY}" width="1064" height="30" fill="#f8fafc" stroke="#1f2937"/>
+      <text x="74" y="${batchTotalY + 20}">合计</text>
+      <text x="520" y="${batchTotalY + 20}">${formatKgValue(splitBatchKg)} kg / 批</text>
+      <text x="790" y="${batchTotalY + 20}">${batchCount} 批</text>
+      <text x="990" y="${batchTotalY + 20}">${formatKgValue(splitTotalKg)}</text>
+    `;
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="1160" height="${height}" viewBox="0 0 1160 ${height}">
         <rect width="1160" height="${height}" fill="#ffffff"/>
@@ -1767,6 +1819,7 @@
         <rect x="48" y="${batchTableY + 16}" width="1064" height="30" fill="#f1f5f9" stroke="#1f2937"/>
         <text x="74" y="${batchTableY + 36}">材料名称</text><text x="520" y="${batchTableY + 36}">单批投料</text><text x="790" y="${batchTableY + 36}">批次数</text><text x="990" y="${batchTableY + 36}">小计(KG)</text>
         ${batchRows}
+        ${batchTotalRow}
       </svg>
     `;
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });

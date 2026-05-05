@@ -215,10 +215,10 @@
     body:not([data-theme="dark"]) .analysis-table-scroll{
       background:var(--surface);
       border-color:var(--border);
-      scrollbar-color:var(--scrollbar-thumb) transparent;
+      scrollbar-color:var(--scrollbar-thumb-color) transparent;
     }
     body:not([data-theme="dark"]) .analysis-table-scroll::-webkit-scrollbar-thumb{
-      background:var(--scrollbar-thumb);
+      background:var(--scrollbar-thumb-color);
     }
     body:not([data-theme="dark"]) .analysis-table th,
     body:not([data-theme="dark"]) .analysis-table td{

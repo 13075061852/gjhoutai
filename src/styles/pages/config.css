@@ -1515,12 +1515,16 @@
       padding-right:2px;
     }
     .assistant-convo-menu-scroll::-webkit-scrollbar{
-      width:8px;
+      width:6px;
     }
     .assistant-convo-menu-scroll::-webkit-scrollbar-thumb{
-      background:var(--scrollbar-thumb);
+      background:var(--scrollbar-thumb-color);
       border-radius:999px;
-      border:2px solid transparent;
+      border:1px solid transparent;
+      background-clip:padding-box;
+    }
+    .assistant-convo-menu-scroll::-webkit-scrollbar-thumb:hover{
+      background:var(--scrollbar-thumb-hover);
       background-clip:padding-box;
     }
     .assistant-convo-section{

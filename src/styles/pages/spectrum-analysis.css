@@ -738,7 +738,7 @@
       padding:0 14px 14px;
       overflow-x:hidden;
       overflow-y:auto;
-      scrollbar-color:#d6dbe3 transparent;
+      scrollbar-color:var(--scrollbar-thumb-color) transparent;
     }
     .spectrum-gallery.is-empty{
       display:grid;
@@ -1305,7 +1305,7 @@
       padding:8px;
       border-radius:12px;
       background:rgba(15,23,42,.42);
-      scrollbar-color:rgba(255,255,255,.32) transparent;
+      scrollbar-color:color-mix(in srgb, var(--accent) 52%, transparent) transparent;
     }
     .spectrum-preview-thumb{
       width:100%;

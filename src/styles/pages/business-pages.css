@@ -1097,6 +1097,11 @@
     }
     .biz-formula-editor-layout{
       grid-template-columns:minmax(520px,1fr) 320px;
+      transition:grid-template-columns .42s var(--ease), gap .42s var(--ease);
+    }
+    .biz-formula-editor-layout.is-library-collapsed{
+      grid-template-columns:minmax(0,1fr) 0px;
+      gap:0;
     }
     .biz-formula-page{
       height:calc(100dvh - var(--topbar) - 32px);
@@ -1832,12 +1837,13 @@
       overflow:auto;
     }
     .biz-line-table{
+      --line-port-col-width:92px;
       min-width:820px;
       table-layout:auto;
       color:var(--text);
       font-size:12px;
     }
-    .biz-line-table .col-port{width:76px}
+    .biz-line-table .col-port{width:var(--line-port-col-width)}
     .biz-line-table .col-material{width:auto}
     .biz-line-table .col-ratio{width:96px}
     .biz-line-table .col-plan{width:110px}
@@ -1864,6 +1870,22 @@
     .biz-line-table tfoot tr:last-child td{
       border-bottom:0;
     }
+    .biz-line-table tfoot td{
+      border-top:1px solid var(--border-2);
+    }
+    .biz-line-table tfoot td[colspan="2"]:first-child{
+      position:relative;
+    }
+    .biz-line-table tfoot td[colspan="2"]:first-child::after{
+      content:"";
+      position:absolute;
+      top:0;
+      bottom:0;
+      left:var(--line-port-col-width);
+      width:1px;
+      background:var(--border-2);
+      pointer-events:none;
+    }
     .biz-line-table .biz-line-port-cell{
       background:var(--surface-2);
     }
@@ -1887,9 +1909,27 @@
       font-weight:950;
     }
     .biz-line-port-cell select{
-      width:64px;
+      width:76px;
       max-width:100%;
+      min-width:76px;
       font-weight:950;
+      appearance:none;
+      -webkit-appearance:none;
+      padding:0 24px 0 10px;
+      background:
+        linear-gradient(45deg, transparent 50%, var(--text-2) 50%) calc(100% - 15px) 50% / 5px 5px no-repeat,
+        linear-gradient(135deg, var(--text-2) 50%, transparent 50%) calc(100% - 10px) 50% / 5px 5px no-repeat,
+        var(--surface);
+      border-color:var(--border);
+      text-align:left;
+      text-align-last:left;
+    }
+    .biz-line-port-cell select:hover,
+    .biz-line-port-cell select:focus{
+      background:
+        linear-gradient(45deg, transparent 50%, var(--accent) 50%) calc(100% - 15px) 50% / 5px 5px no-repeat,
+        linear-gradient(135deg, var(--accent) 50%, transparent 50%) calc(100% - 10px) 50% / 5px 5px no-repeat,
+        var(--surface-2);
     }
     .biz-line-table td,
     .biz-line-table th{
@@ -2050,6 +2090,7 @@
     }
     .biz-formula-actions{
       display:flex;
+      align-items:center;
       justify-content:flex-end;
       gap:12px;
       flex-wrap:wrap;
@@ -2058,6 +2099,9 @@
     .biz-formula-remove-btn,
     .biz-formula-step.is-editable > button{
       min-height:34px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
       padding:0 12px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -2072,6 +2116,19 @@
       border-color:var(--accent);
       background:var(--accent);
       color:#fff;
+    }
+    .biz-formula-actions .biz-formula-side-toggle{
+      gap:6px;
+      color:var(--accent);
+    }
+    .biz-formula-actions .biz-formula-side-toggle:hover{
+      border-color:var(--accent);
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-formula-actions .biz-formula-side-toggle i{
+      font-size:14px;
+      line-height:1;
     }
     .biz-formula-remove-btn:hover,
     .biz-formula-step.is-editable > button:not(:disabled):hover{
@@ -2263,10 +2320,23 @@
     }
     .biz-formula-library{
       min-height:0;
+      min-width:0;
       display:flex;
       flex-direction:column;
       gap:0;
       overflow:hidden;
+      opacity:1;
+      transform:translateX(0);
+      transition:opacity .24s ease, transform .42s var(--ease), padding .42s var(--ease), border-color .24s ease;
+      will-change:opacity, transform;
+    }
+    .biz-formula-editor-layout.is-library-collapsed .biz-formula-library{
+      opacity:0;
+      transform:translateX(18px);
+      pointer-events:none;
+      padding-left:0;
+      padding-right:0;
+      border-color:transparent;
     }
     .biz-formula-library-head{
       align-items:center;

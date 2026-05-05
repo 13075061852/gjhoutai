@@ -323,7 +323,10 @@
     }
     .ai-call-model-list::-webkit-scrollbar-thumb{
       border-radius:999px;
-      background:var(--border-2);
+      background:var(--scrollbar-thumb-color);
+    }
+    .ai-call-model-list::-webkit-scrollbar-thumb:hover{
+      background:var(--scrollbar-thumb-hover);
     }
     .ai-call-model-row{
       flex:0 0 var(--model-rank-row-height);

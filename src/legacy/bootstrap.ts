@@ -5,6 +5,7 @@ import './core/runtime-state';
 import './core/utils';
 import './bootstrap/app-state';
 import './core/animation-manager';
+import './core/motion-effects';
 import './components/custom-select';
 import './components/search-box';
 import './components/confirm-dialog';
@@ -41,4 +42,5 @@ export function bootLegacyApp(): (() => void) | undefined {
 
 export function teardownLegacyApp(): void {
   booted = false;
+  window.GJHApp?.motionEffects?.cleanup?.();
 }

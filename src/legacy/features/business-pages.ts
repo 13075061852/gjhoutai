@@ -246,6 +246,7 @@
   let formulaPageSize = 10;
   let formulaEditorDraft = null;
   let formulaEditorOriginalKey = '';
+  let formulaLibraryCollapsed = false;
   const formulaPageSizeOptions = [5, 10, 20, 50];
 
   const SUPPLIER_STORAGE_KEY = 'gjh-suppliers-v1';
@@ -1580,6 +1581,10 @@
               <strong>宁波广俊塑料科技有限公司</strong>
             </div>
             <div class="biz-formula-actions">
+              <button class="biz-formula-side-toggle" type="button" data-formula-toggle-library aria-pressed="${formulaLibraryCollapsed ? 'true' : 'false'}">
+                <i class="ti ${formulaLibraryCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}" aria-hidden="true"></i>
+                <span>${formulaLibraryCollapsed ? '展开侧边' : '收起侧边'}</span>
+              </button>
               <button type="button" data-formula-back-list>返回列表</button>
               <button type="button" data-formula-save>保存</button>
             </div>
@@ -1742,7 +1747,7 @@
       && !!recipe.materials[activeFormulaMaterialIndex];
 
     return `
-      <aside class="business-panel biz-formula-library">
+      <aside class="business-panel biz-formula-library" aria-hidden="${formulaLibraryCollapsed ? 'true' : 'false'}">
         <div class="business-panel-head biz-formula-library-head">
           <h2>库存材料库</h2>
           <div class="biz-formula-library-filter">
@@ -1772,7 +1777,7 @@
 
   const renderFormulaEditor = () => `
     <section class="biz-formula-page">
-      <section class="biz-formula-layout biz-formula-editor-layout">
+      <section class="biz-formula-layout biz-formula-editor-layout ${formulaLibraryCollapsed ? 'is-library-collapsed' : ''}">
         ${renderFormulaBuilderPanel()}
         ${renderFormulaLibraryPanel()}
       </section>
@@ -2863,6 +2868,28 @@
     const formulaBackButton = event.target.closest('[data-formula-back-list]');
     if (formulaBackButton && refs.businessPageContent.contains(formulaBackButton)) {
       await handleFormulaBackToList();
+      return;
+    }
+
+    const formulaLibraryToggle = event.target.closest('[data-formula-toggle-library]');
+    if (formulaLibraryToggle && refs.businessPageContent.contains(formulaLibraryToggle)) {
+      formulaLibraryCollapsed = !formulaLibraryCollapsed;
+      const layout = refs.businessPageContent.querySelector('.biz-formula-editor-layout');
+      const library = refs.businessPageContent.querySelector('.biz-formula-library');
+      window.App?.animations?.setClass?.(layout, 'is-library-collapsed', formulaLibraryCollapsed)
+        ?? layout?.classList.toggle('is-library-collapsed', formulaLibraryCollapsed);
+      library?.setAttribute('aria-hidden', String(formulaLibraryCollapsed));
+      if (formulaLibraryCollapsed) {
+        window.App?.motionEffects?.exitToRight?.(library, { duration: 0.32 });
+      } else {
+        window.App?.motionEffects?.enterFromRight?.(library, { duration: 0.36 });
+      }
+      window.App?.motionEffects?.pulse?.(layout, { duration: 0.24 });
+      formulaLibraryToggle.setAttribute('aria-pressed', String(formulaLibraryCollapsed));
+      const icon = formulaLibraryToggle.querySelector('i');
+      const label = formulaLibraryToggle.querySelector('span');
+      if (icon) icon.className = `ti ${formulaLibraryCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}`;
+      if (label) label.textContent = formulaLibraryCollapsed ? '展开侧边' : '收起侧边';
       return;
     }
 

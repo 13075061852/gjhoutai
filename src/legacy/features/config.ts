@@ -116,6 +116,19 @@
     }
   };
 
+  const mountOssHelpLink = () => {
+    const head = document.querySelector('.oss-config-block .config-module-head');
+    if (!head || head.querySelector('.panel-help')) return;
+
+    const link = document.createElement('a');
+    link.className = 'panel-help';
+    link.href = 'https://help.aliyun.com/zh/oss/';
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    link.textContent = '阿里云 OSS 文档';
+    head.appendChild(link);
+  };
+
   const setStatus = (message, tone = 'success') => {
     if (!refs.configStatus) return;
     refs.configStatus.textContent = message;
@@ -1491,6 +1504,7 @@
 
   const init = () => {
     mountSearchConfigSection();
+    mountOssHelpLink();
     syncConfigBindings();
 
     const savedConfig = loadSavedConfig();

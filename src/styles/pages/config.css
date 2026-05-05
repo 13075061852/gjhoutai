@@ -35,8 +35,12 @@
       color:var(--text);
     }
     .panel-help{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
       font-size:13px;
       font-weight:600;
+      line-height:16px;
       color:var(--accent);
       text-decoration:none;
     }
@@ -46,13 +50,12 @@
       place-items:center;
       width:16px;
       height:16px;
-      margin-right:6px;
+      flex:0 0 16px;
       border-radius:50%;
       border:1px solid currentColor;
       font-size:11px;
       font-weight:700;
       line-height:1;
-      vertical-align:middle;
     }
     .panel-help:hover{text-decoration:underline}
     .config-form{
@@ -159,6 +162,12 @@
     }
     .config-module-search .search-key-field{
       grid-column:span 2;
+    }
+    .config-module-search > .form-grid{
+      grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+    .config-module-search > .form-grid > .form-grid-3{
+      display:contents;
     }
     .field.full{grid-column:1 / -1}
     .hidden-field{display:none}

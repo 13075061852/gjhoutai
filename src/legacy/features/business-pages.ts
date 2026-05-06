@@ -93,15 +93,16 @@
   `;
 
   const ORDER_STORAGE_KEY = 'gjh-orders-v1';
-  const orderStatusOptions = ['生产中', '待处理', '已发货', '已完成'];
+  const orderStatusOptions = ['待处理', '已安排', '生产中', '已完成', '已发货', '已结清'];
+  const productionQueueStatuses = ['已安排', '生产中', '已完成'];
   const orderPageSizeOptions = [5, 10, 20, 50];
   const defaultOrderRows = [
     { id: 'ORD-20260320', customer: '美的集团', formula: 'PP 滑石粉填充', quantity: 5000, unitPrice: 18, status: '生产中', deliveryDate: '2026-04-10', note: '家电外壳批量单' },
     { id: 'ORD-20260315', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 3000, unitPrice: 35, status: '待处理', deliveryDate: '2026-04-01', note: '等待客户确认交货窗口' },
     { id: 'ORD-20260310', customer: '泰科电子', formula: 'PET 无卤阻燃', quantity: 800, unitPrice: 42, status: '已发货', deliveryDate: '2026-03-25', note: '已同步物流单号' },
-    { id: 'ORD-20260305', customer: '东成电动工具', formula: 'PA6-GF25 增韧增强', quantity: 1500, unitPrice: 38, status: '已发货', deliveryDate: '2026-03-20', note: '客户要求附质检报告' },
-    { id: 'ORD-20260301', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 2000, unitPrice: 35, status: '已发货', deliveryDate: '2026-03-15', note: '常规补货单' },
-    { id: 'ORD-20260226', customer: '格力电器', formula: 'ABS 阻燃高光', quantity: 2600, unitPrice: 28, status: '已完成', deliveryDate: '2026-03-12', note: '财务已归档' },
+    { id: 'ORD-20260305', customer: '东成电动工具', formula: 'PA6-GF25 增韧增强', quantity: 1500, unitPrice: 38, status: '已完成', deliveryDate: '2026-03-20', note: '客户要求附质检报告' },
+    { id: 'ORD-20260301', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 2000, unitPrice: 35, status: '已安排', deliveryDate: '2026-03-15', note: '常规补货单' },
+    { id: 'ORD-20260226', customer: '格力电器', formula: 'ABS 阻燃高光', quantity: 2600, unitPrice: 28, status: '已结清', deliveryDate: '2026-03-12', note: '财务已归档' },
   ];
   const orderCustomerOptions = ['美的集团', '博世汽车零部件', '泰科电子', '东成电动工具', '格力电器', '宁波辰光电器', '苏州瑞嘉材料'];
   const orderFormulaOptions = [
@@ -118,16 +119,22 @@
     const day = String(now.getDate()).padStart(2, '0');
     return `${now.getFullYear()}-${month}-${day}`;
   };
-  const normalizeOrder = (order = {}, index = 0) => ({
-    id: String(order.id || `ORD-${getOrderFallbackDate().replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
-    customer: String(order.customer || orderCustomerOptions[0]).trim(),
-    formula: String(order.formula || orderFormulaOptions[0]).trim(),
-    quantity: Math.max(0, Number(order.quantity || 0)),
-    unitPrice: Math.max(0, Number(order.unitPrice || 0)),
-    status: orderStatusOptions.includes(order.status) ? order.status : orderStatusOptions[0],
-    deliveryDate: String(order.deliveryDate || getOrderFallbackDate()).trim(),
-    note: String(order.note || '').trim(),
-  });
+  const normalizeOrder = (order = {}, index = 0) => {
+    const status = orderStatusOptions.includes(order.status) ? order.status : orderStatusOptions[0];
+    const deliveryDate = String(order.deliveryDate || getOrderFallbackDate()).trim();
+    return {
+      id: String(order.id || `ORD-${getOrderFallbackDate().replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
+      customer: String(order.customer || orderCustomerOptions[0]).trim(),
+      formula: String(order.formula || orderFormulaOptions[0]).trim(),
+      quantity: Math.max(0, Number(order.quantity || 0)),
+      unitPrice: Math.max(0, Number(order.unitPrice || 0)),
+      status,
+      deliveryDate,
+      productionDate: String(order.productionDate || (productionQueueStatuses.includes(status) ? getOrderFallbackDate() : deliveryDate)).trim(),
+      productionNo: String(order.productionNo || '').trim(),
+      note: String(order.note || '').trim(),
+    };
+  };
   const normalizeOrders = (value) => {
     const rows = Array.isArray(value)
       ? value.map(normalizeOrder).filter((order) => order.id)
@@ -142,9 +149,17 @@
   let orderModalOpen = false;
   let orderEditingId = '';
   let orderDraftNote = '订单数据自动保存到本地';
-  let invoiceSelectedOrderId = orderRows.find((order) => order.status === '待处理' || order.status === '生产中')?.id || orderRows[0]?.id || '';
+  let invoiceSelectedOrderId = orderRows.find((order) => order.status === '待处理')?.id || '';
+  let invoiceLineFilter = '全部';
+  let invoiceScheduleDate = getOrderFallbackDate();
+  let invoiceScheduleSequence = 1;
+  let invoiceScheduleDraftOrderId = '';
   let invoiceSplitPort = 1;
   let invoiceBatchCount = 10;
+  let productionPlanDate = getOrderFallbackDate();
+  let productionSearchQuery = '';
+  let productionListPage = 1;
+  let productionPageSize = 10;
 
   const getOrderIndex = (id) => orderRows.findIndex((order) => order.id === id);
   const getOrderAmount = (order) => Number(order.quantity || 0) * Number(order.unitPrice || 0);
@@ -156,12 +171,33 @@
   const getOrderStatusClass = (status) => ({
     生产中: 'is-running',
     待处理: 'is-pending',
+    已安排: 'is-scheduled',
     已发货: 'is-shipped',
     已完成: 'is-complete',
+    已结清: 'is-settled',
   }[status] || 'is-pending');
   const persistOrders = (note = '订单数据已保存') => {
     orderDraftNote = note;
     utils.writeJson(ORDER_STORAGE_KEY, orderRows);
+  };
+  const updateOrderStatus = (id, nextStatus, notePrefix = '已更新订单状态', options = {}) => {
+    const index = getOrderIndex(id);
+    if (index < 0 || !orderStatusOptions.includes(nextStatus)) return false;
+    orderRows[index].status = nextStatus;
+    if (options.productionDate) {
+      orderRows[index].productionDate = options.productionDate;
+    } else if (productionQueueStatuses.includes(nextStatus) && !orderRows[index].productionDate) {
+      orderRows[index].productionDate = productionPlanDate || getOrderFallbackDate();
+    }
+    if (options.productionNo) {
+      orderRows[index].productionNo = options.productionNo;
+    } else if (nextStatus === '已安排' && !orderRows[index].productionNo) {
+      orderRows[index].productionNo = getNextProductionNo(orderRows[index]);
+    }
+    const productionNo = orderRows[index].productionNo || '';
+    persistOrders(`${notePrefix} ${id} · ${getTimeCode()}`);
+    notifyAction(`订单 ${id} 已更新为${nextStatus}${nextStatus === '已安排' && productionNo ? ` · ${productionNo}` : ''}`, 'success', `order-status:${id}:${nextStatus}`);
+    return true;
   };
   const getOrderFormRecord = () => {
     const root = refs.businessPageContent;
@@ -174,6 +210,7 @@
       quantity: read('quantity'),
       unitPrice: read('unitPrice'),
       deliveryDate: read('deliveryDate'),
+      productionDate: read('productionDate'),
       status: read('status'),
       note: read('note'),
     });
@@ -227,8 +264,9 @@
       formula: orderFormulaOptions[0],
       quantity: '',
       unitPrice: '',
-      status: '生产中',
+      status: '待处理',
       deliveryDate: getTodayCode(),
+      productionDate: getTodayCode(),
       note: '',
     });
     const amountPreview = getOrderAmount(modalOrder);
@@ -295,6 +333,11 @@
                           <i class="ti ti-pencil" aria-hidden="true"></i>
                         </button>
                         ${order.status === '待处理' ? `
+                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已安排" aria-label="安排${esc(order.id)}">
+                            <i class="ti ti-list-check" aria-hidden="true"></i>
+                          </button>
+                        ` : ''}
+                        ${order.status === '已安排' ? `
                           <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
                             <i class="ti ti-player-play" aria-hidden="true"></i>
                           </button>
@@ -302,6 +345,16 @@
                         ${order.status === '生产中' ? `
                           <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成${esc(order.id)}">
                             <i class="ti ti-check" aria-hidden="true"></i>
+                          </button>
+                        ` : ''}
+                        ${order.status === '已完成' ? `
+                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已发货" aria-label="发货${esc(order.id)}">
+                            <i class="ti ti-truck-delivery" aria-hidden="true"></i>
+                          </button>
+                        ` : ''}
+                        ${order.status === '已发货' ? `
+                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已结清" aria-label="结清${esc(order.id)}">
+                            <i class="ti ti-receipt-2" aria-hidden="true"></i>
                           </button>
                         ` : ''}
                         <button class="is-danger" type="button" data-order-delete="${esc(order.id)}" aria-label="删除${esc(order.id)}">
@@ -373,6 +426,10 @@
                   <input type="date" value="${esc(modalOrder.deliveryDate)}" data-order-field="deliveryDate">
                 </label>
                 <label>
+                  <span>生产日期</span>
+                  <input type="date" value="${esc(modalOrder.productionDate || modalOrder.deliveryDate)}" data-order-field="productionDate">
+                </label>
+                <label>
                   <span>状态</span>
                   <select data-order-field="status">${renderOptions(orderStatusOptions, modalOrder.status)}</select>
                 </label>
@@ -400,21 +457,33 @@
   };
 
   const renderInvoice = () => {
-    const openOrders = orderRows.filter((order) => ['待处理', '生产中'].includes(order.status));
-    const invoiceOrders = openOrders.length ? openOrders : orderRows;
+    const pendingInvoiceOrders = orderRows.filter((order) => order.status === '待处理');
+    const invoiceOrders = pendingInvoiceOrders.filter((order) => (
+      invoiceLineFilter === '全部' || String(getRecipeForOrder(order).line || 'A') === invoiceLineFilter
+    ));
     if (!invoiceOrders.some((order) => order.id === invoiceSelectedOrderId)) {
       invoiceSelectedOrderId = invoiceOrders[0]?.id || '';
     }
-    const order = invoiceOrders.find((item) => item.id === invoiceSelectedOrderId) || invoiceOrders[0] || normalizeOrder({});
-    const recipe = getRecipeForOrder(order);
+    const order = invoiceOrders.find((item) => item.id === invoiceSelectedOrderId) || invoiceOrders[0] || null;
+    const emptyInvoice = !order;
+    const invoiceScheduleLine = order ? getProductionLineForOrder(order) : 'A';
+    if (order && invoiceScheduleDraftOrderId !== order.id) {
+      invoiceScheduleDraftOrderId = order.id;
+      invoiceScheduleSequence = getNextProductionSequence(order, invoiceScheduleLine, invoiceScheduleDate);
+    }
+    const previewOrder = order || normalizeOrder({});
+    const recipe = getRecipeForOrder(previewOrder);
     const formulaRows = getFormulaRows(recipe);
     const splitFormulaRows = formulaRows.filter((item) => item.port === invoiceSplitPort);
-    const totalKg = Number(order.quantity || 0);
+    const totalKg = Number(previewOrder.quantity || 0);
     const splitTotalKg = splitFormulaRows.reduce((sum, item) => sum + getInvoiceMaterialKg(item, totalKg), 0);
     const splitBatchKg = splitTotalKg / Math.max(invoiceBatchCount, 1);
-    const invoiceDate = order.deliveryDate || getTodayCode();
-    const invoiceLine = recipe.line ? `${recipe.line}线` : 'A线';
-    const invoiceNo = order.id?.replace(/^ORD-?/, '') || 'A1';
+    const invoiceDate = previewOrder.productionNo ? getOrderProductionDate(previewOrder) : invoiceScheduleDate;
+    const invoiceLine = previewOrder.productionNo ? `${getProductionLineForOrder(previewOrder)}线` : `${invoiceScheduleLine}线`;
+    const invoiceNo = getInvoicePreviewNo(previewOrder);
+    const invoiceScheduleNo = `${invoiceScheduleLine}${invoiceScheduleSequence}`;
+    const invoiceScheduleConflict = order && hasProductionSlotConflict(order.id, invoiceScheduleDate, invoiceScheduleNo);
+    const invoiceSequenceOptions = Array.from({ length: 12 }, (_, index) => index + 1);
     const outputRate = totalKg >= 1000 ? `${formatKgValue(totalKg / 1000)}吨/小时` : `${formatKgValue(totalKg)} kg/小时`;
     const getRowSpan = (rows, index, getter) => {
       const value = getter(rows[index]);
@@ -442,48 +511,85 @@
 
     return `
       <section class="biz-invoice-workbench">
-        <div class="business-panel biz-invoice-toolbar">
-          <div class="biz-invoice-toolbar-title">
-            <h2>配料操作图</h2>
-          </div>
-          <div class="biz-invoice-toolbar-main">
-          <div class="biz-invoice-toolbar-controls">
-          <label>
-            <span>依据下料口</span>
-            <select data-invoice-port>${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
-          </label>
-          <label>
-            <span>划分批次</span>
-            <select data-invoice-batch-count>${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
-          </label>
-          </div>
-          <div class="biz-invoice-preview-actions">
-            <button type="button" data-invoice-print><i class="ti ti-printer" aria-hidden="true"></i><span>打印开单</span></button>
-            <button class="is-primary" type="button" data-invoice-export><i class="ti ti-download" aria-hidden="true"></i><span>生成图片</span></button>
-          </div>
-          </div>
-        </div>
         <div class="biz-invoice-layout">
           <aside class="business-panel biz-invoice-orders">
             <div class="business-panel-head">
               <h2>待开单配方</h2>
               <span>订单调取</span>
             </div>
-            <div class="biz-invoice-order-list">
-              ${invoiceOrders.map((item) => {
-                const itemRecipe = getRecipeForOrder(item);
+            <div class="biz-invoice-line-filter" role="group" aria-label="按产线筛选待开单订单">
+              ${['全部', ...formulaLineOptions].map((line) => {
+                const count = line === '全部'
+                  ? pendingInvoiceOrders.length
+                  : pendingInvoiceOrders.filter((item) => String(getRecipeForOrder(item).line || 'A') === line).length;
                 return `
-                  <button class="${item.id === order.id ? 'is-active' : ''}" type="button" data-invoice-order="${esc(item.id)}">
-                    <strong>${esc(item.formula)}</strong>
-                    <span>${formatKgValue(item.quantity)} kg · ${esc(itemRecipe.code || itemRecipe.name)}</span>
-                    <em>${esc(item.id)} / ${esc(item.status)}</em>
+                  <button class="${invoiceLineFilter === line ? 'is-active' : ''}" type="button" data-invoice-line-filter="${esc(line)}">
+                    ${esc(line === '全部' ? '全部' : `${line}线`)}<span>${count}</span>
                   </button>
                 `;
-              }).join('') || '<div class="biz-formula-empty">暂无待开单订单</div>'}
+              }).join('')}
+            </div>
+            <div class="biz-invoice-order-list ${invoiceOrders.length ? '' : 'is-empty'}">
+              ${invoiceOrders.map((item) => {
+                const itemRecipe = getRecipeForOrder(item);
+                const itemNo = getInvoiceNoForOrder(item);
+                return `
+                  <button class="${item.id === previewOrder.id ? 'is-active' : ''}" type="button" data-invoice-order="${esc(item.id)}">
+                    <strong>${esc(item.formula)}</strong>
+                    <span>${formatKgValue(item.quantity)} kg · ${esc(itemRecipe.code || itemRecipe.name)}</span>
+                    <em>${esc(item.id)} / ${esc(itemRecipe.line || 'A')}线 · ${esc(itemNo)}</em>
+                  </button>
+                `;
+              }).join('') || `
+                <div class="biz-invoice-order-empty">
+                  <i class="ti ti-list-check" aria-hidden="true"></i>
+                  <strong>暂无待开单订单</strong>
+                  <span>待处理订单为空</span>
+                </div>
+              `}
             </div>
           </aside>
-          <section class="business-panel biz-print-preview biz-invoice-preview">
-            <div class="biz-operation-sheet biz-requisition-sheet">
+          <section class="business-panel biz-invoice-preview-panel">
+            <div class="biz-invoice-toolbar">
+              <div class="biz-invoice-toolbar-title">
+                <h2>配料操作图</h2>
+                <span>${emptyInvoice ? '暂无待处理订单' : `${esc(invoiceNo)} · ${esc(invoiceLine)} · ${esc(invoiceDate)}`}</span>
+              </div>
+              <div class="biz-invoice-toolbar-main">
+                <div class="biz-invoice-toolbar-controls">
+                  <label data-date-picker-trigger>
+                    <span>生产日期</span>
+                    <input type="date" value="${esc(invoiceScheduleDate)}" data-invoice-schedule-date>
+                  </label>
+                  <label>
+                    <span>线内序号</span>
+                    <select data-invoice-schedule-sequence>${invoiceSequenceOptions.map((value) => {
+                      const no = `${invoiceScheduleLine}${value}`;
+                      const occupied = order && hasProductionSlotConflict(order.id, invoiceScheduleDate, no);
+                      return `<option value="${value}" ${value === invoiceScheduleSequence ? 'selected' : ''}>${esc(no)}${occupied ? ' · 已占用' : ''}</option>`;
+                    }).join('')}</select>
+                  </label>
+                  <label>
+                    <span>依据下料口</span>
+                    <select data-invoice-port>${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+                  </label>
+                  <label>
+                    <span>划分批次</span>
+                    <select data-invoice-batch-count>${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
+                  </label>
+                </div>
+              </div>
+              ${invoiceScheduleConflict ? '<div class="biz-invoice-schedule-warning">当前生产日期下该排产号已被占用，请调整产线或线内序号。</div>' : ''}
+            </div>
+            <div class="biz-invoice-preview-scroll ${emptyInvoice ? 'is-empty' : ''}">
+              ${emptyInvoice ? `
+                <div class="biz-invoice-empty-state">
+                  <i class="ti ti-list-check" aria-hidden="true"></i>
+                  <strong>暂无待开单配方</strong>
+                  <span>待处理订单为空，当前没有可生成的配料操作图</span>
+                </div>
+              ` : ''}
+              <div class="biz-operation-sheet biz-requisition-sheet" ${emptyInvoice ? 'hidden' : ''}>
               <div class="biz-requisition-main">
                 <section class="biz-requisition-left">
                   <div class="biz-requisition-company">宁波广俊塑料科技有限公司</div>
@@ -517,7 +623,7 @@
                       }).join('')}
                       <tr class="is-total"><td></td><td></td><td>合计</td><td>${formatKgValue(totalKg)}</td><td></td></tr>
                       <tr><td></td><td>产量:</td><td colspan="3">${esc(outputRate)}</td></tr>
-                      <tr><td></td><td>备注:</td><td colspan="3">${esc(order.note || '')}</td></tr>
+                      <tr><td></td><td>备注:</td><td colspan="3">${esc(previewOrder.note || '')}</td></tr>
                       ${Array.from({ length: Math.max(2, 10 - formulaRows.length) }, () => '<tr class="is-blank"><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
                     </tbody>
                   </table>
@@ -558,6 +664,12 @@
                   </div>
                 </aside>
               </div>
+              </div>
+            </div>
+            <div class="biz-invoice-preview-actions">
+              <button class="is-schedule" type="button" data-invoice-schedule ${emptyInvoice || invoiceScheduleConflict ? 'disabled' : ''}><i class="ti ti-list-check" aria-hidden="true"></i><span>安排生产</span></button>
+              <button type="button" data-invoice-print ${emptyInvoice ? 'disabled' : ''}><i class="ti ti-printer" aria-hidden="true"></i><span>打印开单</span></button>
+              <button class="is-primary" type="button" data-invoice-export ${emptyInvoice ? 'disabled' : ''}><i class="ti ti-download" aria-hidden="true"></i><span>生成图片</span></button>
             </div>
           </section>
         </div>
@@ -1747,6 +1859,57 @@
       || defaultFormulaRecipes[0];
   };
 
+  const getOrderProductionDate = (order) => String(order?.productionDate || order?.deliveryDate || getTodayCode()).trim();
+
+  const getProductionLineForOrder = (order) => {
+    const line = String(getRecipeForOrder(order)?.line || 'A').toUpperCase();
+    return formulaLineOptions.includes(line) ? line : 'A';
+  };
+
+  const getProductionNoParts = (productionNo) => {
+    const match = String(productionNo || '').trim().match(/^([A-Z])(\d+)$/);
+    return match ? { line: match[1], sequence: Number(match[2] || 0) } : null;
+  };
+
+  const getNextProductionSequence = (order, line = getProductionLineForOrder(order), date = order?.productionDate || invoiceScheduleDate || getTodayCode()) => {
+    const usedNumbers = orderRows
+      .filter((item) => (
+        item.id !== order?.id
+        && productionQueueStatuses.includes(item.status)
+        && getOrderProductionDate(item) === date
+      ))
+      .map((item) => getProductionNoParts(item.productionNo))
+      .filter((parts) => parts?.line === line)
+      .map((parts) => Number(parts.sequence || 0))
+      .filter((value) => Number.isFinite(value));
+    return Math.max(0, ...usedNumbers) + 1;
+  };
+
+  const getNextProductionNo = (order, line = getProductionLineForOrder(order), date = order?.productionDate || invoiceScheduleDate || getTodayCode()) => (
+    `${line}${getNextProductionSequence(order, line, date)}`
+  );
+
+  const getInvoiceNoForOrder = (order) => String(order?.productionNo || getNextProductionNo(order)).trim();
+  const getInvoicePreviewNo = (order) => String(order?.productionNo || `${getProductionLineForOrder(order)}${invoiceScheduleSequence}`).trim();
+
+  const hasProductionSlotConflict = (orderId, productionDate, productionNo) => orderRows.some((item) => (
+    item.id !== orderId
+    && productionQueueStatuses.includes(item.status)
+    && getOrderProductionDate(item) === productionDate
+    && String(item.productionNo || '').trim() === productionNo
+  ));
+
+  const ensureProductionNumbers = () => {
+    let changed = false;
+    orderRows.forEach((order) => {
+      if (productionQueueStatuses.includes(order.status) && !order.productionNo) {
+        order.productionNo = getNextProductionNo(order);
+        changed = true;
+      }
+    });
+    if (changed) utils.writeJson(ORDER_STORAGE_KEY, orderRows);
+  };
+
   const getInvoiceMaterialKg = (material, totalKg) => (
     Number(totalKg || 0) * Number(material?.ratio || 0) / 100
   );
@@ -1758,9 +1921,8 @@
     .replace(/"/g, '&quot;');
 
   const downloadInvoiceOperationImage = () => {
-    const invoiceOrders = orderRows.filter((order) => ['待处理', '生产中'].includes(order.status));
-    const order = (invoiceOrders.length ? invoiceOrders : orderRows).find((item) => item.id === invoiceSelectedOrderId)
-      || orderRows[0];
+    const invoiceOrders = orderRows.filter((order) => order.status === '待处理');
+    const order = invoiceOrders.find((item) => item.id === invoiceSelectedOrderId) || invoiceOrders[0];
     if (!order) return false;
     const recipe = getRecipeForOrder(order);
     const rows = getFormulaRows(recipe);
@@ -1772,6 +1934,7 @@
     const rowHeight = 34;
     const materialTableY = 250;
     const batchTableY = materialTableY + 52 + rows.length * rowHeight;
+    const invoiceNo = getInvoiceNoForOrder(order);
     const batchRowCount = Math.max(splitRows.length, 1) + 1;
     const height = Math.max(760, batchTableY + 112 + batchRowCount * 30);
     const materialRows = rows.map((item, index) => {
@@ -1826,7 +1989,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${order.id}-生产操作图.svg`;
+    link.download = `${invoiceNo}-${order.id}-生产操作图.svg`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -1839,6 +2002,9 @@
     if (recipe?.category) return String(recipe.category);
     return inferFormulaCategory(recipe);
   };
+
+  ensureProductionNumbers();
+
   const getFormulaBaseResinMaterial = (recipe) => (
     (recipe?.materials || []).find((item) => /树脂|基料|主体/.test(`${item.role || ''} ${item.name || ''}`))
     || recipe?.materials?.[0]
@@ -2380,31 +2546,152 @@
     returnFormulaList();
   };
 
-  const renderProduction = () => `
-    <section class="biz-production-layout">
-      <article class="business-panel biz-line-board">
-        <div class="business-panel-head"><h2>产线排程</h2><span>今日 18 批次</span></div>
-        ${[
-          ['1 号线', [['ABS-FR', 36], ['清机', 12], ['PC/ABS', 28]]],
-          ['2 号线', [['PP-GF30', 52], ['抽检', 10], ['PP-T20', 22]]],
-          ['3 号线', [['待领料', 18], ['PC/ABS', 44]]],
-        ].map(([line, jobs]) => `
-          <div class="biz-line-row"><strong>${esc(line)}</strong><div>${jobs.map(([job, width]) => `<span style="width:${width}%">${esc(job)}</span>`).join('')}</div></div>
-        `).join('')}
-      </article>
-      <aside class="business-panel biz-material-ready">
-        <div class="business-panel-head"><h2>领料状态</h2><span>原料仓</span></div>
-        <div class="ready">GJ-PP-GF30 <strong>齐套</strong></div>
-        <div class="pending">GJ-ABS-FR-760 <strong>缺阻燃剂</strong></div>
-        <div class="ready">PC/ABS 合金 <strong>齐套</strong></div>
-      </aside>
-    </section>
-    ${renderTable('排产明细', ['批次', '产线', '产品', '状态'], [
-      ['MO-0427-07', '2 号线', 'GJ-PP-GF30', '生产中'],
-      ['MO-0427-10', '1 号线', 'GJ-ABS-FR-760', '待领料'],
-      ['MO-0428-03', '3 号线', 'PC/ABS 合金', '待排产'],
-    ])}
-  `;
+  const getProductionOrders = () => orderRows
+    .filter((order) => productionQueueStatuses.includes(order.status))
+    .map((order) => normalizeOrder(order));
+
+  const renderProduction = () => {
+    const productionOrders = getProductionOrders();
+    const planOrders = productionOrders
+      .filter((order) => getOrderProductionDate(order) === productionPlanDate)
+      .sort((a, b) => String(getRecipeForOrder(a).line || 'A').localeCompare(String(getRecipeForOrder(b).line || 'A'))
+        || a.id.localeCompare(b.id));
+    const totalKg = planOrders.reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+    const runningCount = planOrders.filter((order) => order.status === '生产中').length;
+    const doneCount = planOrders.filter((order) => order.status === '已完成').length;
+    const lineGroups = formulaLineOptions.map((line) => [
+      line,
+      planOrders.filter((order) => String(getRecipeForOrder(order).line || 'A') === line),
+    ]);
+    const normalizedSearch = productionSearchQuery.trim().toLowerCase();
+    const visiblePlanOrders = normalizedSearch
+      ? planOrders.filter((order) => {
+        const recipe = getRecipeForOrder(order);
+        const values = [
+          order.productionNo || getInvoiceNoForOrder(order),
+          order.id,
+          getOrderProductionDate(order),
+          `${recipe.line || 'A'}号线`,
+          order.formula,
+          formatOrderNumber(order.quantity),
+          order.status,
+        ];
+        return values.some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
+      })
+      : planOrders;
+    const productionFilteredCount = visiblePlanOrders.length;
+    const productionTotalPages = Math.max(1, Math.ceil(productionFilteredCount / productionPageSize));
+    productionListPage = Math.min(Math.max(1, productionListPage), productionTotalPages);
+    const productionPageStart = (productionListPage - 1) * productionPageSize;
+    const pagedPlanOrders = visiblePlanOrders.slice(productionPageStart, productionPageStart + productionPageSize);
+
+    return `
+      <section class="biz-production-page">
+        ${renderStatStrip([
+          ['当天计划', `${planOrders.length} 单`, productionPlanDate],
+          ['计划产量', `${formatKgValue(totalKg)} kg`, '按订单数量汇总'],
+          ['生产中', `${runningCount} 单`, '可在本页完成'],
+          ['已完成', `${doneCount} 单`, doneCount === planOrders.length && planOrders.length ? '当天计划已完成' : '继续跟进'],
+        ])}
+        <section class="biz-production-layout">
+          <article class="business-panel biz-line-board">
+            <div class="business-panel-head">
+              <h2>当天生产计划</h2>
+              <label class="biz-production-date">
+                <span>生产日期</span>
+                <input type="date" value="${esc(productionPlanDate)}" data-production-plan-date>
+              </label>
+            </div>
+            ${lineGroups.map(([line, jobs]) => `
+              <div class="biz-line-row">
+                <strong>${esc(line)} 号线</strong>
+                <div>
+                  ${jobs.map((order) => {
+                    const width = totalKg ? Math.max(16, Math.round(Number(order.quantity || 0) / totalKg * 100)) : 24;
+                    return `<span class="${order.status === '生产中' ? 'is-running' : order.status === '已完成' ? 'is-done' : ''}" style="width:${width}%">${esc(order.productionNo || getInvoiceNoForOrder(order))} · ${esc(order.formula)}</span>`;
+                  }).join('') || '<span class="is-empty" style="width:100%">暂无计划</span>'}
+                </div>
+              </div>
+            `).join('')}
+          </article>
+        </section>
+        <section class="business-panel biz-table-panel biz-production-table-panel">
+          <div class="business-panel-head biz-production-table-head">
+            <div>
+              <h2>排产明细</h2>
+              <span>只显示 ${esc(productionPlanDate)} 的生产计划 · ${productionFilteredCount} / ${planOrders.length} 单</span>
+            </div>
+            <div class="biz-formula-table-actions biz-production-table-actions">
+              ${renderSearchBox({
+                className: 'biz-formula-table-search biz-production-search',
+                placeholder: '搜索排产号 / 订单号 / 产品',
+                value: productionSearchQuery,
+                attributes: { 'data-production-search': 'true' },
+              })}
+            </div>
+          </div>
+          <div class="ui-table-wrap biz-production-table-wrap">
+            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-production-table">
+              <thead><tr><th>排产号</th><th>订单号</th><th>生产日期</th><th>产线</th><th>产品</th><th>数量(KG)</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                ${pagedPlanOrders.map((order) => {
+                  const recipe = getRecipeForOrder(order);
+                  return `
+                    <tr>
+                      <td>${esc(order.productionNo || getInvoiceNoForOrder(order))}</td>
+                      <td>${esc(order.id)}</td>
+                      <td>${esc(getOrderProductionDate(order))}</td>
+                      <td>${esc(recipe.line || 'A')} 号线</td>
+                      <td>${esc(order.formula)}</td>
+                      <td>${esc(formatOrderNumber(order.quantity))}</td>
+                      <td><span class="biz-order-status ${getOrderStatusClass(order.status)}">${esc(order.status)}</span></td>
+                      <td>
+                        <div class="biz-supplier-row-actions biz-order-row-actions">
+                          ${order.status === '已安排' ? `
+                            <button class="is-success" type="button" data-production-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
+                              <i class="ti ti-player-play" aria-hidden="true"></i>
+                            </button>
+                          ` : ''}
+                          ${order.status === '生产中' ? `
+                            <button class="is-success" type="button" data-production-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成生产${esc(order.id)}">
+                              <i class="ti ti-check" aria-hidden="true"></i>
+                            </button>
+                          ` : ''}
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('') || `<tr><td colspan="8"><div class="biz-formula-empty">${normalizedSearch ? '暂无匹配生产计划' : '当天暂无生产计划'}</div></td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="biz-formula-pagination biz-production-pagination">
+            <p class="biz-formula-pagination-meta">
+              第 ${productionFilteredCount ? productionPageStart + 1 : 0}-${Math.min(productionPageStart + productionPageSize, productionFilteredCount)} 条 / 共 ${productionFilteredCount} 条
+            </p>
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-production-page-size aria-label="排产明细每页条数">${orderPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === productionPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-production-page-prev ${productionListPage <= 1 ? 'disabled' : ''} aria-label="排产明细上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${productionListPage} / ${productionTotalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-production-page-next ${productionListPage >= productionTotalPages ? 'disabled' : ''} aria-label="排产明细下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    `;
+  };
 
   const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
   const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
@@ -3067,9 +3354,12 @@
 
   const render = (pageId, def = {}) => {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
+    const usesInvoiceWorkbench = pageId === 'invoice-print';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
+    refs.businessPageContent.classList.toggle('biz-invoice-shell', usesInvoiceWorkbench);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
+    refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-invoice-active', usesInvoiceWorkbench);
     refs.businessPageContent.innerHTML = `
       ${renderBody(pageId)}
     `;
@@ -3242,6 +3532,17 @@
       restoreSearchInputState(`[data-archive-search="${kind}"]`, state.search, selectionStart, selectionEnd);
       return;
     }
+    if (event.target.hasAttribute('data-production-search')) {
+      productionSearchQuery = event.target.value;
+      productionListPage = 1;
+      const selectionStart = event.target.selectionStart ?? productionSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      scheduleSearchRender(
+        'production-plan',
+        () => restoreSearchInputState('[data-production-search]', productionSearchQuery, selectionStart, selectionEnd),
+      );
+      return;
+    }
     if (event.target.hasAttribute('data-formula-search')) {
       formulaSearchQuery = event.target.value;
       formulaListPage = 1;
@@ -3280,6 +3581,30 @@
     if (event.target.hasAttribute('data-invoice-batch-count')) {
       invoiceBatchCount = Math.max(1, Number(event.target.value) || 1);
       render('invoice-print');
+      return;
+    }
+    if (event.target.hasAttribute('data-invoice-schedule-date')) {
+      invoiceScheduleDate = event.target.value || getTodayCode();
+      const order = orderRows[getOrderIndex(invoiceSelectedOrderId)];
+      invoiceScheduleSequence = getNextProductionSequence(order, getProductionLineForOrder(order), invoiceScheduleDate);
+      render('invoice-print');
+      return;
+    }
+    if (event.target.hasAttribute('data-invoice-schedule-sequence')) {
+      invoiceScheduleSequence = Math.max(1, Number(event.target.value) || 1);
+      render('invoice-print');
+      return;
+    }
+    if (event.target.hasAttribute('data-production-plan-date')) {
+      productionPlanDate = event.target.value || getTodayCode();
+      productionListPage = 1;
+      render('production-plan');
+      return;
+    }
+    if (event.target.hasAttribute('data-production-page-size')) {
+      productionPageSize = Number(event.target.value) || 10;
+      productionListPage = 1;
+      render('production-plan');
       return;
     }
     if (event.target.hasAttribute('data-inventory-category-filter')) {
@@ -3351,6 +3676,25 @@
   refs.businessPageContent?.addEventListener('click', async (event) => {
     if (!(event.target instanceof Element)) return;
 
+    const datePickerTrigger = event.target.closest('[data-date-picker-trigger]');
+    if (datePickerTrigger && refs.businessPageContent.contains(datePickerTrigger)) {
+      const input = datePickerTrigger.querySelector('input[type="date"]');
+      if (input && event.target !== input) {
+        event.preventDefault();
+        input.focus({ preventScroll: true });
+        try {
+          if (typeof input.showPicker === 'function') {
+            input.showPicker();
+          } else {
+            input.click();
+          }
+        } catch {
+          input.click();
+        }
+      }
+      return;
+    }
+
     const orderPagePrev = event.target.closest('[data-order-page-prev]');
     if (orderPagePrev && refs.businessPageContent.contains(orderPagePrev) && !orderPagePrev.disabled) {
       orderListPage -= 1;
@@ -3362,6 +3706,20 @@
     if (orderPageNext && refs.businessPageContent.contains(orderPageNext) && !orderPageNext.disabled) {
       orderListPage += 1;
       render('order-management');
+      return;
+    }
+
+    const productionPagePrev = event.target.closest('[data-production-page-prev]');
+    if (productionPagePrev && refs.businessPageContent.contains(productionPagePrev) && !productionPagePrev.disabled) {
+      productionListPage -= 1;
+      render('production-plan');
+      return;
+    }
+
+    const productionPageNext = event.target.closest('[data-production-page-next]');
+    if (productionPageNext && refs.businessPageContent.contains(productionPageNext) && !productionPageNext.disabled) {
+      productionListPage += 1;
+      render('production-plan');
       return;
     }
 
@@ -3389,13 +3747,15 @@
     if (orderStatusButton && refs.businessPageContent.contains(orderStatusButton)) {
       const id = orderStatusButton.getAttribute('data-order-status') || '';
       const nextStatus = orderStatusButton.getAttribute('data-order-next-status') || '';
-      const index = getOrderIndex(id);
-      if (index >= 0 && orderStatusOptions.includes(nextStatus)) {
-        orderRows[index].status = nextStatus;
-        persistOrders(`已更新订单状态 ${id} · ${getTimeCode()}`);
-        notifyAction(`订单 ${id} 已更新为${nextStatus}`, 'success', `order-status:${id}:${nextStatus}`);
-        render('order-management');
-      }
+      if (updateOrderStatus(id, nextStatus)) render('order-management');
+      return;
+    }
+
+    const productionStatusButton = event.target.closest('[data-production-status]');
+    if (productionStatusButton && refs.businessPageContent.contains(productionStatusButton)) {
+      const id = productionStatusButton.getAttribute('data-production-status') || '';
+      const nextStatus = productionStatusButton.getAttribute('data-order-next-status') || '';
+      if (updateOrderStatus(id, nextStatus, '已更新生产计划')) render('production-plan');
       return;
     }
 
@@ -3435,7 +3795,42 @@
     const invoiceOrderButton = event.target.closest('[data-invoice-order]');
     if (invoiceOrderButton && refs.businessPageContent.contains(invoiceOrderButton)) {
       invoiceSelectedOrderId = invoiceOrderButton.getAttribute('data-invoice-order') || invoiceSelectedOrderId;
+      invoiceScheduleDraftOrderId = '';
       render('invoice-print');
+      return;
+    }
+
+    const invoiceLineButton = event.target.closest('[data-invoice-line-filter]');
+    if (invoiceLineButton && refs.businessPageContent.contains(invoiceLineButton)) {
+      invoiceLineFilter = invoiceLineButton.getAttribute('data-invoice-line-filter') || '全部';
+      invoiceSelectedOrderId = '';
+      invoiceScheduleDraftOrderId = '';
+      render('invoice-print');
+      return;
+    }
+
+    const invoiceScheduleButton = event.target.closest('[data-invoice-schedule]');
+    if (invoiceScheduleButton && refs.businessPageContent.contains(invoiceScheduleButton) && !invoiceScheduleButton.disabled) {
+      const id = invoiceSelectedOrderId;
+      const order = orderRows[getOrderIndex(id)];
+      const invoiceScheduleLine = getProductionLineForOrder(order);
+      const productionNo = `${invoiceScheduleLine}${invoiceScheduleSequence}`;
+      if (hasProductionSlotConflict(id, invoiceScheduleDate, productionNo)) {
+        notifyAction(`排产号 ${productionNo} 在 ${invoiceScheduleDate} 已被占用`, 'warn', `invoice-schedule-conflict:${productionNo}`);
+        render('invoice-print');
+        return;
+      }
+      if (updateOrderStatus(id, '已安排', '已安排开单订单', {
+        productionDate: invoiceScheduleDate,
+        productionNo,
+      })) {
+        invoiceSelectedOrderId = orderRows.find((item) => (
+          item.status === '待处理'
+          && (invoiceLineFilter === '全部' || String(getRecipeForOrder(item).line || 'A') === invoiceLineFilter)
+        ))?.id || '';
+        invoiceScheduleDraftOrderId = '';
+        render('invoice-print');
+      }
       return;
     }
 

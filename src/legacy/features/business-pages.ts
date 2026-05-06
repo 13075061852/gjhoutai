@@ -157,6 +157,8 @@
   let invoiceSplitPort = 1;
   let invoiceBatchCount = 10;
   let productionPlanDate = getOrderFallbackDate();
+  let productionLineFilter = '全部';
+  let productionStatusFilter = '全部';
   let productionSearchQuery = '';
   let productionListPage = 1;
   let productionPageSize = 10;
@@ -332,31 +334,6 @@
                         <button type="button" data-order-edit="${esc(order.id)}" aria-label="编辑${esc(order.id)}">
                           <i class="ti ti-pencil" aria-hidden="true"></i>
                         </button>
-                        ${order.status === '待处理' ? `
-                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已安排" aria-label="安排${esc(order.id)}">
-                            <i class="ti ti-list-check" aria-hidden="true"></i>
-                          </button>
-                        ` : ''}
-                        ${order.status === '已安排' ? `
-                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
-                            <i class="ti ti-player-play" aria-hidden="true"></i>
-                          </button>
-                        ` : ''}
-                        ${order.status === '生产中' ? `
-                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成${esc(order.id)}">
-                            <i class="ti ti-check" aria-hidden="true"></i>
-                          </button>
-                        ` : ''}
-                        ${order.status === '已完成' ? `
-                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已发货" aria-label="发货${esc(order.id)}">
-                            <i class="ti ti-truck-delivery" aria-hidden="true"></i>
-                          </button>
-                        ` : ''}
-                        ${order.status === '已发货' ? `
-                          <button class="is-success" type="button" data-order-status="${esc(order.id)}" data-order-next-status="已结清" aria-label="结清${esc(order.id)}">
-                            <i class="ti ti-receipt-2" aria-hidden="true"></i>
-                          </button>
-                        ` : ''}
                         <button class="is-danger" type="button" data-order-delete="${esc(order.id)}" aria-label="删除${esc(order.id)}">
                           <i class="ti ti-x" aria-hidden="true"></i>
                         </button>
@@ -2564,22 +2541,26 @@
       planOrders.filter((order) => String(getRecipeForOrder(order).line || 'A') === line),
     ]);
     const normalizedSearch = productionSearchQuery.trim().toLowerCase();
-    const visiblePlanOrders = normalizedSearch
-      ? planOrders.filter((order) => {
-        const recipe = getRecipeForOrder(order);
-        const values = [
-          order.productionNo || getInvoiceNoForOrder(order),
-          order.id,
-          getOrderProductionDate(order),
-          `${recipe.line || 'A'}号线`,
-          order.formula,
-          formatOrderNumber(order.quantity),
-          order.status,
-        ];
-        return values.some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
-      })
-      : planOrders;
+    const visiblePlanOrders = planOrders.filter((order) => {
+      const recipe = getRecipeForOrder(order);
+      const line = String(recipe.line || 'A');
+      const matchesLine = productionLineFilter === '全部' || line === productionLineFilter;
+      const matchesStatus = productionStatusFilter === '全部' || order.status === productionStatusFilter;
+      if (!matchesLine || !matchesStatus) return false;
+      if (!normalizedSearch) return true;
+      const values = [
+        order.productionNo || getInvoiceNoForOrder(order),
+        order.id,
+        getOrderProductionDate(order),
+        `${line}号线`,
+        order.formula,
+        formatOrderNumber(order.quantity),
+        order.status,
+      ];
+      return values.some((value) => String(value || '').toLowerCase().includes(normalizedSearch));
+    });
     const productionFilteredCount = visiblePlanOrders.length;
+    const hasProductionFilters = productionLineFilter !== '全部' || productionStatusFilter !== '全部' || Boolean(normalizedSearch);
     const productionTotalPages = Math.max(1, Math.ceil(productionFilteredCount / productionPageSize));
     productionListPage = Math.min(Math.max(1, productionListPage), productionTotalPages);
     const productionPageStart = (productionListPage - 1) * productionPageSize;
@@ -2595,8 +2576,10 @@
         ])}
         <section class="biz-production-layout">
           <article class="business-panel biz-line-board">
-            <div class="business-panel-head">
-              <h2>当天生产计划</h2>
+            <div class="business-panel-head biz-line-board-head">
+              <div class="biz-line-board-title">
+                <h2>当天生产计划</h2>
+              </div>
               <label class="biz-production-date">
                 <span>生产日期</span>
                 <input type="date" value="${esc(productionPlanDate)}" data-production-plan-date>
@@ -2607,9 +2590,9 @@
                 <strong>${esc(line)} 号线</strong>
                 <div>
                   ${jobs.map((order) => {
-                    const width = totalKg ? Math.max(16, Math.round(Number(order.quantity || 0) / totalKg * 100)) : 24;
-                    return `<span class="${order.status === '生产中' ? 'is-running' : order.status === '已完成' ? 'is-done' : ''}" style="width:${width}%">${esc(order.productionNo || getInvoiceNoForOrder(order))} · ${esc(order.formula)}</span>`;
-                  }).join('') || '<span class="is-empty" style="width:100%">暂无计划</span>'}
+                    const statusClass = order.status === '生产中' ? 'is-running' : order.status === '已完成' ? 'is-done' : 'is-scheduled';
+                    return `<span class="${statusClass}"><strong>${esc(order.formula)}</strong><em>${esc(formatOrderNumber(order.quantity))} KG</em><small><b class="biz-line-job-code">${esc(order.productionNo || getInvoiceNoForOrder(order))}</b>${esc(order.status)}</small></span>`;
+                  }).join('') || '<span class="is-empty">暂无计划</span>'}
                 </div>
               </div>
             `).join('')}
@@ -2617,11 +2600,17 @@
         </section>
         <section class="business-panel biz-table-panel biz-production-table-panel">
           <div class="business-panel-head biz-production-table-head">
-            <div>
+            <div class="biz-production-table-title">
+              <i class="ti ti-list-details" aria-hidden="true"></i>
               <h2>排产明细</h2>
-              <span>只显示 ${esc(productionPlanDate)} 的生产计划 · ${productionFilteredCount} / ${planOrders.length} 单</span>
             </div>
             <div class="biz-formula-table-actions biz-production-table-actions">
+              <select data-production-line-filter aria-label="排产产线筛选">
+                ${renderOptions(['全部', ...formulaLineOptions.map((line) => `${line}号线`)], productionLineFilter === '全部' ? '全部' : `${productionLineFilter}号线`)}
+              </select>
+              <select data-production-status-filter aria-label="排产状态筛选">
+                ${renderOptions(['全部', ...productionQueueStatuses], productionStatusFilter)}
+              </select>
               ${renderSearchBox({
                 className: 'biz-formula-table-search biz-production-search',
                 placeholder: '搜索排产号 / 订单号 / 产品',
@@ -2646,14 +2635,19 @@
                       <td>${esc(formatOrderNumber(order.quantity))}</td>
                       <td><span class="biz-order-status ${getOrderStatusClass(order.status)}">${esc(order.status)}</span></td>
                       <td>
-                        <div class="biz-supplier-row-actions biz-order-row-actions">
+                        <div class="biz-supplier-row-actions biz-order-row-actions biz-production-row-actions">
                           ${order.status === '已安排' ? `
-                            <button class="is-success" type="button" data-production-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
+                            <button class="is-success is-start" type="button" data-production-status="${esc(order.id)}" data-order-next-status="生产中" aria-label="开始生产${esc(order.id)}">
                               <i class="ti ti-player-play" aria-hidden="true"></i>
                             </button>
                           ` : ''}
                           ${order.status === '生产中' ? `
-                            <button class="is-success" type="button" data-production-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成生产${esc(order.id)}">
+                            <button class="is-success is-running" type="button" data-production-status="${esc(order.id)}" data-order-next-status="已完成" aria-label="完成生产${esc(order.id)}">
+                              <i class="ti ti-loader-2 is-spinning" aria-hidden="true"></i>
+                            </button>
+                          ` : ''}
+                          ${order.status === '已完成' ? `
+                            <button class="is-success is-finished" type="button" aria-label="已完成${esc(order.id)}" disabled>
                               <i class="ti ti-check" aria-hidden="true"></i>
                             </button>
                           ` : ''}
@@ -2661,7 +2655,7 @@
                       </td>
                     </tr>
                   `;
-                }).join('') || `<tr><td colspan="8"><div class="biz-formula-empty">${normalizedSearch ? '暂无匹配生产计划' : '当天暂无生产计划'}</div></td></tr>`}
+                }).join('') || `<tr><td colspan="8"><div class="biz-formula-empty">${hasProductionFilters ? '暂无匹配生产计划' : '当天暂无生产计划'}</div></td></tr>`}
               </tbody>
             </table>
           </div>
@@ -3597,6 +3591,19 @@
     }
     if (event.target.hasAttribute('data-production-plan-date')) {
       productionPlanDate = event.target.value || getTodayCode();
+      productionListPage = 1;
+      render('production-plan');
+      return;
+    }
+    if (event.target.hasAttribute('data-production-line-filter')) {
+      const value = event.target.value || '全部';
+      productionLineFilter = value === '全部' ? '全部' : value.replace('号线', '');
+      productionListPage = 1;
+      render('production-plan');
+      return;
+    }
+    if (event.target.hasAttribute('data-production-status-filter')) {
+      productionStatusFilter = event.target.value || '全部';
       productionListPage = 1;
       render('production-plan');
       return;

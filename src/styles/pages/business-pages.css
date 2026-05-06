@@ -1,4 +1,26 @@
 /* Placeholder and business prototype pages */
+    .biz-invoice-print-root{
+      display:none;
+    }
+    @media print{
+      body.is-invoice-operation-printing{
+        background:#fff !important;
+      }
+      body.is-invoice-operation-printing > :not(.biz-invoice-print-root){
+        display:none !important;
+      }
+      body.is-invoice-operation-printing .biz-invoice-print-root{
+        display:block !important;
+        width:100%;
+        margin:0;
+        padding:0;
+        background:#fff;
+      }
+      body.is-invoice-operation-printing .biz-invoice-print-root .biz-operation-sheet{
+        margin:0 auto !important;
+        box-shadow:none !important;
+      }
+    }
     .placeholder-page{
       width:100%;
       max-width:none;
@@ -1361,6 +1383,37 @@
       justify-content:flex-end;
       gap:12px;
     }
+    .biz-invoice-view-switch{
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      gap:2px;
+      padding:3px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-invoice-view-switch button{
+      height:30px;
+      min-width:86px;
+      padding:0 12px;
+      border:0;
+      border-radius:6px;
+      background:transparent;
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .biz-invoice-view-switch button:hover,
+    .biz-invoice-view-switch button.is-active{
+      background:#fff;
+      color:var(--accent);
+      box-shadow:0 1px 3px rgba(15,23,42,.08);
+    }
     .biz-invoice-toolbar-title > span,
     .biz-invoice-toolbar-controls label > span{
       display:block;
@@ -1380,7 +1433,7 @@
       min-width:0;
       display:flex;
       flex-direction:column;
-      gap:6px;
+      gap:0;
       min-height:auto;
       padding:0;
       border:0;
@@ -1545,6 +1598,10 @@
       overflow:auto;
       padding:22px;
       background:transparent;
+    }
+    .biz-invoice-preview-scroll.is-screw-view{
+      padding:14px 18px 6px;
+      overflow:auto;
     }
     .biz-invoice-preview-scroll.is-empty{
       display:flex;
@@ -1727,6 +1784,421 @@
       font-size:12px;
       font-weight:800;
     }
+    .biz-operation-sheet.biz-requisition-sheet{
+      width:1040px;
+      max-width:none;
+      min-width:1040px;
+      padding:12px 14px 16px;
+      background:#fff;
+      color:#000;
+      font-family:"Microsoft YaHei",Arial,sans-serif;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-main{
+      display:grid;
+      grid-template-columns:minmax(0,.56fr) minmax(360px,.44fr);
+      gap:26px;
+      align-items:center;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-left,
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-right{
+      min-width:0;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-company{
+      padding:12px 8px 10px;
+      border:2px solid #000;
+      border-bottom:1px solid #000;
+      color:#000;
+      font-size:28px;
+      line-height:1;
+      font-weight:950;
+      letter-spacing:0;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-meta{
+      display:grid;
+      grid-template-columns:1fr 230px;
+      border-left:2px solid #000;
+      border-right:2px solid #000;
+      border-bottom:1px solid #000;
+      color:#000;
+      font-size:17px;
+      line-height:1.25;
+      font-weight:500;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-meta span{
+      padding:8px 10px;
+      text-align:center;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-meta span + span{
+      text-align:right;
+      padding-right:14px;
+    }
+    .biz-operation-sheet.biz-requisition-sheet table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed;
+      color:#000;
+      font-size:15px;
+      line-height:1.2;
+    }
+    .biz-operation-sheet.biz-requisition-sheet th,
+    .biz-operation-sheet.biz-requisition-sheet td{
+      height:34px;
+      padding:4px 8px;
+      border:1px solid #000;
+      background:#fff;
+      color:#000;
+      text-align:center;
+      vertical-align:middle;
+      font-weight:850;
+      white-space:normal;
+      word-break:break-word;
+    }
+    .biz-operation-sheet.biz-requisition-sheet th{
+      font-size:16px;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table{
+      border-left:2px solid #000;
+      border-right:2px solid #000;
+      border-bottom:1px solid #000;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table th:nth-child(1){width:82px}
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table th:nth-child(2){width:100px}
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table th:nth-child(3){width:auto}
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table th:nth-child(4){width:124px}
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table th:nth-child(5){width:124px}
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table tr.is-total td,
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table tr.is-total td{
+      background:#fff;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table tr.is-split-basis td{
+      background:#fff;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-wide-row td{
+      height:36px;
+      font-size:15px;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-material-table tr.is-blank td{
+      height:34px;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-sign{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:8px;
+      min-height:36px;
+      padding:7px 0;
+      border-left:2px solid #000;
+      border-right:2px solid #000;
+      border-bottom:2px solid #000;
+      color:#000;
+      font-size:17px;
+      line-height:1.2;
+      font-weight:500;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-card{
+      width:100%;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-title{
+      padding:11px 8px;
+      border:2px solid #000;
+      border-bottom:1px solid #000;
+      color:#000;
+      font-size:18px;
+      line-height:1;
+      font-weight:950;
+      text-align:center;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table{
+      border:2px solid #000;
+      border-top:0;
+      font-size:15px;
+      table-layout:fixed;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table + .biz-requisition-batch-table{
+      margin-top:22px;
+      border-top:2px solid #000;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table th,
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table td{
+      height:38px;
+      padding:5px 8px;
+      font-size:15px;
+      font-weight:850;
+    }
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table th:first-child,
+    .biz-operation-sheet.biz-requisition-sheet .biz-requisition-batch-table td:first-child{
+      width:120px;
+      font-weight:950;
+    }
+    .biz-screw-sheet{
+      width:1180px;
+      max-width:none;
+      min-width:1180px;
+      min-height:760px;
+      padding:28px 32px 32px;
+      font-family:"Microsoft YaHei",Arial,sans-serif;
+      font-size:13px;
+    }
+    .biz-screw-header{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:18px;
+      align-items:end;
+      padding-bottom:14px;
+      border-bottom:3px solid #111827;
+    }
+    .biz-screw-header span{
+      display:block;
+      color:#475569;
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:1px;
+    }
+    .biz-screw-header h1{
+      margin:6px 0 0;
+      color:#111827;
+      font-size:26px;
+      line-height:1.1;
+      font-weight:950;
+      letter-spacing:0;
+    }
+    .biz-screw-header > strong{
+      color:#111827;
+      font-size:18px;
+      line-height:1.2;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-screw-meta-grid{
+      display:grid;
+      grid-template-columns:1.4fr .8fr .7fr .9fr .9fr .8fr;
+      border:1px solid #111827;
+      border-top:0;
+    }
+    .biz-screw-meta-grid > div{
+      min-width:0;
+      padding:8px 10px;
+      border-right:1px solid #111827;
+    }
+    .biz-screw-meta-grid > div:last-child{
+      border-right:0;
+    }
+    .biz-screw-meta-grid span{
+      display:block;
+      color:#475569;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+    }
+    .biz-screw-meta-grid strong{
+      display:block;
+      min-width:0;
+      margin-top:5px;
+      color:#111827;
+      font-size:13px;
+      line-height:1.25;
+      font-weight:750;
+      word-break:break-word;
+    }
+    .biz-screw-lead-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 250px;
+      gap:14px;
+      align-items:stretch;
+      margin-top:14px;
+    }
+    .biz-screw-side{
+      display:flex;
+      min-height:0;
+    }
+    .biz-screw-card{
+      margin-top:14px;
+      border:1px solid #111827;
+      background:#fff;
+    }
+    .biz-screw-lead-grid .biz-screw-card{
+      margin-top:0;
+    }
+    .biz-screw-lead-grid .biz-screw-side > .biz-screw-card{
+      width:100%;
+      display:flex;
+      flex-direction:column;
+    }
+    .biz-screw-card h3{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      min-height:32px;
+      margin:0;
+      padding:6px 10px;
+      border-bottom:1px solid #111827;
+      background:#f8fafc;
+      color:#111827;
+      font-size:14px;
+      line-height:1.2;
+      font-weight:950;
+    }
+    .biz-screw-card h3 span{
+      min-width:20px;
+      height:20px;
+      display:inline-grid;
+      place-items:center;
+      border:1px solid #111827;
+      border-radius:999px;
+      background:#111827;
+      color:#fff;
+      font-size:11px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-screw-card p{
+      margin:0;
+      padding:10px 12px;
+      color:#111827;
+      font-size:12px;
+      line-height:1.65;
+      font-weight:750;
+    }
+    .biz-screw-sign-grid{
+      display:grid;
+      grid-template-columns:auto 1fr;
+      gap:22px 14px;
+      flex:1 1 auto;
+      align-content:center;
+      padding:18px 14px;
+      color:#111827;
+      font-size:13px;
+      font-weight:900;
+    }
+    .biz-screw-sign-grid i{
+      display:block;
+      min-width:0;
+      height:22px;
+      border-bottom:1px solid #111827;
+    }
+    .biz-screw-sheet table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed;
+      color:#111827;
+      font-size:13px;
+    }
+    .biz-screw-sheet th,
+    .biz-screw-sheet td{
+      min-height:28px;
+      padding:6px 7px;
+      border:1px solid #111827;
+      background:#fff;
+      text-align:center;
+      line-height:1.25;
+      font-weight:750;
+      white-space:normal;
+      word-break:break-word;
+    }
+    .biz-screw-sheet th{
+      background:#f8fafc;
+      font-weight:950;
+    }
+    .biz-screw-formula th:first-child,
+    .biz-screw-formula td:first-child{
+      width:104px;
+      font-weight:900;
+    }
+    .biz-screw-equipment{
+      margin-top:14px;
+    }
+    .biz-screw-param-list{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      border-bottom:1px solid #111827;
+    }
+    .biz-screw-param-list div{
+      min-width:0;
+      padding:8px 10px;
+      border-right:1px solid #111827;
+      border-bottom:1px solid #111827;
+    }
+    .biz-screw-param-list div:nth-child(4n){
+      border-right:0;
+    }
+    .biz-screw-param-list div:nth-last-child(-n+4){
+      border-bottom:0;
+    }
+    .biz-screw-param-list span{
+      display:block;
+      color:#475569;
+      font-size:11px;
+      line-height:1.2;
+      font-weight:900;
+    }
+    .biz-screw-param-list strong{
+      display:block;
+      margin-top:5px;
+      color:#111827;
+      font-size:15px;
+      line-height:1.1;
+      font-weight:950;
+    }
+    .biz-screw-temp-title{
+      padding:8px 10px 6px;
+      border-top:1px solid #111827;
+      color:#111827;
+      font-size:13px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-screw-temp th,
+    .biz-screw-temp td{
+      padding:8px 4px;
+    }
+    .biz-screw-check{
+      min-width:980px;
+    }
+    .biz-screw-inspection,
+    .biz-screw-summary{
+      overflow:auto;
+    }
+    .biz-screw-check th{
+      width:94px;
+    }
+    .biz-screw-check td:first-of-type{
+      width:96px;
+      font-weight:900;
+    }
+    .biz-screw-check td{
+      height:24px;
+    }
+    .biz-screw-summary{
+      display:grid;
+      grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
+      gap:0 14px;
+      align-items:start;
+    }
+    .biz-screw-summary h3{
+      grid-column:1 / -1;
+      margin-bottom:0;
+    }
+    .biz-screw-summary table{
+      font-size:12px;
+      height:100%;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary th,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary td{
+      height:26px;
+      padding-top:0;
+      padding-bottom:0;
+      vertical-align:middle;
+    }
+    .biz-screw-summary table:first-of-type{
+      min-width:520px;
+    }
+    .biz-screw-summary table:last-of-type{
+      min-width:400px;
+    }
     @media (max-width:1500px){
       .biz-invoice-toolbar{
         grid-template-columns:1fr;
@@ -1843,6 +2315,329 @@
       font-size:12px;
       font-weight:900;
     }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header{
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:18px;
+      padding-bottom:14px;
+      border-bottom:3px solid #111827;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header span{
+      margin:0;
+      color:#475569;
+      font-size:12px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:1px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header > strong{
+      display:block;
+      color:#111827;
+      font-size:18px;
+      line-height:1.2;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed;
+      color:#111827;
+      font-size:13px;
+      line-height:1.25;
+    }
+    .biz-operation-sheet.biz-screw-sheet th,
+    .biz-operation-sheet.biz-screw-sheet td{
+      min-height:28px;
+      padding:6px 7px;
+      border:1px solid #111827;
+      background:#fff;
+      text-align:center;
+      line-height:1.25;
+      font-weight:750;
+      white-space:normal;
+      word-break:break-word;
+    }
+    .biz-operation-sheet.biz-screw-sheet th{
+      background:#f8fafc;
+      color:#0f172a;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp th,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp td{
+      padding:8px 4px;
+    }
+    .biz-operation-sheet.biz-screw-sheet{
+      width:1040px;
+      max-width:none;
+      min-width:1040px;
+      min-height:0;
+      padding:8px 10px 12px;
+      background:#fff;
+      color:#000;
+      font-family:"Microsoft YaHei",Arial,sans-serif;
+      font-size:12px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      align-items:end;
+      gap:12px;
+      padding:0 2px 8px;
+      border:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header h1{
+      margin:0;
+      color:#000;
+      font-size:21px;
+      line-height:1;
+      font-weight:950;
+      letter-spacing:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-header > strong{
+      color:#000;
+      font-size:21px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-meta-grid{
+      display:grid;
+      grid-template-columns:1.2fr .88fr 1fr 1.1fr .86fr .7fr;
+      border:2px solid #000;
+      border-bottom-width:2px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-meta-grid > div{
+      min-height:38px;
+      padding:5px 8px;
+      border-right:1px solid #000;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-meta-grid > div:last-child{
+      border-right:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-meta-grid span{
+      display:block;
+      margin:0;
+      color:#000;
+      font-size:10px;
+      line-height:1.15;
+      font-weight:900;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-meta-grid strong{
+      display:block;
+      margin-top:5px;
+      color:#000;
+      font-size:13px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-lead-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 210px;
+      gap:10px;
+      align-items:stretch;
+      margin-top:8px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-section{
+      margin-top:8px;
+      border:2px solid #000;
+      background:#fff;
+      overflow:hidden;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-lead-grid .biz-screw-section{
+      margin-top:0;
+      height:100%;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-confirm{
+      display:block;
+      min-height:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-section h3{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      height:25px;
+      margin:0;
+      padding:0 10px;
+      border:0;
+      border-bottom:1px solid #000;
+      background:#fff;
+      color:#000;
+      font-size:13px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-section h3 span{
+      width:16px;
+      min-width:16px;
+      height:16px;
+      display:inline-grid;
+      place-items:center;
+      border:0;
+      border-radius:50%;
+      background:#000;
+      color:#fff;
+      font-size:11px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-confirm h3{
+      gap:0;
+      padding-left:14px;
+    }
+    .biz-operation-sheet.biz-screw-sheet table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed;
+      color:#000;
+      font-size:12px;
+      line-height:1.2;
+    }
+    .biz-operation-sheet.biz-screw-sheet th,
+    .biz-operation-sheet.biz-screw-sheet td{
+      height:22px;
+      min-height:22px;
+      padding:2px 4px;
+      border:1px solid #000;
+      background:#fff;
+      color:#000;
+      text-align:center;
+      vertical-align:middle;
+      line-height:1.2;
+      font-weight:850;
+      white-space:normal;
+      word-break:break-word;
+    }
+    .biz-operation-sheet.biz-screw-sheet th{
+      background:#fff;
+      color:#000;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-formula{
+      border-style:hidden;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-formula th:first-child,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-formula td:first-child{
+      width:94px;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-sign-grid{
+      display:grid;
+      grid-template-columns:auto 1fr;
+      gap:22px 10px;
+      min-height:102px;
+      align-content:center;
+      padding:12px 18px;
+      color:#000;
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-sign-grid i{
+      height:16px;
+      border-bottom:2px solid #000;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-param-table{
+      border-style:hidden;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-param-table td{
+      height:36px;
+      padding:5px 12px;
+      text-align:left;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-param-table span{
+      display:block;
+      color:#000;
+      font-size:11px;
+      line-height:1.15;
+      font-weight:850;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-param-table strong{
+      display:block;
+      margin-top:6px;
+      color:#000;
+      font-size:14px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp-title{
+      height:22px;
+      padding:4px 8px 0;
+      border-top:1px solid #000;
+      color:#000;
+      font-size:12px;
+      line-height:1;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp{
+      border-style:hidden;
+      border-top:1px solid #000;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp th,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-temp td{
+      height:23px;
+      padding:3px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-check{
+      min-width:0;
+      border-style:hidden;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-check th{
+      width:86px;
+      font-size:13px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-check td:first-of-type{
+      width:80px;
+      font-weight:950;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-check td{
+      height:19px;
+      padding:2px 3px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) minmax(0,.98fr);
+      gap:0;
+      align-items:start;
+      border:2px solid #000;
+      overflow:visible;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary h3{
+      grid-column:1 / -1;
+      margin:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table{
+      min-width:0;
+      height:auto;
+      margin:0;
+      border:0;
+      font-size:12px;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table th,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table td{
+      border:1px solid #000;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table tr:first-child > *{
+      border-top:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table tr:last-child > *{
+      border-bottom:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table tr > *:first-child{
+      border-left:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table tr > *:last-child{
+      border-right:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table:first-of-type tr > *:last-child{
+      border-right:1px solid #000;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table:first-of-type,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary table:last-of-type{
+      min-width:0;
+    }
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary th,
+    .biz-operation-sheet.biz-screw-sheet .biz-screw-summary td{
+      height:31px;
+      min-height:31px;
+      padding:4px 6px;
+    }
     .biz-invoice-process{
       display:flex;
       flex-direction:column;
@@ -1885,6 +2680,12 @@
         align-items:stretch;
         gap:12px;
       }
+      .biz-invoice-view-switch{
+        width:100%;
+      }
+      .biz-invoice-view-switch button{
+        flex:1 1 0;
+      }
       .biz-invoice-toolbar-controls{
         grid-template-columns:1fr;
         gap:8px;
@@ -1902,9 +2703,20 @@
       .biz-operation-sheet{
         padding:12px;
       }
-      .biz-requisition-main{
-        grid-template-columns:1fr;
-        gap:24px;
+      .biz-screw-param-list{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+      .biz-screw-param-list div:nth-child(4n){
+        border-right:1px solid #111827;
+      }
+      .biz-screw-param-list div:nth-child(2n){
+        border-right:0;
+      }
+      .biz-screw-param-list div:nth-last-child(-n+4){
+        border-bottom:1px solid #111827;
+      }
+      .biz-screw-param-list div:nth-last-child(-n+2){
+        border-bottom:0;
       }
       .biz-requisition-output{
         margin:0 0 16px;

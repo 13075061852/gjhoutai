@@ -156,6 +156,7 @@
   let invoiceScheduleDraftOrderId = '';
   let invoiceSplitPort = 1;
   let invoiceBatchCount = 10;
+  let invoiceOperationView = 'material';
   let productionPlanDate = getOrderFallbackDate();
   let productionLineFilter = '全部';
   let productionStatusFilter = '全部';
@@ -485,6 +486,138 @@
       const groupSize = baseBatchColumns + (groupIndex < extraBatchColumns ? 1 : 0);
       return Array.from({ length: groupSize }, () => nextBatchNo++);
     });
+    const isScrewView = invoiceOperationView === 'screw';
+    const operationTitle = isScrewView ? '螺杆操作图' : '配料操作图';
+    const materialColumns = Array.from({ length: 6 }, (_, index) => formulaRows[index] || null);
+    const categoryRow = materialColumns.map((item) => item ? esc(item.name) : '');
+    const ratioRow = materialColumns.map((item) => item ? `${formatKgValue(item.ratio)}%` : '');
+    const loadRow = materialColumns.map((item) => item ? `${formatKgValue(getInvoiceMaterialKg(item, totalKg))}kg` : '');
+    const cleanRow = materialColumns.map((item) => {
+      if (!item) return '';
+      if (/色母|母粒/i.test(item.name)) return '扫仓、吸秤';
+      return '—';
+    });
+    const processText = Array.isArray(recipe.process) ? recipe.process.map((item) => item.join(' ')).join('；') : '';
+    const processTemps = Array.from(processText.matchAll(/(\d{2,3})\s*C/gi), (match) => Number(match[1]));
+    const category = getFormulaCategory(recipe);
+    const tempBase = processTemps.length
+      ? processTemps[processTemps.length - 1]
+      : category === 'PP'
+        ? 210
+        : category === 'ABS'
+          ? 225
+          : 245;
+    const screwSpeed = category === 'PP' ? 430 : category === 'ABS' ? 420 : 460;
+    const sideSpeed1 = Math.round(screwSpeed * 0.11);
+    const sideSpeed2 = Math.round(screwSpeed * 0.13);
+    const cutterSpeed = category === 'PP' ? 95 : 105;
+    const tempZones = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'C10', 'C11', 'G1', 'G2'];
+    const tempValues = tempZones.map((zone, index) => {
+      if (zone === 'C0') return 0;
+      if (zone === 'G1' || zone === 'G2') return tempBase;
+      if (index <= 4) return tempBase + 10;
+      if (index <= 7) return tempBase;
+      return tempBase - 10 + (index % 3 === 1 ? 10 : 0);
+    });
+    const inspectionColumns = Array.from({ length: 16 }, (_, index) => index + 1);
+    const renderScrewOperationSheet = () => `
+              <div class="biz-operation-sheet biz-screw-sheet" ${emptyInvoice ? 'hidden' : ''}>
+                <header class="biz-screw-header">
+                  <h1>螺杆操作图</h1>
+                  <strong>${esc(invoiceNo)}</strong>
+                </header>
+                <div class="biz-screw-meta-grid">
+                  <div><span>型号</span><strong>${esc(recipe.product || recipe.code || previewOrder.formula)}</strong></div>
+                  <div><span>台号</span><strong>${esc(recipe.code || '--')}</strong></div>
+                  <div><span>生产线</span><strong>${esc(invoiceLine)}</strong></div>
+                  <div><span>计划胶量 [kg]</span><strong>${formatKgValue(totalKg)}</strong></div>
+                  <div><span>日期</span><strong>${esc(invoiceDate)}</strong></div>
+                  <div><span>批号</span><strong>${esc(invoiceNo)}</strong></div>
+                </div>
+                <div class="biz-screw-lead-grid">
+                  <section class="biz-screw-section biz-screw-meter">
+                    <h3><span>1</span>计量秤</h3>
+                    <table class="biz-screw-formula">
+                      <tbody>
+                        <tr><th>编号</th>${materialColumns.map((_, index) => `<th>${index + 1}</th>`).join('')}</tr>
+                        <tr><td>物料类别</td>${categoryRow.map((value) => `<td>${value}</td>`).join('')}</tr>
+                        <tr><td>比例</td>${ratioRow.map((value) => `<td>${value}</td>`).join('')}</tr>
+                        <tr><td>负荷</td>${loadRow.map((value) => `<td>${value}</td>`).join('')}</tr>
+                        <tr><td>生产前清理</td>${cleanRow.map((value) => `<td>${value}</td>`).join('')}</tr>
+                      </tbody>
+                    </table>
+                  </section>
+                  <aside class="biz-screw-confirm">
+                    <section class="biz-screw-section">
+                      <h3>操作确认</h3>
+                      <div class="biz-screw-sign-grid">
+                        <span>操作</span><i></i>
+                        <span>复核</span><i></i>
+                      </div>
+                    </section>
+                  </aside>
+                </div>
+                <section class="biz-screw-section biz-screw-equipment">
+                  <h3><span>2</span>主设备参数</h3>
+                  <table class="biz-screw-param-table">
+                    <tbody>
+                      <tr>
+                        <td><span>螺杆转速 [rpm]</span><strong>${screwSpeed}</strong></td>
+                        <td><span>侧位1螺杆转速 [rpm]</span><strong>${sideSpeed1}</strong></td>
+                        <td><span>切粒机转速 [rpm]</span><strong>${cutterSpeed}</strong></td>
+                        <td><span>过水长度 [m]</span><strong>0.9</strong></td>
+                        <td><span>熔压 [Bar]</span><strong>120</strong></td>
+                      </tr>
+                      <tr>
+                        <td><span>产量 [kg/h]</span><strong>${formatKgValue(totalKg >= 1000 ? totalKg : Math.max(totalKg, 800))}</strong></td>
+                        <td><span>侧位2螺杆转速 [rpm]</span><strong>${sideSpeed2}</strong></td>
+                        <td><span>真空压力表 [Mpa]</span><strong>0.08-0.09</strong></td>
+                        <td><span>熔温 [°C]</span><strong>${tempBase}</strong></td>
+                        <td><span>扭矩 [%]</span><strong>60</strong></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="biz-screw-temp-title">炮筒温度 [°C]</div>
+                  <table class="biz-screw-temp">
+                    <tbody>
+                      <tr>${tempZones.map((zone) => `<th>${zone}</th>`).join('')}</tr>
+                      <tr>${tempValues.map((value) => `<td>${value}</td>`).join('')}</tr>
+                    </tbody>
+                  </table>
+                </section>
+                <section class="biz-screw-section biz-screw-inspection">
+                  <h3><span>3</span>巡检记录</h3>
+                  <table class="biz-screw-check">
+                    <tbody>
+                      ${['时间', '真空度', '焦料清理', '粒子外观', '计量秤状态'].map((label, index) => `
+                        <tr>
+                          ${index === 0 ? '<th rowspan="5">30分钟/次</th>' : ''}
+                          <td>${label}</td>
+                          ${inspectionColumns.map(() => '<td></td>').join('')}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </section>
+                <section class="biz-screw-section biz-screw-summary">
+                  <h3><span>4</span>数量统计</h3>
+                  <table>
+                    <tbody>
+                      <tr><th colspan="7">计量秤使用量（KG）</th></tr>
+                      <tr><td>合计</td>${materialColumns.map((_, index) => `<td>${index + 1}</td>`).join('')}</tr>
+                      <tr><td>${formatKgValue(totalKg)}</td>${materialColumns.map(() => '<td></td>').join('')}</tr>
+                    </tbody>
+                  </table>
+                  <table>
+                    <tbody>
+                      <tr><th colspan="5">入库量（KG）</th></tr>
+                      <tr><td>产出量</td><td>开机料</td><td>料块</td><td>取样</td><td>入库</td></tr>
+                      <tr><td></td><td></td><td></td><td></td><td></td></tr>
+                    </tbody>
+                  </table>
+                </section>
+              </div>
+    `;
 
     return `
       <section class="biz-invoice-workbench">
@@ -529,36 +662,35 @@
           <section class="business-panel biz-invoice-preview-panel">
             <div class="biz-invoice-toolbar">
               <div class="biz-invoice-toolbar-title">
-                <h2>配料操作图</h2>
-                <span>${emptyInvoice ? '暂无待处理订单' : `${esc(invoiceNo)} · ${esc(invoiceLine)} · ${esc(invoiceDate)}`}</span>
+                <h2>${operationTitle}</h2>
               </div>
               <div class="biz-invoice-toolbar-main">
+                <div class="biz-invoice-view-switch" role="group" aria-label="操作图切换">
+                  <button class="${!isScrewView ? 'is-active' : ''}" type="button" data-invoice-view="material">配料操作图</button>
+                  <button class="${isScrewView ? 'is-active' : ''}" type="button" data-invoice-view="screw">螺杆操作图</button>
+                </div>
                 <div class="biz-invoice-toolbar-controls">
                   <label data-date-picker-trigger>
-                    <span>生产日期</span>
-                    <input type="date" value="${esc(invoiceScheduleDate)}" data-invoice-schedule-date>
+                    <input type="date" value="${esc(invoiceScheduleDate)}" data-invoice-schedule-date aria-label="生产日期">
                   </label>
                   <label>
-                    <span>线内序号</span>
-                    <select data-invoice-schedule-sequence>${invoiceSequenceOptions.map((value) => {
+                    <select data-invoice-schedule-sequence aria-label="线内序号">${invoiceSequenceOptions.map((value) => {
                       const no = `${invoiceScheduleLine}${value}`;
                       const occupied = order && hasProductionSlotConflict(order.id, invoiceScheduleDate, no);
                       return `<option value="${value}" ${value === invoiceScheduleSequence ? 'selected' : ''}>${esc(no)}${occupied ? ' · 已占用' : ''}</option>`;
                     }).join('')}</select>
                   </label>
                   <label>
-                    <span>依据下料口</span>
-                    <select data-invoice-port>${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+                    <select data-invoice-port aria-label="依据下料口">${portOptions.map(([value, label]) => `<option value="${esc(value)}" ${Number(value) === invoiceSplitPort ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
                   </label>
                   <label>
-                    <span>划分批次</span>
-                    <select data-invoice-batch-count>${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
+                    <select data-invoice-batch-count aria-label="划分批次">${batchOptions.map((value) => `<option value="${value}" ${value === invoiceBatchCount ? 'selected' : ''}>${value} 批</option>`).join('')}</select>
                   </label>
                 </div>
               </div>
               ${invoiceScheduleConflict ? '<div class="biz-invoice-schedule-warning">当前生产日期下该排产号已被占用，请调整产线或线内序号。</div>' : ''}
             </div>
-            <div class="biz-invoice-preview-scroll ${emptyInvoice ? 'is-empty' : ''}">
+            <div class="biz-invoice-preview-scroll ${emptyInvoice ? 'is-empty' : ''} ${isScrewView ? 'is-screw-view' : ''}">
               ${emptyInvoice ? `
                 <div class="biz-invoice-empty-state">
                   <i class="ti ti-list-check" aria-hidden="true"></i>
@@ -566,13 +698,14 @@
                   <span>待处理订单为空，当前没有可生成的配料操作图</span>
                 </div>
               ` : ''}
+              ${isScrewView ? renderScrewOperationSheet() : `
               <div class="biz-operation-sheet biz-requisition-sheet" ${emptyInvoice ? 'hidden' : ''}>
               <div class="biz-requisition-main">
                 <section class="biz-requisition-left">
                   <div class="biz-requisition-company">宁波广俊塑料科技有限公司</div>
                   <div class="biz-requisition-meta">
                     <span>领料单&nbsp;&nbsp;${esc(invoiceNo)}</span>
-                    <span>${esc(invoiceDate)}</span>
+                    <span>日期：${esc(invoiceDate)}</span>
                   </div>
                   <table class="biz-requisition-material-table">
                     <thead>
@@ -599,8 +732,8 @@
                         `;
                       }).join('')}
                       <tr class="is-total"><td></td><td></td><td>合计</td><td>${formatKgValue(totalKg)}</td><td></td></tr>
-                      <tr><td></td><td>产量:</td><td colspan="3">${esc(outputRate)}</td></tr>
-                      <tr><td></td><td>备注:</td><td colspan="3">${esc(previewOrder.note || '')}</td></tr>
+                      <tr class="biz-requisition-wide-row"><td colspan="2">产量</td><td colspan="3">${esc(outputRate)}</td></tr>
+                      <tr class="biz-requisition-wide-row"><td colspan="2">备注</td><td colspan="3">${esc(previewOrder.note || '')}</td></tr>
                       ${Array.from({ length: Math.max(2, 10 - formulaRows.length) }, () => '<tr class="is-blank"><td></td><td></td><td></td><td></td><td></td></tr>').join('')}
                     </tbody>
                   </table>
@@ -642,6 +775,7 @@
                 </aside>
               </div>
               </div>
+              `}
             </div>
             <div class="biz-invoice-preview-actions">
               <button class="is-schedule" type="button" data-invoice-schedule ${emptyInvoice || invoiceScheduleConflict ? 'disabled' : ''}><i class="ti ti-list-check" aria-hidden="true"></i><span>安排生产</span></button>
@@ -1971,6 +2105,32 @@
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 500);
+    return true;
+  };
+
+  const printInvoiceOperationSheet = () => {
+    const sheet = refs.businessPageContent.querySelector('.biz-operation-sheet:not([hidden])');
+    if (!sheet) return false;
+
+    document.querySelector('.biz-invoice-print-root')?.remove();
+    const printRoot = document.createElement('div');
+    printRoot.className = 'biz-invoice-print-root';
+    const printSheet = sheet.cloneNode(true);
+    if (printSheet instanceof HTMLElement) {
+      printSheet.removeAttribute('hidden');
+    }
+    printRoot.appendChild(printSheet);
+    document.body.appendChild(printRoot);
+    document.body.classList.add('is-invoice-operation-printing');
+
+    const cleanup = () => {
+      document.body.classList.remove('is-invoice-operation-printing');
+      printRoot.remove();
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
+    window.setTimeout(() => {
+      window.print();
+    }, 0);
     return true;
   };
 
@@ -3816,6 +3976,14 @@
       return;
     }
 
+    const invoiceViewButton = event.target.closest('[data-invoice-view]');
+    if (invoiceViewButton && refs.businessPageContent.contains(invoiceViewButton)) {
+      const nextView = invoiceViewButton.getAttribute('data-invoice-view') || 'material';
+      invoiceOperationView = nextView === 'screw' ? 'screw' : 'material';
+      render('invoice-print');
+      return;
+    }
+
     const invoiceScheduleButton = event.target.closest('[data-invoice-schedule]');
     if (invoiceScheduleButton && refs.businessPageContent.contains(invoiceScheduleButton) && !invoiceScheduleButton.disabled) {
       const id = invoiceSelectedOrderId;
@@ -3843,7 +4011,8 @@
 
     const invoicePrintButton = event.target.closest('[data-invoice-print]');
     if (invoicePrintButton && refs.businessPageContent.contains(invoicePrintButton)) {
-      window.print();
+      const printed = printInvoiceOperationSheet();
+      if (!printed) notifyAction('暂无可打印的操作图', 'warn', 'invoice-print');
       return;
     }
 

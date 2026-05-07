@@ -42,5 +42,6 @@ export function bootLegacyApp(): (() => void) | undefined {
 
 export function teardownLegacyApp(): void {
   booted = false;
+  window.GJHApp?.animations?.cleanup?.();
   window.GJHApp?.motionEffects?.cleanup?.();
 }

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5001/)",
+      "Bash(npx vite *)",
+      "Bash(node -e ' *)",
+      "Bash(node _split_markup.js)",
+      "Bash(node _split_markup.cjs)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(node _split.cjs)",
+      "Bash(xxd)",
+      "Bash(npm run *)"
+    ]
+  }
+}

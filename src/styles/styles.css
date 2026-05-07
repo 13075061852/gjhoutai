@@ -3,5 +3,14 @@
 @import url("./components/components.css");
 @import url("./layout/sidebar.css");
 @import url("./layout/layout.css");
-@import url("./pages.css");
+@import url("./pages/dashboard-chat.css");
+@import url("./pages/image-cutout.css");
+@import url("./pages/business-pages.css");
+@import url("./pages/property-analysis.css");
+@import url("./pages/spectrum-analysis.css");
+@import url("./pages/config.css");
+@import url("./pages/theme-settings.css");
+@import url("./pages/project-skills.css");
+@import url("./pages/ai-call-analysis.css");
+@import url("./pages/theme-overrides.css");
 @import url("./layout/responsive.css");

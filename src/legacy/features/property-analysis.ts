@@ -874,6 +874,13 @@
     return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
   };
 
+  const getSelectedRowsForAllSheets = () => {
+    if (!state.data) return [];
+    return getSheetNames(state.data).flatMap((sheetName) => (
+      getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey))
+    ));
+  };
+
   const getModelTypeCount = (rows) => {
     const models = new Set();
     rows.forEach((row) => {
@@ -884,7 +891,7 @@
   };
 
   const updateToolbarState = (filteredRows) => {
-    const selectedCount = getSelectedRowsForActiveSheet().length;
+    const selectedCount = getSelectedRowsForAllSheets().length;
     const allSelected = isAllFilteredSelected(filteredRows);
 
     if (refs.selectionMeta) {
@@ -1095,7 +1102,7 @@
   };
 
   const copyCompareImage = async (button) => {
-    const rows = getSelectedRowsForActiveSheet();
+    const rows = getSelectedRowsForAllSheets();
     if (rows.length < 2) return;
     if (!navigator.clipboard?.write || !window.ClipboardItem) {
       App.notify?.error?.('当前浏览器不支持复制图片到剪贴板。');
@@ -1177,7 +1184,7 @@
   }
 
   const openCompareDialog = () => {
-    const rows = getSelectedRowsForActiveSheet();
+    const rows = getSelectedRowsForAllSheets();
     if (rows.length < 2) return;
 
     closeCompareDialog();
@@ -1238,7 +1245,8 @@
 
     const sheetName = getActiveSheet(state.data);
     const { filteredRows, columns } = getVisibleRows();
-    const selectedRows = getSelectedRowsForActiveSheet();
+    const selectedRows = getSelectedRowsForAllSheets();
+    const targetColumns = selectedRows.length ? getColumns(selectedRows) : columns;
     const targetRows = selectedRows;
     const metrics = [
       '熔指',
@@ -1268,7 +1276,7 @@
       lines.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
     }
 
-    const rowLines = summarizeRowsForAi(targetRows, columns, 12);
+    const rowLines = summarizeRowsForAi(targetRows, targetColumns, 12);
     if (rowLines.length) {
       lines.push('代表性数据：', ...rowLines);
       if (targetRows.length > rowLines.length) lines.push(`还有 ${targetRows.length - rowLines.length} 条未展开。`);
@@ -1369,8 +1377,9 @@
     if (!state.data) return '';
 
     const sheetName = getActiveSheet(state.data);
-    const selectedRows = getSelectedRowsForActiveSheet();
+    const selectedRows = getSelectedRowsForAllSheets();
     const { filteredRows, columns } = getVisibleRows();
+    const selectedColumns = selectedRows.length ? getColumns(selectedRows) : columns;
 
     if (!selectedRows.length) {
       return [
@@ -1393,14 +1402,14 @@
       `当前页面状态：工作表=${sheetName || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
       `已选数据行数：${selectedRows.length}`,
       questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
-      matchedRows.length ? `已选数据中的问题相关匹配行：\n${summarizeRowsForAi(matchedRows, columns, 30).join('\n')}` : '已选数据中的问题相关匹配行：未匹配到完全或相近行，请基于全部已选数据继续查找并说明。',
+      matchedRows.length ? `已选数据中的问题相关匹配行：\n${summarizeRowsForAi(matchedRows, selectedColumns, 30).join('\n')}` : '已选数据中的问题相关匹配行：未匹配到完全或相近行，请基于全部已选数据继续查找并说明。',
       '已选数据 JSON：',
-      formatSelectedRowsTableForAi(sheetName, selectedRows, columns),
+      formatSelectedRowsTableForAi(sheetName, selectedRows, selectedColumns),
     ].filter(Boolean).join('\n');
   };
 
   const getAiDataFile = (question = '') => {
-    if (!getSelectedRowsForActiveSheet().length) return null;
+    if (!getSelectedRowsForAllSheets().length) return null;
     const content = getSelectedAiContext(question);
     if (!content) return null;
 
@@ -1522,7 +1531,7 @@
     const activeSheet = getActiveSheet(state.data);
     const sheetNames = getSheetNames(state.data);
     const visible = getVisibleRows();
-    const selectedRows = getSelectedRowsForActiveSheet();
+    const selectedRows = getSelectedRowsForAllSheets();
     const terms = extractAgentTerms(question);
     const identifierTerms = getIdentifierTerms(terms);
     const rowWindow = extractAgentRowWindow(question);

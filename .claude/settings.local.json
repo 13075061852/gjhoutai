@@ -11,7 +11,16 @@
       "Bash(git stash *)",
       "Bash(node _split.cjs)",
       "Bash(xxd)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(grep -iE '^\\(Phone|Coin|Currency|Cpu$|Chart|Clock|Trending|Assembly|Play|Zoom|Circle|Radar|Bolt|Calendar|Star|Activity|Bulb|Message|Arrow|Adjust|Close\\)')",
+      "Bash(grep -iE '^\\(PhoneCall|PaperMoney|Dollar|Cpu|ChartLine|Time|AlarmClock|TrendingUp|Currency|AssemblyLine|Message|Zoom|Success|Radar|BoltOne|Calendar|Round|ArrowLeft|ArrowRight|CheckCorrect|Star|History|Light|CheckOne|Correct|Play|MessageOne|Timer\\)$')",
+      "Bash(grep -v \"^export\\\\|^default\\\\|^from\\\\|^icons$\")",
+      "Bash(grep -E \"^\\(PhoneCall|PaperMoney|Dollar|Cpu|ChartLine|Time|AlarmClock|TrendingUp|Currency|AssemblyLine|Message|Zoom|Success|Radar|BoltOne|Calendar|Round|ArrowLeft|ArrowRight|CheckCorrect|Star|History|Light|CheckOne|Correct|Play|MessageOne|Timer|PaperMoneyTwo\\)$\")",
+      "Bash(node scripts/check-icon-mappings.mjs)",
+      "Bash(grep -E \"^\\(DatabaseEdit|DatabaseConfig|Database\\)$\")",
+      "Bash(chmod +x *)",
+      "Bash(node *)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }

@@ -1132,8 +1132,8 @@
     const columns = getCompareColumns(rows);
 
     return `
-      <div class="analysis-compare-dialog" role="dialog" aria-modal="true" aria-label="物性数据对比">
-        <div class="analysis-compare-card">
+      <div class="analysis-compare-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="物性数据对比">
+        <div class="analysis-compare-card dialog-card">
           <div class="analysis-compare-head">
             <div class="analysis-compare-title">广俊数据对比</div>
             <div class="analysis-compare-actions">
@@ -1141,7 +1141,7 @@
                 <i class="ti ti-clipboard-copy" aria-hidden="true"></i>
                 <span>复制图片</span>
               </button>
-              <button class="analysis-compare-close" type="button" aria-label="关闭对比弹窗" data-analysis-compare-close>
+              <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭对比弹窗" data-analysis-compare-close>
                 <i class="ti ti-x" aria-hidden="true"></i>
               </button>
             </div>

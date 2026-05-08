@@ -8,14 +8,8 @@
   let activeTimer = null;
 
   const dialogSelector = [
-    '[role="dialog"]',
-    '[aria-modal="true"]',
+    '.dialog-overlay',
     '.confirm-dialog-overlay',
-    '.spectrum-delete-dialog',
-    '.spectrum-preview-dialog',
-    '.spectrum-compact-detail-dialog',
-    '.biz-inventory-material-modal',
-    '.biz-inventory-category-modal',
     '.ai-call-detail-modal',
   ].join(',');
 

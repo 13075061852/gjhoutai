@@ -1,4 +1,62 @@
 /* Shared UI component styles */
+
+/* ===== Dialog z-index layer system ===== */
+:root {
+  --layer-dialog: 1000;
+  --layer-dialog-stacked: 1100;
+  --layer-toast: 3000;
+  --layer-burst: 3100;
+}
+
+/* ===== Shared dialog overlay ===== */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-dialog, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--dialog-overlay-bg, rgba(15, 23, 42, .38));
+  animation: dialog-overlay-in .18s ease-out both;
+}
+
+/* ===== Shared dialog card ===== */
+.dialog-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--dialog-radius, 10px);
+  background: var(--surface);
+  box-shadow: var(--dialog-shadow, 0 24px 70px rgba(15, 23, 42, .18));
+  transform-origin: center;
+  animation: dialog-card-in .22s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+/* ===== Shared dialog close button ===== */
+.dialog-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+.dialog-close:hover,
+.dialog-close:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-3);
+}
+
 .is-custom-select-native{
   position:absolute;
   width:1px;
@@ -267,15 +325,7 @@
 }
 
 .confirm-dialog-overlay{
-  position:fixed;
-  inset:0;
-  z-index:2400;
-  display:flex;
-  align-items:center;
-  justify-content:center;
   padding:18px;
-  background:rgba(15,23,42,.38);
-  animation:dialog-overlay-in .18s ease-out both;
 }
 
 .confirm-dialog-card{
@@ -284,12 +334,6 @@
   grid-template-columns:42px minmax(0,1fr);
   gap:14px;
   padding:18px;
-  border:1px solid var(--border);
-  border-radius:8px;
-  background:var(--surface);
-  box-shadow:0 24px 70px rgba(15,23,42,.22);
-  transform-origin:center;
-  animation:dialog-card-in .22s cubic-bezier(.16,1,.3,1) both;
 }
 
 .confirm-dialog-icon{
@@ -376,7 +420,7 @@
   position:fixed;
   left:var(--dialog-consent-x);
   top:var(--dialog-consent-y);
-  z-index:30000;
+  z-index:var(--layer-burst, 3100);
   width:var(--dialog-consent-size);
   height:var(--dialog-consent-size);
   display:grid;
@@ -475,25 +519,6 @@ html[data-reduced-motion="1"] button.is-consent-animating{
   animation:none;
 }
 
-.biz-inventory-material-modal,
-.biz-inventory-category-modal,
-.spectrum-delete-dialog,
-.spectrum-preview-dialog,
-.spectrum-compact-detail-dialog,
-.ai-call-detail-modal{
-  animation:dialog-overlay-in .18s ease-out both;
-}
-
-.biz-inventory-material-dialog,
-.biz-inventory-category-dialog,
-.spectrum-delete-card,
-.spectrum-preview-card,
-.spectrum-compact-detail-card,
-.ai-call-detail-card{
-  transform-origin:center;
-  animation:dialog-card-in .22s cubic-bezier(.16,1,.3,1) both;
-}
-
 @keyframes dialog-overlay-in{
   from{
     opacity:0;
@@ -514,20 +539,10 @@ html[data-reduced-motion="1"] button.is-consent-animating{
   }
 }
 
+html[data-reduced-motion="1"] .dialog-overlay,
+html[data-reduced-motion="1"] .dialog-card,
 html[data-reduced-motion="1"] .confirm-dialog-overlay,
-html[data-reduced-motion="1"] .confirm-dialog-card,
-html[data-reduced-motion="1"] .biz-inventory-material-modal,
-html[data-reduced-motion="1"] .biz-inventory-category-modal,
-html[data-reduced-motion="1"] .spectrum-delete-dialog,
-html[data-reduced-motion="1"] .spectrum-preview-dialog,
-html[data-reduced-motion="1"] .spectrum-compact-detail-dialog,
-html[data-reduced-motion="1"] .ai-call-detail-modal,
-html[data-reduced-motion="1"] .biz-inventory-material-dialog,
-html[data-reduced-motion="1"] .biz-inventory-category-dialog,
-html[data-reduced-motion="1"] .spectrum-delete-card,
-html[data-reduced-motion="1"] .spectrum-preview-card,
-html[data-reduced-motion="1"] .spectrum-compact-detail-card,
-html[data-reduced-motion="1"] .ai-call-detail-card{
+html[data-reduced-motion="1"] .confirm-dialog-card{
   animation:none;
 }
 
@@ -535,7 +550,7 @@ html[data-reduced-motion="1"] .ai-call-detail-card{
   position:fixed;
   right:20px;
   bottom:20px;
-  z-index:32000;
+  z-index:var(--layer-toast, 3000);
   width:min(360px, calc(100vw - 32px));
   display:flex;
   flex-direction:column;

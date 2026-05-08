@@ -318,6 +318,7 @@
   `;
 
   const ORDER_STORAGE_KEY = 'gjh-orders-v1';
+  const ORDER_LOG_KEY = 'gjh-order-logs-v1';
   const orderStatusOptions = ['待处理', '已安排', '生产中', '已完成', '已发货', '已结清'];
   const productionQueueStatuses = ['已安排', '生产中', '已完成'];
   const orderPageSizeOptions = [5, 10, 20, 50];
@@ -329,15 +330,27 @@
     { id: 'ORD-20260301', customer: '博世汽车零部件', formula: 'PBT-GF30 高强度增强', quantity: 2000, unitPrice: 35, status: '已安排', deliveryDate: '2026-03-15', note: '常规补货单' },
     { id: 'ORD-20260226', customer: '格力电器', formula: 'ABS 阻燃高光', quantity: 2600, unitPrice: 28, status: '已结清', deliveryDate: '2026-03-12', note: '财务已归档' },
   ];
-  const orderCustomerOptions = ['美的集团', '博世汽车零部件', '泰科电子', '东成电动工具', '格力电器', '宁波辰光电器', '苏州瑞嘉材料'];
-  const orderFormulaOptions = [
-    'PP 滑石粉填充',
-    'PBT-GF30 高强度增强',
-    'PET 无卤阻燃',
-    'PA6-GF25 增韧增强',
-    'ABS 阻燃高光',
-    'PC/ABS 耐热合金',
-  ];
+  const ORDER_FALLBACK_CUSTOMERS = ['美的集团', '博世汽车零部件', '泰科电子', '东成电动工具', '格力电器', '宁波辰光电器', '苏州瑞嘉材料'];
+  const ORDER_FALLBACK_FORMULAS = ['PP 滑石粉填充', 'PBT-GF30 高强度增强', 'PET 无卤阻燃', 'PA6-GF25 增韧增强', 'ABS 阻燃高光', 'PC/ABS 耐热合金'];
+  const getOrderCustomerOptions = () => {
+    try {
+      const rows = archiveStates['customer']?.rows;
+      if (rows?.length) {
+        const names = rows.map((r) => r.name).filter(Boolean);
+        if (names.length) return names;
+      }
+      const defaults = archiveConfigs['customer']?.defaults;
+      if (defaults?.length) return defaults.map((r) => r.name).filter(Boolean);
+    } catch (_) { /* archives not yet initialized */ }
+    return ORDER_FALLBACK_CUSTOMERS;
+  };
+  const getOrderFormulaOptions = () => {
+    try {
+      const names = formulaRecipes?.map((r) => r.name).filter(Boolean);
+      if (names?.length) return names;
+    } catch (_) { /* recipes not yet initialized */ }
+    return ORDER_FALLBACK_FORMULAS;
+  };
   const getOrderFallbackDate = () => {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -349,8 +362,8 @@
     const deliveryDate = String(order.deliveryDate || getOrderFallbackDate()).trim();
     return {
       id: String(order.id || `ORD-${getOrderFallbackDate().replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
-      customer: String(order.customer || orderCustomerOptions[0]).trim(),
-      formula: String(order.formula || orderFormulaOptions[0]).trim(),
+      customer: String(order.customer || getOrderCustomerOptions()[0]).trim(),
+      formula: String(order.formula || getOrderFormulaOptions()[0]).trim(),
       quantity: Math.max(0, Number(order.quantity || 0)),
       unitPrice: Math.max(0, Number(order.unitPrice || 0)),
       status,
@@ -367,12 +380,69 @@
     return rows.length ? rows : defaultOrderRows.map(normalizeOrder);
   };
   let orderRows = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
+  let orderLogs = (utils.readJson(ORDER_LOG_KEY, null) || []).map((entry) => ({
+    orderId: String(entry.orderId || ''),
+    fromStatus: String(entry.fromStatus || ''),
+    toStatus: String(entry.toStatus || ''),
+    timestamp: String(entry.timestamp || new Date().toISOString()),
+  }));
+
+  const PROCUREMENT_STORAGE_KEY = 'gjh-procurements-v1';
+  const procurementStatusOptions = ['已下单', '已到货', '已入库', '已质检', '已结算'];
+  const procurementPageSizeOptions = [5, 10, 20, 50];
+  const defaultProcurementRows = [
+    { id: 'PR-20260420', supplier: '南通星辰合成材料', material: 'ABS PA-757', quantity: 5000, unitPrice: 15.5, purchaseDate: '2026-04-20', status: '已入库', note: '月度常规采购' },
+    { id: 'PR-20260415', supplier: '中石化仪征化纤', material: 'PP T30S', quantity: 8000, unitPrice: 9.2, purchaseDate: '2026-04-15', status: '已入库', note: '锁定排产计划价' },
+    { id: 'PR-20260410', supplier: '巨石集团', material: '玻纤 ECS3011B', quantity: 3000, unitPrice: 12.8, purchaseDate: '2026-04-10', status: '已质检', note: '关注含水率指标' },
+    { id: 'PR-20260405', supplier: '巴斯夫中国', material: 'PA6 B3EG6', quantity: 2000, unitPrice: 28.0, purchaseDate: '2026-04-05', status: '已结算', note: '高性能树脂样品转化' },
+    { id: 'PR-20260401', supplier: '南通星辰合成材料', material: 'PC 110', quantity: 4000, unitPrice: 22.5, purchaseDate: '2026-04-01', status: '已结算', note: '' },
+    { id: 'PR-20260325', supplier: '陶氏化学', material: 'POE 8150', quantity: 1500, unitPrice: 18.6, purchaseDate: '2026-03-25', status: '已到货', note: '增韧剂样品测试中' },
+    { id: 'PR-20260320', supplier: '科莱恩化工', material: '色母 UN2014', quantity: 800, unitPrice: 35.0, purchaseDate: '2026-03-20', status: '已入库', note: '色母粒，交期确认' },
+    { id: 'PR-20260315', supplier: '以色列化工集团(ICL)', material: '阻燃剂 FR-802', quantity: 2000, unitPrice: 45.0, purchaseDate: '2026-03-15', status: '已入库', note: '进口原料，年度资质待补齐' },
+    { id: 'PR-20260310', supplier: '巴斯夫添加剂', material: '抗氧剂 B225', quantity: 500, unitPrice: 52.0, purchaseDate: '2026-03-10', status: '已结算', note: '' },
+    { id: 'PR-20260305', supplier: '南京曙光化工', material: 'PA6-GF25', quantity: 3000, unitPrice: 16.8, purchaseDate: '2026-03-05', status: '已发货', note: '协同销售渠道' },
+  ];
+  const normalizeProcurement = (procurement = {}, index = 0) => {
+    const status = procurementStatusOptions.includes(procurement.status) ? procurement.status : procurementStatusOptions[0];
+    return {
+      id: String(procurement.id || `PR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
+      supplier: String(procurement.supplier || supplierRows[0]?.name || '').trim(),
+      material: String(procurement.material || '').trim(),
+      quantity: Math.max(0, Number(procurement.quantity || 0)),
+      unitPrice: Math.max(0, Number(procurement.unitPrice || 0)),
+      purchaseDate: String(procurement.purchaseDate || new Date().toISOString().slice(0, 10)).trim(),
+      status,
+      note: String(procurement.note || '').trim(),
+    };
+  };
+  const normalizeProcurements = (value) => {
+    const rows = Array.isArray(value)
+      ? value.map(normalizeProcurement).filter((p) => p.id && p.supplier)
+      : [];
+    return rows.length ? rows : defaultProcurementRows.map(normalizeProcurement);
+  };
+  const procurementRows = normalizeProcurements(utils.readJson(PROCUREMENT_STORAGE_KEY, null));
+  let procurementSupplierFilter = '全部';
+  let procurementSearchQuery = '';
+  let procurementEditingId = '';
+  let procurementModalOpen = false;
+  let procurementDraftNote = '原料采购记录自动保存到本地';
+  let procurementListPage = 1;
+  let procurementPageSize = 10;
+  const persistLogs = () => { utils.writeJson(ORDER_LOG_KEY, orderLogs); };
+  const getOrderLogs = (id) => orderLogs.filter((entry) => entry.orderId === id).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const logOrderStatusChange = (id, fromStatus, toStatus) => {
+    orderLogs.push({ orderId: id, fromStatus, toStatus, timestamp: new Date().toISOString() });
+    persistLogs();
+  };
   let orderStatusFilter = '全部';
   let orderDateFilter = '';
   let orderListPage = 1;
   let orderPageSize = 10;
   let orderModalOpen = false;
   let orderEditingId = '';
+  let orderDetailId = '';
+  let customerDetailCode = '';
   let orderDraftNote = '订单数据自动保存到本地';
   let invoiceSelectedOrderId = orderRows.find((order) => order.status === '待处理')?.id || '';
   let invoiceLineFilter = '全部';
@@ -411,6 +481,15 @@
   const updateOrderStatus = (id, nextStatus, notePrefix = '已更新订单状态', options = {}) => {
     const index = getOrderIndex(id);
     if (index < 0 || !orderStatusOptions.includes(nextStatus)) return false;
+    if (nextStatus === '生产中') {
+      const line = getProductionLineForOrder(orderRows[index]);
+      const runningOnSameLine = orderRows.some((item) => item.id !== id && item.status === '生产中' && getProductionLineForOrder(item) === line);
+      if (runningOnSameLine) {
+        notifyAction(`${line} 号线已有生产中计划，请先完成当前生产任务再开启新计划`, 'warning', `production-line-busy:${line}`);
+        return false;
+      }
+    }
+    const oldStatus = orderRows[index].status;
     orderRows[index].status = nextStatus;
     if (options.productionDate) {
       orderRows[index].productionDate = options.productionDate;
@@ -424,6 +503,7 @@
     }
     const productionNo = orderRows[index].productionNo || '';
     persistOrders(`${notePrefix} ${id} · ${getTimeCode()}`);
+    logOrderStatusChange(id, oldStatus, nextStatus);
     notifyAction(`订单 ${id} 已更新为${nextStatus}${nextStatus === '已安排' && productionNo ? ` · ${productionNo}` : ''}`, 'success', `order-status:${id}:${nextStatus}`);
     return true;
   };
@@ -452,7 +532,11 @@
     }
     const index = getOrderIndex(orderEditingId);
     if (index >= 0) {
+      const oldStatus = orderRows[index].status;
       orderRows[index] = order;
+      if (order.status !== oldStatus) {
+        logOrderStatusChange(order.id, oldStatus, order.status);
+      }
       persistOrders(`已更新订单 ${order.id} · ${getTimeCode()}`);
       notifyAction(`已保存订单 ${order.id}`, 'success', `order-save:${order.id}`);
       return true;
@@ -488,8 +572,8 @@
     const pageStart = (orderListPage - 1) * orderPageSize;
     const pagedOrders = visibleOrders.slice(pageStart, pageStart + orderPageSize);
     const modalOrder = normalizeOrder(orderRows[getOrderIndex(orderEditingId)] || {
-      customer: orderCustomerOptions[0],
-      formula: orderFormulaOptions[0],
+      customer: getOrderCustomerOptions()[0],
+      formula: getOrderFormulaOptions()[0],
       quantity: '',
       unitPrice: '',
       status: '待处理',
@@ -547,7 +631,7 @@
               <tbody>
                 ${pagedOrders.map((order) => `
                   <tr>
-                    <td><button class="biz-order-code" type="button" data-order-edit="${esc(order.id)}">${esc(order.id)}</button></td>
+                    <td><button class="biz-order-code" type="button" data-order-detail="${esc(order.id)}">${esc(order.id)}</button></td>
                     <td>${esc(order.customer)}</td>
                     <td>${esc(order.formula)}</td>
                     <td>${esc(formatOrderNumber(order.quantity))}</td>
@@ -592,25 +676,25 @@
           </div>
         </section>
         ${orderModalOpen ? `
-          <div class="biz-order-modal" data-order-modal>
-            <div class="biz-inventory-material-dialog biz-order-dialog" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+          <div class="biz-order-modal dialog-overlay" data-order-modal>
+            <div class="biz-inventory-material-dialog biz-order-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="orderModalTitle">${orderEditingId ? '编辑订单' : '新建订单'}</h2>
                   <span>${esc(orderDraftNote)}</span>
                 </div>
-                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭订单弹窗" data-order-close>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭订单弹窗" data-order-close>
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
               <div class="biz-order-editor">
                 <label>
                   <span>客户 *</span>
-                  <select data-order-field="customer">${renderOptions(orderCustomerOptions, modalOrder.customer)}</select>
+                  <select data-order-field="customer">${renderOptions(getOrderCustomerOptions(), modalOrder.customer)}</select>
                 </label>
                 <label>
                   <span>配方 *</span>
-                  <select data-order-field="formula">${renderOptions(orderFormulaOptions, modalOrder.formula)}</select>
+                  <select data-order-field="formula">${renderOptions(getOrderFormulaOptions(), modalOrder.formula)}</select>
                 </label>
                 <label>
                   <span>数量 (kg) *</span>
@@ -656,6 +740,798 @@
           </div>
         ` : ''}
       </section>
+    `;
+  };
+
+  const renderOrderDetail = () => {
+    const order = orderRows.find((o) => o.id === orderDetailId);
+    if (!order) {
+      return `
+        <section class="business-panel biz-order-detail-panel">
+          <div class="biz-order-detail-head">
+            <button class="biz-inventory-back-btn" type="button" data-order-detail-back>
+              <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回订单列表
+            </button>
+          </div>
+          <div class="biz-formula-empty">订单不存在或已被删除</div>
+        </section>
+      `;
+    }
+    const logs = getOrderLogs(orderDetailId);
+    const line = getProductionLineForOrder(order);
+    const currentIdx = orderStatusOptions.indexOf(order.status);
+    const statusReachedAt = {};
+    logs.forEach((entry) => { statusReachedAt[entry.toStatus] = entry.timestamp; });
+    return `
+      <section class="business-panel biz-order-detail-panel">
+        <div class="biz-order-detail-head">
+          <button class="biz-inventory-back-btn" type="button" data-order-detail-back>
+            <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回订单列表
+          </button>
+          <div class="biz-order-detail-title">
+            <h2>${esc(order.id)}</h2>
+            <span class="biz-order-status ${getOrderStatusClass(order.status)}">${esc(order.status)}</span>
+          </div>
+        </div>
+        <div class="biz-order-status-pipeline">
+          <div class="biz-status-pipeline-track">
+            ${orderStatusOptions.map((status, idx) => {
+              const isCompleted = idx < currentIdx;
+              const isCurrent = idx === currentIdx;
+              const reached = statusReachedAt[status];
+              const dt = reached ? new Date(reached) : null;
+              const dateStr = dt ? dt.toLocaleDateString('zh-CN') : '';
+              const timeStr = dt ? dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+              return `
+                <div class="biz-pipeline-node ${isCompleted ? 'is-done' : ''} ${isCurrent ? 'is-active' : ''}">
+                  <div class="biz-pipeline-dot">
+                    ${isCompleted ? '<i class="ti ti-check" aria-hidden="true"></i>' : ''}
+                    ${isCurrent ? '<span class="biz-pipeline-pulse"></span>' : ''}
+                  </div>
+                  <div class="biz-pipeline-label">${status}</div>
+                  ${dateStr ? `<div class="biz-pipeline-time">${dateStr} ${timeStr}</div>` : '<div class="biz-pipeline-time">&nbsp;</div>'}
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <div class="biz-status-pipeline-bar">
+            <div class="biz-status-pipeline-fill" style="width:${currentIdx >= 0 ? (currentIdx / (orderStatusOptions.length - 1)) * 100 : 0}%"></div>
+          </div>
+        </div>
+        <div class="biz-order-detail-grid">
+          <div class="biz-order-detail-field">
+            <label>客户</label>
+            <span>${esc(order.customer)}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>配方</label>
+            <span>${esc(order.formula)}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>数量 (KG)</label>
+            <span>${esc(formatOrderNumber(order.quantity))}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>单价 (¥/KG)</label>
+            <span>¥${esc(Number(order.unitPrice || 0).toFixed(2))}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>总金额 (¥)</label>
+            <span><strong>${esc(formatOrderAmount(getOrderAmount(order)))}</strong></span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>交货日期</label>
+            <span>${esc(order.deliveryDate)}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>生产日期</label>
+            <span>${esc(getOrderProductionDate(order))}</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>产线</label>
+            <span>${esc(line)} 号线</span>
+          </div>
+          <div class="biz-order-detail-field">
+            <label>排产号</label>
+            <span>${esc(order.productionNo || '-')}</span>
+          </div>
+          <div class="biz-order-detail-field is-note">
+            <label>备注</label>
+            <span>${esc(order.note || '无')}</span>
+          </div>
+        </div>
+        <div class="biz-order-detail-timeline">
+          <h3>状态变更记录</h3>
+          ${logs.length ? logs.map((entry) => {
+            const dt = new Date(entry.timestamp);
+            const dateStr = dt.toLocaleDateString('zh-CN');
+            const timeStr = dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            return `
+              <div class="biz-order-timeline-item">
+                <div class="biz-order-timeline-dot"></div>
+                <div class="biz-order-timeline-content">
+                  <span class="biz-order-timeline-time">${dateStr} ${timeStr}</span>
+                  <span class="biz-order-timeline-status">
+                    <span class="biz-order-status ${getOrderStatusClass(entry.fromStatus)}">${esc(entry.fromStatus)}</span>
+                    <i class="ti ti-arrow-right" aria-hidden="true"></i>
+                    <span class="biz-order-status ${getOrderStatusClass(entry.toStatus)}">${esc(entry.toStatus)}</span>
+                  </span>
+                </div>
+              </div>
+            `;
+          }).join('') : '<div class="biz-formula-empty">暂无状态变更记录</div>'}
+        </div>
+        <div class="biz-order-detail-actions">
+          <button class="biz-inventory-primary-btn" type="button" data-order-edit="${esc(order.id)}">编辑订单</button>
+        </div>
+      </section>
+    `;
+  };
+
+  const renderCustomerDetail = () => {
+    const customer = getCustomerByCode(customerDetailCode);
+    if (!customer) {
+      return `
+        <section class="business-panel biz-customer-detail-panel">
+          <div class="biz-order-detail-head">
+            <button class="biz-inventory-back-btn" type="button" data-customer-detail-back>
+              <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回客户档案
+            </button>
+          </div>
+          <div class="biz-formula-empty">客户不存在或已被删除</div>
+        </section>
+      `;
+    }
+    const orders = getCustomerOrders(customer.name);
+    const productStats = getCustomerProductStats(orders);
+    const totalAmount = productStats.reduce((sum, p) => sum + p.totalAmount, 0);
+    const totalQty = productStats.reduce((sum, p) => sum + p.totalQty, 0);
+    const activeOrders = orders.filter((o) => !['已完成', '已发货', '已结清'].includes(o.status));
+    const topProducts = productStats.slice(0, 3);
+    const firstOrderDate = orders.length ? orders[orders.length - 1].deliveryDate : '';
+    const lastOrderDate = orders.length ? orders[0].deliveryDate : '';
+    const statusDist = {};
+    orders.forEach((o) => { statusDist[o.status] = (statusDist[o.status] || 0) + 1; });
+    return `
+      <section class="business-panel biz-customer-detail-panel">
+        <div class="biz-order-detail-head">
+          <button class="biz-inventory-back-btn" type="button" data-customer-detail-back>
+            <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回客户档案
+          </button>
+          <div class="biz-order-detail-title">
+            <h2>${esc(customer.name)}</h2>
+            <span class="biz-customer-grade">${esc(customer.category)}</span>
+            <span class="biz-formula-status ${getArchiveStatusClass(customer.status)}">${esc(customer.status)}</span>
+          </div>
+        </div>
+        <div class="biz-customer-kpi-strip">
+          <article>
+            <span class="kpi-eyebrow">累计采购次数</span>
+            <strong>${orders.length}</strong>
+            <small>单</small>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">采购总额</span>
+            <strong>${esc(formatOrderAmount(totalAmount))}</strong>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">采购总量</span>
+            <strong>${esc(formatOrderNumber(totalQty))}</strong>
+            <small>KG</small>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">涉及产品</span>
+            <strong>${productStats.length}</strong>
+            <small>种</small>
+          </article>
+        </div>
+        <div class="biz-customer-info-row">
+          <div class="biz-order-detail-grid biz-customer-info-grid">
+            <div class="biz-order-detail-field">
+              <label>客户编号</label>
+              <span>${esc(customer.code)}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>联系人</label>
+              <span>${esc(customer.contact || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>电话</label>
+              <span>${esc(customer.phone || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>邮箱</label>
+              <span>${esc(customer.email || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>地址</label>
+              <span>${esc(customer.address || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field is-note">
+              <label>备注</label>
+              <span>${esc(customer.note || '无')}</span>
+            </div>
+          </div>
+          <div class="biz-customer-status-dist">
+            <h4>订单状态分布</h4>
+            ${orderStatusOptions.map((s) => {
+              const count = statusDist[s] || 0;
+              const pct = orders.length ? Math.round(count / orders.length * 100) : 0;
+              return `
+                <div class="biz-status-dist-row">
+                  <span class="biz-order-status ${getOrderStatusClass(s)}">${s}</span>
+                  <div class="biz-status-dist-bar"><div class="biz-status-dist-fill" style="width:${pct}%"></div></div>
+                  <strong>${count}</strong>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="biz-customer-section">
+          <h3>产品采购分析</h3>
+          ${productStats.length ? `
+            <div class="biz-customer-product-table-wrap">
+              <table class="biz-formula-table biz-order-table ui-table">
+                <thead>
+                  <tr>
+                    <th>产品名称</th>
+                    <th>采购次数</th>
+                    <th>累计数量 (KG)</th>
+                    <th>累计金额 (¥)</th>
+                    <th>占比</th>
+                    <th>最近交期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${productStats.map((p) => `
+                    <tr>
+                      <td>${esc(p.formula)}</td>
+                      <td>${p.count}</td>
+                      <td>${esc(formatOrderNumber(p.totalQty))}</td>
+                      <td><strong>${esc(formatOrderAmount(p.totalAmount))}</strong></td>
+                      <td>
+                        <div class="biz-customer-product-bar">
+                          <div class="biz-customer-product-fill" style="width:${totalAmount ? Math.round(p.totalAmount / totalAmount * 100) : 0}%"></div>
+                          <span>${totalAmount ? Math.round(p.totalAmount / totalAmount * 100) : 0}%</span>
+                        </div>
+                      </td>
+                      <td>${esc(p.lastDate)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="biz-formula-empty">暂无采购记录</div>'}
+        </div>
+        <div class="biz-customer-section">
+          <h3>需求分析</h3>
+          <div class="biz-customer-demand-grid">
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-star" aria-hidden="true"></i> 主力采购产品</h4>
+              ${topProducts.length ? `
+                <ol class="biz-demand-list">
+                  ${topProducts.map((p) => `<li><span>${esc(p.formula)}</span><strong>${esc(formatOrderAmount(p.totalAmount))}</strong></li>`).join('')}
+                </ol>
+              ` : '<p class="biz-demand-hint">暂无数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-activity" aria-hidden="true"></i> 采购活跃度</h4>
+              ${orders.length ? `
+                <div class="biz-demand-insight">
+                  <p>首次采购 <strong>${esc(firstOrderDate)}</strong>，最近采购 <strong>${esc(lastOrderDate)}</strong></p>
+                  <p>累计 ${orders.length} 笔订单，覆盖 ${productStats.length} 种产品</p>
+                  <p>${activeOrders.length ? `当前有 <strong>${activeOrders.length}</strong> 笔订单处理中` : '当前无处理中订单'}</p>
+                </div>
+              ` : '<p class="biz-demand-hint">暂无采购数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-chart-bar" aria-hidden="true"></i> 采购偏好</h4>
+              ${productStats.length ? `
+                <div class="biz-demand-insight">
+                  <p>偏好采购 <strong>${esc(topProducts[0]?.formula || '--')}</strong>，占总额 <strong>${topProducts.length ? Math.round(topProducts[0].totalAmount / totalAmount * 100) : 0}%</strong></p>
+                  <p>${productStats.length >= 3 ? `前三种产品占比 <strong>${Math.round(topProducts.reduce((s, p) => s + p.totalAmount, 0) / totalAmount * 100)}%</strong>` : ''}</p>
+                  <p>${activeOrders.filter((o) => o.status === '生产中').length ? `当前 <strong>${activeOrders.filter((o) => o.status === '生产中').length}</strong> 种产品正在生产中` : ''}</p>
+                </div>
+              ` : '<p class="biz-demand-hint">暂无数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-bulb" aria-hidden="true"></i> 跟进建议</h4>
+              <div class="biz-demand-insight">
+                ${(() => {
+                  const tips = [];
+                  if (!lastOrderDate || new Date(lastOrderDate) < new Date(Date.now() - 30 * 86400000)) tips.push('客户近期无新订单，建议主动跟进回访');
+                  if (activeOrders.length > 2) tips.push(`当前 ${activeOrders.length} 笔订单处理中，注意生产进度跟踪`);
+                  if (customer.category === '重点客户' && orders.length < 3) tips.push('重点客户订单量偏少，建议了解原因并争取增量');
+                  if (customer.status === '暂停服务') tips.push('⚠️ 客户当前暂停服务，确认是否需要恢复合作');
+                  if (customer.status === '样品跟进') tips.push('样品阶段客户，建议确认样品反馈并推动量产订单');
+                  if (customer.status === '账期复核') tips.push('客户账期复核中，关注回款情况再排新单');
+                  if (!tips.length) tips.push('客户关系良好，继续保持现有服务水平');
+                  return tips.map((t) => `<p>${t}</p>`).join('');
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="biz-customer-section">
+          <h3>采购明细</h3>
+          ${orders.length ? `
+            <div class="biz-customer-product-table-wrap">
+              <table class="biz-formula-table biz-order-table ui-table">
+                <thead>
+                  <tr>
+                    <th>订单号</th>
+                    <th>产品</th>
+                    <th>数量 (KG)</th>
+                    <th>金额 (¥)</th>
+                    <th>状态</th>
+                    <th>交货日期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${orders.map((o) => `
+                    <tr>
+                      <td><button class="biz-order-code" type="button" data-order-detail="${esc(o.id)}">${esc(o.id)}</button></td>
+                      <td>${esc(o.formula)}</td>
+                      <td>${esc(formatOrderNumber(o.quantity))}</td>
+                      <td><strong>${esc(formatOrderAmount(getOrderAmount(o)))}</strong></td>
+                      <td><span class="biz-order-status ${getOrderStatusClass(o.status)}">${esc(o.status)}</span></td>
+                      <td>${esc(o.deliveryDate)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="biz-formula-empty">该客户暂无采购记录</div>'}
+        </div>
+        <div class="biz-order-detail-actions">
+          <button class="biz-inventory-primary-btn" type="button" data-archive-edit="customer" data-archive-code="${esc(customer.code)}">编辑客户信息</button>
+        </div>
+      </section>
+    `;
+  };
+
+  let supplierDetailCode = '';
+
+  const renderSupplierDetail = () => {
+    const supplier = getSupplierByCode(supplierDetailCode);
+    if (!supplier) {
+      return `
+        <section class="business-panel biz-customer-detail-panel biz-supplier-detail-panel">
+          <div class="biz-order-detail-head">
+            <button class="biz-inventory-back-btn" type="button" data-supplier-detail-back>
+              <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回供应商档案
+            </button>
+          </div>
+          <div class="biz-formula-empty">供应商不存在或已被删除</div>
+        </section>
+      `;
+    }
+    const procurements = getSupplierProcurements(supplier.name);
+    const materialStats = getSupplierMaterialStats(procurements);
+    const totalAmount = materialStats.reduce((sum, m) => sum + m.totalAmount, 0);
+    const totalQty = materialStats.reduce((sum, m) => sum + m.totalQty, 0);
+    const activeProcurements = procurements.filter((p) => !['已结算', '已入库'].includes(p.status));
+    const topMaterials = materialStats.slice(0, 3);
+    const firstProcurementDate = procurements.length ? procurements[procurements.length - 1].purchaseDate : '';
+    const lastProcurementDate = procurements.length ? procurements[0].purchaseDate : '';
+    const statusDist = {};
+    procurements.forEach((p) => { statusDist[p.status] = (statusDist[p.status] || 0) + 1; });
+    return `
+      <section class="business-panel biz-customer-detail-panel biz-supplier-detail-panel">
+        <div class="biz-order-detail-head">
+          <button class="biz-inventory-back-btn" type="button" data-supplier-detail-back>
+            <i class="ti ti-arrow-left" aria-hidden="true"></i> 返回供应商档案
+          </button>
+          <div class="biz-order-detail-title">
+            <h2>${esc(supplier.name)}</h2>
+            <span class="biz-customer-grade">${esc(supplier.category)}</span>
+            <span class="biz-formula-status ${getSupplierStatusClass(supplier.status)}">${esc(supplier.status)}</span>
+          </div>
+        </div>
+        <div class="biz-customer-kpi-strip">
+          <article>
+            <span class="kpi-eyebrow">累计采购次数</span>
+            <strong>${procurements.length}</strong>
+            <small>次</small>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">采购总额</span>
+            <strong>${esc(formatOrderAmount(totalAmount))}</strong>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">采购总量</span>
+            <strong>${esc(formatOrderNumber(totalQty))}</strong>
+            <small>KG</small>
+          </article>
+          <article>
+            <span class="kpi-eyebrow">涉及原料</span>
+            <strong>${materialStats.length}</strong>
+            <small>种</small>
+          </article>
+        </div>
+        <div class="biz-customer-info-row">
+          <div class="biz-order-detail-grid biz-customer-info-grid">
+            <div class="biz-order-detail-field">
+              <label>供应商编号</label>
+              <span>${esc(supplier.code)}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>联系人</label>
+              <span>${esc(supplier.contact || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>电话</label>
+              <span>${esc(supplier.phone || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>邮箱</label>
+              <span>${esc(supplier.email || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field">
+              <label>地址</label>
+              <span>${esc(supplier.address || '--')}</span>
+            </div>
+            <div class="biz-order-detail-field is-note">
+              <label>备注</label>
+              <span>${esc(supplier.note || '无')}</span>
+            </div>
+          </div>
+          <div class="biz-customer-status-dist">
+            <h4>采购状态分布</h4>
+            ${procurementStatusOptions.map((s) => {
+              const count = statusDist[s] || 0;
+              const pct = procurements.length ? Math.round(count / procurements.length * 100) : 0;
+              return `
+                <div class="biz-status-dist-row">
+                  <span class="biz-order-status ${getProcurementStatusClass(s)}">${s}</span>
+                  <div class="biz-status-dist-bar"><div class="biz-status-dist-fill" style="width:${pct}%"></div></div>
+                  <strong>${count}</strong>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="biz-customer-section">
+          <h3>原料采购分析</h3>
+          ${materialStats.length ? `
+            <div class="biz-customer-product-table-wrap">
+              <table class="biz-formula-table biz-order-table ui-table">
+                <thead>
+                  <tr>
+                    <th>原料名称</th>
+                    <th>采购次数</th>
+                    <th>累计数量 (KG)</th>
+                    <th>累计金额 (¥)</th>
+                    <th>占比</th>
+                    <th>最近采购</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${materialStats.map((m) => `
+                    <tr>
+                      <td>${esc(m.material)}</td>
+                      <td>${m.count}</td>
+                      <td>${esc(formatOrderNumber(m.totalQty))}</td>
+                      <td><strong>${esc(formatOrderAmount(m.totalAmount))}</strong></td>
+                      <td>
+                        <div class="biz-customer-product-bar">
+                          <div class="biz-customer-product-fill" style="width:${totalAmount ? Math.round(m.totalAmount / totalAmount * 100) : 0}%"></div>
+                          <span>${totalAmount ? Math.round(m.totalAmount / totalAmount * 100) : 0}%</span>
+                        </div>
+                      </td>
+                      <td>${esc(m.lastDate)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="biz-formula-empty">暂无采购记录</div>'}
+        </div>
+        <div class="biz-customer-section">
+          <h3>供应分析</h3>
+          <div class="biz-customer-demand-grid">
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-star" aria-hidden="true"></i> 主力供应原料</h4>
+              ${topMaterials.length ? `
+                <ol class="biz-demand-list">
+                  ${topMaterials.map((m) => `<li><span>${esc(m.material)}</span><strong>${esc(formatOrderAmount(m.totalAmount))}</strong></li>`).join('')}
+                </ol>
+              ` : '<p class="biz-demand-hint">暂无数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-activity" aria-hidden="true"></i> 采购活跃度</h4>
+              ${procurements.length ? `
+                <div class="biz-demand-insight">
+                  <p>首次采购 <strong>${esc(firstProcurementDate)}</strong>，最近采购 <strong>${esc(lastProcurementDate)}</strong></p>
+                  <p>累计 ${procurements.length} 笔采购，覆盖 ${materialStats.length} 种原料</p>
+                  <p>${activeProcurements.length ? `当前有 <strong>${activeProcurements.length}</strong> 笔采购处理中` : '当前无处理中采购'}</p>
+                </div>
+              ` : '<p class="biz-demand-hint">暂无采购数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-chart-bar" aria-hidden="true"></i> 采购偏好</h4>
+              ${materialStats.length ? `
+                <div class="biz-demand-insight">
+                  <p>偏好采购 <strong>${esc(topMaterials[0]?.material || '--')}</strong>，占总额 <strong>${topMaterials.length ? Math.round(topMaterials[0].totalAmount / totalAmount * 100) : 0}%</strong></p>
+                  <p>${materialStats.length >= 3 ? `前三种原料占比 <strong>${Math.round(topMaterials.reduce((s, m) => s + m.totalAmount, 0) / totalAmount * 100)}%</strong>` : ''}</p>
+                  <p>${activeProcurements.filter((p) => p.status === '已质检').length ? `当前 <strong>${activeProcurements.filter((p) => p.status === '已质检').length}</strong> 种原料正在质检中` : ''}</p>
+                </div>
+              ` : '<p class="biz-demand-hint">暂无数据</p>'}
+            </div>
+            <div class="biz-customer-demand-card">
+              <h4><i class="ti ti-bulb" aria-hidden="true"></i> 跟进建议</h4>
+              <div class="biz-demand-insight">
+                ${(() => {
+                  const tips = [];
+                  if (!lastProcurementDate || new Date(lastProcurementDate) < new Date(Date.now() - 60 * 86400000)) tips.push('供应商近期无采购订单，建议评估合作关系');
+                  if (activeProcurements.length > 2) tips.push(`当前 ${activeProcurements.length} 笔采购处理中，注意跟进到货进度`);
+                  if (supplier.category === '基础树脂' && materialStats.length < 3) tips.push('基础树脂供应商原料种类偏少，建议拓展供应品类');
+                  if (supplier.status === '暂停合作') tips.push('⚠️ 供应商当前暂停合作，确认是否需要恢复');
+                  if (supplier.status === '样品评估') tips.push('样品评估阶段供应商，确认样品测试结果并推动正式合作');
+                  if (!tips.length) tips.push('供应商合作稳定，继续保持现有供应关系');
+                  return tips.map((t) => `<p>${t}</p>`).join('');
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="biz-customer-section">
+          <h3>采购明细</h3>
+          ${procurements.length ? `
+            <div class="biz-customer-product-table-wrap">
+              <table class="biz-formula-table biz-order-table ui-table">
+                <thead>
+                  <tr>
+                    <th>采购单号</th>
+                    <th>原料</th>
+                    <th>数量 (KG)</th>
+                    <th>金额 (¥)</th>
+                    <th>状态</th>
+                    <th>采购日期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${procurements.map((p) => `
+                    <tr>
+                      <td><span class="biz-order-code">${esc(p.id)}</span></td>
+                      <td>${esc(p.material)}</td>
+                      <td>${esc(formatOrderNumber(p.quantity))}</td>
+                      <td><strong>${esc(formatOrderAmount(Number(p.quantity || 0) * Number(p.unitPrice || 0)))}</strong></td>
+                      <td><span class="biz-order-status ${getProcurementStatusClass(p.status)}">${esc(p.status)}</span></td>
+                      <td>${esc(p.purchaseDate)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="biz-formula-empty">该供应商暂无采购记录</div>'}
+        </div>
+        <div class="biz-order-detail-actions">
+          <button class="biz-inventory-primary-btn" type="button" data-supplier-edit="${esc(supplier.code)}">编辑供应商信息</button>
+        </div>
+      </section>
+    `;
+  };
+
+  const getProcurementStatusClass = (status) => {
+    if (/已结算|已入库/.test(status)) return 'is-ok';
+    if (/已发货|已到货|已质检/.test(status)) return 'is-info';
+    if (/已下单/.test(status)) return 'is-warn';
+    return '';
+  };
+
+  const persistProcurements = (note = '原料采购记录已保存') => {
+    procurementDraftNote = note;
+    utils.writeJson(PROCUREMENT_STORAGE_KEY, procurementRows);
+  };
+
+  const getNextProcurementId = () => {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const todayRows = procurementRows.filter((p) => p.id.startsWith(`PR-${today}`));
+    const maxNumber = todayRows.reduce((max, p) => {
+      const num = parseInt(p.id.split('-').pop(), 10);
+      return num > max ? num : max;
+    }, 0);
+    return `PR-${today}-${String(maxNumber + 1).padStart(2, '0')}`;
+  };
+
+  const saveProcurement = () => {
+    const pick = (sel) => refs.businessPageContent?.querySelector(sel)?.value ?? '';
+    const id = pick('[data-procurement-field="id"]').trim();
+    const supplier = pick('[data-procurement-field="supplier"]').trim();
+    const material = pick('[data-procurement-field="material"]').trim();
+    const quantity = parseFloat(pick('[data-procurement-field="quantity"]')) || 0;
+    const unitPrice = parseFloat(pick('[data-procurement-field="unitPrice"]')) || 0;
+    const purchaseDate = pick('[data-procurement-field="purchaseDate"]').trim();
+    const status = pick('[data-procurement-field="status"]').trim();
+    const note = pick('[data-procurement-field="note"]').trim();
+    if (!supplier || !material) {
+      notifyAction('请填写供应商和原料名称', 'warning', 'procurement-validation');
+      return false;
+    }
+    const record = normalizeProcurement({ id, supplier, material, quantity, unitPrice, purchaseDate, status, note }, procurementRows.length);
+    if (procurementEditingId) {
+      const idx = procurementRows.findIndex((p) => p.id === procurementEditingId);
+      if (idx >= 0) procurementRows[idx] = record;
+    } else {
+      procurementRows.push(record);
+    }
+    persistProcurements(procurementEditingId ? `已更新采购记录 ${id} · ${getTimeCode()}` : `已新增采购记录 ${id} · ${getTimeCode()}`);
+    notifyAction(procurementEditingId ? `已更新采购记录 ${id}` : `已新增采购记录 ${id}`, 'success', `procurement-save:${id}`);
+    procurementEditingId = '';
+    return true;
+  };
+
+  const deleteProcurement = async (id) => {
+    const procurement = procurementRows.find((p) => p.id === id);
+    if (!procurement) return false;
+    const confirmed = await confirmDialog('删除采购记录', `确定要删除采购单 ${id} 吗？该操作不可恢复。`);
+    if (!confirmed) return false;
+    const idx = procurementRows.indexOf(procurement);
+    procurementRows.splice(idx, 1);
+    persistProcurements(`已删除采购记录 ${id} · ${getTimeCode()}`);
+    notifyAction(`已删除采购记录 ${id}`, 'success', `procurement-delete:${id}`);
+    return true;
+  };
+
+  const renderRawMaterialProcurement = () => {
+    const supplierOptions = ['全部', ...new Set(procurementRows.map((p) => p.supplier).filter(Boolean))].sort();
+    if (!supplierOptions.includes(procurementSupplierFilter)) procurementSupplierFilter = '全部';
+    const normalizedSearch = procurementSearchQuery.trim().toLowerCase();
+    const visibleProcurements = procurementRows.filter((p) => {
+      const matchedSupplier = procurementSupplierFilter === '全部' || p.supplier === procurementSupplierFilter;
+      const values = [p.id, p.supplier, p.material, p.status, p.note];
+      const matchedSearch = !normalizedSearch || values.some((v) => String(v).toLowerCase().includes(normalizedSearch));
+      return matchedSupplier && matchedSearch;
+    });
+    const filteredCount = visibleProcurements.length;
+    const totalPages = Math.max(1, Math.ceil(filteredCount / procurementPageSize));
+    procurementListPage = Math.min(Math.max(1, procurementListPage), totalPages);
+    const pageStart = (procurementListPage - 1) * procurementPageSize;
+    const pagedProcurements = visibleProcurements.slice(pageStart, pageStart + procurementPageSize);
+    const editingProcurement = procurementEditingId ? procurementRows.find((p) => p.id === procurementEditingId) : null;
+    const procurementForm = editingProcurement || normalizeProcurement({ id: getNextProcurementId(), status: '已下单' });
+    const procurementFormAmount = Number(procurementForm.quantity || 0) * Number(procurementForm.unitPrice || 0);
+
+    return `
+      <div class="biz-supplier-page biz-procurement-page">
+        <section class="business-panel biz-supplier-table-panel biz-procurement-table-panel">
+          <div class="biz-formula-table-head biz-supplier-table-head">
+            <div class="biz-formula-table-title">
+              <i class="ti ti-package-import" aria-hidden="true"></i>
+              <div>
+                <h2>原料采购管理</h2>
+              </div>
+            </div>
+            <div class="biz-formula-table-actions biz-supplier-table-actions">
+              ${renderSearchBox({
+                className: 'biz-supplier-search',
+                value: procurementSearchQuery,
+                placeholder: '搜索采购单号、原料、供应商...',
+                label: '搜索原料采购记录',
+                attributes: { 'data-procurement-search': '' },
+              })}
+              <select data-procurement-supplier-filter aria-label="供应商筛选">
+                ${supplierOptions.map((s) => `
+                  <option value="${esc(s)}" ${s === procurementSupplierFilter ? 'selected' : ''}>${esc(s === '全部' ? '全部供应商' : s)}</option>
+                `).join('')}
+              </select>
+              <button class="biz-formula-new-btn" type="button" data-procurement-new>
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>新增采购</span>
+              </button>
+            </div>
+          </div>
+          <div class="ui-table-wrap biz-supplier-table-wrap">
+            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table biz-procurement-table">
+              <thead>
+                <tr>${['采购单号', '供应商', '原料名称', '数量 (KG)', '单价 (¥)', '金额 (¥)', '采购日期', '状态', '操作'].map((c) => `<th>${esc(c)}</th>`).join('')}</tr>
+              </thead>
+              <tbody>
+                ${pagedProcurements.map((p) => `
+                  <tr>
+                    <td>${esc(p.id)}</td>
+                    <td><button class="biz-order-code" type="button" data-supplier-detail-from-procurement="${esc(supplierRows.find((s) => s.name === p.supplier)?.code || '')}">${esc(p.supplier)}</button></td>
+                    <td>${esc(p.material)}</td>
+                    <td>${esc(formatOrderNumber(p.quantity))}</td>
+                    <td>${esc(p.unitPrice.toFixed(2))}</td>
+                    <td><strong>${esc(formatOrderAmount(Number(p.quantity || 0) * Number(p.unitPrice || 0)))}</strong></td>
+                    <td>${esc(p.purchaseDate)}</td>
+                    <td><span class="biz-formula-status ${getProcurementStatusClass(p.status)}">${esc(p.status)}</span></td>
+                    <td>
+                      <div class="biz-supplier-row-actions">
+                        <button type="button" title="编辑采购记录" aria-label="编辑采购 ${esc(p.id)}" data-procurement-edit="${esc(p.id)}">
+                          <i class="ti ti-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button class="is-danger" type="button" title="删除采购记录" aria-label="删除采购 ${esc(p.id)}" data-procurement-delete="${esc(p.id)}">
+                          <i class="ti ti-trash" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('') || '<tr><td colspan="9"><div class="biz-formula-empty">暂无匹配采购记录</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="biz-formula-pagination biz-supplier-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-procurement-page-size aria-label="采购每页条数">${procurementPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === procurementPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-procurement-page-prev ${procurementListPage <= 1 ? 'disabled' : ''} aria-label="采购上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${procurementListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-procurement-page-next ${procurementListPage >= totalPages ? 'disabled' : ''} aria-label="采购下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${procurementModalOpen ? `
+          <div class="biz-order-modal dialog-overlay" data-procurement-modal>
+            <div class="biz-inventory-material-dialog biz-order-dialog biz-supplier-dialog biz-procurement-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="procurementModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="procurementModalTitle">${procurementEditingId ? '编辑采购记录' : '新增采购记录'}</h2>
+                  <span>${esc(procurementDraftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭采购编辑" data-procurement-close>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-supplier-editor">
+                <label class="is-code">
+                  <span>采购单号</span>
+                  <input type="text" value="${esc(procurementForm.id)}" placeholder="例如：PR-20260420" data-procurement-field="id" ${procurementEditingId ? 'readonly' : ''}>
+                </label>
+                <label class="is-name">
+                  <span>供应商 *</span>
+                  <select data-procurement-field="supplier">${renderOptions(supplierRows.map((s) => s.name).filter(Boolean), procurementForm.supplier)}</select>
+                </label>
+                <label>
+                  <span>原料名称 *</span>
+                  <input type="text" value="${esc(procurementForm.material)}" placeholder="原料名称" data-procurement-field="material">
+                </label>
+                <label>
+                  <span>数量 (KG)</span>
+                  <input type="number" value="${esc(String(procurementForm.quantity))}" placeholder="0" min="0" step="0.01" data-procurement-field="quantity">
+                </label>
+                <label>
+                  <span>单价 (¥)</span>
+                  <input type="number" value="${esc(String(procurementForm.unitPrice))}" placeholder="0.00" min="0" step="0.01" data-procurement-field="unitPrice">
+                </label>
+                <label class="is-calc">
+                  <span>金额 (¥)</span>
+                  <input type="text" value="${esc(formatOrderAmount(procurementFormAmount))}" readonly>
+                </label>
+                <label>
+                  <span>采购日期</span>
+                  <input type="date" value="${esc(procurementForm.purchaseDate)}" data-procurement-field="purchaseDate">
+                </label>
+                <label>
+                  <span>状态</span>
+                  <select data-procurement-field="status">${renderOptions(procurementStatusOptions, procurementForm.status)}</select>
+                </label>
+                <label class="is-note">
+                  <span>备注</span>
+                  <textarea placeholder="采购备注信息" data-procurement-field="note">${esc(procurementForm.note)}</textarea>
+                </label>
+                <div class="biz-inventory-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-procurement-cancel>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-procurement-save>保存</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
     `;
   };
 
@@ -1461,14 +2337,14 @@
           </div>
         </section>
         ${inventoryMaterialModalOpen ? `
-          <div class="biz-inventory-material-modal" data-inventory-material-modal>
-            <div class="biz-inventory-material-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryMaterialModalTitle">
+          <div class="biz-inventory-material-modal dialog-overlay" data-inventory-material-modal>
+            <div class="biz-inventory-material-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="inventoryMaterialModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="inventoryMaterialModalTitle">${inventoryEditingMaterialName ? '编辑材料' : '新增材料'}</h2>
                   <span>${esc(inventoryDraftNote)}</span>
                 </div>
-                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭材料编辑" data-inventory-close-material-modal>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭材料编辑" data-inventory-close-material-modal>
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
@@ -1518,14 +2394,14 @@
           </div>
         ` : ''}
         ${inventoryCategoryModalOpen ? `
-          <div class="biz-inventory-category-modal" data-inventory-category-modal>
-            <div class="biz-inventory-category-dialog" role="dialog" aria-modal="true" aria-labelledby="inventoryCategoryModalTitle">
+          <div class="biz-inventory-category-modal dialog-overlay" data-inventory-category-modal>
+            <div class="biz-inventory-category-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="inventoryCategoryModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="inventoryCategoryModalTitle">分类管理</h2>
                   <span>${esc(inventoryDraftNote)}</span>
                 </div>
-                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭分类管理" data-inventory-close-category-modal>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭分类管理" data-inventory-close-category-modal>
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
@@ -2121,6 +2997,120 @@
   const createFormulaRecipe = () => {
     beginFormulaEdit(createEmptyFormulaRecipe(), { isNew: true });
     formulaDraftNote = '新建配方未保存';
+  };
+
+  const normalizeFormulaSkillText = (value) => String(value ?? '')
+    .toLowerCase()
+    .replace(/[\s\-_/（）()【】[\]{}.,，。:：;；'"“”‘’]+/g, '');
+
+  const normalizeFormulaSkillList = (value) => {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    return String(value || '')
+      .split(/[，,、\n;；]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+
+  const normalizeFormulaMaterialInput = (materials = []) => {
+    const source = Array.isArray(materials) ? materials : normalizeFormulaSkillList(materials);
+    return source.map((item, index) => {
+      const material = typeof item === 'object' && item ? item : { name: item };
+      const name = String(material.name || material.material || material.title || '').trim();
+      if (!name) return null;
+      return {
+        ...getDefaultFormulaMaterial(name, material.port || getLeastUsedPort([])),
+        name,
+        port: normalizeFeederPort(material.port, (index % feederPorts.length) + 1),
+        ratio: Number(material.ratio ?? material.percent ?? material.percentage ?? 0),
+        tolerance: String(material.tolerance || '±0.1%'),
+        role: String(material.role || getDefaultFormulaMaterial(name).role || '配方材料'),
+        stage: String(material.stage || getDefaultFormulaMaterial(name).stage || '待设定'),
+      };
+    }).filter(Boolean);
+  };
+
+  const toFormulaSkillItem = (recipe) => ({
+    id: recipe.id,
+    code: recipe.code || recipe.id.replace(/^FM-/, ''),
+    name: recipe.name,
+    product: recipe.product,
+    category: getFormulaCategory(recipe),
+    status: getFormulaDisplayStatus(recipe.status),
+    line: recipe.line || 'A',
+    version: recipe.version,
+    updated: recipe.updated,
+  });
+
+  const createFormulaByAgent = (input = {}) => {
+    const code = String(input.code || input.id || '').trim().replace(/^FM-/i, '');
+    const product = String(input.product || input.productName || input.model || '').trim();
+    const name = String(input.name || input.title || input.formulaName || product || code || '').trim();
+
+    if (!name && !code && !product) {
+      return { ok: false, message: '请提供要创建的配方名称、编号或产品型号。' };
+    }
+
+    const duplicateKey = normalizeFormulaSkillText(code || product || name);
+    const duplicate = formulaRecipes.find((recipe) => [
+      recipe.id,
+      recipe.code,
+      recipe.name,
+      recipe.product,
+    ].some((value) => normalizeFormulaSkillText(value) === duplicateKey));
+    if (duplicate) {
+      return {
+        ok: false,
+        message: `已存在配方「${duplicate.name || duplicate.code}」，暂未重复创建。`,
+        candidates: [toFormulaSkillItem(duplicate)],
+        data: { created: 0, items: [toFormulaSkillItem(duplicate)] },
+      };
+    }
+
+    const recipe = createEmptyFormulaRecipe();
+    recipe.code = code || product || recipe.id.replace(/^FM-/, '');
+    recipe.name = name || `${recipe.code} 配方`;
+    recipe.product = product || recipe.code;
+    recipe.category = String(input.category || inferFormulaCategory(recipe)).trim();
+    recipe.status = String(input.status || '实验').trim();
+    recipe.line = formulaLineOptions.includes(input.line) ? input.line : 'A';
+    recipe.owner = String(input.owner || input.creator || 'AI助手').trim();
+    recipe.batchSize = String(input.batchSize || input.batch || '').trim();
+    recipe.target = String(input.target || input.note || input.description || 'AI 创建的配方草稿，请补充配比、工艺参数和验证计划。').trim();
+    recipe.materials = normalizeFormulaMaterialInput(input.materials || input.ingredients || input.components);
+    recipe.process = Array.isArray(input.process)
+      ? input.process.map((item) => (Array.isArray(item)
+        ? [String(item[0] || '').trim(), String(item[1] || '').trim()]
+        : [String(item.step || item.name || '').trim(), String(item.detail || item.value || '').trim()]))
+        .filter((item) => item[0] || item[1])
+      : [];
+    recipe.checks = normalizeFormulaSkillList(input.checks || input.tests || input.validation);
+    recipe.updated = getTodayCode();
+    recipe.versions = [createFormulaVersionRecord(recipe, recipe.version, 'AI创建')];
+
+    formulaRecipes.unshift(recipe);
+    activeFormulaId = recipe.id;
+    formulaSearchQuery = '';
+    formulaListCategory = '全部';
+    formulaListStatus = '全部';
+    formulaListPage = 1;
+    formulaViewMode = 'list';
+    clearFormulaEditorDraft();
+    persistFormulaRecipes(`AI 已创建配方 ${recipe.name} · ${getTimeCode()}`);
+    render('formula-management');
+    App.projectSkills?.render?.();
+    notifyAction(`已创建配方 ${recipe.name}`, 'success', `formula-create:${recipe.id}`);
+
+    return {
+      ok: true,
+      message: `新配方记录已创建：${recipe.name}。`,
+      details: [
+        `配方编号：${recipe.code}`,
+        `产品型号：${recipe.product}`,
+        `分类/产线：${getFormulaCategory(recipe)} / ${recipe.line || 'A'}线`,
+        `当前列表总数：${formulaRecipes.length} 个`,
+      ],
+      data: { created: 1, items: [toFormulaSkillItem(recipe)] },
+    };
   };
 
   const deleteFormulaRecipe = async (recipeId) => {
@@ -3162,6 +4152,21 @@
     return 'is-ok';
   };
 
+  const getCustomerByCode = (code) => archiveStates['customer']?.rows.find((r) => r.code === code);
+  const getCustomerOrders = (customerName) => orderRows.filter((o) => o.customer === customerName).sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
+  const getCustomerProductStats = (orders) => {
+    const map = {};
+    orders.forEach((o) => {
+      const key = o.formula;
+      if (!map[key]) map[key] = { formula: key, count: 0, totalQty: 0, totalAmount: 0, lastDate: '' };
+      map[key].count++;
+      map[key].totalQty += Number(o.quantity || 0);
+      map[key].totalAmount += getOrderAmount(o);
+      if (!map[key].lastDate || o.deliveryDate > map[key].lastDate) map[key].lastDate = o.deliveryDate;
+    });
+    return Object.values(map).sort((a, b) => b.totalAmount - a.totalAmount);
+  };
+
   const persistArchive = (kind, note) => {
     const config = archiveConfigs[kind];
     const state = archiveStates[kind];
@@ -3261,6 +4266,25 @@
   };
 
   const getSupplierByCode = (code) => supplierRows.find((supplier) => supplier.code === code);
+
+  const getSupplierProcurements = (supplierName) => procurementRows.filter((p) => p.supplier === supplierName).sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  const getSupplierMaterialStats = (procurements) => {
+    const map = {};
+    procurements.forEach((p) => {
+      const key = p.material;
+      if (!map[key]) map[key] = { material: key, count: 0, totalQty: 0, totalAmount: 0, lastDate: '' };
+      map[key].count++;
+      map[key].totalQty += Number(p.quantity || 0);
+      map[key].totalAmount += Number(p.quantity || 0) * Number(p.unitPrice || 0);
+      if (!map[key].lastDate || p.purchaseDate > map[key].lastDate) map[key].lastDate = p.purchaseDate;
+    });
+    return Object.values(map).sort((a, b) => b.totalAmount - a.totalAmount);
+  };
+
+  const getSupplierCategoryOptions = () => {
+    const cats = new Set(supplierRows.map((s) => s.category).filter(Boolean));
+    return [...cats].sort();
+  };
 
   const getSupplierStatusClass = (status) => {
     if (/暂停/.test(status)) return 'is-danger';
@@ -3411,7 +4435,7 @@
                 ${pagedSuppliers.map((supplier) => `
                   <tr>
                     <td>${esc(supplier.code)}</td>
-                    <td class="biz-supplier-name-cell">${esc(supplier.name)}</td>
+                    <td class="biz-supplier-name-cell"><button class="biz-order-code" type="button" data-supplier-detail="${esc(supplier.code)}">${esc(supplier.name)}</button></td>
                     <td>${esc(supplier.contact || '--')}</td>
                     <td>${esc(supplier.phone || '--')}</td>
                     <td>${esc(supplier.email || '--')}</td>
@@ -3454,14 +4478,14 @@
           </div>
         </section>
         ${supplierModalOpen ? `
-          <div class="biz-inventory-material-modal biz-supplier-modal" data-supplier-modal>
-            <div class="biz-inventory-material-dialog biz-supplier-dialog" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
+          <div class="biz-order-modal dialog-overlay" data-supplier-modal>
+            <div class="biz-inventory-material-dialog biz-order-dialog biz-supplier-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="supplierModalTitle">${supplierEditingCode ? '编辑供应商' : '新增供应商'}</h2>
                   <span>${esc(supplierDraftNote)}</span>
                 </div>
-                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭供应商编辑" data-supplier-close>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭供应商编辑" data-supplier-close>
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
@@ -3577,7 +4601,7 @@
                 ${pagedRows.map((record) => `
                   <tr>
                     <td>${esc(record.code)}</td>
-                    <td class="biz-supplier-name-cell">${esc(record.name)}</td>
+                    <td class="biz-supplier-name-cell">${kind === 'customer' ? `<button class="biz-order-code" type="button" data-customer-detail="${esc(record.code)}">${esc(record.name)}</button>` : esc(record.name)}</td>
                     <td>${esc(record.contact || '--')}</td>
                     <td>${esc(record.phone || '--')}</td>
                     <td>${esc(record.email || '--')}</td>
@@ -3620,14 +4644,14 @@
           </div>
         </section>
         ${state.modalOpen ? `
-          <div class="biz-inventory-material-modal biz-supplier-modal" data-archive-modal="${esc(kind)}">
-            <div class="biz-inventory-material-dialog biz-supplier-dialog" role="dialog" aria-modal="true" aria-labelledby="${esc(kind)}ModalTitle">
+          <div class="biz-order-modal dialog-overlay" data-archive-modal="${esc(kind)}">
+            <div class="biz-inventory-material-dialog biz-order-dialog biz-supplier-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="${esc(kind)}ModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="${esc(kind)}ModalTitle">${state.editingCode ? `编辑${config.entityName}` : config.addText}</h2>
                   <span>${esc(state.draftNote)}</span>
                 </div>
-                <button class="biz-inventory-icon-btn" type="button" aria-label="关闭${esc(config.entityName)}编辑" data-archive-close="${esc(kind)}">
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭${esc(config.entityName)}编辑" data-archive-close="${esc(kind)}">
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
@@ -3717,14 +4741,18 @@
     const renderers = {
       dashboard: renderDashboard,
       'order-management': renderOrders,
+      'order-detail': renderOrderDetail,
       'invoice-print': renderInvoice,
       'sales-stock': renderStock,
       'formula-management': renderFormula,
       'production-plan': renderProduction,
       'inventory-management': renderInventory,
       'supplier-archive': renderSupplierArchive,
+      'supplier-detail': renderSupplierDetail,
       'customer-archive': () => renderArchive('customer'),
+      'customer-detail': renderCustomerDetail,
       'personnel-archive': () => renderArchive('personnel'),
+      'raw-material-procurement': renderRawMaterialProcurement,
       'permission-management': renderPermission,
       'audit-log': renderAudit,
     };
@@ -3733,7 +4761,7 @@
 
   const render = (pageId, def = {}) => {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement';
     const usesInvoiceWorkbench = pageId === 'invoice-print';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
     refs.businessPageContent.classList.toggle('biz-invoice-shell', usesInvoiceWorkbench);
@@ -3847,6 +4875,18 @@
       );
       return;
     }
+    if (event.target.hasAttribute('data-procurement-search')) {
+      procurementSearchQuery = event.target.value;
+      procurementListPage = 1;
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? procurementSearchQuery.length) : procurementSearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        'raw-material-procurement',
+        () => restoreSearchInputState('[data-procurement-search]', procurementSearchQuery, selectionStart, selectionEnd),
+      );
+      return;
+    }
     if (event.target.hasAttribute('data-archive-search')) {
       const kind = event.target.getAttribute('data-archive-search');
       const config = archiveConfigs[kind];
@@ -3896,6 +4936,15 @@
       const selectionEnd = event.target.selectionEnd ?? selectionStart;
       render('supplier-archive');
       restoreSearchInputState('[data-supplier-search]', supplierSearchQuery, selectionStart, selectionEnd);
+      return;
+    }
+    if (event.target.hasAttribute('data-procurement-search')) {
+      procurementSearchQuery = event.target.value;
+      procurementListPage = 1;
+      const selectionStart = event.target.selectionStart ?? procurementSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('raw-material-procurement');
+      restoreSearchInputState('[data-procurement-search]', procurementSearchQuery, selectionStart, selectionEnd);
       return;
     }
     if (event.target.hasAttribute('data-archive-search')) {
@@ -4028,6 +5077,18 @@
       render('supplier-archive');
       return;
     }
+    if (event.target.hasAttribute('data-procurement-supplier-filter')) {
+      procurementSupplierFilter = event.target.value || '全部';
+      procurementListPage = 1;
+      render('raw-material-procurement');
+      return;
+    }
+    if (event.target.hasAttribute('data-procurement-page-size')) {
+      procurementPageSize = Number(event.target.value) || 10;
+      procurementListPage = 1;
+      render('raw-material-procurement');
+      return;
+    }
     if (event.target.hasAttribute('data-archive-filter')) {
       const kind = event.target.getAttribute('data-archive-filter');
       const config = archiveConfigs[kind];
@@ -4125,6 +5186,13 @@
       return;
     }
 
+    const orderDetailButton = event.target.closest('[data-order-detail]');
+    if (orderDetailButton && refs.businessPageContent.contains(orderDetailButton)) {
+      orderDetailId = orderDetailButton.getAttribute('data-order-detail') || '';
+      App.navigation.showPage('order-detail', { scrollTop: true });
+      return;
+    }
+
     const orderEditButton = event.target.closest('[data-order-edit]');
     if (orderEditButton && refs.businessPageContent.contains(orderEditButton)) {
       orderEditingId = orderEditButton.getAttribute('data-order-edit') || '';
@@ -4132,6 +5200,27 @@
       orderModalOpen = true;
       render('order-management');
       refs.businessPageContent?.querySelector('[data-order-field="customer"]')?.focus();
+      return;
+    }
+
+    const orderDetailBackButton = event.target.closest('[data-order-detail-back]');
+    if (orderDetailBackButton && refs.businessPageContent.contains(orderDetailBackButton)) {
+      orderDetailId = '';
+      App.navigation.showPage('order-management', { scrollTop: true });
+      return;
+    }
+
+    const customerDetailButton = event.target.closest('[data-customer-detail]');
+    if (customerDetailButton && refs.businessPageContent.contains(customerDetailButton)) {
+      customerDetailCode = customerDetailButton.getAttribute('data-customer-detail') || '';
+      App.navigation.showPage('customer-detail', { scrollTop: true });
+      return;
+    }
+
+    const customerDetailBackButton = event.target.closest('[data-customer-detail-back]');
+    if (customerDetailBackButton && refs.businessPageContent.contains(customerDetailBackButton)) {
+      customerDetailCode = '';
+      App.navigation.showPage('customer-archive', { scrollTop: true });
       return;
     }
 
@@ -4280,6 +5369,20 @@
     if (supplierPageNext && refs.businessPageContent.contains(supplierPageNext) && !supplierPageNext.disabled) {
       supplierListPage += 1;
       render('supplier-archive');
+      return;
+    }
+
+    const procurementPagePrev = event.target.closest('[data-procurement-page-prev]');
+    if (procurementPagePrev && refs.businessPageContent.contains(procurementPagePrev) && !procurementPagePrev.disabled) {
+      procurementListPage -= 1;
+      render('raw-material-procurement');
+      return;
+    }
+
+    const procurementPageNext = event.target.closest('[data-procurement-page-next]');
+    if (procurementPageNext && refs.businessPageContent.contains(procurementPageNext) && !procurementPageNext.disabled) {
+      procurementListPage += 1;
+      render('raw-material-procurement');
       return;
     }
 
@@ -4613,6 +5716,80 @@
       return;
     }
 
+    const supplierDetailButton = event.target.closest('[data-supplier-detail]');
+    if (supplierDetailButton && refs.businessPageContent.contains(supplierDetailButton)) {
+      supplierDetailCode = supplierDetailButton.getAttribute('data-supplier-detail') || '';
+      App.navigation.showPage('supplier-detail', { scrollTop: true });
+      return;
+    }
+
+    const supplierDetailFromProcurementButton = event.target.closest('[data-supplier-detail-from-procurement]');
+    if (supplierDetailFromProcurementButton && refs.businessPageContent.contains(supplierDetailFromProcurementButton)) {
+      supplierDetailCode = supplierDetailFromProcurementButton.getAttribute('data-supplier-detail-from-procurement') || '';
+      App.navigation.showPage('supplier-detail', { scrollTop: true });
+      return;
+    }
+
+    const supplierDetailBackButton = event.target.closest('[data-supplier-detail-back]');
+    if (supplierDetailBackButton && refs.businessPageContent.contains(supplierDetailBackButton)) {
+      supplierDetailCode = '';
+      App.navigation.showPage('supplier-archive', { scrollTop: true });
+      return;
+    }
+
+    const procurementNewButton = event.target.closest('[data-procurement-new]');
+    if (procurementNewButton && refs.businessPageContent.contains(procurementNewButton)) {
+      procurementEditingId = '';
+      procurementDraftNote = '正在新增采购记录';
+      procurementModalOpen = true;
+      render('raw-material-procurement');
+      refs.businessPageContent?.querySelector('[data-procurement-field="material"]')?.focus();
+      return;
+    }
+
+    const procurementEditButton = event.target.closest('[data-procurement-edit]');
+    if (procurementEditButton && refs.businessPageContent.contains(procurementEditButton)) {
+      procurementEditingId = procurementEditButton.getAttribute('data-procurement-edit') || '';
+      procurementDraftNote = `正在编辑采购记录 ${procurementEditingId}`;
+      procurementModalOpen = true;
+      render('raw-material-procurement');
+      refs.businessPageContent?.querySelector('[data-procurement-field="material"]')?.focus();
+      return;
+    }
+
+    const procurementDeleteButton = event.target.closest('[data-procurement-delete]');
+    if (procurementDeleteButton && refs.businessPageContent.contains(procurementDeleteButton)) {
+      await deleteProcurement(procurementDeleteButton.getAttribute('data-procurement-delete') || '');
+      render('raw-material-procurement');
+      return;
+    }
+
+    const procurementSaveButton = event.target.closest('[data-procurement-save]');
+    if (procurementSaveButton && refs.businessPageContent.contains(procurementSaveButton)) {
+      const saved = saveProcurement();
+      procurementModalOpen = !saved;
+      render('raw-material-procurement');
+      if (!saved) refs.businessPageContent?.querySelector('[data-procurement-field="material"]')?.focus();
+      return;
+    }
+
+    const procurementCloseButton = event.target.closest('[data-procurement-close], [data-procurement-cancel]');
+    if (procurementCloseButton && refs.businessPageContent.contains(procurementCloseButton)) {
+      procurementEditingId = '';
+      procurementModalOpen = false;
+      procurementDraftNote = '已取消采购编辑';
+      render('raw-material-procurement');
+      return;
+    }
+
+    const procurementModal = event.target.closest('[data-procurement-modal]');
+    if (procurementModal && event.target === procurementModal) {
+      procurementEditingId = '';
+      procurementModalOpen = false;
+      render('raw-material-procurement');
+      return;
+    }
+
     const archiveNewButton = event.target.closest('[data-archive-new]');
     if (archiveNewButton && refs.businessPageContent.contains(archiveNewButton)) {
       const kind = archiveNewButton.getAttribute('data-archive-new');
@@ -4752,6 +5929,12 @@
       render('supplier-archive');
       return;
     }
+    if (event.key === 'Escape' && procurementModalOpen) {
+      procurementEditingId = '';
+      procurementModalOpen = false;
+      render('raw-material-procurement');
+      return;
+    }
     const openArchiveKind = Object.keys(archiveStates).find((kind) => archiveStates[kind].modalOpen);
     if (event.key === 'Escape' && openArchiveKind) {
       archiveStates[openArchiveKind].editingCode = '';
@@ -4773,5 +5956,5 @@
     formulaAddCard.click();
   });
 
-  App.businessPages = { render };
+  App.businessPages = { render, createFormulaByAgent };
 })();

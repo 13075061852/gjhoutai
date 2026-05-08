@@ -1338,7 +1338,7 @@
           '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
           '用户要求分析、查询、对比、总结当前项目数据、当前页数据或选中数据时，不要直接强答，必须先输出项目技能调用 JSON。',
           '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，调用 property.searchRows 获取物性数据后再分析。',
-          '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用图谱相关技能，通常是 spectrum.searchImages；不要因为问题里有型号就改调用物性表。',
+          '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用图谱相关技能 spectrum.manageImages，并用 action 参数区分查询、新增、更新、删除等动作；不要因为问题里有型号就改调用物性表。',
           '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
           skillProtocolContext,
         ].filter(Boolean).join('\n\n'),
@@ -1574,7 +1574,7 @@
     const skillId = String(execution?.skill?.id || '');
     const result = execution?.result || {};
     if (!result.ok) return false;
-    if (skillId === 'spectrum.searchImages') {
+    if (skillId === 'spectrum.manageImages' && result.data?.action === 'search') {
       return Boolean(result.data?.context || getSkillResultImages(execution).length);
     }
     if (result.candidates?.length) return false;
@@ -1768,13 +1768,26 @@
     if (refs.chatInput) refs.chatInput.value = '';
 
     try {
-      const execution = await App.projectSkills.executeSkill(plan.skillId, plan.input || {}, {
-        source: 'chat-natural-language',
-        prompt,
-      });
+      const steps = Array.isArray(plan.steps) && plan.steps.length
+        ? plan.steps
+        : [plan];
+      const executions = [];
+      for (const step of steps) {
+        const execution = await App.projectSkills.executeSkill(step.skillId, step.input || {}, {
+          source: 'chat-natural-language',
+          prompt,
+          reason: step.reason || plan.reason || '',
+        });
+        executions.push(execution);
+        if (execution?.result?.ok === false) break;
+      }
+      const execution = executions[executions.length - 1];
+      const content = executions.length > 1
+        ? executions.map((item, index) => `步骤 ${index + 1}/${executions.length}\n${App.projectSkills.formatSkillMessage(item)}`).join('\n\n')
+        : App.projectSkills.formatSkillMessage(execution);
       pushChatMessage(
         'assistant',
-        App.projectSkills.formatSkillMessage(execution),
+        content,
         [],
         App.projectSkills.getResultActions?.(execution) || []
       );
@@ -2087,7 +2100,7 @@
     }
 
     const localPlan = projectAccessEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
-    if (localPlan?.skillId === 'assistant.openPage') {
+    if (localPlan?.skillId === 'assistant.openPage' || Array.isArray(localPlan?.steps)) {
       await runLocalSkillPlan(prompt, localPlan);
       return;
     }
@@ -2335,7 +2348,8 @@
         if (needsSynthesis) {
           try {
             const rawSkillImages = getSkillResultImages(skillExecution);
-            const isSpectrumImageSearch = skillExecution?.skill?.id === 'spectrum.searchImages';
+            const isSpectrumImageSearch = skillExecution?.skill?.id === 'spectrum.manageImages'
+              && skillExecution?.result?.data?.action === 'search';
             if (isSpectrumImageSearch && !rawSkillImages.length) {
               streamedContent = [
                 App.projectSkills.formatSkillMessage(skillExecution),
@@ -2402,7 +2416,9 @@
           } catch (error) {
             if (isAbortError(error)) throw error;
             const skillImageCount = getSkillResultImages(skillExecution).length;
-            streamedContent = skillExecution?.skill?.id === 'spectrum.searchImages' && skillImageCount
+            streamedContent = skillExecution?.skill?.id === 'spectrum.manageImages'
+              && skillExecution?.result?.data?.action === 'search'
+              && skillImageCount
               ? [
                   `已找到 ${skillImageCount} 张相关图谱，并已尝试上传图谱图片给 AI 做曲线对比分析。`,
                   '',

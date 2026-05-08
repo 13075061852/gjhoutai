@@ -548,6 +548,7 @@
         hints: ['等待首次调用', '自动统计 Token', '按模型汇总'],
       });
     }
+    const maxTokens = rows[0]?.tokens || 1;
     const rankIcons = ['ti-medal', 'ti-medal-2', 'ti-medal'];
     return rows.map((item, index) => `
       <div class="ai-call-model-row ${index < 3 ? `is-top-${index + 1}` : ''}">
@@ -560,10 +561,13 @@
             <span>${formatNumber(item.calls)} 次调用</span>
             <span>${esc(formatCnyCost(item.cny))}</span>
           </div>
+          <div class="ai-call-model-bar-wrap">
+            <span class="ai-call-model-bar" style="width:${clampPercent((item.tokens / maxTokens) * 100)}"></span>
+          </div>
         </div>
         <div class="ai-call-model-token">
           <strong>${formatNumber(item.tokens)}</strong>
-          <span>Token</span>
+          <span>${Math.round((item.tokens / maxTokens) * 100)}%</span>
         </div>
       </div>
     `).join('');
@@ -584,7 +588,7 @@
         </tr>
       `;
     }
-    return logs.map((item) => {
+    return logs.map((item, rowIndex) => {
       const usage = item.tokenUsage || {};
       const cost = normalizeCostUsage(usage.cost);
       const statusClass = item.status === 'failed' ? 'is-failed' : 'is-success';
@@ -599,7 +603,7 @@
         meta.stream ? '流式' : '非流式',
       ].filter(Boolean).join(' · ');
       return `
-        <tr data-ai-call-row="${esc(item.id)}">
+        <tr class="${rowIndex % 2 === 0 ? 'is-even' : ''}" data-ai-call-row="${esc(item.id)}">
           <td>
             <strong class="ai-call-cell-main">${esc(formatDateTime(item.at))}</strong>
             <span class="ai-call-cell-sub">${esc(getSourceLabel(item.source))} · ${esc(item.pageTitle || getPageTitle(item.pageId))}</span>
@@ -759,32 +763,65 @@
     const usage = item.tokenUsage || {};
     const cost = normalizeCostUsage(usage.cost);
     const meta = item.requestMeta || {};
+    const statusClass = item.status === 'failed' ? 'is-failed' : 'is-success';
+    const statusText = item.status === 'failed' ? '调用失败' : '调用成功';
+    const totalTokens = usage.totalTokens || 0;
+    const promptRatio = totalTokens ? Math.round((usage.promptTokens || 0) / totalTokens * 100) : 0;
+    const completionRatio = totalTokens ? 100 - promptRatio : 0;
     const detailRows = [
       renderDetailField('时间', formatDateTime(item.at)),
       renderDetailField('来源', `${getSourceLabel(item.source)} · ${item.pageTitle || getPageTitle(item.pageId)}`),
       renderDetailField('模型', getModelDisplayName(item.model)),
       renderDetailField('供应商', getProviderLabel(item.provider)),
-      renderDetailField('状态', item.status === 'failed' ? `失败：${item.error || '-'}` : `成功：${item.statusText || '接口返回'}`),
-      renderDetailField('Tokens', `总计 ${formatNumber(usage.totalTokens || 0)}，输入 ${formatNumber(usage.promptTokens || 0)}，输出 ${formatNumber(usage.completionTokens || 0)}`),
-      renderDetailField('费用', formatCostLabel(cost)),
       renderDetailField('耗时', formatDuration(item.durationMs)),
-      renderDetailField('请求', `${meta.messages || 0} 条消息 · ${meta.images || 0} 张图 · ${meta.files || 0} 个文件 · ${meta.stream ? '流式' : '非流式'}`),
-      renderDetailField('接口', item.endpoint),
+      renderDetailField('接口', item.endpoint || '-'),
     ].join('');
     return `
-      <div class="ai-call-detail-modal" role="dialog" aria-modal="true" aria-label="AI 调用详情">
-        <div class="ai-call-detail-backdrop" data-ai-call-close></div>
-        <section class="ai-call-detail-card">
+      <div class="ai-call-detail-modal dialog-overlay" role="dialog" aria-modal="true" aria-label="AI 调用详情">
+        <section class="ai-call-detail-card dialog-card">
           <div class="ai-call-detail-head">
             <div>
-              <h2>调用详情</h2>
+              <div class="ai-call-detail-head-row">
+                <h2>调用详情</h2>
+                <mark class="${statusClass}">${statusText}</mark>
+              </div>
               <span>${esc(item.id)}</span>
             </div>
-            <button class="ai-call-detail-close" type="button" data-ai-call-close aria-label="关闭详情">
+            <button class="ai-call-detail-close dialog-close" type="button" data-ai-call-close aria-label="关闭详情">
               <i class="ti ti-x" aria-hidden="true"></i>
             </button>
           </div>
           <div class="ai-call-detail-grid">${detailRows}</div>
+          <div class="ai-call-detail-block">
+            <h3>Token 分布</h3>
+            <div class="ai-call-token-split">
+              <div class="ai-call-token-split-bar">
+                <span class="ai-call-token-split-prompt" style="width:${clampPercent(promptRatio)}"></span>
+                <span class="ai-call-token-split-completion" style="width:${clampPercent(completionRatio)}"></span>
+              </div>
+              <div class="ai-call-token-split-labels">
+                <span>输入 ${formatNumber(usage.promptTokens || 0)} (${promptRatio}%)</span>
+                <span>输出 ${formatNumber(usage.completionTokens || 0)} (${completionRatio}%)</span>
+              </div>
+            </div>
+          </div>
+          <div class="ai-call-detail-block">
+            <h3>费用</h3>
+            <div class="ai-call-detail-cost">
+              <span><em>总计</em><strong>${esc(formatCostLabel(cost))}</strong></span>
+              ${cost ? `<span><em>单价</em><strong>${esc(formatUsdCost(cost.promptPricePerToken || 0))} / ${esc(formatUsdCost(cost.completionPricePerToken || 0))}</strong></span>` : ''}
+              <span><em>估算方式</em><strong>${cost?.estimated ? '按模型价格估算' : cost ? '接口返回实际扣费' : '未确认价格'}</strong></span>
+            </div>
+          </div>
+          <div class="ai-call-detail-block">
+            <h3>请求参数</h3>
+            <div class="ai-call-detail-cost">
+              <span><em>消息数</em><strong>${meta.messages || 0} 条</strong></span>
+              <span><em>图片</em><strong>${meta.images || 0} 张</strong></span>
+              <span><em>文件</em><strong>${meta.files || 0} 个</strong></span>
+              <span><em>模式</em><strong>${meta.stream ? '流式' : '非流式'}</strong></span>
+            </div>
+          </div>
           <div class="ai-call-detail-block">
             <h3>问题</h3>
             <div class="ai-call-detail-content">${renderDetailContent(item.prompt || '-')}</div>
@@ -836,21 +873,33 @@
     const periods = getPeriodSummary(logs);
     refs.aiCallAnalysisPanel.innerHTML = `
       <section class="ai-call-analysis-stats" aria-label="AI 调用统计">
-        <div>
-          <strong>${formatNumber(totals.calls)}</strong>
-          <span>累计调用</span>
+        <div class="ai-call-stat-card">
+          <span class="ai-call-stat-icon ai-call-stat-icon--calls"><i class="ti ti-phone-call" aria-hidden="true"></i></span>
+          <div class="ai-call-stat-body">
+            <strong>${formatNumber(totals.calls)}</strong>
+            <span>累计调用</span>
+          </div>
         </div>
-        <div>
-          <strong>${formatNumber(totals.totalTokens)}</strong>
-          <span>累计 Tokens</span>
+        <div class="ai-call-stat-card">
+          <span class="ai-call-stat-icon ai-call-stat-icon--tokens"><i class="ti ti-coins" aria-hidden="true"></i></span>
+          <div class="ai-call-stat-body">
+            <strong>${formatNumber(totals.totalTokens)}</strong>
+            <span>累计 Tokens</span>
+          </div>
         </div>
-        <div>
-          <strong>${esc(formatCnyCost(totals.totalCny))}</strong>
-          <span>${esc(formatUsdCost(totals.totalUsd))}</span>
+        <div class="ai-call-stat-card">
+          <span class="ai-call-stat-icon ai-call-stat-icon--cost"><i class="ti ti-currency-dollar" aria-hidden="true"></i></span>
+          <div class="ai-call-stat-body">
+            <strong>${esc(formatCnyCost(totals.totalCny))}</strong>
+            <span>${esc(formatUsdCost(totals.totalUsd))}</span>
+          </div>
         </div>
-        <div>
-          <strong>${formatNumber(totals.models.size)}</strong>
-          <span>涉及模型 · 失败 ${formatNumber(totals.failed)} 次</span>
+        <div class="ai-call-stat-card">
+          <span class="ai-call-stat-icon ai-call-stat-icon--models"><i class="ti ti-cpu" aria-hidden="true"></i></span>
+          <div class="ai-call-stat-body">
+            <strong>${formatNumber(totals.models.size)}</strong>
+            <span>涉及模型</span>
+          </div>
         </div>
       </section>
 
@@ -928,7 +977,7 @@
         render();
         return;
       }
-      if (event.target.closest('[data-ai-call-close]')) {
+      if (event.target.closest('[data-ai-call-close]') || event.target.classList.contains('ai-call-detail-modal')) {
         closeDetailModal();
       }
     });

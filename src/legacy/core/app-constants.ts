@@ -55,6 +55,11 @@
         eyebrow: '销售履约',
         desc: '集中跟进订单状态、交期风险、待审核变更和客户交付节奏。',
       },
+      'order-detail': {
+        title: '订单详情',
+        eyebrow: '销售履约',
+        desc: '查看订单完整信息与状态变更记录。',
+      },
       'invoice-print': {
         title: '开单打印',
         eyebrow: '单据中心',
@@ -85,10 +90,25 @@
         eyebrow: '采购基础',
         desc: '管理供应商资质、联系人、供货品类、价格条款和风险等级。',
       },
+      'supplier-detail': {
+        title: '供应商详情',
+        eyebrow: '采购基础',
+        desc: '查看供应商完整信息、采购往来记录与材料供应分析。',
+      },
+      'raw-material-procurement': {
+        title: '原料采购',
+        eyebrow: '采购管理',
+        desc: '记录和管理原料采购订单，与供应商档案联动，追踪每一次原料购入。',
+      },
       'customer-archive': {
         title: '客户档案',
         eyebrow: '客户经营',
         desc: '沉淀客户资料、交易历史、信用状态和跟进事项，支持长期服务。',
+      },
+      'customer-detail': {
+        title: '客户详情',
+        eyebrow: '客户经营',
+        desc: '查看客户完整信息、采购历史、产品偏好与需求分析。',
       },
       'personnel-archive': {
         title: '人员档案',

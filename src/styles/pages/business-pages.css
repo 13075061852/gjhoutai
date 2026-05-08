@@ -444,24 +444,10 @@
       border-radius:8px;
     }
     .biz-inventory-category-modal{
-      position:fixed;
-      inset:0;
-      z-index:1300;
-      display:flex;
-      align-items:center;
-      justify-content:center;
       padding:18px;
-      background:rgba(15,23,42,.34);
     }
     .biz-inventory-material-modal{
-      position:fixed;
-      inset:0;
-      z-index:1300;
-      display:flex;
-      align-items:center;
-      justify-content:center;
       padding:18px;
-      background:rgba(15,23,42,.34);
     }
     .biz-inventory-category-dialog{
       width:min(680px, 100%);
@@ -469,11 +455,7 @@
       display:flex;
       flex-direction:column;
       gap:14px;
-      padding:16px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-      box-shadow:0 24px 68px rgba(15,23,42,.18);
+      padding:18px;
       overflow:auto;
     }
     .biz-inventory-material-dialog{
@@ -483,10 +465,6 @@
       flex-direction:column;
       gap:0;
       padding:0;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-      box-shadow:0 24px 68px rgba(15,23,42,.18);
       overflow:hidden;
     }
     .biz-inventory-dialog-head{
@@ -518,15 +496,9 @@
       font-weight:800;
     }
     .biz-inventory-icon-btn{
-      width:34px;
-      height:34px;
       flex:0 0 auto;
       display:grid;
       place-items:center;
-      border:1px solid var(--border);
-      border-radius:7px;
-      background:var(--surface-2);
-      color:var(--text-2);
       cursor:pointer;
     }
     .biz-inventory-icon-btn:hover{
@@ -1495,16 +1467,7 @@
       flex:0 0 auto;
     }
     .biz-order-modal{
-      position:fixed;
-      inset:0;
-      z-index:70;
-      display:flex;
-      align-items:center;
-      justify-content:center;
       padding:20px;
-      background:rgba(15,23,42,.22);
-      backdrop-filter:blur(4px);
-      animation:dialog-overlay-in .18s ease-out both;
     }
     .biz-order-dialog{
       width:min(560px, 100%);
@@ -5237,6 +5200,7 @@
       display:grid;
       grid-template-columns:repeat(2,minmax(0,1fr));
       gap:14px 20px;
+      padding:20px 18px 0;
     }
     .biz-supplier-editor label{
       min-width:0;
@@ -5412,4 +5376,583 @@
     }
     body[data-theme="dark"] .biz-recent-item::before{
       border-color:var(--surface);
+    }
+    /* ============ Order Detail Page ============ */
+    .biz-order-detail-panel{
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+      padding:24px;
+      overflow-y:auto;
+    }
+    .biz-order-detail-head{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .biz-order-detail-head .biz-inventory-back-btn{
+      align-self:flex-start;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      transition:background .15s;
+    }
+    .biz-order-detail-head .biz-inventory-back-btn:hover{
+      background:var(--surface-2);
+    }
+    .biz-order-detail-title{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .biz-order-detail-title h2{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-order-detail-title .biz-order-status{
+      font-size:13px;
+    }
+    /* ---- Status Pipeline ---- */
+    .biz-order-status-pipeline{
+      padding:20px 16px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface);
+      position:relative;
+    }
+    .biz-status-pipeline-bar{
+      position:absolute;
+      top:34px;
+      left:16px;
+      right:16px;
+      height:4px;
+      border-radius:2px;
+      background:var(--border);
+      z-index:0;
+      pointer-events:none;
+    }
+    .biz-status-pipeline-fill{
+      height:100%;
+      border-radius:2px;
+      background:var(--accent);
+      transition:width .5s ease;
+    }
+    .biz-status-pipeline-track{
+      display:flex;
+      justify-content:space-between;
+      position:relative;
+      z-index:1;
+    }
+    .biz-pipeline-node{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:8px;
+      flex:1 1 0;
+      min-width:0;
+    }
+    .biz-pipeline-dot{
+      width:32px;
+      height:32px;
+      border-radius:50%;
+      border:3px solid var(--border);
+      background:var(--surface);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      transition:border-color .3s, background .3s;
+    }
+    .biz-pipeline-dot .ti{
+      font-size:14px;
+      color:#fff;
+    }
+    .biz-pipeline-node.is-done .biz-pipeline-dot{
+      border-color:var(--accent);
+      background:var(--accent);
+    }
+    .biz-pipeline-node.is-active .biz-pipeline-dot{
+      border-color:var(--accent);
+      background:var(--surface);
+      box-shadow:0 0 0 4px var(--accent-soft);
+    }
+    .biz-pipeline-pulse{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:var(--accent);
+      display:block;
+    }
+    @keyframes biz-pipeline-pulse-anim{
+      0%, 100%{box-shadow:0 0 0 0 var(--accent-soft)}
+      50%{box-shadow:0 0 0 8px transparent}
+    }
+    .biz-pipeline-node.is-active .biz-pipeline-pulse{
+      animation:biz-pipeline-pulse-anim 2s ease-in-out infinite;
+    }
+    .biz-pipeline-label{
+      font-size:12px;
+      font-weight:700;
+      color:var(--text-dim);
+      text-align:center;
+      white-space:nowrap;
+    }
+    .biz-pipeline-node.is-done .biz-pipeline-label,
+    .biz-pipeline-node.is-active .biz-pipeline-label{
+      color:var(--text);
+    }
+    .biz-pipeline-time{
+      font-size:11px;
+      font-weight:500;
+      color:var(--text-dim);
+      text-align:center;
+      white-space:nowrap;
+    }
+    .biz-pipeline-node.is-done .biz-pipeline-time{
+      color:var(--accent);
+    }
+    /* ---- Info Grid ---- */
+    .biz-order-detail-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+      gap:16px;
+      padding:20px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface);
+    }
+    .biz-order-detail-field{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .biz-order-detail-field label{
+      font-size:12px;
+      font-weight:600;
+      color:var(--text-dim);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+    }
+    .biz-order-detail-field span{
+      font-size:14px;
+      font-weight:500;
+      color:var(--text);
+    }
+    .biz-order-detail-field strong{
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-order-detail-field.is-note{
+      grid-column:1 / -1;
+    }
+    /* ---- Vertical timeline (log records) ---- */
+    .biz-order-detail-timeline{
+      padding:20px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface);
+    }
+    .biz-order-detail-timeline h3{
+      margin:0 0 16px;
+      font-size:15px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-order-timeline-item{
+      display:flex;
+      gap:12px;
+      padding-bottom:16px;
+      position:relative;
+    }
+    .biz-order-timeline-item:not(:last-child)::after{
+      content:'';
+      position:absolute;
+      left:5px;
+      top:16px;
+      bottom:0;
+      width:2px;
+      background:var(--border);
+    }
+    .biz-order-timeline-dot{
+      flex:0 0 auto;
+      width:12px;
+      height:12px;
+      border-radius:50%;
+      background:var(--accent);
+      margin-top:4px;
+      position:relative;
+      z-index:1;
+    }
+    .biz-order-timeline-content{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      flex:1 1 auto;
+      min-width:0;
+    }
+    .biz-order-timeline-time{
+      font-size:12px;
+      font-weight:500;
+      color:var(--text-dim);
+    }
+    .biz-order-timeline-status{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:13px;
+    }
+    .biz-order-timeline-status .ti{
+      font-size:14px;
+      color:var(--text-dim);
+    }
+    .biz-order-timeline-status .biz-order-status{
+      font-size:12px;
+    }
+    .biz-order-detail-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      padding-top:8px;
+    }
+    /* ---- Dark mode ---- */
+    body[data-theme="dark"] .biz-order-detail-grid,
+    body[data-theme="dark"] .biz-order-detail-timeline,
+    body[data-theme="dark"] .biz-order-status-pipeline{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    /* ============ Customer Detail Page ============ */
+    .biz-customer-detail-panel{
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+      padding:24px;
+      overflow-y:auto;
+    }
+    .biz-customer-grade{
+      display:inline-flex;
+      align-items:center;
+      padding:2px 10px;
+      border-radius:6px;
+      font-size:12px;
+      font-weight:700;
+      background:var(--accent-soft);
+      color:var(--accent);
+    }
+    .biz-customer-kpi-strip{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:12px;
+    }
+    .biz-customer-kpi-strip article{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      padding:16px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface);
+    }
+    .biz-customer-kpi-strip .kpi-eyebrow{
+      font-size:12px;
+      font-weight:600;
+      color:var(--text-dim);
+    }
+    .biz-customer-kpi-strip strong{
+      font-size:24px;
+      font-weight:900;
+      color:var(--text);
+      line-height:1.2;
+    }
+    .biz-customer-kpi-strip small{
+      font-size:12px;
+      font-weight:500;
+      color:var(--text-dim);
+    }
+    .biz-customer-info-row{
+      display:grid;
+      grid-template-columns:1fr 260px;
+      gap:16px;
+      align-items:start;
+    }
+    .biz-customer-info-grid{
+      padding:16px;
+    }
+    .biz-customer-status-dist{
+      padding:16px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface);
+    }
+    .biz-customer-status-dist h4{
+      margin:0 0 12px;
+      font-size:13px;
+      font-weight:700;
+      color:var(--text);
+    }
+    .biz-status-dist-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .biz-status-dist-row .biz-order-status{
+      flex:0 0 auto;
+      font-size:11px;
+      min-width:56px;
+      justify-content:center;
+    }
+    .biz-status-dist-bar{
+      flex:1 1 auto;
+      height:6px;
+      border-radius:3px;
+      background:var(--surface-2);
+      overflow:hidden;
+    }
+    .biz-status-dist-fill{
+      height:100%;
+      border-radius:3px;
+      background:var(--accent);
+      transition:width .4s ease;
+    }
+    .biz-status-dist-row strong{
+      flex:0 0 auto;
+      width:24px;
+      text-align:right;
+      font-size:13px;
+      font-weight:700;
+      color:var(--text);
+    }
+    .biz-customer-section{
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:var(--surface);
+      overflow:hidden;
+    }
+    .biz-customer-section h3{
+      margin:0;
+      padding:16px 20px 0;
+      font-size:15px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-customer-product-table-wrap{
+      padding:16px 20px 20px;
+    }
+    .biz-customer-product-table-wrap table{
+      width:100%;
+    }
+    .biz-customer-product-bar{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      min-width:80px;
+    }
+    .biz-customer-product-fill{
+      height:8px;
+      border-radius:4px;
+      background:var(--accent);
+      min-width:0;
+    }
+    .biz-customer-product-bar span{
+      font-size:12px;
+      font-weight:600;
+      color:var(--text-dim);
+      white-space:nowrap;
+    }
+    .biz-customer-demand-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:12px;
+      padding:16px 20px 20px;
+    }
+    .biz-customer-demand-card{
+      padding:16px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface-2);
+    }
+    .biz-customer-demand-card h4{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin:0 0 10px;
+      font-size:13px;
+      font-weight:700;
+      color:var(--text);
+    }
+    .biz-customer-demand-card h4 .ti{
+      font-size:15px;
+      color:var(--accent);
+    }
+    .biz-demand-list{
+      margin:0;
+      padding:0;
+      list-style:none;
+      counter-reset:demand;
+    }
+    .biz-demand-list li{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:6px 0;
+      border-bottom:1px solid var(--border);
+      font-size:13px;
+      color:var(--text);
+    }
+    .biz-demand-list li:last-child{
+      border-bottom:0;
+    }
+    .biz-demand-list li strong{
+      font-weight:700;
+      color:var(--accent);
+    }
+    .biz-demand-insight p{
+      margin:0 0 6px;
+      font-size:13px;
+      color:var(--text);
+      line-height:1.5;
+    }
+    .biz-demand-insight p:last-child{
+      margin-bottom:0;
+    }
+    .biz-demand-hint{
+      font-size:13px;
+      color:var(--text-dim);
+      margin:0;
+    }
+    /* ---- Responsive ---- */
+    @media(max-width:900px){
+      .biz-customer-info-row{
+        grid-template-columns:1fr;
+      }
+      .biz-customer-kpi-strip{
+        grid-template-columns:repeat(2,1fr);
+      }
+      .biz-customer-demand-grid{
+        grid-template-columns:1fr;
+      }
+    }
+    body[data-theme="dark"] .biz-customer-kpi-strip article,
+    body[data-theme="dark"] .biz-customer-status-dist,
+    body[data-theme="dark"] .biz-customer-section,
+    body[data-theme="dark"] .biz-customer-demand-card{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+
+    /* ============ Supplier Detail Page (reuses customer-detail styles) ============ */
+    .biz-supplier-detail-panel .biz-supplier-name-cell button{
+      cursor:pointer;
+    }
+    .biz-supplier-detail-panel .biz-supplier-name-cell button:hover{
+      color:var(--accent);
+    }
+
+    /* ============ Raw Material Procurement Page ============ */
+    .biz-procurement-page{
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .biz-procurement-page .biz-supplier-table-panel{
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .biz-procurement-table-panel .ui-table-wrap{
+      flex:1 1 auto;
+      overflow-y:auto;
+    }
+    .biz-procurement-table th{
+      font-size:12px;
+      font-weight:700;
+      text-wrap:nowrap;
+    }
+    .biz-procurement-table td{
+      font-size:13px;
+      text-wrap:nowrap;
+    }
+    .biz-procurement-table .biz-order-code{
+      background:none;
+      border:none;
+      padding:0;
+      font-size:13px;
+      font-weight:600;
+      color:var(--accent);
+      cursor:pointer;
+      text-align:left;
+    }
+    .biz-procurement-table .biz-order-code:hover{
+      text-decoration:underline;
+    }
+    .biz-procurement-dialog{
+      max-width:600px;
+    }
+    .biz-procurement-dialog .biz-supplier-editor{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      padding:20px;
+    }
+    .biz-procurement-dialog .biz-supplier-editor label{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      font-size:12px;
+      font-weight:600;
+      color:var(--text-dim);
+    }
+    .biz-procurement-dialog .biz-supplier-editor label.is-name,
+    .biz-procurement-dialog .biz-supplier-editor label.is-note{
+      grid-column:1 / -1;
+    }
+    .biz-procurement-dialog .biz-supplier-editor input,
+    .biz-procurement-dialog .biz-supplier-editor select,
+    .biz-procurement-dialog .biz-supplier-editor textarea{
+      padding:8px 12px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      font-size:13px;
+      background:var(--surface);
+      color:var(--text);
+    }
+    .biz-procurement-dialog .biz-supplier-editor textarea{
+      min-height:60px;
+      resize:vertical;
+    }
+    .biz-procurement-dialog .biz-inventory-modal-actions{
+      grid-column:1 / -1;
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      padding-top:8px;
+    }
+
+    @media(max-width:768px){
+      .biz-procurement-dialog .biz-supplier-editor{
+        grid-template-columns:1fr;
+      }
+      .biz-procurement-table-wrap{
+        overflow-x:auto;
+      }
+    }
+    body[data-theme="dark"] .biz-procurement-dialog .biz-supplier-editor input,
+    body[data-theme="dark"] .biz-procurement-dialog .biz-supplier-editor select,
+    body[data-theme="dark"] .biz-procurement-dialog .biz-supplier-editor textarea{
+      background:var(--surface-2);
     }

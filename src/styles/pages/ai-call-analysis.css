@@ -49,44 +49,84 @@
       grid-template-columns:repeat(4, minmax(0, 1fr));
       gap:12px;
     }
-    .ai-call-analysis-stats div{
-      min-height:92px;
-      padding:16px;
+    .ai-call-stat-card{
+      min-height:76px;
+      padding:12px 14px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface);
       display:flex;
+      align-items:center;
+      gap:12px;
+      transition:border-color .2s ease, box-shadow .2s ease;
+    }
+    .ai-call-stat-card:hover{
+      border-color:var(--border-2);
+      box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 6%, transparent);
+    }
+    .ai-call-stat-icon{
+      width:38px;
+      height:38px;
+      border-radius:8px;
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      font-size:18px;
+    }
+    .ai-call-stat-icon--calls{
+      background:color-mix(in srgb, var(--accent) 12%, transparent);
+      color:var(--accent);
+      border:1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+    }
+    .ai-call-stat-icon--tokens{
+      background:color-mix(in srgb, #8b5cf6 12%, transparent);
+      color:#8b5cf6;
+      border:1px solid color-mix(in srgb, #8b5cf6 26%, var(--border));
+    }
+    .ai-call-stat-icon--cost{
+      background:color-mix(in srgb, #16a34a 12%, transparent);
+      color:#16a34a;
+      border:1px solid color-mix(in srgb, #16a34a 26%, var(--border));
+    }
+    .ai-call-stat-icon--models{
+      background:color-mix(in srgb, #f59e0b 12%, transparent);
+      color:#d97706;
+      border:1px solid color-mix(in srgb, #d97706 26%, var(--border));
+    }
+    .ai-call-stat-body{
+      min-width:0;
+      display:flex;
       flex-direction:column;
       justify-content:center;
-      gap:12px;
+      gap:6px;
     }
-    .ai-call-analysis-stats strong{
+    .ai-call-stat-body strong{
       color:var(--text);
-      font-size:25px;
+      font-size:20px;
       line-height:1;
       font-weight:900;
       word-break:break-word;
     }
-    .ai-call-analysis-stats span{
+    .ai-call-stat-body span{
       color:var(--muted);
       font-size:12px;
-      line-height:1.45;
+      line-height:1.3;
       font-weight:800;
     }
     .ai-call-period-card{
       min-width:0;
       min-height:0;
-      padding:16px;
+      padding:14px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface);
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:10px;
     }
     .ai-call-analysis-overview{
-      --model-rank-row-height:88px;
-      --model-rank-row-gap:12px;
+      --model-rank-row-height:84px;
+      --model-rank-row-gap:10px;
       flex:0 0 auto;
       display:grid;
       grid-template-columns:minmax(0, 1fr) minmax(280px, 340px);
@@ -115,6 +155,7 @@
       font-size:12px;
       font-weight:850;
       cursor:pointer;
+      transition:all .22s ease;
     }
     .ai-call-period-tabs button:hover{
       color:var(--text);
@@ -138,7 +179,7 @@
     }
     .ai-call-trend-summary span{
       min-width:0;
-      padding:10px;
+      padding:8px 10px;
       border:1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
       border-radius:8px;
       background:
@@ -146,7 +187,7 @@
         var(--surface-2);
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:8px;
     }
     .ai-call-trend-summary b{
       min-width:0;
@@ -171,8 +212,8 @@
     }
     .ai-call-trend-visual{
       position:relative;
-      min-height:148px;
-      padding:8px 6px 6px;
+      min-height:120px;
+      padding:6px;
       border:1px solid var(--border);
       border-radius:8px;
       background:
@@ -185,7 +226,7 @@
       position:relative;
       z-index:1;
       width:100%;
-      height:174px;
+      height:140px;
       display:block;
       color:var(--accent);
     }
@@ -213,8 +254,8 @@
       z-index:2;
       left:6px;
       right:6px;
-      top:8px;
-      height:174px;
+      top:6px;
+      height:140px;
       pointer-events:none;
     }
     .ai-call-trend-point,
@@ -284,7 +325,7 @@
       align-items:flex-start;
       justify-content:space-between;
       gap:12px;
-      margin-bottom:12px;
+      margin-bottom:10px;
     }
     .ai-call-analysis-panel-head h2{
       margin:0;
@@ -311,7 +352,7 @@
       scrollbar-width:thin;
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:10px;
     }
     .ai-call-model-list.is-empty{
       max-height:none;
@@ -332,7 +373,7 @@
       flex:0 0 var(--model-rank-row-height);
       height:var(--model-rank-row-height);
       overflow:hidden;
-      padding:12px;
+      padding:10px 12px;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface-2);
@@ -382,7 +423,7 @@
       min-width:0;
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:8px;
     }
     .ai-call-model-row strong,
     .ai-call-analysis-table td strong{
@@ -440,7 +481,7 @@
       display:flex;
       align-items:center;
       justify-content:flex-start;
-      gap:12px;
+      gap:10px;
     }
     .ai-call-model-meta span{
       min-width:0;
@@ -451,11 +492,34 @@
       font-weight:850;
       display:inline-flex;
       align-items:center;
-      gap:12px;
+      gap:6px;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
       word-break:normal;
+    }
+    .ai-call-model-bar-wrap{
+      height:4px;
+      margin-top:2px;
+      border-radius:999px;
+      background:var(--surface);
+      overflow:hidden;
+    }
+    .ai-call-model-bar{
+      display:block;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 64%, #8b5cf6));
+      transition:width .4s ease;
+    }
+    .ai-call-model-row.is-top-1 .ai-call-model-bar{
+      background:linear-gradient(90deg, #d4a017, #f59e0b);
+    }
+    .ai-call-model-row.is-top-2 .ai-call-model-bar{
+      background:linear-gradient(90deg, #64748b, #94a3b8);
+    }
+    .ai-call-model-row.is-top-3 .ai-call-model-bar{
+      background:linear-gradient(90deg, #b7794b, #d97706);
     }
     .ai-call-analysis-table-panel{
       min-height:0;
@@ -544,6 +608,15 @@
       text-overflow:ellipsis;
       word-break:normal;
     }
+    .ai-call-analysis-table tbody tr{
+      transition:background .15s ease;
+    }
+    .ai-call-analysis-table tbody tr.is-even{
+      background:color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+    }
+    .ai-call-analysis-table tbody tr:hover{
+      background:color-mix(in srgb, var(--accent-soft) 28%, var(--surface-2));
+    }
     .ai-call-detail-btn{
       min-height:30px;
       padding:0 10px;
@@ -555,10 +628,12 @@
       font-size:12px;
       font-weight:850;
       cursor:pointer;
+      transition:all .2s ease;
     }
     .ai-call-detail-btn:hover{
       border-color:var(--accent);
       background:var(--accent-soft);
+      box-shadow:0 2px 8px color-mix(in srgb, var(--accent) 18%, transparent);
     }
     .ai-call-analysis-table mark{
       display:inline-block;
@@ -645,43 +720,48 @@
       font-weight:850;
     }
     .ai-call-detail-modal{
-      position:fixed;
-      inset:0;
-      z-index:100;
-      display:grid;
-      place-items:center;
-      padding:22px;
-    }
-    .ai-call-detail-backdrop{
-      position:absolute;
-      inset:0;
-      background:rgba(15,23,42,.38);
+      padding:18px;
     }
     .ai-call-detail-card{
-      position:relative;
-      z-index:1;
       width:min(860px, 100%);
-      max-height:min(760px, calc(100vh - 44px));
+      max-height:min(760px, calc(100vh - 36px));
       overflow:auto;
-      padding:18px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-      box-shadow:0 24px 70px rgba(15,23,42,.24);
+      padding:16px;
     }
     .ai-call-detail-head{
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
       gap:12px;
-      margin-bottom:14px;
+      margin-bottom:12px;
     }
-    .ai-call-detail-head h2{
+    .ai-call-detail-head-row{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .ai-call-detail-head-row h2{
       margin:0;
       color:var(--text);
       font-size:20px;
       line-height:1.2;
       font-weight:900;
+    }
+    .ai-call-detail-head-row mark{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:999px;
+      font-size:11px;
+      line-height:1;
+      font-weight:900;
+    }
+    .ai-call-detail-head-row mark.is-success{
+      background:rgba(22,163,74,.12);
+      color:#16a34a;
+    }
+    .ai-call-detail-head-row mark.is-failed{
+      background:rgba(220,38,38,.12);
+      color:#dc2626;
     }
     .ai-call-detail-head span{
       display:block;
@@ -692,12 +772,6 @@
       word-break:break-all;
     }
     .ai-call-detail-close{
-      width:34px;
-      height:34px;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface-2);
-      color:var(--text-2);
       display:grid;
       place-items:center;
       cursor:pointer;
@@ -741,6 +815,60 @@
       line-height:1.65;
       font-weight:700;
       white-space:pre-wrap;
+      word-break:break-word;
+    }
+    .ai-call-token-split{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .ai-call-token-split-bar{
+      height:8px;
+      border-radius:999px;
+      background:var(--surface);
+      overflow:hidden;
+      display:flex;
+    }
+    .ai-call-token-split-prompt{
+      background:var(--accent);
+      border-radius:999px 0 0 999px;
+      transition:width .4s ease;
+    }
+    .ai-call-token-split-completion{
+      background:color-mix(in srgb, #8b5cf6 72%, var(--accent));
+      border-radius:0 999px 999px 0;
+      transition:width .4s ease;
+    }
+    .ai-call-token-split-labels{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .ai-call-token-split-labels span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:750;
+    }
+    .ai-call-detail-cost{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));
+      gap:10px;
+    }
+    .ai-call-detail-cost span{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .ai-call-detail-cost em{
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      font-weight:800;
+    }
+    .ai-call-detail-cost strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:800;
       word-break:break-word;
     }
     .ai-call-detail-content{

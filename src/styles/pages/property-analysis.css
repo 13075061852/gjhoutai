@@ -557,15 +557,7 @@
       font-weight:600;
     }
     .analysis-compare-dialog{
-      position:fixed;
-      inset:0;
-      z-index:30000;
-      display:flex;
-      align-items:center;
-      justify-content:center;
       padding:24px;
-      background:rgba(15,23,42,.42);
-      animation:analysis-compare-overlay-in .18s ease-out both;
     }
     .analysis-compare-card{
       width:fit-content;
@@ -574,11 +566,6 @@
       display:flex;
       flex-direction:column;
       overflow:hidden;
-      border:1px solid #dbe5f0;
-      border-radius:8px;
-      background:#fff;
-      box-shadow:0 24px 70px rgba(15,23,42,.22);
-      animation:analysis-compare-card-in .22s cubic-bezier(.16,1,.3,1) both;
     }
     .analysis-compare-head{
       flex:0 0 auto;
@@ -631,23 +618,11 @@
       cursor:wait;
     }
     .analysis-compare-close{
-      width:34px;
-      height:34px;
       flex:0 0 auto;
-      display:grid;
-      place-items:center;
-      border:1px solid #dbe5f0;
-      border-radius:8px;
-      background:#fff;
-      color:#475569;
-      cursor:pointer;
     }
     .analysis-compare-close:hover,
     .analysis-compare-close:focus-visible{
       outline:none;
-      border-color:#cbd5e1;
-      color:#0f172a;
-      background:#f8fafc;
     }
     .analysis-compare-body{
       min-height:0;
@@ -710,20 +685,6 @@
     .analysis-compare-table th:last-child,
     .analysis-compare-table td:last-child{
       border-right:0;
-    }
-    @keyframes analysis-compare-overlay-in{
-      from{opacity:0}
-      to{opacity:1}
-    }
-    @keyframes analysis-compare-card-in{
-      from{
-        opacity:0;
-        transform:translateY(10px);
-      }
-      to{
-        opacity:1;
-        transform:translateY(0);
-      }
     }
     @media (max-width:720px){
       .analysis-compare-dialog{

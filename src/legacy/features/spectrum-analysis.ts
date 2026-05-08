@@ -36,9 +36,8 @@
 
   const refs = {};
   let imageDbPromise = null;
-  let detailResizeObserver = null;
   let categoryDragActive = false;
-  const DETAIL_AUTO_COLLAPSE_WIDTH = 1260;
+  const DETAIL_COMPACT_MQ = window.matchMedia('(max-width: 1200px)');
 
   const initRefs = () => {
     refs.searchInput = document.getElementById('spectrumSearchInput');
@@ -621,9 +620,9 @@
   const openUploadConflictDialog = (fileName) => new Promise((resolve) => {
     refs.uploadConflictDialog?.remove();
     const dialog = document.createElement('div');
-    dialog.className = 'spectrum-delete-dialog spectrum-upload-conflict-dialog';
+    dialog.className = 'spectrum-delete-dialog dialog-overlay';
     dialog.innerHTML = `
-      <div class="spectrum-delete-card spectrum-upload-conflict-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadConflictTitle">
+      <div class="spectrum-delete-card spectrum-upload-conflict-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadConflictTitle">
         <div class="spectrum-delete-icon spectrum-upload-conflict-icon"><i class="ti ti-file-alert" aria-hidden="true"></i></div>
         <div class="spectrum-delete-main">
           <div class="spectrum-delete-title" id="spectrumUploadConflictTitle">发现同名图片</div>
@@ -653,9 +652,9 @@
   const openImportConflictDialog = (count) => new Promise((resolve) => {
     refs.uploadConflictDialog?.remove();
     const dialog = document.createElement('div');
-    dialog.className = 'spectrum-delete-dialog spectrum-upload-conflict-dialog';
+    dialog.className = 'spectrum-delete-dialog dialog-overlay';
     dialog.innerHTML = `
-      <div class="spectrum-delete-card spectrum-upload-conflict-card" role="dialog" aria-modal="true" aria-labelledby="spectrumImportConflictTitle">
+      <div class="spectrum-delete-card spectrum-upload-conflict-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="spectrumImportConflictTitle">
         <div class="spectrum-delete-icon spectrum-upload-conflict-icon"><i class="ti ti-file-alert" aria-hidden="true"></i></div>
         <div class="spectrum-delete-main">
           <div class="spectrum-delete-title" id="spectrumImportConflictTitle">发现 ${count} 项同名冲突</div>
@@ -688,9 +687,9 @@
 
     refs.uploadIssueDialog?.remove();
     const dialog = document.createElement('div');
-    dialog.className = 'spectrum-delete-dialog spectrum-upload-issue-dialog';
+    dialog.className = 'spectrum-delete-dialog dialog-overlay';
     dialog.innerHTML = `
-      <div class="spectrum-delete-card spectrum-upload-issue-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadIssueTitle">
+      <div class="spectrum-delete-card spectrum-upload-issue-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="spectrumUploadIssueTitle">
         <div class="spectrum-delete-icon spectrum-upload-issue-icon"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
         <div class="spectrum-delete-main">
           <div class="spectrum-delete-title" id="spectrumUploadIssueTitle">发现 ${entries.length} 张异常图片</div>
@@ -925,21 +924,21 @@
     }
 
     const modal = document.createElement('div');
-    modal.className = 'spectrum-compact-detail-dialog';
+    modal.className = 'spectrum-compact-detail-dialog dialog-overlay';
     modal.innerHTML = item ? `
-      <div class="spectrum-compact-detail-card" role="dialog" aria-modal="true" aria-labelledby="spectrumCompactDetailTitle">
-        <button class="spectrum-detail-modal-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
-          <i class="ti ti-x" aria-hidden="true"></i>
-        </button>
-        <button class="spectrum-compact-detail-image" type="button" data-spectrum-preview="${utils.escapeHtml(item.id)}" aria-label="放大查看 ${utils.escapeHtml(item.title)}">
-          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
-        </button>
+      <div class="spectrum-compact-detail-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="spectrumCompactDetailTitle">
         <div class="spectrum-detail-modal-head">
           <div>
             <div class="spectrum-detail-modal-title" id="spectrumCompactDetailTitle">图谱详情</div>
             <div class="spectrum-detail-modal-subtitle">${utils.escapeHtml(item.title)}</div>
           </div>
+          <button class="spectrum-detail-modal-close dialog-close" type="button" data-spectrum-detail-close aria-label="关闭详情">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
         </div>
+        <button class="spectrum-compact-detail-image" type="button" data-spectrum-preview="${utils.escapeHtml(item.id)}" aria-label="放大查看 ${utils.escapeHtml(item.title)}">
+          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+        </button>
         <form class="spectrum-detail-form" data-spectrum-detail-form>
           <input name="id" type="hidden" value="${utils.escapeHtml(item.id)}" />
           <label class="spectrum-detail-field spectrum-detail-field-full">
@@ -1021,11 +1020,7 @@
   };
 
   const isDetailCompactMode = () => {
-    if (!refs.workbench) return false;
-    const width = refs.workbench.getBoundingClientRect().width;
-    const detailWidth = refs.detailPanel?.getBoundingClientRect().width || 0;
-    const detailIsClipped = !state.detailCollapsed && detailWidth > 0 && detailWidth < 260;
-    return (width > 0 && width < DETAIL_AUTO_COLLAPSE_WIDTH) || detailIsClipped;
+    return DETAIL_COMPACT_MQ.matches;
   };
 
   const syncDetailAutoCollapse = () => {
@@ -1040,15 +1035,8 @@
 
   const setupDetailAutoCollapse = () => {
     syncDetailAutoCollapse();
-    if (!refs.workbench) return;
 
-    if (window.ResizeObserver) {
-      detailResizeObserver = new ResizeObserver(() => syncDetailAutoCollapse());
-      detailResizeObserver.observe(refs.workbench);
-      return;
-    }
-
-    window.addEventListener('resize', syncDetailAutoCollapse);
+    DETAIL_COMPACT_MQ.addEventListener('change', syncDetailAutoCollapse);
   };
 
   const printSelectedList = () => {
@@ -1915,7 +1903,7 @@
         <button class="spectrum-preview-close" type="button" data-spectrum-preview-close aria-label="关闭预览">
           <i class="ti ti-x" aria-hidden="true"></i>
         </button>
-        <div class="spectrum-preview-card">
+        <div class="spectrum-preview-card dialog-card">
           <div class="spectrum-preview-card-head">
             <div>
               <div class="spectrum-preview-card-title">${utils.escapeHtml(item.title)}</div>
@@ -1955,7 +1943,7 @@
 
     closeImagePreview();
     const dialog = document.createElement('div');
-    dialog.className = 'spectrum-preview-dialog';
+    dialog.className = 'spectrum-preview-dialog dialog-overlay';
     document.body.appendChild(dialog);
     refs.previewDialog = dialog;
     refs.previewItems = getPreviewItems(id);
@@ -1967,8 +1955,31 @@
     const selected = force ?? !state.selectedIds.has(id);
     if (selected) state.selectedIds.add(id);
     else state.selectedIds.delete(id);
+
+    const prevActiveId = state.activeId;
     state.activeId = id || state.activeId;
-    render();
+
+    if (prevActiveId && prevActiveId !== id) {
+      const prevCard = refs.gallery?.querySelector(`[data-spectrum-id="${CSS.escape(prevActiveId)}"]`);
+      if (prevCard) prevCard.classList.remove('is-active');
+    }
+
+    const card = refs.gallery?.querySelector(`[data-spectrum-id="${CSS.escape(id)}"]`);
+    if (card) {
+      card.classList.toggle('is-selected', selected);
+      card.classList.add('is-active');
+      card.setAttribute('aria-pressed', String(selected));
+    }
+
+    const filtered = getFilteredItems();
+    if (refs.galleryCount) {
+      refs.galleryCount.textContent = `共 ${filtered.length} 张，已选 ${state.selectedIds.size} 张`;
+    }
+
+    renderDetail();
+    renderSelectedList();
+    updateActions();
+    updateDetailCollapsed();
   };
 
   const readFileAsDataUrl = (file) => new Promise((resolve) => {
@@ -2672,15 +2683,35 @@
     refs.selectedList?.addEventListener('click', (event) => {
       const removeButton = event.target.closest('[data-spectrum-remove-selected]');
       if (removeButton) {
-        state.selectedIds.delete(removeButton.getAttribute('data-spectrum-remove-selected'));
-        render();
+        const removedId = removeButton.getAttribute('data-spectrum-remove-selected');
+        state.selectedIds.delete(removedId);
+        const removedCard = refs.gallery?.querySelector(`[data-spectrum-id="${CSS.escape(removedId)}"]`);
+        if (removedCard) {
+          removedCard.classList.remove('is-selected');
+          removedCard.setAttribute('aria-pressed', 'false');
+        }
+        const filtered = getFilteredItems();
+        if (refs.galleryCount) {
+          refs.galleryCount.textContent = `共 ${filtered.length} 张，已选 ${state.selectedIds.size} 张`;
+        }
+        renderSelectedList();
+        renderDetail();
+        updateActions();
         return;
       }
 
       const openButton = event.target.closest('[data-spectrum-open]');
       if (openButton) {
+        const prevActiveId = state.activeId;
         state.activeId = openButton.getAttribute('data-spectrum-open') || state.activeId;
-        render();
+        if (prevActiveId && prevActiveId !== state.activeId) {
+          const prevCard = refs.gallery?.querySelector(`[data-spectrum-id="${CSS.escape(prevActiveId)}"]`);
+          if (prevCard) prevCard.classList.remove('is-active');
+        }
+        const activeCard = refs.gallery?.querySelector(`[data-spectrum-id="${CSS.escape(state.activeId)}"]`);
+        if (activeCard) activeCard.classList.add('is-active');
+        renderDetail();
+        updateDetailCollapsed();
       }
     });
 

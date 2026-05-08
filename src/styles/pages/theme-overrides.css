@@ -330,8 +330,26 @@
       border-color:var(--border);
       color:var(--text);
     }
+    body[data-theme="dark"] .dialog-overlay{
+      --dialog-overlay-bg:rgba(2,6,23,.62);
+    }
+    body[data-theme="dark"] .dialog-card{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .dialog-close{
+      background:var(--surface-2);
+      border-color:var(--border);
+      color:var(--text-2);
+    }
+    body[data-theme="dark"] .dialog-close:hover,
+    body[data-theme="dark"] .dialog-close:focus-visible{
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--surface-3);
+    }
     body[data-theme="dark"] .spectrum-workbench.is-detail-modal-open .spectrum-detail-panel{
-      background:rgba(2,6,23,.62);
+      --dialog-overlay-bg:rgba(2,6,23,.62);
       border:0;
       color:var(--text);
     }
@@ -343,7 +361,7 @@
       border-bottom-color:var(--border);
     }
     body[data-theme="dark"] .spectrum-compact-detail-dialog{
-      background:rgba(2,6,23,.62);
+      --dialog-overlay-bg:rgba(2,6,23,.62);
       color:var(--text);
     }
     body[data-theme="dark"] .spectrum-compact-detail-card{

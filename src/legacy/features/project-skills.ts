@@ -171,6 +171,32 @@
     return { title, category, type, tags };
   };
 
+  const extractFormulaCreateInput = (prompt) => {
+    const text = String(prompt || '').trim();
+    const simpleFormula = text.match(/(?:做|来|搞|弄|配|设计|生成|出)\s*(?:一个|一份|条|个)?\s*(PC\/ABS|ABS|PBT|PET|PA|PP|[A-Za-z0-9._/-]{2,40})?\s*(?:对标|改进|试产|实验)?\s*配方/i);
+    const name = extractQuotedText(text)
+      || text.match(/(?:新增|创建|新建|添加)\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{2,80})\s*(?:配方|配方记录|记录)?/)?.[1]
+      || text.match(/配方(?:名称|名)?(?:是|为|叫|：|:)\s*([^，。；;!?！？]{1,80})/)?.[1]
+      || (simpleFormula?.[1] ? `${simpleFormula[1].toUpperCase()} 配方` : '')
+      || '';
+    const code = text.match(/(?:编号|配方编号|code)(?:是|为|：|:)?\s*([A-Za-z0-9._/-]{2,40})/i)?.[1]
+      || text.match(/\b([A-Z0-9]{2,}(?:-[A-Z0-9]+){1,5})\b/i)?.[1]
+      || '';
+    const product = text.match(/(?:产品|型号|产品型号)(?:是|为|：|:)?\s*([A-Za-z0-9._/-]{2,50})/i)?.[1]
+      || simpleFormula?.[1]?.toUpperCase()
+      || '';
+    const category = text.match(/(?:分类|材质|类别)(?:是|为|：|:)?\s*(PC\/ABS|ABS|PP|PBT|PA|PET|[\u4e00-\u9fa5A-Za-z0-9._/-]{1,30})/i)?.[1] || '';
+    const line = text.match(/([AB])\s*线/i)?.[1]?.toUpperCase() || '';
+    const owner = text.match(/(?:负责人|工程师|owner)(?:是|为|：|:)?\s*([\u4e00-\u9fa5A-Za-z0-9._/-]{1,30})/)?.[1] || '';
+    const target = text.match(/(?:目标|说明|备注|用途)(?:是|为|：|:)?\s*([^。；;!?！？]{1,120})/)?.[1] || '';
+    const checksText = text.match(/(?:验证|测试|检测|计划)(?:是|为|：|:)?\s*([^。；;!?！？]{1,120})/)?.[1] || '';
+    const checks = checksText
+      ? checksText.split(/[，,、/]+/).map((item) => item.trim()).filter(Boolean)
+      : [];
+    if (!name && !code && !product) return null;
+    return { name, code, product, category, line, owner, target, checks };
+  };
+
   const extractSpectrumUpdateInput = (prompt) => {
     const text = String(prompt || '').trim();
     const selected = /(?:当前已选|当前选中|已选|选中)/.test(text);
@@ -292,8 +318,9 @@
 
   const SKILL_CALL_EXAMPLE = {
     gjhSkillCall: {
-      skillId: 'spectrum.deleteImage',
+      skillId: 'spectrum.manageImages',
       input: {
+        action: 'delete',
         target: '图谱名称',
         mode: 'target',
       },
@@ -337,202 +364,135 @@
 
   const createSkillRegistry = () => [
     {
-      id: 'spectrum.deleteImage',
-      title: '删除图谱图片',
+      id: 'spectrum.manageImages',
+      title: '管理图谱数据',
       module: '图谱分析',
-      icon: 'ti-trash',
+      icon: 'ti-database-edit',
       level: '执行型',
-      summary: '按图谱名称、编号或当前已选状态删除图谱库图片，并同步本地图片库和编辑记录。',
-      inputSpec: '{ "target": "图谱名称/编号", "mode": "target | selected | active" }',
-      outputSpec: '{ "ok": true, "deleted": 1, "message": "..." }',
-      examples: ['帮我删除图谱分析上的「320G6-N11 DSC」', '删除当前已选图谱'],
+      summary: '按 action 参数选择图谱数据操作，支持查询、新增、修改、选择、删除、标签和分类管理。',
+      inputSpec: '{ "action": "search | create | update | select | delete | tag | categorize", "target": "名称/编号/关键词", "mode": "query | target | selected | filtered | active", "title": "新增标题", "updates": { "category": "...", "note": "...", "tagsAdd": ["..."] }, "tags": ["标签"], "category": "分类", "maxAffected": 30 }',
+      outputSpec: '{ "ok": true, "action": "search", "items": [{ "title": "..." }], "images": ["图谱图片"] }',
+      actionDocs: [
+        ['search', '查询图谱', 'query、mode、limit', '匹配记录、上下文、图谱图片'],
+        ['create', '新增记录', 'title、code、type、category、tags、note', '新增记录详情'],
+        ['update', '修改字段', 'target、mode、updates、maxAffected', '更新数量和明细'],
+        ['select', '选择范围', 'target、mode、clearExisting、maxAffected', '已选数量'],
+        ['delete', '删除记录', 'target、mode、maxAffected', '删除数量或候选项'],
+        ['tag', '管理标签', 'target、mode、tags、maxAffected', '标签写入结果'],
+        ['categorize', '调整分类', 'target、mode、category、maxAffected', '分类更新结果'],
+      ],
+      paramDocs: [
+        ['action', '操作类型，可选 search/create/update/select/delete/tag/categorize', '必填'],
+        ['target', '目标名称、编号、关键词或分类范围', '按 action 需要'],
+        ['mode', '目标范围：query 精确/模糊查询，selected 当前已选，filtered 当前筛选，active 当前图谱', '可选'],
+        ['updates', 'update 时要修改的字段，例如 title、category、note、tagsAdd', 'update 必填'],
+        ['maxAffected', '最多影响多少条记录，用于限制批量修改或删除范围', '可选'],
+      ],
+      resultDocs: [
+        ['ok', '执行是否成功'],
+        ['message', '执行结果摘要'],
+        ['items', '命中的图谱记录或处理后的记录明细'],
+        ['images', 'search 时可交给视觉模型分析的图谱图片'],
+        ['candidates', '目标不唯一时返回候选项，供用户二次确认'],
+      ],
+      examples: ['查找 320G6 的 DSC 图谱', '新增一条「320G6-B1 DSC」图谱记录，分类阻燃', '把当前选中的图谱备注改为需要复核', '删除当前已选图谱'],
       infer(prompt) {
         const text = String(prompt || '');
         const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
         const hasDeleteIntent = /(?:删除|移除|删掉|清理)/.test(text);
-        const mentionsSpectrum = /(?:图谱|谱图|图片|图像)/.test(text);
-        const matched = hasDeleteIntent && (mentionsSpectrum || activeOnSpectrumPage);
-        if (!matched || /(?:怎么|如何|教程|说明|能不能)/.test(text)) return null;
-        const selected = /(?:当前|选中|已选)/.test(text);
-        const target = extractDeleteTarget(text);
-        return {
-          skillId: this.id,
-          confidence: target || selected ? 0.92 : 0.72,
-          input: {
-            target,
-            mode: selected && !target ? 'selected' : 'target',
-          },
-        };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.deleteByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露删除技能接口。' };
+        const mentionsSpectrum = /(?:图谱|谱图|图片|图像|曲线|dsc|tga)/i.test(text);
+        if (!mentionsSpectrum && !activeOnSpectrumPage) return null;
+        if (/(?:怎么|如何|教程|说明|能不能)/.test(text)) return null;
+
+        if (hasDeleteIntent) {
+          const selected = /(?:当前|选中|已选)/.test(text);
+          const target = extractDeleteTarget(text);
+          return {
+            skillId: this.id,
+            confidence: target || selected ? 0.92 : 0.72,
+            input: {
+              action: 'delete',
+              target,
+              mode: selected && !target ? 'selected' : 'target',
+            },
+          };
         }
-        return App.spectrumAnalysis.deleteByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.createImageRecord',
-      title: '新增图谱记录',
-      module: '图谱分析',
-      icon: 'ti-file-plus',
-      level: '执行型',
-      summary: '新增一条待上传图谱记录，写入名称、编号、类型、分类、标签、日期和备注；不会重复创建同名记录。',
-      inputSpec: '{ "title": "图谱名称", "code": "编号", "type": "DSC | TGA", "category": "分类", "date": "YYYY-MM-DD", "tags": ["标签"], "note": "备注" }',
-      outputSpec: '{ "ok": true, "created": 1, "items": [{ "title": "..." }] }',
-      examples: ['新增一条「320G6-B1 DSC」图谱记录，分类阻燃', '创建一个杜邦 PET FR530 DSC 的待上传图谱'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+
         const hasCreateIntent = /(?:新增|创建|新建|添加)/.test(text) && /(?:图谱|谱图|图片|记录|数据)/.test(text);
-        if (!hasCreateIntent || (!activeOnSpectrumPage && !/(?:图谱|谱图)/.test(text))) return null;
-        const input = extractSpectrumCreateInput(text);
-        if (!input) return null;
-        return { skillId: this.id, confidence: 0.86, input };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.createByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露新增记录技能接口。' };
+        if (hasCreateIntent) {
+          const input = extractSpectrumCreateInput(text);
+          if (input) return { skillId: this.id, confidence: 0.86, input: { action: 'create', ...input } };
         }
-        return App.spectrumAnalysis.createByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.updateImages',
-      title: '更新图谱数据',
-      module: '图谱分析',
-      icon: 'ti-edit',
-      level: '执行型',
-      summary: '精确更新图谱标题、分类、日期、备注或标签；支持当前已选、当前筛选或明确关键词范围，并限制单次影响数量。',
-      inputSpec: '{ "target": "名称/编号/分类/标签", "mode": "query | selected | filtered | active", "updates": { "title": "...", "category": "...", "date": "YYYY-MM-DD", "note": "...", "tagsAdd": ["..."], "tagsRemove": ["..."], "tagsSet": ["..."] }, "maxAffected": 30 }',
-      outputSpec: '{ "ok": true, "updated": 3, "changed": 2, "items": [{ "title": "..." }] }',
-      examples: ['把当前选中的图谱备注改为需要复核', '给杜邦相关图谱移除 PET 标签', '把 320G6-B1 的分类改为阻燃'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
-        const hasUpdateIntent = /(?:修改|更新|改成|改为|设置|设为|写入|移除|去掉|清除|备注|标题|名称|标签|分类)/.test(text);
-        const mentionsSpectrum = /(?:图谱|谱图|图片|记录|数据|当前已选|当前筛选|选中)/.test(text);
-        if (!hasUpdateIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
-        const input = extractSpectrumUpdateInput(text);
-        if (!input) return null;
-        return { skillId: this.id, confidence: 0.88, input };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.updateByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露更新数据技能接口。' };
-        }
-        return App.spectrumAnalysis.updateByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.selectImages',
-      title: '选择图谱数据',
-      module: '图谱分析',
-      icon: 'ti-checklist',
-      level: '执行型',
-      summary: '按明确关键词、当前筛选或当前图谱选择数据，供后续分析、更新或删除复用，避免一次处理过宽范围。',
-      inputSpec: '{ "target": "名称/编号/分类/标签", "mode": "query | filtered | active", "clearExisting": true, "maxAffected": 80 }',
-      outputSpec: '{ "ok": true, "selected": 3, "totalSelected": 3 }',
-      examples: ['先选中杜邦相关图谱', '选择当前筛选结果', '追加选择 320G6-B1 图谱'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
-        const hasSelectIntent = /(?:选择|选中|勾选|定位|筛出|筛选|追加选择|加选)/.test(text);
-        const mentionsSpectrum = /(?:图谱|谱图|图片|记录|数据|当前筛选|当前图谱)/.test(text);
-        if (!hasSelectIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
-        return { skillId: this.id, confidence: 0.82, input: extractSpectrumSelectInput(text) };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.selectByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露选择数据技能接口。' };
-        }
-        return App.spectrumAnalysis.selectByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.addTags',
-      title: '批量添加图谱标签',
-      module: '图谱分析',
-      icon: 'ti-tags',
-      level: '执行型',
-      summary: '按明确关键词、当前筛选结果或已选图谱批量写入标签，并同步图谱库、详情编辑和本地保存。',
-      inputSpec: '{ "target": "420", "tags": ["PET"], "mode": "query | selected | filtered", "maxAffected": 30 }',
-      outputSpec: '{ "ok": true, "updated": 17, "tags": ["PET"] }',
-      examples: ['帮我把所有 420 的图谱加上 PET 标签', '给当前已选图谱添加阻燃标签'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+
         const hasTagIntent = /(?:标签|打标|标记)/.test(text)
           && /(?:加上|添加|增加|打上|写入|标记为|设为|设置为|改成|修改|加)/.test(text);
-        const mentionsSpectrum = /(?:图谱|谱图|图片|图像)/.test(text);
-        if (!hasTagIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
-        const input = extractTagUpdateInput(text);
-        if (!input) return null;
-        return {
-          skillId: this.id,
-          confidence: 0.9,
-          input,
-        };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.tagByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露标签修改技能接口。' };
+        if (hasTagIntent) {
+          const input = extractTagUpdateInput(text);
+          if (input) return { skillId: this.id, confidence: 0.9, input: { action: 'tag', ...input } };
         }
-        return App.spectrumAnalysis.tagByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.categorizeImages',
-      title: '批量整理图谱分类',
-      module: '图谱分析',
-      icon: 'ti-tags',
-      level: '执行型',
-      summary: '按明确关键词、当前筛选结果或已选图谱批量更新分类，并自动切换到新分类视图。',
-      inputSpec: '{ "target": "杜邦", "category": "杜邦", "mode": "query | selected | filtered", "maxAffected": 30 }',
-      outputSpec: '{ "ok": true, "updated": 17, "category": "杜邦" }',
-      examples: ['把杜邦的产品整理出来做一个新分类叫杜邦', '把当前筛选结果归类为PET'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        const activeOnSpectrumPage = getActivePageId() === 'spectrum-analysis';
+
         const hasCategoryIntent = /(?:分类|归类|整理|分组|新分类|创建分类|新增分类|放到|分到)/.test(text);
         const hasSetIntent = /(?:叫|为|成|到|整理出来|做一个|创建|新建|新增|归类|放到|分到)/.test(text);
-        const mentionsSpectrum = /(?:图谱|谱图|图片|图像|产品|型号|数据)/.test(text);
-        if (!hasCategoryIntent || !hasSetIntent || (!mentionsSpectrum && !activeOnSpectrumPage)) return null;
-        const input = extractCategoryUpdateInput(text);
-        if (!input) return null;
-        return {
-          skillId: this.id,
-          confidence: 0.93,
-          input,
-        };
-      },
-      async handler(input = {}) {
-        if (!App.spectrumAnalysis?.categorizeByAgent) {
-          return { ok: false, message: '图谱分析模块尚未暴露分类整理技能接口。' };
+        if (hasCategoryIntent && hasSetIntent) {
+          const input = extractCategoryUpdateInput(text);
+          if (input) return { skillId: this.id, confidence: 0.93, input: { action: 'categorize', ...input } };
         }
-        return App.spectrumAnalysis.categorizeByAgent(input);
-      },
-    },
-    {
-      id: 'spectrum.searchImages',
-      title: '检索图谱库',
-      module: '图谱分析',
-      icon: 'ti-photo-search',
-      level: '查询型',
-      summary: '按标题、编号、分类、标签、DSC/TGA 类型或备注检索图谱，并返回可上传给视觉模型的图谱图片。',
-      inputSpec: '{ "query": "关键词", "mode": "query | selected | filtered | active", "limit": "可选，只有用户明确要求数量时才填写" }',
-      outputSpec: '{ "ok": true, "items": [{ "title": "...", "type": "DSC" }], "images": ["图谱图片"] }',
-      examples: ['查找 320G6 的 DSC 图谱', '检索标签里有异常的 TGA 图片'],
-      infer(prompt) {
-        const text = String(prompt || '');
-        if (!/(?:查找|搜索|检索|找|分析|对比|比较|查看|看).*(?:图谱|谱图|图片|曲线|dsc|tga)|(?:图谱|谱图|图片|曲线|dsc|tga).*(?:查找|搜索|检索|找|分析|对比|比较|查看|看)/i.test(text)) return null;
-        return { skillId: this.id, confidence: 0.76, input: extractSpectrumSearchInput(text) };
+
+        const hasUpdateIntent = /(?:修改|更新|改成|改为|设置|设为|写入|移除|去掉|清除|备注|标题|名称|标签|分类)/.test(text);
+        if (hasUpdateIntent) {
+          const input = extractSpectrumUpdateInput(text);
+          if (input) return { skillId: this.id, confidence: 0.88, input: { action: 'update', ...input } };
+        }
+
+        const hasSelectIntent = /(?:选择|选中|勾选|定位|筛出|筛选|追加选择|加选)/.test(text);
+        if (hasSelectIntent) {
+          return { skillId: this.id, confidence: 0.82, input: { action: 'select', ...extractSpectrumSelectInput(text) } };
+        }
+
+        if (/(?:查找|搜索|检索|找|分析|对比|比较|查看|看).*(?:图谱|谱图|图片|曲线|dsc|tga)|(?:图谱|谱图|图片|曲线|dsc|tga).*(?:查找|搜索|检索|找|分析|对比|比较|查看|看)/i.test(text)) {
+          return { skillId: this.id, confidence: 0.76, input: { action: 'search', ...extractSpectrumSearchInput(text) } };
+        }
+
+        return null;
       },
       async handler(input = {}) {
+        const action = String(input.action || 'search').trim();
+        const withAction = (result) => ({
+          ...(result || {}),
+          data: {
+            ...(result?.data || {}),
+            action,
+          },
+        });
+
+        if (action === 'delete') {
+          if (!App.spectrumAnalysis?.deleteByAgent) return { ok: false, message: '图谱分析模块尚未暴露删除技能接口。' };
+          return withAction(await App.spectrumAnalysis.deleteByAgent(input));
+        }
+        if (action === 'create') {
+          if (!App.spectrumAnalysis?.createByAgent) return { ok: false, message: '图谱分析模块尚未暴露新增记录技能接口。' };
+          return withAction(await App.spectrumAnalysis.createByAgent(input));
+        }
+        if (action === 'update') {
+          if (!App.spectrumAnalysis?.updateByAgent) return { ok: false, message: '图谱分析模块尚未暴露更新数据技能接口。' };
+          return withAction(await App.spectrumAnalysis.updateByAgent(input));
+        }
+        if (action === 'select') {
+          if (!App.spectrumAnalysis?.selectByAgent) return { ok: false, message: '图谱分析模块尚未暴露选择数据技能接口。' };
+          return withAction(await App.spectrumAnalysis.selectByAgent(input));
+        }
+        if (action === 'tag') {
+          if (!App.spectrumAnalysis?.tagByAgent) return { ok: false, message: '图谱分析模块尚未暴露标签修改技能接口。' };
+          return withAction(await App.spectrumAnalysis.tagByAgent(input));
+        }
+        if (action === 'categorize') {
+          if (!App.spectrumAnalysis?.categorizeByAgent) return { ok: false, message: '图谱分析模块尚未暴露分类整理技能接口。' };
+          return withAction(await App.spectrumAnalysis.categorizeByAgent(input));
+        }
         if (!App.spectrumAnalysis?.searchByAgent) {
           return { ok: false, message: '图谱分析模块尚未暴露检索技能接口。' };
         }
-        return App.spectrumAnalysis.searchByAgent(input);
+        return withAction(await App.spectrumAnalysis.searchByAgent(input));
       },
     },
     {
@@ -544,6 +504,15 @@
       summary: '按型号、批次或指标关键词检索物性数据，返回强匹配、相近匹配和指标摘要。',
       inputSpec: '{ "query": "型号/批次/指标关键词" }',
       outputSpec: '{ "ok": true, "context": "物性分析检索结果..." }',
+      paramDocs: [
+        ['query', '要检索的型号、批次、材料名称或指标关键词', '必填'],
+      ],
+      resultDocs: [
+        ['ok', '是否检索成功'],
+        ['context', '可交给 AI 分析的物性数据上下文'],
+        ['displayTable', '前端展示用的匹配数据表'],
+        ['stats', '命中行数、上下文长度等统计信息'],
+      ],
       examples: ['检索物性型号 320G6-N11', '查一下批次 A2404 的冲击强度'],
       infer(prompt) {
         const text = String(prompt || '');
@@ -574,6 +543,46 @@
       },
     },
     {
+      id: 'formula.createRecipe',
+      title: '创建新配方记录',
+      module: '配方管理',
+      icon: 'ti-flask-2',
+      level: '执行型',
+      summary: '在配方管理列表中新增一条真实配方草稿，写入编号、名称、产品型号、分类、产线、负责人、说明和验证项，并同步本地配方库。不会重复创建同名或同编号记录。',
+      inputSpec: '{ "name": "配方名称", "code": "配方编号", "product": "产品型号", "category": "ABS | PP | PC/ABS | ...", "line": "A | B", "owner": "负责人", "target": "目标说明", "materials": [{ "name": "原料", "ratio": 58, "port": 1 }], "checks": ["验证项"] }',
+      outputSpec: '{ "ok": true, "created": 1, "items": [{ "name": "...", "code": "..." }] }',
+      paramDocs: [
+        ['name', '配方名称，列表中显示的主标题', '必填其一'],
+        ['code', '配方编号，用于去重和检索', '必填其一'],
+        ['product', '产品型号或目标牌号', '必填其一'],
+        ['materials', '配方原料数组，可包含 name、ratio、port、role、stage', '可选'],
+        ['checks', '验证或测试项目，例如 DSC/TGA/CTI', '可选'],
+      ],
+      resultDocs: [
+        ['ok', '是否创建成功'],
+        ['created', '新增记录数量'],
+        ['items', '新增配方的编号、名称、分类、产线和版本'],
+        ['message', '创建结果摘要'],
+      ],
+      examples: ['根据选中的物性数据创建一个配方草稿', '新建 420G6-B3-X6-DuPont 对标改进版配方'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        const activeOnFormulaPage = getActivePageId() === 'formula-management';
+        const hasCreateIntent = /(?:新增|创建|新建|添加|生成|做|来|搞|弄|配|设计|出).*(?:配方|配方记录)|(?:配方|配方记录).*(?:新增|创建|新建|添加|生成|做|来|搞|弄|配|设计|出)/.test(text);
+        if (!hasCreateIntent && !activeOnFormulaPage) return null;
+        if (!hasCreateIntent || /(?:怎么|如何|教程|说明|能不能)/.test(text)) return null;
+        const input = extractFormulaCreateInput(text);
+        if (!input) return null;
+        return { skillId: this.id, confidence: 0.9, input };
+      },
+      async handler(input = {}) {
+        if (!App.businessPages?.createFormulaByAgent) {
+          return { ok: false, message: '配方管理模块尚未暴露创建配方技能接口。' };
+        }
+        return App.businessPages.createFormulaByAgent(input);
+      },
+    },
+    {
       id: 'analysis.buildJointPackage',
       title: '生成联合分析包',
       module: '综合分析',
@@ -582,6 +591,16 @@
       summary: '仅在用户明确要求跨模块/物性+图谱联合分析时，把相关数据整理成统一的 AI 分析上下文。',
       inputSpec: '{ "question": "用户问题", "forceCurrentPage": false }',
       outputSpec: '{ "ok": true, "context": "...", "images": ["图谱图片"], "imageCount": 1 }',
+      paramDocs: [
+        ['question', '用户要分析的问题或目标型号', '必填'],
+        ['forceCurrentPage', '是否强制优先使用当前页面数据', '可选'],
+      ],
+      resultDocs: [
+        ['ok', '是否生成成功'],
+        ['context', '联合分析上下文，包含相关物性和业务信息'],
+        ['images', '可用于视觉分析的图谱图片'],
+        ['imageCount', '图谱图片数量'],
+      ],
       examples: ['把当前型号的物性和图谱合成分析包', '生成 320G6-N11 的联合分析上下文'],
       infer(prompt) {
         const text = String(prompt || '');
@@ -619,6 +638,14 @@
       summary: '根据自然语言跳转到系统内任意已注册页面，包括业务中心、基础数据、系统管理和 AI 功能页。',
       inputSpec: '{ "pageId": "spectrum-analysis" }',
       outputSpec: '{ "ok": true, "pageId": "spectrum-analysis" }',
+      paramDocs: [
+        ['pageId', '目标页面 ID，例如 formula-management、spectrum-analysis、property-analysis', '必填'],
+      ],
+      resultDocs: [
+        ['ok', '是否切换成功'],
+        ['pageId', '已切换到的页面 ID'],
+        ['message', '页面切换结果摘要'],
+      ],
       examples: ['打开客户档案', '切换到图谱分析', '打开AI调用分析'],
       infer(prompt) {
         const text = String(prompt || '');
@@ -642,6 +669,26 @@
   ];
 
   const getSkillRegistry = () => createSkillRegistry();
+  const SPECTRUM_LEGACY_ACTIONS = {
+    'spectrum.deleteImage': 'delete',
+    'spectrum.createImageRecord': 'create',
+    'spectrum.updateImages': 'update',
+    'spectrum.selectImages': 'select',
+    'spectrum.addTags': 'tag',
+    'spectrum.categorizeImages': 'categorize',
+    'spectrum.searchImages': 'search',
+  };
+  const normalizeSkillInvocation = (skillId, input = {}) => {
+    const action = SPECTRUM_LEGACY_ACTIONS[skillId];
+    if (!action) return { skillId, input };
+    return {
+      skillId: 'spectrum.manageImages',
+      input: {
+        action,
+        ...input,
+      },
+    };
+  };
   const getSkillById = (skillId) => getSkillRegistry().find((skill) => skill.id === skillId);
 
   const routePrompt = (prompt = '') => {
@@ -649,6 +696,25 @@
       .map((skill) => skill.infer?.(prompt))
       .filter(Boolean)
       .sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    const formulaPlan = plans.find((plan) => plan.skillId === 'formula.createRecipe');
+    if (formulaPlan) {
+      return {
+        skillId: 'formula.createRecipe',
+        input: formulaPlan.input || {},
+        confidence: formulaPlan.confidence || 0.9,
+        steps: [
+          {
+            skillId: 'assistant.openPage',
+            input: { pageId: 'formula-management' },
+            reason: '创建配方前先打开配方管理页面',
+          },
+          {
+            ...formulaPlan,
+            reason: '在配方管理列表中写入新配方',
+          },
+        ],
+      };
+    }
     return plans[0] || null;
   };
 
@@ -666,22 +732,23 @@
   };
 
   const executeSkill = async (skillId, input = {}, meta = {}) => {
-    const skill = getSkillById(skillId);
+    const normalizedInvocation = normalizeSkillInvocation(skillId, input);
+    const skill = getSkillById(normalizedInvocation.skillId);
     if (!skill) {
-      const missing = normalizeResult({ ok: false, message: `未知项目技能：${skillId}` });
-      appendHistory({ skillId, title: skillId, ok: false, message: missing.message, source: meta.source || 'unknown' });
-      return { skill: { id: skillId, title: skillId }, result: missing };
+      const missing = normalizeResult({ ok: false, message: `未知项目技能：${normalizedInvocation.skillId}` });
+      appendHistory({ skillId: normalizedInvocation.skillId, title: normalizedInvocation.skillId, ok: false, message: missing.message, source: meta.source || 'unknown' });
+      return { skill: { id: normalizedInvocation.skillId, title: normalizedInvocation.skillId }, result: missing };
     }
 
     let result;
     try {
-      result = normalizeResult(await skill.handler(input, meta));
+      result = normalizeResult(await skill.handler(normalizedInvocation.input, meta));
     } catch (error) {
       result = normalizeResult({ ok: false, message: error?.message || '技能执行失败。' });
     }
 
     appendHistory({
-      skillId,
+      skillId: normalizedInvocation.skillId,
       title: skill.title,
       ok: result.ok,
       message: result.message,
@@ -691,7 +758,9 @@
   };
 
   const formatSkillMessage = ({ skill, result }) => {
-    const hasCandidateActions = skill?.id === 'spectrum.deleteImage' && result.candidates?.length;
+    const hasCandidateActions = skill?.id === 'spectrum.manageImages'
+      && result?.data?.action === 'delete'
+      && result.candidates?.length;
     const lines = [
       `已调用项目技能：${skill.title || skill.id}`,
       `执行状态：${result.ok ? '完成' : '需要处理'}`,
@@ -718,7 +787,12 @@
   };
 
   const getResultActions = ({ skill, result } = {}) => {
-    if (skill?.id !== 'spectrum.deleteImage' || !Array.isArray(result?.candidates) || !result.candidates.length) {
+    if (
+      skill?.id !== 'spectrum.manageImages'
+      || result?.data?.action !== 'delete'
+      || !Array.isArray(result?.candidates)
+      || !result.candidates.length
+    ) {
       return [];
     }
 
@@ -733,8 +807,9 @@
         description: meta || '点击后直接删除这张图谱',
         icon: 'ti-trash',
         variant: 'danger',
-        skillId: 'spectrum.deleteImage',
+        skillId: 'spectrum.manageImages',
         input: {
+          action: 'delete',
           target: String(item.id || item.title || item.code || ''),
           mode: 'target',
         },
@@ -836,11 +911,18 @@
   const executeSkillCallFromText = async (text = '', meta = {}) => {
     const call = parseSkillCallFromText(text);
     if (!call) return null;
-    if (call.skillId === 'spectrum.selectImages' && hasSpectrumVisualAnalysisIntent(meta.prompt)) {
-      call.skillId = 'spectrum.searchImages';
+    const normalizedCall = normalizeSkillInvocation(call.skillId, call.input);
+    call.skillId = normalizedCall.skillId;
+    call.input = normalizedCall.input;
+    if (
+      call.skillId === 'spectrum.manageImages'
+      && call.input?.action === 'select'
+      && hasSpectrumVisualAnalysisIntent(meta.prompt)
+    ) {
       call.input = {
         ...extractSpectrumSearchInput(meta.prompt),
         ...call.input,
+        action: 'search',
         mode: call.input?.mode === 'filtered' || call.input?.mode === 'active'
           ? call.input.mode
           : 'selected',
@@ -874,17 +956,18 @@
       '技能执行后，前端会把执行结果回写给用户。',
       '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
       '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。',
-      '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用 spectrum.searchImages；不要因为问题里有型号或系列号就改调 property.searchRows。',
+      '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用 spectrum.manageImages，并用 action=search 检索；不要因为问题里有型号或系列号就改调 property.searchRows。',
       '只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
       '物性数据默认上传所有符合条件的匹配行；只有用户明确说“前 N 条/只要 N 行/显示 N 个”等数量限制时，才限制上传数量。',
       '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
-      '凡是调用 spectrum.searchImages 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
-      '图谱图片默认上传所有符合条件的匹配图片；只有用户明确说“前 N 张/只要 N 张/显示 N 个”等数量限制时，才给 spectrum.searchImages 填写 limit。',
-      '用户说“当前、选中、已选、本页、筛选结果、这张”等范围词并且要分析图谱时，调用 spectrum.searchImages 时必须填写 mode，例如选中范围用 mode=selected，不要把“选中”当成 query 关键词。',
-      '图谱数据处理按 CRUD 选择技能：查询用 spectrum.searchImages；新增待上传记录用 spectrum.createImageRecord；选择范围用 spectrum.selectImages；修改标题/分类/日期/备注/标签用 spectrum.updateImages 或专用标签/分类技能；删除用 spectrum.deleteImage。',
-      '注意：spectrum.selectImages 只用于改变左侧图谱库的勾选状态，不会上传图片、不会做视觉分析。用户说“分析选中的图谱/看一下已选图谱/对比当前选中图片”时，必须调用 spectrum.searchImages 并设置 mode=selected。',
+      '凡是调用 spectrum.manageImages 且 action=search 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
+      '图谱图片默认上传所有符合条件的匹配图片；只有用户明确说“前 N 张/只要 N 张/显示 N 个”等数量限制时，才给 spectrum.manageImages 填写 limit。',
+      '用户说“当前、选中、已选、本页、筛选结果、这张”等范围词并且要分析图谱时，调用 spectrum.manageImages 时必须填写 action=search 和 mode，例如选中范围用 mode=selected，不要把“选中”当成 query 关键词。',
+      '图谱数据处理统一调用 spectrum.manageImages：查询 action=search；新增 action=create；选择 action=select；修改标题/分类/日期/备注 action=update；标签 action=tag；归类 action=categorize；删除 action=delete。',
+      '配方数据处理：用户要求创建、 新增或生成配方记录时，调用 formula.createRecipe；不要只用自然语言声称已创建。',
+      '注意：spectrum.manageImages 的 action=select 只用于改变左侧图谱库的勾选状态，不会上传图片、不会做视觉分析。用户说“分析选中的图谱/看一下已选图谱/对比当前选中图片”时，必须调用 action=search 并设置 mode=selected。',
       '所有增删改都必须给出明确 target 或 mode。单个对象优先使用名称/编号精确匹配；用户说“当前选中”用 mode=selected，说“当前筛选/当前分类”用 mode=filtered。',
-      '如果目标可能命中无关数据，先调用 spectrum.searchImages 或 spectrum.selectImages 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',
+      '如果目标可能命中无关数据，先调用 spectrum.manageImages 的 action=search 或 action=select 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',
       '如果技能返回多个候选对象，前端会生成可点击的候选按钮，用户点击后再执行对应对象。',
       '如果用户表达含糊，你可以选择最接近的技能并填入从语义中推断出的参数；缺少关键参数时再自然语言追问。',
       '可用技能：',
@@ -896,45 +979,166 @@
     const node = document.getElementById('projectSkillHistory');
     if (!node) return;
     const history = readHistory();
-    node.innerHTML = history.length
-      ? history.map((item) => `
-          <article class="project-skill-log-item">
-            <span class="${item.ok ? 'is-ok' : 'is-warn'}">${item.ok ? '完成' : '未完成'}</span>
-            <strong>${esc(item.title || item.skillId)}</strong>
+    if (!history.length) {
+      node.innerHTML = `
+        <div class="project-skill-empty">
+          <span class="project-skill-empty-icon"><i class="ti ti-clock-off" aria-hidden="true"></i></span>
+          <strong>暂无技能执行记录</strong>
+          <p>点击左侧技能示例按钮，或在聊天中描述操作需求，技能执行后会记录在这里。</p>
+        </div>
+      `;
+      return;
+    }
+    node.innerHTML = history.map((item, index) => `
+      <article class="project-skill-log-item${index === 0 ? ' is-latest' : ''}">
+        <div class="project-skill-log-indicator">
+          <span class="project-skill-log-dot ${item.ok ? 'is-ok' : 'is-warn'}"></span>
+          ${index < history.length - 1 ? '<span class="project-skill-log-line"></span>' : ''}
+        </div>
+        <div class="project-skill-log-body">
+          <div class="project-skill-log-head">
+            <span class="project-skill-log-badge ${item.ok ? 'is-ok' : 'is-warn'}">${item.ok ? '完成' : '未完成'}</span>
             <em>${esc(item.at || '')}</em>
-            <p>${esc(item.message || '')}</p>
-          </article>
-        `).join('')
-      : '<div class="project-skill-empty">暂无技能执行记录</div>';
+          </div>
+          <strong>${esc(item.title || item.skillId)}</strong>
+          <p>${esc(item.message || '')}</p>
+        </div>
+      </article>
+    `).join('');
+  };
+
+  const getLevelClass = (level) => {
+    const map = { '执行型': 'action', '查询型': 'query', '上下文型': 'context' };
+    return map[level] || 'action';
   };
 
   const render = () => {
     if (!refs.projectSkillPanel) return;
     const skills = getSkillRegistry();
+    const grouped = new Map();
+    skills.forEach((skill) => {
+      const module = skill.module || '其他';
+      if (!grouped.has(module)) grouped.set(module, []);
+      grouped.get(module).push(skill);
+    });
     refs.projectSkillPanel.innerHTML = `
       <section class="project-skill-workspace">
         <section class="project-skill-list-panel" aria-label="项目技能列表">
           <div class="project-skill-history-head">
             <div>
               <div class="project-skill-kicker">Skills</div>
-              <h2>项目技能</h2>
+              <h2>项目技能 <em class="project-skill-count">${skills.length} 项</em></h2>
+            </div>
+            <div class="project-skill-search-wrap">
+              <i class="ti ti-search" aria-hidden="true"></i>
+              <input class="project-skill-search" type="search" id="projectSkillSearch" placeholder="搜索技能..." autocomplete="off">
             </div>
           </div>
           <div class="project-skill-grid">
-            ${skills.map((skill) => `
-              <article class="project-skill-card">
-                <div class="project-skill-card-top">
-                  <span class="project-skill-icon"><i class="ti ${esc(skill.icon)}" aria-hidden="true"></i></span>
-                  <div>
-                    <strong>${esc(skill.title)}</strong>
-                    <em>${esc(skill.module)} · ${esc(skill.level)}</em>
-                  </div>
+            ${[...grouped.entries()].map(([module, moduleSkills]) => `
+              <div class="project-skill-module-group">
+                <div class="project-skill-module-header">
+                  <span>${esc(module)}</span>
+                  <em>${moduleSkills.length} 项技能</em>
                 </div>
-                <p>${esc(skill.summary)}</p>
-                <div class="project-skill-examples">
-                  ${skill.examples.map((example) => `<button type="button" data-skill-example="${esc(example)}">${esc(example)}</button>`).join('')}
-                </div>
-              </article>
+                ${moduleSkills.map((skill) => `
+                  <article class="project-skill-card" data-skill-module="${esc(skill.module)}" data-skill-title="${esc(skill.title)}">
+                    <div class="project-skill-card-top">
+                      <span class="project-skill-icon"><i class="ti ${esc(skill.icon)}" aria-hidden="true"></i></span>
+                      <div>
+                        <strong>${esc(skill.title)}</strong>
+                        <em>${esc(skill.module)} · <span class="project-skill-level project-skill-level--${getLevelClass(skill.level)}">${esc(skill.level)}</span></em>
+                      </div>
+                    </div>
+                    <p>${esc(skill.summary)}</p>
+                    ${Array.isArray(skill.actionDocs) && skill.actionDocs.length ? `
+                      <section class="project-skill-manual-section" aria-label="${esc(skill.title)} 操作类型">
+                        <div class="project-skill-section-title">
+                          <i class="ti ti-list-check" aria-hidden="true"></i>
+                          <span>操作类型</span>
+                        </div>
+                        <div class="project-skill-action-table">
+                          <div class="project-skill-action-row is-head">
+                            <span>action</span>
+                            <span>用途</span>
+                            <span>关键参数</span>
+                            <span>返回内容</span>
+                          </div>
+                          ${skill.actionDocs.map(([action, purpose, params, result]) => `
+                            <div class="project-skill-action-row">
+                              <code>${esc(action)}</code>
+                              <span>${esc(purpose)}</span>
+                              <span>${esc(params)}</span>
+                              <span>${esc(result)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </section>
+                    ` : ''}
+                    ${Array.isArray(skill.paramDocs) && skill.paramDocs.length ? `
+                      <section class="project-skill-manual-section" aria-label="${esc(skill.title)} 参数说明">
+                        <div class="project-skill-section-title">
+                          <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+                          <span>参数说明</span>
+                        </div>
+                        <div class="project-skill-doc-table project-skill-doc-table--params">
+                          <div class="project-skill-doc-row is-head">
+                            <span>参数</span>
+                            <span>定义</span>
+                            <span>要求</span>
+                          </div>
+                          ${skill.paramDocs.map(([name, desc, required]) => `
+                            <div class="project-skill-doc-row">
+                              <code>${esc(name)}</code>
+                              <span>${esc(desc)}</span>
+                              <span>${esc(required)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </section>
+                    ` : ''}
+                    ${Array.isArray(skill.resultDocs) && skill.resultDocs.length ? `
+                      <section class="project-skill-manual-section" aria-label="${esc(skill.title)} 返回字段">
+                        <div class="project-skill-section-title">
+                          <i class="ti ti-arrow-back-up" aria-hidden="true"></i>
+                          <span>返回字段</span>
+                        </div>
+                        <div class="project-skill-doc-table project-skill-doc-table--results">
+                          <div class="project-skill-doc-row is-head">
+                            <span>字段</span>
+                            <span>说明</span>
+                          </div>
+                          ${skill.resultDocs.map(([name, desc]) => `
+                            <div class="project-skill-doc-row">
+                              <code>${esc(name)}</code>
+                              <span>${esc(desc)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </section>
+                    ` : ''}
+                    <div class="project-skill-schema">
+                      <div>
+                        <span><i class="ti ti-braces" aria-hidden="true"></i> 输入参数 JSON</span>
+                        <pre><code>${esc(formatJsonSpec(skill.inputSpec))}</code></pre>
+                      </div>
+                      <div>
+                        <span><i class="ti ti-arrow-back-up" aria-hidden="true"></i> 返回结果 JSON</span>
+                        <pre><code>${esc(formatJsonSpec(skill.outputSpec))}</code></pre>
+                      </div>
+                    </div>
+                    <div class="project-skill-example-block">
+                      <div class="project-skill-section-title">
+                        <i class="ti ti-message-circle" aria-hidden="true"></i>
+                        <span>示例指令</span>
+                      </div>
+                      <div class="project-skill-examples">
+                        ${skill.examples.map((example) => `<button type="button" data-skill-example="${esc(example)}">${esc(example)}</button>`).join('')}
+                      </div>
+                    </div>
+                  </article>
+                `).join('')}
+              </div>
             `).join('')}
           </div>
         </section>
@@ -958,6 +1162,28 @@
   };
 
   const bind = () => {
+    refs.projectSkillPanel?.addEventListener('input', (event) => {
+      const input = event.target;
+      if (input?.id !== 'projectSkillSearch') return;
+      const query = normalizeText(input.value || '');
+      const cards = refs.projectSkillPanel?.querySelectorAll('.project-skill-card');
+      const groups = refs.projectSkillPanel?.querySelectorAll('.project-skill-module-group');
+      if (!cards || !groups) return;
+      let anyVisible = false;
+      groups.forEach((group) => {
+        let groupVisible = false;
+        group.querySelectorAll('.project-skill-card').forEach((card) => {
+          const title = normalizeText(card.getAttribute('data-skill-title') || '');
+          const module = normalizeText(card.getAttribute('data-skill-module') || '');
+          const visible = !query || title.includes(query) || module.includes(query);
+          card.style.display = visible ? '' : 'none';
+          if (visible) groupVisible = true;
+        });
+        group.style.display = groupVisible ? '' : 'none';
+        if (groupVisible) anyVisible = true;
+      });
+    });
+
     refs.projectSkillPanel?.addEventListener('click', async (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;

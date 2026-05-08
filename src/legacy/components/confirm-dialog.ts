@@ -47,9 +47,9 @@
     closeActive(false);
 
     const overlay = document.createElement('div');
-    overlay.className = 'confirm-dialog-overlay';
+    overlay.className = 'confirm-dialog-overlay dialog-overlay';
     overlay.innerHTML = `
-      <div class="confirm-dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+      <div class="confirm-dialog-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
         <div class="confirm-dialog-icon"><i class="ti ${escapeHtml(icon)}" aria-hidden="true"></i></div>
         <div class="confirm-dialog-main">
           <h2 class="confirm-dialog-title" id="confirmDialogTitle">${escapeHtml(title)}</h2>

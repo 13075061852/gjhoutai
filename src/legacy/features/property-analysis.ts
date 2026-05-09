@@ -9,6 +9,11 @@ import { getLegacyApp } from '../core/app-context';
 
   const { constants, utils } = App;
   const PAGE_SIZE_DEFAULT = 15;
+  const REPORT_RANGE_STORAGE_KEY = 'gjh-property-report-ranges-v1';
+  const REPORT_COMPANY_NAME = '宁波广俊塑料科技有限公司';
+  const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
+  const REPORT_COMPANY_TEL = '0574-63072712';
+  const REPORT_COMPANY_FAX = '0574-63805667';
   const HEADER_LABELS = {
     型号: '型号',
     批次: '批次',
@@ -57,6 +62,14 @@ import { getLegacyApp } from '../core/app-context';
     '冲击强度[Mpa]',
     '灰份',
   ];
+  const REPORT_METRICS = [
+    { key: '灰份', item: '灰份', unit: '%' },
+    { key: '熔指', item: '熔融指数（260℃ / 2.16KG）', unit: 'g/10min' },
+    { key: '拉伸强度[Mpa]', item: '拉伸强度', unit: 'MPa' },
+    { key: '弯曲强度[Mpa]', item: '弯曲强度', unit: 'MPa' },
+    { key: '弯曲模量[Mpa]', item: '弯曲模量', unit: 'MPa' },
+    { key: '冲击强度[Mpa]', item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
+  ];
   const AGENT_CONTEXT_ROW_LIMIT = 12;
   const AGENT_CONTEXT_SIMILAR_LIMIT = 8;
   const AGENT_STOP_TERMS = new Set([
@@ -96,6 +109,8 @@ import { getLegacyApp } from '../core/app-context';
     compareBtn: document.getElementById('analysisCompareBtn'),
     importExcelBtn: document.getElementById('analysisImportExcelBtn'),
     exportJsonBtn: document.getElementById('analysisExportJsonBtn'),
+    exportReportBtn: document.getElementById('analysisExportReportBtn'),
+    manageRangesBtn: document.getElementById('analysisManageRangesBtn'),
     excelInput: document.getElementById('analysisExcelInput'),
     importStatus: document.getElementById('analysisImportStatus'),
     panelCount: document.getElementById('analysisPanelCount'),
@@ -118,12 +133,57 @@ import { getLegacyApp } from '../core/app-context';
     suggestionOpen: false,
     compareOnly: false,
     selectedKeys: new Set(),
+    reportRanges: [],
+    reportDialogOpen: false,
+    reportSelectedIndex: 0,
+    reportDrafts: [],
+    rangeManagerSearch: '',
+    rangeManagerSelectedModel: '',
     dataSource: 'default',
     sourceFileName: '',
     uploadStatusText: '读取中',
   };
 
   const escapeHtml = (value) => utils.escapeHtml(value);
+
+  const notify = (message, tone = 'success', key = '') => {
+    const show = App.notify?.[tone] || App.notify?.show;
+    if (typeof show === 'function') {
+      if (show === App.notify?.show) {
+        show.call(App.notify, { message, tone, key: key || `property-report-${Date.now()}` });
+      } else {
+        show.call(App.notify, message, key ? { key } : undefined);
+      }
+      return;
+    }
+    console[tone === 'error' ? 'error' : 'log'](message);
+  };
+
+  const ensureReportToolbar = () => {
+    if (!refs.exportJsonBtn?.parentElement) return;
+    const actionGroup = refs.exportJsonBtn.parentElement;
+
+    if (!refs.manageRangesBtn) {
+      const button = document.createElement('button');
+      button.className = 'analysis-toolbar-btn';
+      button.id = 'analysisManageRangesBtn';
+      button.type = 'button';
+      button.innerHTML = '<i class="ti ti-adjustments" aria-hidden="true"></i><span>检测范围</span>';
+      refs.exportJsonBtn.insertAdjacentElement('afterend', button);
+      refs.manageRangesBtn = button;
+    }
+
+    if (!refs.exportReportBtn) {
+      const button = document.createElement('button');
+      button.className = 'analysis-toolbar-btn analysis-toolbar-btn-primary';
+      button.id = 'analysisExportReportBtn';
+      button.type = 'button';
+      button.disabled = true;
+      button.innerHTML = '<i class="ti ti-package-export" aria-hidden="true"></i><span>导出报告</span>';
+      actionGroup.appendChild(button);
+      refs.exportReportBtn = button;
+    }
+  };
 
   const normalizeRows = (value) => {
     if (!Array.isArray(value)) return [];
@@ -632,6 +692,777 @@ import { getLegacyApp } from '../core/app-context';
     return parseNumericValue(value);
   };
 
+  const normalizeReportText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+  const sanitizeFileName = (value) => normalizeReportText(value)
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || '检验报告';
+
+  const formatChineseDate = (date = new Date()) => `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+
+  const getRowModel = (row) => normalizeReportText(row?.型号);
+
+  const getRowBatch = (row) => normalizeReportText(row?.批次);
+
+  const getRowColor = (row) => {
+    const model = getRowModel(row);
+    const match = model.match(/-([A-Za-z0-9]+)$/);
+    return match?.[1] || normalizeReportText(row?.色号 || row?.颜色 || '');
+  };
+
+  const loadReportRanges = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(REPORT_RANGE_STORAGE_KEY) || '[]');
+      state.reportRanges = Array.isArray(parsed) ? parsed.map((item, index) => ({
+        id: normalizeReportText(item.id) || `range-${Date.now()}-${index}`,
+        model: normalizeReportText(item.model),
+        metricKey: normalizeReportText(item.metricKey),
+        item: normalizeReportText(item.item),
+        unit: normalizeReportText(item.unit),
+        range: normalizeReportText(item.range),
+      })).filter((item) => item.model && item.metricKey && item.range) : [];
+    } catch {
+      state.reportRanges = [];
+    }
+  };
+
+  const saveReportRanges = () => {
+    localStorage.setItem(REPORT_RANGE_STORAGE_KEY, JSON.stringify(state.reportRanges));
+  };
+
+  const getReportMetricConfig = (metricKey) => (
+    REPORT_METRICS.find((metric) => metric.key === metricKey) || {
+      key: metricKey,
+      item: formatHeader(metricKey),
+      unit: '',
+    }
+  );
+
+  const getReportRange = (model, metricKey) => state.reportRanges.find((item) => (
+    item.model === model && item.metricKey === metricKey
+  ));
+
+  const getRangePrecision = (rangeText) => {
+    const matches = String(rangeText || '').match(/\d+(?:\.(\d+))?/g) || [];
+    return Math.min(Math.max(...matches.map((item) => getPrecision(item)), 0), 3);
+  };
+
+  const formatReportValue = (row, metricKey, rangeText = '') => {
+    const raw = row?.[metricKey];
+    const numeric = getMetricValue(row, metricKey);
+    if (numeric == null) return normalizeReportText(Array.isArray(raw) ? raw.join(' / ') : raw);
+
+    const rangePrecision = getRangePrecision(rangeText);
+    const precision = Math.max(rangePrecision, Math.min(getPrecision(numeric), 1));
+    const fixed = numeric.toFixed(precision);
+    return rangePrecision > 0 ? fixed : fixed.replace(/\.?0+$/, '');
+  };
+
+  const getReportMetricsForRow = (row) => REPORT_METRICS
+    .filter((metric) => hasMeaningfulValue(row?.[metric.key]))
+    .map((metric) => metric.key);
+
+  const getMissingRangeItems = (rows) => {
+    const missing = [];
+    const seen = new Set();
+
+    rows.forEach((row) => {
+      const model = getRowModel(row);
+      getReportMetricsForRow(row).forEach((metricKey) => {
+        const key = `${model}::${metricKey}`;
+        if (!model || seen.has(key) || getReportRange(model, metricKey)) return;
+        seen.add(key);
+        missing.push({
+          model,
+          metricKey,
+          item: getReportMetricConfig(metricKey).item,
+        });
+      });
+    });
+
+    return missing;
+  };
+
+  const createReportDraft = (row) => {
+    const model = getRowModel(row);
+    const batch = getRowBatch(row);
+    const metrics = getReportMetricsForRow(row).map((metricKey) => {
+      const config = getReportMetricConfig(metricKey);
+      const range = getReportRange(model, metricKey);
+      return {
+        key: metricKey,
+        item: range?.item || config.item,
+        unit: range?.unit || config.unit,
+        range: range?.range || '',
+        value: formatReportValue(row, metricKey, range?.range),
+      };
+    });
+
+    return {
+      key: row.__rowKey,
+      model,
+      batch,
+      date: formatChineseDate(),
+      color: getRowColor(row),
+      intro: '本批次材料依照该型号生产流程规范生产，经内部品质检验合格，如下：',
+      metrics,
+    };
+  };
+
+  const getActiveReportDraft = () => state.reportDrafts[state.reportSelectedIndex] || null;
+
+  const updateReportDraftFromDialog = () => {
+    const dialog = document.querySelector('.analysis-report-dialog');
+    const draft = getActiveReportDraft();
+    if (!dialog || !draft) return;
+
+    dialog.querySelectorAll('[data-report-field]').forEach((input) => {
+      const field = input.getAttribute('data-report-field');
+      if (field && field in draft) draft[field] = input.value;
+    });
+
+    dialog.querySelectorAll('[data-report-metric-index]').forEach((row) => {
+      const index = Number.parseInt(row.getAttribute('data-report-metric-index') || '', 10);
+      const metric = draft.metrics[index];
+      if (!metric) return;
+      row.querySelectorAll('[data-report-metric-field]').forEach((input) => {
+        const field = input.getAttribute('data-report-metric-field');
+        if (field && field in metric) metric[field] = input.value;
+      });
+    });
+  };
+
+  const drawCenteredText = (ctx, text, x, y, options = {}) => {
+    ctx.save();
+    ctx.font = options.font || '32px sans-serif';
+    ctx.fillStyle = options.color || '#111827';
+    ctx.textAlign = options.align || 'center';
+    ctx.textBaseline = options.baseline || 'middle';
+    ctx.fillText(String(text ?? ''), x, y);
+    ctx.restore();
+  };
+
+  const drawReportCanvas = (canvas, draft) => {
+    if (!canvas || !draft) return;
+    const scale = 2;
+    const width = 794;
+    const height = 1123;
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(70, 38);
+    ctx.lineTo(724, 38);
+    ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(346, 38);
+    ctx.lineTo(448, 38);
+    ctx.stroke();
+
+    drawCenteredText(ctx, REPORT_COMPANY_NAME, width / 2, 96, { font: '700 36px "Microsoft YaHei", sans-serif' });
+    drawCenteredText(ctx, REPORT_COMPANY_ADDRESS, width / 2, 145, { font: '22px "Microsoft YaHei", sans-serif' });
+    drawCenteredText(ctx, `TEL：${REPORT_COMPANY_TEL}      FAX：${REPORT_COMPANY_FAX}`, width / 2, 184, { font: '22px Arial, sans-serif' });
+
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(212, 255);
+    ctx.lineTo(286, 255);
+    ctx.moveTo(508, 255);
+    ctx.lineTo(582, 255);
+    ctx.stroke();
+    drawCenteredText(ctx, '检验报告表', width / 2, 255, { font: '700 36px "Microsoft YaHei", sans-serif' });
+
+    const left = 72;
+    const labelX = 108;
+    const valueX = 138;
+    const fields = [
+      ['日期：', draft.date],
+      ['型号：', draft.model],
+      ['色号：', draft.color],
+      ['批号：', draft.batch],
+    ];
+    ctx.fillStyle = '#111827';
+    fields.forEach(([label, value], index) => {
+      const y = 320 + index * 48;
+      ctx.font = '700 23px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(label, labelX, y);
+      ctx.font = '22px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(String(value || ''), valueX, y);
+    });
+
+    ctx.font = '22px "Microsoft YaHei", sans-serif';
+    ctx.fillText(draft.intro || '', left, 540);
+
+    const tableX = 68;
+    const tableY = 590;
+    const colWidths = [260, 130, 170, 150];
+    const rowH = 54;
+    const headers = ['检验项目', '单位', '检验范围', '检验值'];
+    const rows = draft.metrics || [];
+    const tableW = colWidths.reduce((sum, item) => sum + item, 0);
+    const tableH = rowH * (rows.length + 1);
+
+    ctx.strokeStyle = '#2f3742';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tableX, tableY, tableW, tableH);
+    let x = tableX;
+    colWidths.slice(0, -1).forEach((colWidth) => {
+      x += colWidth;
+      ctx.beginPath();
+      ctx.moveTo(x, tableY);
+      ctx.lineTo(x, tableY + tableH);
+      ctx.stroke();
+    });
+    for (let i = 1; i <= rows.length; i += 1) {
+      const y = tableY + rowH * i;
+      ctx.beginPath();
+      ctx.moveTo(tableX, y);
+      ctx.lineTo(tableX + tableW, y);
+      ctx.stroke();
+    }
+
+    headers.forEach((header, index) => {
+      const cellX = tableX + colWidths.slice(0, index).reduce((sum, item) => sum + item, 0);
+      drawCenteredText(ctx, header, cellX + colWidths[index] / 2, tableY + rowH / 2, { font: '700 21px "Microsoft YaHei", sans-serif' });
+    });
+
+    rows.forEach((row, rowIndex) => {
+      [row.item, row.unit, row.range, row.value].forEach((text, colIndex) => {
+        const cellX = tableX + colWidths.slice(0, colIndex).reduce((sum, item) => sum + item, 0);
+        drawCenteredText(ctx, text, cellX + colWidths[colIndex] / 2, tableY + rowH * (rowIndex + 1) + rowH / 2, { font: '20px "Microsoft YaHei", sans-serif' });
+      });
+    });
+  };
+
+  const renderReportPreview = () => {
+    const draft = getActiveReportDraft();
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    if (canvas) drawReportCanvas(canvas, draft);
+  };
+
+  const canvasToBlob = (canvas, type = 'image/png', quality) => new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('报告预览生成失败'));
+    }, type, quality);
+  });
+
+  const binaryStringFromBase64 = (value) => atob(String(value || '').split(',').pop() || '');
+
+  const escapePdfText = (value) => String(value).replace(/[\\()]/g, '\\$&');
+
+  const createPdfBlobFromCanvas = (canvas, title) => {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    const imageBinary = binaryStringFromBase64(dataUrl);
+    const width = 595.28;
+    const height = 841.89;
+    const contentStream = `q\n${width} 0 0 ${height} 0 0 cm\n/Im0 Do\nQ`;
+    const objects = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`,
+      `<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBinary.length} >>\nstream\n${imageBinary}\nendstream`,
+      `<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream`,
+      `<< /Title (${escapePdfText(title)}) /Producer (Gjun Report Export) >>`,
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach((object, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach((offset) => {
+      pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+    });
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    const bytes = new Uint8Array(pdf.length);
+    for (let index = 0; index < pdf.length; index += 1) bytes[index] = pdf.charCodeAt(index) & 0xff;
+    return new Blob([bytes], { type: 'application/pdf' });
+  };
+
+  const getReportFileBase = (draft) => sanitizeFileName(`${draft?.batch || '未命名批次'} ${draft?.model || '未命名型号'}`);
+
+  const buildReportDialogHtml = () => {
+    const draft = getActiveReportDraft();
+    return `
+      <div class="analysis-report-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="导出检验报告">
+        <div class="analysis-report-card dialog-card">
+          <div class="analysis-report-head">
+            <div>
+              <div class="analysis-report-title">导出检验报告</div>
+              <div class="analysis-report-subtitle">已选 ${state.reportDrafts.length} 条，可逐条编辑预览并导出</div>
+            </div>
+            <div class="analysis-report-actions">
+              <button class="analysis-report-btn" type="button" data-report-open-ranges>
+                <i class="ti ti-adjustments" aria-hidden="true"></i><span>检测范围</span>
+              </button>
+              <button class="analysis-report-btn" type="button" data-report-export-image>
+                <i class="ti ti-download" aria-hidden="true"></i><span>导出图片</span>
+              </button>
+              <button class="analysis-report-btn is-primary" type="button" data-report-export-pdf>
+                <i class="ti ti-file-text" aria-hidden="true"></i><span>导出PDF</span>
+              </button>
+              <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭导出报告" data-report-close>
+                <i class="ti ti-x" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div class="analysis-report-body">
+            <aside class="analysis-report-selected">
+              <div class="analysis-report-section-title">待生成列表</div>
+              <div class="analysis-report-selected-list">
+                ${state.reportDrafts.map((item, index) => `
+                  <button class="analysis-report-selected-item${index === state.reportSelectedIndex ? ' is-active' : ''}" type="button" data-report-select="${index}">
+                    <strong>${escapeHtml(item.model || '--')}</strong>
+                    <span>${escapeHtml(item.batch || '--')}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </aside>
+            <section class="analysis-report-editor">
+              <div class="analysis-report-form-grid">
+                ${[
+                  ['date', '日期'],
+                  ['model', '型号'],
+                  ['color', '色号'],
+                  ['batch', '批号'],
+                ].map(([field, label]) => `
+                  <label>
+                    <span>${label}</span>
+                    <input value="${escapeHtml(draft?.[field] || '')}" data-report-field="${field}">
+                  </label>
+                `).join('')}
+                <label class="is-wide">
+                  <span>说明</span>
+                  <input value="${escapeHtml(draft?.intro || '')}" data-report-field="intro">
+                </label>
+              </div>
+              <div class="analysis-report-metric-editor">
+                <div class="analysis-report-section-title">报告明细</div>
+                <div class="analysis-report-metric-head">
+                  <span>检验项目</span><span>单位</span><span>检验范围</span><span>检验值</span>
+                </div>
+                ${(draft?.metrics || []).map((metric, index) => `
+                  <div class="analysis-report-metric-row" data-report-metric-index="${index}">
+                    <input value="${escapeHtml(metric.item)}" data-report-metric-field="item">
+                    <input value="${escapeHtml(metric.unit)}" data-report-metric-field="unit">
+                    <input value="${escapeHtml(metric.range)}" data-report-metric-field="range">
+                    <input value="${escapeHtml(metric.value)}" data-report-metric-field="value">
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+            <section class="analysis-report-preview-wrap">
+              <div class="analysis-report-section-title">预览</div>
+              <div class="analysis-report-preview-scroll">
+                <canvas data-report-preview-canvas></canvas>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const closeReportDialog = () => {
+    updateReportDraftFromDialog();
+    document.querySelector('.analysis-report-dialog')?.remove();
+    document.removeEventListener('keydown', handleReportDialogKeydown);
+    state.reportDialogOpen = false;
+  };
+
+  function handleReportDialogKeydown(event) {
+    if (event.key === 'Escape') closeReportDialog();
+  }
+
+  const rerenderReportDialog = () => {
+    const dialog = document.querySelector('.analysis-report-dialog');
+    if (!dialog) return;
+    dialog.outerHTML = buildReportDialogHtml();
+    bindReportDialogEvents();
+    renderReportPreview();
+  };
+
+  const exportActiveReportImage = async () => {
+    updateReportDraftFromDialog();
+    renderReportPreview();
+    const draft = getActiveReportDraft();
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    if (!draft || !canvas) return;
+    const blob = await canvasToBlob(canvas, 'image/png');
+    downloadBlob(blob, `${getReportFileBase(draft)}.png`);
+    notify('报告图片已导出', 'success', 'property-report-image');
+  };
+
+  const exportActiveReportPdf = async () => {
+    updateReportDraftFromDialog();
+    renderReportPreview();
+    const draft = getActiveReportDraft();
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    if (!draft || !canvas) return;
+    const blob = createPdfBlobFromCanvas(canvas, `${getReportFileBase(draft)}.PDF`);
+    downloadBlob(blob, `${getReportFileBase(draft)}.PDF`);
+    notify('报告 PDF 已导出', 'success', 'property-report-pdf');
+  };
+
+  const bindReportDialogEvents = () => {
+    const dialog = document.querySelector('.analysis-report-dialog');
+    if (!dialog) return;
+    dialog.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const selectButton = target.closest('[data-report-select]');
+      if (selectButton) {
+        updateReportDraftFromDialog();
+        state.reportSelectedIndex = Number.parseInt(selectButton.getAttribute('data-report-select') || '0', 10) || 0;
+        rerenderReportDialog();
+        return;
+      }
+      if (target.closest('[data-report-open-ranges]')) {
+        openRangeManagerDialog();
+        return;
+      }
+      if (target.closest('[data-report-export-image]')) {
+        exportActiveReportImage().catch((error) => notify(error?.message || '导出图片失败', 'error', 'property-report-image-error'));
+        return;
+      }
+      if (target.closest('[data-report-export-pdf]')) {
+        exportActiveReportPdf().catch((error) => notify(error?.message || '导出 PDF 失败', 'error', 'property-report-pdf-error'));
+        return;
+      }
+      if (target.closest('[data-report-close]') || target === dialog) closeReportDialog();
+    });
+    dialog.addEventListener('input', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      updateReportDraftFromDialog();
+      renderReportPreview();
+    });
+  };
+
+  const openReportDialog = () => {
+    const selectedRows = getSelectedRowsForAllSheets();
+    if (!selectedRows.length) {
+      notify('请先选择需要生成报告的数据', 'warn', 'property-report-no-selection');
+      return;
+    }
+
+    const missingRanges = getMissingRangeItems(selectedRows);
+    if (missingRanges.length) {
+      notify(`有 ${missingRanges.length} 项数据还未设置检测范围值，请先在检测范围中设置。`, 'warn', 'property-report-missing-ranges');
+      openRangeManagerDialog(missingRanges);
+      return;
+    }
+
+    closeReportDialog();
+    state.reportDrafts = selectedRows.map(createReportDraft);
+    state.reportSelectedIndex = 0;
+    state.reportDialogOpen = true;
+    document.body.insertAdjacentHTML('beforeend', buildReportDialogHtml());
+    bindReportDialogEvents();
+    document.addEventListener('keydown', handleReportDialogKeydown);
+    renderReportPreview();
+    document.querySelector('[data-report-close]')?.focus({ preventScroll: true });
+  };
+
+  const createRangeDraft = (overrides = {}) => {
+    const metricKey = overrides.metricKey || REPORT_METRICS[0].key;
+    const metric = getReportMetricConfig(metricKey);
+    return {
+      id: overrides.id || `range-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      model: normalizeReportText(overrides.model),
+      metricKey,
+      item: normalizeReportText(overrides.item) || metric.item,
+      unit: normalizeReportText(overrides.unit) || metric.unit,
+      range: normalizeReportText(overrides.range),
+    };
+  };
+
+  const getRangeCandidateModels = () => {
+    if (!state.data) return [];
+    const rows = getSheetNames(state.data).flatMap((sheetName) => filterRows(getRowsForSheet(sheetName)));
+    const seen = new Set();
+    const models = [];
+
+    rows.forEach((row) => {
+      const model = getRowModel(row);
+      if (!model || seen.has(model)) return;
+      seen.add(model);
+      models.push(model);
+    });
+
+    return models;
+  };
+
+  const getFilteredRangeCandidateModels = () => {
+    const query = normalizeReportText(state.rangeManagerSearch).toLowerCase();
+    const models = getRangeCandidateModels();
+    if (!query) return models;
+    return models.filter((model) => model.toLowerCase().includes(query));
+  };
+
+  const getRangesForModel = (model) => {
+    const map = new Map();
+    state.reportRanges
+      .filter((item) => item.model === model)
+      .forEach((item) => map.set(item.metricKey, item));
+    return REPORT_METRICS.map((metric) => ({
+      ...createRangeDraft({ model, metricKey: metric.key }),
+      ...(map.get(metric.key) || {}),
+    }));
+  };
+
+  const buildRangeRowsHtml = (model = '') => getRangesForModel(model).map((item) => `
+    <div class="analysis-range-metric-row" data-range-metric-key="${escapeHtml(item.metricKey)}">
+      <div class="analysis-range-metric-name">${escapeHtml(item.item || getReportMetricConfig(item.metricKey).item)}</div>
+      <input value="${escapeHtml(item.unit)}" data-range-metric-field="unit" aria-label="${escapeHtml(item.item)}单位">
+      <input value="${escapeHtml(item.range)}" data-range-metric-field="range" placeholder="例如 28.0~32.0 或 ≥120" aria-label="${escapeHtml(item.item)}检测范围">
+    </div>
+  `).join('');
+
+  const getRangeSetStatus = (model) => {
+    const filled = getRangesForModel(model).filter((item) => item.range);
+    if (filled.length >= REPORT_METRICS.length) return 'complete';
+    if (filled.length > 0) return 'partial';
+    return 'empty';
+  };
+
+  const getRangeStatusLabel = (model) => {
+    const status = getRangeSetStatus(model);
+    if (status === 'complete') return '已设置';
+    if (status === 'partial') return '部分';
+    return '';
+  };
+
+  const buildRangeModelListHtml = () => {
+    const models = getFilteredRangeCandidateModels();
+    if (!models.length) return '<div class="analysis-range-model-empty">暂无匹配型号</div>';
+
+    return models.map((model) => {
+      const status = getRangeSetStatus(model);
+      return `
+        <button class="analysis-range-model-item${model === state.rangeManagerSelectedModel ? ' is-active' : ''}" type="button" data-range-model="${escapeHtml(model)}">
+          <span>${escapeHtml(model)}</span>
+          ${status !== 'empty' ? `<em class="is-${status}">${escapeHtml(getRangeStatusLabel(model))}</em>` : ''}
+        </button>
+      `;
+    }).join('');
+  };
+
+  const buildRangeEditorHtml = () => (state.rangeManagerSelectedModel ? `
+    <form class="analysis-range-form analysis-range-form-bulk" data-range-form>
+      <div class="analysis-range-form-head">
+        <div class="analysis-range-current-model">
+          <span>当前型号</span>
+          <strong>${escapeHtml(state.rangeManagerSelectedModel)}</strong>
+        </div>
+        <input data-range-field="model" value="${escapeHtml(state.rangeManagerSelectedModel)}" hidden>
+        <div class="analysis-range-form-actions">
+          <button class="analysis-report-btn" type="button" data-range-reset>清空表单</button>
+          <button class="analysis-report-btn" type="button" data-range-clear-model>清除已设置</button>
+          <button class="analysis-report-btn is-primary" type="submit">保存整套范围</button>
+        </div>
+      </div>
+      <div class="analysis-range-metric-list">
+        <div class="analysis-range-metric-head">
+          <span>检测项目</span><span>单位</span><span>检测范围</span>
+        </div>
+        <div data-range-metric-list>${buildRangeRowsHtml(state.rangeManagerSelectedModel)}</div>
+      </div>
+    </form>
+  ` : `
+    <div class="analysis-range-editor-empty">
+      <strong>请选择左侧型号</strong>
+      <span>左侧只显示当前物性表筛选结果中的去重型号。</span>
+    </div>
+  `);
+
+  const updateRangeModelList = () => {
+    const list = document.querySelector('.analysis-range-model-list');
+    const meta = document.querySelector('.analysis-range-model-meta');
+    if (list) list.innerHTML = buildRangeModelListHtml();
+    if (meta) meta.textContent = `筛选结果型号 ${getRangeCandidateModels().length} 个`;
+  };
+
+  const updateRangeEditorPanel = () => {
+    const panel = document.querySelector('.analysis-range-editor-panel');
+    if (panel) panel.innerHTML = buildRangeEditorHtml();
+  };
+
+  const updateRangeManagerSelection = (model) => {
+    state.rangeManagerSelectedModel = model || '';
+    updateRangeModelList();
+    updateRangeEditorPanel();
+  };
+
+  const buildRangeManagerHtml = (missingItems = []) => `
+    <div class="analysis-range-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="检测范围管理">
+      <div class="analysis-range-card dialog-card">
+        <div class="analysis-report-head">
+          <div>
+            <div class="analysis-report-title">检测范围管理</div>
+            <div class="analysis-report-subtitle">按型号维护报告中的检验项目、单位和检测范围</div>
+          </div>
+          <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭检测范围管理" data-range-close>
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="analysis-range-body">
+          ${missingItems.length ? `
+            <div class="analysis-range-warning">
+              <strong>以下项目还未设置检测范围值</strong>
+              <span>${missingItems.map((item) => `${escapeHtml(item.model)} / ${escapeHtml(item.item)}`).join('，')}</span>
+            </div>
+          ` : ''}
+          <div class="analysis-range-workbench">
+            <aside class="analysis-range-model-panel">
+              <label class="analysis-range-search">
+                <i class="ti ti-search" aria-hidden="true"></i>
+                <input data-range-search type="search" value="${escapeHtml(state.rangeManagerSearch)}" placeholder="搜索型号">
+              </label>
+              <div class="analysis-range-model-meta">筛选结果型号 ${getRangeCandidateModels().length} 个</div>
+              <div class="analysis-range-model-list">${buildRangeModelListHtml()}</div>
+            </aside>
+            <section class="analysis-range-editor-panel">
+              ${buildRangeEditorHtml()}
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const fillRangeForm = (range = {}) => {
+    const dialog = document.querySelector('.analysis-range-dialog');
+    const form = dialog?.querySelector('[data-range-form]');
+    if (!form) return;
+    const draft = createRangeDraft(range);
+    form.querySelector('[data-range-field="model"]').value = draft.model;
+    const list = form.querySelector('[data-range-metric-list]');
+    if (list) list.innerHTML = buildRangeRowsHtml(draft.model);
+  };
+
+  const readRangeForm = () => {
+    const dialog = document.querySelector('.analysis-range-dialog');
+    const form = dialog?.querySelector('[data-range-form]');
+    if (!form) return null;
+    const model = normalizeReportText(form.querySelector('[data-range-field="model"]').value);
+    const ranges = [...form.querySelectorAll('[data-range-metric-key]')].map((row) => {
+      const metricKey = row.getAttribute('data-range-metric-key');
+      const metric = getReportMetricConfig(metricKey);
+      return createRangeDraft({
+        model,
+        metricKey,
+        item: metric.item,
+        unit: row.querySelector('[data-range-metric-field="unit"]')?.value,
+        range: row.querySelector('[data-range-metric-field="range"]')?.value,
+      });
+    });
+    return { model, ranges };
+  };
+
+  const closeRangeManagerDialog = () => {
+    document.querySelector('.analysis-range-dialog')?.remove();
+    document.removeEventListener('keydown', handleRangeManagerKeydown);
+  };
+
+  function handleRangeManagerKeydown(event) {
+    if (event.key === 'Escape') closeRangeManagerDialog();
+  }
+
+  const rerenderRangeManagerDialog = (missingItems = []) => {
+    const dialog = document.querySelector('.analysis-range-dialog');
+    if (!dialog) return;
+    dialog.outerHTML = buildRangeManagerHtml(missingItems);
+    bindRangeManagerEvents(missingItems);
+  };
+
+  const bindRangeManagerEvents = (missingItems = []) => {
+    const dialog = document.querySelector('.analysis-range-dialog');
+    if (!dialog) return;
+    dialog.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const modelButton = target.closest('[data-range-model]');
+      if (modelButton) {
+        updateRangeManagerSelection(modelButton.getAttribute('data-range-model') || '');
+        return;
+      }
+      if (target.closest('[data-range-clear-model]')) {
+        const model = state.rangeManagerSelectedModel;
+        state.reportRanges = state.reportRanges.filter((item) => item.model !== model);
+        saveReportRanges();
+        updateRangeModelList();
+        updateRangeEditorPanel();
+        notify('该型号检测范围已删除', 'success', 'property-range-delete');
+        return;
+      }
+      if (target.closest('[data-range-reset]')) {
+        fillRangeForm({ model: state.rangeManagerSelectedModel });
+        document.querySelectorAll('.analysis-range-dialog [data-range-metric-field="range"]').forEach((input) => {
+          input.value = '';
+        });
+        return;
+      }
+      if (target.closest('[data-range-close]') || target === dialog) closeRangeManagerDialog();
+    });
+    dialog.addEventListener('submit', (event) => {
+      if (!event.target?.closest?.('[data-range-form]')) return;
+      event.preventDefault();
+      const draft = readRangeForm();
+      if (!draft?.model) {
+        notify('请先填写型号', 'warn', 'property-range-model-required');
+        return;
+      }
+      const filledRanges = draft.ranges.filter((item) => item.range);
+      if (!filledRanges.length) {
+        notify('请至少填写一项检测范围', 'warn', 'property-range-required');
+        return;
+      }
+      state.reportRanges = [
+        ...state.reportRanges.filter((item) => item.model !== draft.model),
+        ...filledRanges,
+      ];
+      saveReportRanges();
+      state.rangeManagerSelectedModel = draft.model;
+      updateRangeModelList();
+      updateRangeEditorPanel();
+      notify('该型号整套检测范围已保存', 'success', 'property-range-save');
+    });
+    dialog.querySelector('[data-range-search]')?.addEventListener('input', (event) => {
+      state.rangeManagerSearch = event.target.value || '';
+      updateRangeModelList();
+    });
+    const firstMissing = missingItems[0];
+    if (firstMissing && !state.rangeManagerSelectedModel) state.rangeManagerSelectedModel = firstMissing.model;
+  };
+
+  function openRangeManagerDialog(missingItems = []) {
+    closeRangeManagerDialog();
+    state.rangeManagerSearch = '';
+    const models = getRangeCandidateModels();
+    state.rangeManagerSelectedModel = missingItems[0]?.model || models[0] || '';
+    document.body.insertAdjacentHTML('beforeend', buildRangeManagerHtml(missingItems));
+    bindRangeManagerEvents(missingItems);
+    document.addEventListener('keydown', handleRangeManagerKeydown);
+    document.querySelector('[data-range-search]')?.focus({ preventScroll: true });
+  }
+
   const hasRowsForSheet = (data, sheetName) => normalizeRows(data?.sheets?.raw?.[sheetName]).length > 0;
 
   const getSheetNames = (data) => {
@@ -913,6 +1744,10 @@ import { getLegacyApp } from '../core/app-context';
 
     if (refs.exportJsonBtn) {
       refs.exportJsonBtn.disabled = !state.data;
+    }
+
+    if (refs.exportReportBtn) {
+      refs.exportReportBtn.disabled = selectedCount < 1;
     }
 
     if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
@@ -1897,6 +2732,8 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const bind = () => {
+    ensureReportToolbar();
+
     refs.sheetTabs?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-sheet-name]');
       if (!button) return;
@@ -2049,6 +2886,8 @@ import { getLegacyApp } from '../core/app-context';
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);
     refs.compareBtn?.addEventListener('click', toggleCompareMode);
     refs.exportJsonBtn?.addEventListener('click', exportCurrentJson);
+    refs.manageRangesBtn?.addEventListener('click', () => openRangeManagerDialog());
+    refs.exportReportBtn?.addEventListener('click', openReportDialog);
     refs.importExcelBtn?.addEventListener('click', () => {
       if (!refs.excelInput) return;
       refs.excelInput.value = '';
@@ -2079,6 +2918,7 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const init = () => {
+    loadReportRanges();
     bind();
     loadData();
   };

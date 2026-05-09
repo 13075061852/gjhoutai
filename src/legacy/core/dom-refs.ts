@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { ensureLegacyApp } from './app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
+  const App = ensureLegacyApp();
   const byId = (id) => document.getElementById(id);
   const qs = (selector) => document.querySelector(selector);
   const qsa = (selector) => document.querySelectorAll(selector);

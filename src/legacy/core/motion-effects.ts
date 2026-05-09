@@ -1,11 +1,12 @@
 // @ts-nocheck
 import { animate } from 'motion/mini';
+import { ensureLegacyApp, ensurePublicApp } from './app-context';
 
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   const activeAnimations = new WeakMap();
 
   const prefersReducedMotion = () => App.animations?.prefersReducedMotion?.() ?? false;

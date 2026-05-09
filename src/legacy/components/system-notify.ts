@@ -1,9 +1,11 @@
 // @ts-nocheck
+import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   const MAX_VISIBLE = 3;
   const DEFAULT_DURATION = 2800;
   const REPEAT_GUARD_MS = 900;
@@ -12,7 +14,7 @@
   let container = null;
 
   const escapeHtml = (value) => {
-    if (window.App?.utils?.escapeHtml) return window.App.utils.escapeHtml(value);
+    if (getPublicApp()?.utils?.escapeHtml) return getPublicApp().utils.escapeHtml(value);
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
       '<': '&lt;',

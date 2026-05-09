@@ -1,12 +1,14 @@
 // @ts-nocheck
+import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+
 (function () {
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   const enhancedSelects = new WeakMap();
   let openInstance = null;
 
   const escapeHtml = (value) => {
-    if (window.App?.utils?.escapeHtml) return window.App.utils.escapeHtml(value);
+    if (getPublicApp()?.utils?.escapeHtml) return getPublicApp().utils.escapeHtml(value);
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
       '<': '&lt;',
@@ -20,7 +22,7 @@
 
   const closeInstance = (instance) => {
     if (!instance) return;
-    window.App?.animations?.removeClass?.(instance.root, 'is-open') ?? instance.root.classList.remove('is-open');
+    PublicApp?.animations?.removeClass?.(instance.root, 'is-open') ?? instance.root.classList.remove('is-open');
     instance.trigger.setAttribute('aria-expanded', 'false');
     instance.menu.hidden = true;
     if (openInstance === instance) openInstance = null;
@@ -28,7 +30,7 @@
 
   const openSelect = (instance) => {
     if (openInstance && openInstance !== instance) closeInstance(openInstance);
-    window.App?.animations?.addClass?.(instance.root, 'is-open') ?? instance.root.classList.add('is-open');
+    PublicApp?.animations?.addClass?.(instance.root, 'is-open') ?? instance.root.classList.add('is-open');
     instance.trigger.setAttribute('aria-expanded', 'true');
     instance.menu.hidden = false;
     openInstance = instance;

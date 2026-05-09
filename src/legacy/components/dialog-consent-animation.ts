@@ -1,9 +1,11 @@
 // @ts-nocheck
+import { ensureLegacyApp, ensurePublicApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   let activeBurst = null;
   let activeTimer = null;
 

@@ -1,4 +1,5 @@
 import './core/app-namespace';
+import { getLegacyApp } from './core/app-context';
 import './core/dom-refs';
 import './core/app-constants';
 import './core/runtime-state';
@@ -28,20 +29,22 @@ let booted = false;
 export function bootLegacyApp(): (() => void) | undefined {
   if (booted) return undefined;
   booted = true;
-  window.GJHApp?.navigation?.init?.();
-  window.GJHApp?.themeSettings?.init?.();
-  window.GJHApp?.propertyAnalysis?.init?.();
-  window.GJHApp?.spectrumAnalysis?.init?.();
-  window.GJHApp?.imageCutout?.init?.();
-  window.GJHApp?.config?.init?.();
-  window.GJHApp?.aiCallAnalysis?.init?.();
-  window.GJHApp?.projectSkills?.init?.();
-  window.GJHApp?.chat?.init?.();
+  const App = getLegacyApp();
+  App?.navigation?.init?.();
+  App?.themeSettings?.init?.();
+  App?.propertyAnalysis?.init?.();
+  App?.spectrumAnalysis?.init?.();
+  App?.imageCutout?.init?.();
+  App?.config?.init?.();
+  App?.aiCallAnalysis?.init?.();
+  App?.projectSkills?.init?.();
+  App?.chat?.init?.();
   return undefined;
 }
 
 export function teardownLegacyApp(): void {
   booted = false;
-  window.GJHApp?.animations?.cleanup?.();
-  window.GJHApp?.motionEffects?.cleanup?.();
+  const App = getLegacyApp();
+  App?.animations?.cleanup?.();
+  App?.motionEffects?.cleanup?.();
 }

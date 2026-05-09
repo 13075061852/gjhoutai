@@ -1,9 +1,12 @@
 // @ts-nocheck
+import { getLegacyApp, getPublicApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp;
+  const App = getLegacyApp();
   if (!App) return;
+  const PublicApp = getPublicApp();
 
   const { refs, constants } = App;
   let assistantFullscreenExitTimer = null;
@@ -21,7 +24,7 @@
 
   const clearCollapsedNavFlyoutTimer = () => {
     if (collapsedNavFlyoutTimer) {
-      window.App?.animations?.clearDelay?.(collapsedNavFlyoutTimer) ?? window.clearTimeout(collapsedNavFlyoutTimer);
+      PublicApp?.animations?.clearDelay?.(collapsedNavFlyoutTimer) ?? window.clearTimeout(collapsedNavFlyoutTimer);
       collapsedNavFlyoutTimer = null;
     }
   };
@@ -35,7 +38,7 @@
 
   const scheduleCollapsedNavFlyoutClose = () => {
     clearCollapsedNavFlyoutTimer();
-    collapsedNavFlyoutTimer = window.App?.animations?.schedule?.(120, () => {
+    collapsedNavFlyoutTimer = PublicApp?.animations?.schedule?.(120, () => {
       removeCollapsedNavFlyout();
     }) ?? window.setTimeout(() => {
       removeCollapsedNavFlyout();
@@ -126,7 +129,7 @@
 
   const runSidebarTransition = (direction = '') => {
     if (!refs.shell) return;
-    const animations = window.App?.animations;
+    const animations = PublicApp?.animations;
     animations?.addClass?.(refs.shell, 'sidebar-transitioning') ?? refs.shell.classList.add('sidebar-transitioning');
     refs.shell.classList.toggle('sidebar-expanding', direction === 'expand');
     refs.shell.classList.toggle('sidebar-collapsing', direction === 'collapse');
@@ -163,7 +166,7 @@
 
   const clearAssistantFullscreenExitTimer = () => {
     if (assistantFullscreenExitTimer) {
-      window.App?.animations?.clearDelay?.(assistantFullscreenExitTimer) ?? window.clearTimeout(assistantFullscreenExitTimer);
+      PublicApp?.animations?.clearDelay?.(assistantFullscreenExitTimer) ?? window.clearTimeout(assistantFullscreenExitTimer);
       assistantFullscreenExitTimer = null;
     }
   };
@@ -200,27 +203,27 @@
       localStorage.setItem(constants.ASSISTANT_STATE_KEY, '0');
       updateAssistantToggle();
       updateAssistantFullscreenToggle();
-      (window.App?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
+      (PublicApp?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
         void refs.shell?.offsetWidth;
         refs.shell?.classList.add('assistant-fullscreen-open');
-        window.GJHApp?.chat?.renderChat?.();
+        App?.chat?.renderChat?.();
       });
       return;
     }
 
     refs.shell.classList.remove('assistant-fullscreen-open');
     syncAssistantFullscreenAttr(false);
-    assistantFullscreenExitTimer = window.App?.animations?.schedule?.(560, () => {
+    assistantFullscreenExitTimer = PublicApp?.animations?.schedule?.(560, () => {
       refs.shell?.classList.remove('assistant-fullscreen');
       refs.shell?.classList.remove('assistant-fullscreen-open');
       updateAssistantFullscreenToggle();
-      window.GJHApp?.chat?.renderChat?.();
+      App?.chat?.renderChat?.();
       assistantFullscreenExitTimer = null;
     }) ?? window.setTimeout(() => {
       refs.shell?.classList.remove('assistant-fullscreen');
       refs.shell?.classList.remove('assistant-fullscreen-open');
       updateAssistantFullscreenToggle();
-      window.GJHApp?.chat?.renderChat?.();
+      App?.chat?.renderChat?.();
       assistantFullscreenExitTimer = null;
     }, 560);
   };
@@ -330,7 +333,7 @@
         entry.removeEventListener('transitionend', clearInlineMotion);
       };
       entry.addEventListener('transitionend', clearInlineMotion);
-      window.App?.animations?.schedule?.(280, clearInlineMotion) ?? window.setTimeout(clearInlineMotion, 280);
+      PublicApp?.animations?.schedule?.(280, clearInlineMotion) ?? window.setTimeout(clearInlineMotion, 280);
     });
   };
 
@@ -345,7 +348,7 @@
     ghost.style.left = '-1000px';
     ghost.style.pointerEvents = 'none';
     document.body.appendChild(ghost);
-    window.App?.animations?.nextFrame?.(() => ghost.remove()) ?? window.setTimeout(() => ghost.remove(), 0);
+    PublicApp?.animations?.nextFrame?.(() => ghost.remove()) ?? window.setTimeout(() => ghost.remove(), 0);
     return ghost;
   };
 
@@ -419,7 +422,7 @@
     cleanupVisitedDrag();
     renderRecentPages(activePageId);
     suppressVisitedClick = true;
-    window.App?.animations?.schedule?.(0, () => {
+    PublicApp?.animations?.schedule?.(0, () => {
       suppressVisitedClick = false;
     }) ?? window.setTimeout(() => {
       suppressVisitedClick = false;
@@ -432,7 +435,7 @@
 
     animateTopVisitedReorder(() => {
       refs.topVisitedPages.insertBefore(visitedDragPlaceholder, referenceEntry);
-      window.App?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
+      PublicApp?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
     });
   };
 
@@ -502,7 +505,7 @@
         event.dataTransfer.setDragImage(ghost, Math.min(entryRect.width / 2, event.offsetX || entryRect.width / 2), Math.min(entryRect.height / 2, event.offsetY || entryRect.height / 2));
       }
 
-      (window.App?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
+      (PublicApp?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
         animateTopVisitedReorder(() => {
           entry.remove();
         });
@@ -517,7 +520,7 @@
       });
       animateTopVisitedReorder(() => {
         refs.topVisitedPages.insertBefore(visitedDragPlaceholder, nextEntry || null);
-        window.App?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
+        PublicApp?.animations?.nextFrame?.(openVisitedPlaceholder) ?? requestAnimationFrame(openVisitedPlaceholder);
       });
     });
 
@@ -528,7 +531,7 @@
         visitedDragPlaceholder.style.width = '0px';
         visitedDragPlaceholder.style.opacity = '0';
         visitedDragPlaceholder.classList.remove('is-open');
-        window.App?.animations?.schedule?.(220, () => {
+        PublicApp?.animations?.schedule?.(220, () => {
           if (!draggedVisitedPageId || visitedDragPlaceholder?.classList.contains('is-open')) return;
           visitedDragPlaceholder?.remove();
         }) ?? window.setTimeout(() => {
@@ -651,7 +654,7 @@
     renderRecentPages(pageId);
 
     if (scrollTop) {
-      (window.App?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
+      (PublicApp?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
         const content = document.querySelector('.content');
         content?.scrollTo({ top: 0, behavior: 'smooth' });
       });
@@ -702,7 +705,7 @@
         localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');
         syncSidebarCollapsedAttr(false);
         updateSidebarToggle(false);
-        window.App?.animations?.nextFrame?.(() => refs.sidebarSearchInput?.focus())
+        PublicApp?.animations?.nextFrame?.(() => refs.sidebarSearchInput?.focus())
           ?? requestAnimationFrame(() => refs.sidebarSearchInput?.focus());
       });
     }

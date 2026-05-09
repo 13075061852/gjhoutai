@@ -1,9 +1,10 @@
 // @ts-nocheck
-﻿// @ts-nocheck
+import { getLegacyApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp;
+  const App = getLegacyApp();
   if (!App) return;
 
   const { refs, constants, state, utils } = App;

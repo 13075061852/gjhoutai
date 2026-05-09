@@ -1,14 +1,15 @@
 // @ts-nocheck
-﻿// @ts-nocheck
+import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   let activeDialog = null;
 
   const escapeHtml = (value) => {
-    if (window.App?.utils?.escapeHtml) return window.App.utils.escapeHtml(value);
+    if (getPublicApp()?.utils?.escapeHtml) return getPublicApp().utils.escapeHtml(value);
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
       '&': '&amp;',
       '<': '&lt;',

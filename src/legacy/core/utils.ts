@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { ensureLegacyApp } from './app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp || (window.GJHApp = {});
+  const App = ensureLegacyApp();
   const { constants } = App;
   if (!constants) {
     throw new Error('GJHApp constants must be initialized before utils.');

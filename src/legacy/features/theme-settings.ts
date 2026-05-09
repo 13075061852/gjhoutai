@@ -1,8 +1,10 @@
 // @ts-nocheck
+import { getLegacyApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp;
+  const App = getLegacyApp();
   if (!App) return;
 
   const THEME_ID_KEY = 'gjh-theme-id-v1';

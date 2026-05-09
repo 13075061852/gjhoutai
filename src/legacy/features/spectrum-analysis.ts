@@ -1,9 +1,12 @@
 // @ts-nocheck
+import { getLegacyApp, getPublicApp } from '../core/app-context';
+
 (function () {
   'use strict';
 
-  const App = window.GJHApp;
+  const App = getLegacyApp();
   if (!App) return;
+  const PublicApp = getPublicApp();
 
   const { utils } = App;
   const STORAGE_KEY = 'gjh-spectrum-user-images-v2';
@@ -572,7 +575,7 @@
       return `[data-spectrum-id="${escapedId}"], [data-spectrum-selected-item="${escapedId}"]`;
     }).join(', ');
     const nodes = selector ? [...document.querySelectorAll(selector)] : [];
-    const animations = window.App?.animations;
+    const animations = PublicApp?.animations;
     const reducedMotion = animations?.prefersReducedMotion?.() ?? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
     if (!nodes.length || reducedMotion) {
@@ -886,7 +889,7 @@
   };
 
   const updateDetailCollapsed = () => {
-    const animations = window.App?.animations;
+    const animations = PublicApp?.animations;
     animations?.setClass?.(refs.workbench, 'is-detail-collapsed', state.detailCollapsed)
       ?? refs.workbench?.classList.toggle('is-detail-collapsed', state.detailCollapsed);
     if (!refs.toggleDetailBtn) return;
@@ -1027,7 +1030,7 @@
     if (!refs.workbench) return;
     const compact = isDetailCompactMode();
     state.detailAutoCompact = compact;
-    window.App?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
+    PublicApp?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
       ?? refs.workbench.classList.toggle('is-detail-auto-compact', compact);
     if (compact && !state.detailCollapsed) setDetailCollapsed(true);
     if (!compact && state.detailModalOpen) closeDetailModal();
@@ -2718,7 +2721,7 @@
     refs.toggleDetailBtn?.addEventListener('click', () => {
       const compact = isDetailCompactMode();
       state.detailAutoCompact = compact;
-      window.App?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
+      PublicApp?.animations?.setClass?.(refs.workbench, 'is-detail-auto-compact', compact)
         ?? refs.workbench?.classList.toggle('is-detail-auto-compact', compact);
       if (compact) {
         if (state.detailModalOpen) closeDetailModal();
@@ -2774,6 +2777,7 @@
     if (!refs.gallery) return;
     bindEvents();
     setupDetailAutoCollapse();
+    refs.gallery.className = 'spectrum-gallery is-empty';
     refs.gallery.innerHTML = `
       <div class="spectrum-empty-state">
         <div class="spectrum-empty-icon"><i class="ti ti-loader-2" aria-hidden="true"></i></div>

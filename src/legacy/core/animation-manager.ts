@@ -1,7 +1,9 @@
 // @ts-nocheck
+import { ensureLegacyApp, ensurePublicApp } from './app-context';
+
 (function () {
-  const App = window.GJHApp || (window.GJHApp = {});
-  const PublicApp = window.App = window.App || {};
+  const App = ensureLegacyApp();
+  const PublicApp = ensurePublicApp();
   const motionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const activeTimers = new Set();
 

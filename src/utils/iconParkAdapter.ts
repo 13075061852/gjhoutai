@@ -170,6 +170,7 @@ const iconMap: Record<string, IconRenderer> = {
   'ti-file-search': FileSearch,
   'ti-file-spreadsheet': Excel,
   'ti-file-text': DocDetail,
+  'ti-file-type-docx': DocDetail,
   'ti-flask-2': Flask,
   'ti-globe': Globe,
   'ti-history': History,

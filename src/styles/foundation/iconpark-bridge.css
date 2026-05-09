@@ -149,7 +149,7 @@
 .ti-eye{--ip-icon:var(--ip-eye)}
 .ti-eye-off{--ip-icon:var(--ip-eye-off)}
 .ti-file-alert{--ip-icon:var(--ip-alert)}
-.ti-file-description,.ti-file-text{--ip-icon:var(--ip-file)}
+.ti-file-description,.ti-file-text,.ti-file-type-docx{--ip-icon:var(--ip-file)}
 .ti-file-plus{--ip-icon:var(--ip-add)}
 .ti-file-search,.ti-photo-search{--ip-icon:var(--ip-search)}
 .ti-file-spreadsheet,.ti-table-options{--ip-icon:var(--ip-table)}

@@ -1498,6 +1498,13 @@ import { getLegacyApp } from '../core/app-context';
               <button class="analysis-report-btn" type="button" data-report-open-ranges>
                 <i class="ti ti-adjustments" aria-hidden="true"></i><span>检测范围</span>
               </button>
+              <label class="analysis-report-export-scope">
+                <span>导出范围</span>
+                <select data-report-export-scope>
+                  <option value="active" selected>当前选中</option>
+                  <option value="all">列表全部</option>
+                </select>
+              </label>
               <button class="analysis-report-btn" type="button" data-report-export-image>
                 <i class="ti ti-download" aria-hidden="true"></i><span>导出图片</span>
               </button>
@@ -1561,28 +1568,54 @@ import { getLegacyApp } from '../core/app-context';
     renderReportPreview();
   };
 
-  const exportActiveReportImage = async () => {
-    updateReportDraftFromDialog();
-    const draft = getActiveReportDraft();
-    const canvas = document.querySelector('[data-report-preview-canvas]');
-    if (!draft || !canvas) return;
+  const getReportExportDrafts = () => {
+    const scope = document.querySelector('[data-report-export-scope]')?.value || 'active';
+    if (scope === 'all') return state.reportDrafts.filter(Boolean);
+    return [getActiveReportDraft()].filter(Boolean);
+  };
+
+  const withReportDraftSelection = async (draft, callback) => {
+    const previousIndex = state.reportSelectedIndex;
+    const index = state.reportDrafts.indexOf(draft);
+    if (index >= 0) state.reportSelectedIndex = index;
+    await callback(draft);
+    state.reportSelectedIndex = previousIndex;
+  };
+
+  const exportReportDraftImage = async (draft, canvas) => {
     await drawReportCanvas(canvas, draft, { includeSeal: true });
     const blob = await canvasToBlob(canvas, 'image/png');
     downloadBlob(blob, `${getReportFileBase(draft)}.png`);
+  };
+
+  const exportReportDraftPdf = async (draft, canvas) => {
+    await drawReportCanvas(canvas, draft, { includeSeal: true });
+    const blob = createPdfBlobFromCanvas(canvas, `${getReportFileBase(draft)}.PDF`);
+    downloadBlob(blob, `${getReportFileBase(draft)}.PDF`);
+  };
+
+  const exportActiveReportImage = async () => {
+    updateReportDraftFromDialog();
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    const drafts = getReportExportDrafts();
+    if (!canvas || !drafts.length) return;
+    for (const draft of drafts) {
+      await withReportDraftSelection(draft, async (item) => exportReportDraftImage(item, canvas));
+    }
     await renderReportPreview();
-    notify('报告图片已导出', 'success', 'property-report-image');
+    notify(drafts.length > 1 ? `已导出 ${drafts.length} 张报告图片` : '报告图片已导出', 'success', 'property-report-image');
   };
 
   const exportActiveReportPdf = async () => {
     updateReportDraftFromDialog();
-    const draft = getActiveReportDraft();
     const canvas = document.querySelector('[data-report-preview-canvas]');
-    if (!draft || !canvas) return;
-    await drawReportCanvas(canvas, draft, { includeSeal: true });
-    const blob = createPdfBlobFromCanvas(canvas, `${getReportFileBase(draft)}.PDF`);
-    downloadBlob(blob, `${getReportFileBase(draft)}.PDF`);
+    const drafts = getReportExportDrafts();
+    if (!canvas || !drafts.length) return;
+    for (const draft of drafts) {
+      await withReportDraftSelection(draft, async (item) => exportReportDraftPdf(item, canvas));
+    }
     await renderReportPreview();
-    notify('报告 PDF 已导出', 'success', 'property-report-pdf');
+    notify(drafts.length > 1 ? `已导出 ${drafts.length} 份报告 PDF` : '报告 PDF 已导出', 'success', 'property-report-pdf');
   };
 
   const bindReportDialogEvents = () => {

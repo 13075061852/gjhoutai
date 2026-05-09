@@ -747,6 +747,29 @@
       flex-wrap:wrap;
       justify-content:flex-end;
     }
+    .analysis-report-export-scope{
+      height:34px;
+      border:1px solid #dbe5f0;
+      border-radius:8px;
+      background:#fff;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:0 8px;
+      color:#64748b;
+      font-size:12px;
+      font-weight:900;
+    }
+    .analysis-report-export-scope select{
+      height:28px;
+      border:0;
+      outline:0;
+      background:transparent;
+      color:#0f2748;
+      font:inherit;
+      font-weight:900;
+      cursor:pointer;
+    }
     .analysis-report-btn{
       height:34px;
       border:1px solid #dbe5f0;

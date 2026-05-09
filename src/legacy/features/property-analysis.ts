@@ -70,6 +70,8 @@ import { getLegacyApp } from '../core/app-context';
     { key: '弯曲模量[Mpa]', item: '弯曲模量', unit: 'MPa' },
     { key: '冲击强度[Mpa]', item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
   ];
+  const MELT_INDEX_METRIC_KEY = '熔指';
+  const MELT_INDEX_TEMPERATURES = ['250℃', '260℃', '275℃'];
   const AGENT_CONTEXT_ROW_LIMIT = 12;
   const AGENT_CONTEXT_SIMILAR_LIMIT = 8;
   const AGENT_STOP_TERMS = new Set([
@@ -111,6 +113,7 @@ import { getLegacyApp } from '../core/app-context';
     exportJsonBtn: document.getElementById('analysisExportJsonBtn'),
     exportReportBtn: document.getElementById('analysisExportReportBtn'),
     manageRangesBtn: document.getElementById('analysisManageRangesBtn'),
+    rangeWordInput: null,
     excelInput: document.getElementById('analysisExcelInput'),
     importStatus: document.getElementById('analysisImportStatus'),
     panelCount: document.getElementById('analysisPanelCount'),
@@ -139,6 +142,7 @@ import { getLegacyApp } from '../core/app-context';
     reportDrafts: [],
     rangeManagerSearch: '',
     rangeManagerSelectedModel: '',
+    rangeWordImporting: false,
     dataSource: 'default',
     sourceFileName: '',
     uploadStatusText: '读取中',
@@ -171,6 +175,18 @@ import { getLegacyApp } from '../core/app-context';
       button.innerHTML = '<i class="ti ti-adjustments" aria-hidden="true"></i><span>检测范围</span>';
       refs.exportJsonBtn.insertAdjacentElement('afterend', button);
       refs.manageRangesBtn = button;
+    }
+
+    refs.rangeWordInput = document.getElementById('analysisRangeWordInput');
+    if (!refs.rangeWordInput) {
+      const input = document.createElement('input');
+      input.id = 'analysisRangeWordInput';
+      input.type = 'file';
+      input.accept = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      input.multiple = true;
+      input.hidden = true;
+      document.body.appendChild(input);
+      refs.rangeWordInput = input;
     }
 
     if (!refs.exportReportBtn) {
@@ -566,6 +582,22 @@ import { getLegacyApp } from '../core/app-context';
     return window.XLSX;
   };
 
+  const ensureJsZipLoaded = async () => {
+    if (window.JSZip) return window.JSZip;
+
+    try {
+      await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'JSZip');
+    } catch {
+      throw new Error('Word解析库未加载。当前网络或代理无法访问 JSZip CDN，请稍后重试。');
+    }
+
+    if (!window.JSZip) {
+      throw new Error('Word解析库加载异常，请刷新页面后重试。');
+    }
+
+    return window.JSZip;
+  };
+
   const utf8ToBase64 = (value) => {
     const bytes = new TextEncoder().encode(value);
     let binary = '';
@@ -703,6 +735,8 @@ import { getLegacyApp } from '../core/app-context';
 
   const getRowModel = (row) => normalizeReportText(row?.型号);
 
+  const getReportDisplayModel = (row) => getRowModel(row).split('-')[0] || getRowModel(row);
+
   const getRowBatch = (row) => normalizeReportText(row?.批次);
 
   const getRowColor = (row) => {
@@ -739,6 +773,188 @@ import { getLegacyApp } from '../core/app-context';
     }
   );
 
+  const getMeltIndexTemperature = (item = '') => {
+    const text = normalizeReportText(item);
+    return MELT_INDEX_TEMPERATURES.find((temperature) => text.includes(temperature)) || '260℃';
+  };
+
+  const buildMeltIndexItemLabel = (temperature = '260℃') => `熔融指数（${temperature} / 2.16KG）`;
+
+  const normalizeDocxText = (value = '') => normalizeReportText(value)
+    .replace(/\u00a0/g, ' ')
+    .replace(/℃|°C|°/gi, '℃')
+    .replace(/[≥≧]/g, '≥')
+    .replace(/[≤≦]/g, '≤')
+    .replace(/[／]/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const getReportMetricByDocxItem = (item = '') => {
+    const text = normalizeDocxText(item).toLowerCase();
+    if (!text) return null;
+    if (text.includes('灰') && (text.includes('分') || text.includes('份'))) return getReportMetricConfig('灰份');
+    if (text.includes('熔') && (text.includes('指') || text.includes('融'))) return getReportMetricConfig(MELT_INDEX_METRIC_KEY);
+    if (text.includes('拉伸')) return getReportMetricConfig('拉伸强度[Mpa]');
+    if (text.includes('弯曲') && text.includes('强度')) return getReportMetricConfig('弯曲强度[Mpa]');
+    if (text.includes('弯曲') && text.includes('模量')) return getReportMetricConfig('弯曲模量[Mpa]');
+    if (text.includes('冲击')) return getReportMetricConfig('冲击强度[Mpa]');
+    return null;
+  };
+
+  const getMeltIndexTemperatureFromDocxItem = (item = '') => {
+    const text = normalizeDocxText(item);
+    const match = text.match(/(250|260|275)\s*℃/);
+    return match ? `${match[1]}℃` : getMeltIndexTemperature(text);
+  };
+
+  const normalizeRangeUnit = (unit = '') => normalizeDocxText(unit)
+    .replace(/^KJ$/i, 'kJ')
+    .replace(/KJ/i, 'kJ')
+    .replace(/m2/g, 'm²');
+
+  const normalizeRangeText = (range = '') => normalizeDocxText(range)
+    .replace(/^≥\s*\./, '≥0.')
+    .replace(/^≤\s*\./, '≤0.');
+
+  const getTextBetweenLabels = (text, label, stopLabels = []) => {
+    const source = normalizeDocxText(text);
+    const labelIndex = source.indexOf(label);
+    if (labelIndex < 0) return '';
+    const start = labelIndex + label.length;
+    const tail = source.slice(start);
+    const stopIndexes = stopLabels
+      .map((stopLabel) => tail.indexOf(stopLabel))
+      .filter((index) => index >= 0);
+    const end = stopIndexes.length ? Math.min(...stopIndexes) : tail.length;
+    return normalizeDocxText(tail.slice(0, end).replace(/^[:：]/, ''));
+  };
+
+  const normalizeDocxModelPart = (value = '') => normalizeDocxText(value).replace(/\s+/g, '');
+
+  const decodeXmlText = (value = '') => {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = value;
+    return textarea.value;
+  };
+
+  const stripDocxXmlToText = (xml = '') => decodeXmlText(String(xml).replace(/<[^>]+>/g, ''));
+
+  const extractDocxText = (xml = '') => normalizeDocxText(stripDocxXmlToText(xml));
+
+  const extractDocxTextRuns = (xml = '') => [extractDocxText(xml)];
+
+  const extractDocxCellText = (cellXml = '') => extractDocxText(cellXml);
+
+  const extractDocxTagBlocks = (xml = '', tagName = '') => {
+    const source = String(xml || '');
+    const blocks = [];
+    let cursor = 0;
+    const openPattern = new RegExp(`<${tagName}(?:\\s|>)`, 'g');
+
+    while (cursor < source.length) {
+      openPattern.lastIndex = cursor;
+      const openMatch = openPattern.exec(source);
+      if (!openMatch) break;
+
+      const openEnd = source.indexOf('>', openMatch.index);
+      if (openEnd < 0) break;
+
+      let depth = 1;
+      let scan = openEnd + 1;
+      while (depth > 0 && scan < source.length) {
+        const nextOpen = source.indexOf(`<${tagName}`, scan);
+        const nextClose = source.indexOf(`</${tagName}>`, scan);
+        if (nextClose < 0) break;
+        if (nextOpen >= 0 && nextOpen < nextClose && /[\s>]/.test(source[nextOpen + tagName.length + 1] || '')) {
+          depth += 1;
+          scan = nextOpen + tagName.length + 1;
+          continue;
+        }
+        depth -= 1;
+        scan = nextClose + tagName.length + 3;
+      }
+
+      if (depth === 0) blocks.push(source.slice(openMatch.index, scan));
+      cursor = scan;
+    }
+
+    return blocks;
+  };
+
+  const extractDocxRows = (xml = '') => extractDocxTagBlocks(xml, 'w:tr').map((rowXml) => (
+    extractDocxTagBlocks(rowXml, 'w:tc').map((cellXml) => extractDocxCellText(cellXml))
+  )).filter((row) => row.some(Boolean));
+
+  const normalizeWordJsonRow = (cells = []) => ({
+    item: cells[0] || '',
+    unit: cells[1] || '',
+    range: cells[2] || '',
+    value: cells[3] || '',
+    cells,
+  });
+
+  const getModelFromRangeWordXml = (xml = '', fileName = '') => {
+    const fileModel = String(fileName || '').match(/\b\d{3,4}[A-Z]\d{1,2}(?:-[A-Z0-9]+)?\b/i)?.[0] || '';
+    if (fileModel.includes('-')) return fileModel.toUpperCase();
+
+    const bodyText = extractDocxText(xml);
+    const modelText = normalizeDocxModelPart(getTextBetweenLabels(bodyText, '型号', ['色号', '批号', '检验项目']));
+    const colorText = normalizeDocxModelPart(getTextBetweenLabels(bodyText, '色号', ['批号', '检验项目']));
+    const model = modelText.match(/\d{3,4}[A-Z]\d{1,2}/i)?.[0] || fileModel;
+    const color = colorText.match(/[A-Z]\d{1,2}/i)?.[0] || '';
+    const combined = [model, color].filter(Boolean).join('-');
+    if (combined) return combined;
+
+    return fileModel.toUpperCase();
+  };
+
+  const parseRangeWordJsonFile = async (file) => {
+    const JSZip = await ensureJsZipLoaded();
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const xml = await zip.file('word/document.xml')?.async('string');
+    if (!xml) throw new Error('未找到 Word 正文内容');
+
+    const model = getModelFromRangeWordXml(xml, file.name);
+    if (!model) throw new Error('未识别到型号');
+
+    const rows = extractDocxRows(xml)
+      .map(normalizeWordJsonRow)
+      .filter((row) => row.item && row.unit && row.range)
+      .filter((row) => !(row.item.includes('检验') && row.unit.includes('单位')));
+
+    return {
+      fileName: file.name,
+      model,
+      rows,
+    };
+  };
+
+  const buildRangeDraftsFromWordJson = (wordJson) => {
+    const ranges = (wordJson?.rows || []).map((row) => {
+      const metric = getReportMetricByDocxItem(row.item);
+      if (!metric) return null;
+      const item = metric.key === MELT_INDEX_METRIC_KEY
+        ? buildMeltIndexItemLabel(getMeltIndexTemperatureFromDocxItem(row.item))
+        : metric.item;
+      return createRangeDraft({
+        model: wordJson.model,
+        metricKey: metric.key,
+        item,
+        unit: normalizeRangeUnit(row.unit) || metric.unit,
+        range: normalizeRangeText(row.range),
+      });
+    }).filter((item) => item?.range);
+
+    if (!ranges.length) throw new Error('未识别到检测范围表格');
+    return { model: wordJson.model, ranges, source: wordJson };
+  };
+
+  const parseRangeWordFile = async (file) => {
+    const wordJson = await parseRangeWordJsonFile(file);
+    console.info('[property-analysis] Word range JSON:', wordJson);
+    return buildRangeDraftsFromWordJson(wordJson);
+  };
+
   const getReportRange = (model, metricKey) => state.reportRanges.find((item) => (
     item.model === model && item.metricKey === metricKey
   ));
@@ -748,10 +964,16 @@ import { getLegacyApp } from '../core/app-context';
     return Math.min(Math.max(...matches.map((item) => getPrecision(item)), 0), 3);
   };
 
+  const canReportValueKeepDecimal = (metricKey) => (
+    metricKey === MELT_INDEX_METRIC_KEY || metricKey === '冲击强度[Mpa]'
+  );
+
   const formatReportValue = (row, metricKey, rangeText = '') => {
     const raw = row?.[metricKey];
     const numeric = getMetricValue(row, metricKey);
     if (numeric == null) return normalizeReportText(Array.isArray(raw) ? raw.join(' / ') : raw);
+
+    if (!canReportValueKeepDecimal(metricKey)) return String(Math.round(numeric));
 
     const rangePrecision = getRangePrecision(rangeText);
     const precision = Math.max(rangePrecision, Math.min(getPrecision(numeric), 1));
@@ -786,6 +1008,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const createReportDraft = (row) => {
     const model = getRowModel(row);
+    const displayModel = getReportDisplayModel(row);
     const batch = getRowBatch(row);
     const metrics = getReportMetricsForRow(row).map((metricKey) => {
       const config = getReportMetricConfig(metricKey);
@@ -801,10 +1024,15 @@ import { getLegacyApp } from '../core/app-context';
 
     return {
       key: row.__rowKey,
-      model,
+      model: displayModel,
+      fullModel: model,
       batch,
       date: formatChineseDate(),
       color: getRowColor(row),
+      companyName: REPORT_COMPANY_NAME,
+      companyAddress: REPORT_COMPANY_ADDRESS,
+      companyTel: REPORT_COMPANY_TEL,
+      companyFax: REPORT_COMPANY_FAX,
       intro: '本批次材料依照该型号生产流程规范生产，经内部品质检验合格，如下：',
       metrics,
     };
@@ -847,7 +1075,14 @@ import { getLegacyApp } from '../core/app-context';
     if (!canvas || !draft) return;
     const scale = 2;
     const width = 794;
-    const height = 1123;
+    const rows = draft.metrics || [];
+    const rowH = 48;
+    const tableY = 485;
+    const tableH = rowH * (rows.length + 1);
+    const height = Math.max(860, tableY + tableH + 180);
+    const contentLeft = 70;
+    const contentRight = 724;
+    const contentWidth = contentRight - contentLeft;
     canvas.width = width * scale;
     canvas.height = height * scale;
     canvas.style.width = `${width}px`;
@@ -860,8 +1095,8 @@ import { getLegacyApp } from '../core/app-context';
     ctx.strokeStyle = '#1d4ed8';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(70, 38);
-    ctx.lineTo(724, 38);
+    ctx.moveTo(contentLeft, 38);
+    ctx.lineTo(contentRight, 38);
     ctx.stroke();
     ctx.lineWidth = 5;
     ctx.beginPath();
@@ -869,23 +1104,27 @@ import { getLegacyApp } from '../core/app-context';
     ctx.lineTo(448, 38);
     ctx.stroke();
 
-    drawCenteredText(ctx, REPORT_COMPANY_NAME, width / 2, 96, { font: '700 36px "Microsoft YaHei", sans-serif' });
-    drawCenteredText(ctx, REPORT_COMPANY_ADDRESS, width / 2, 145, { font: '22px "Microsoft YaHei", sans-serif' });
-    drawCenteredText(ctx, `TEL：${REPORT_COMPANY_TEL}      FAX：${REPORT_COMPANY_FAX}`, width / 2, 184, { font: '22px Arial, sans-serif' });
+    drawCenteredText(ctx, draft.companyName || REPORT_COMPANY_NAME, width / 2, 94, { font: '700 32px "Microsoft YaHei", sans-serif' });
+    drawCenteredText(ctx, draft.companyAddress || REPORT_COMPANY_ADDRESS, width / 2, 138, { font: '19px "Microsoft YaHei", sans-serif' });
+    drawCenteredText(ctx, `TEL：${draft.companyTel || REPORT_COMPANY_TEL}      FAX：${draft.companyFax || REPORT_COMPANY_FAX}`, width / 2, 172, { font: '19px Arial, sans-serif' });
 
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(212, 255);
-    ctx.lineTo(286, 255);
-    ctx.moveTo(508, 255);
-    ctx.lineTo(582, 255);
+    ctx.moveTo(212, 232);
+    ctx.lineTo(286, 232);
+    ctx.moveTo(508, 232);
+    ctx.lineTo(582, 232);
     ctx.stroke();
-    drawCenteredText(ctx, '检验报告表', width / 2, 255, { font: '700 36px "Microsoft YaHei", sans-serif' });
+    drawCenteredText(ctx, '检验报告表', width / 2, 232, { font: '700 30px "Microsoft YaHei", sans-serif' });
 
-    const left = 72;
-    const labelX = 108;
-    const valueX = 138;
+    const colWidths = [225, 100, 155, 120];
+    const headers = ['检验项目', '单位', '检验范围', '检验值'];
+    const tableW = colWidths.reduce((sum, item) => sum + item, 0);
+    const tableX = contentLeft + (contentWidth - tableW) / 2;
+    const left = tableX;
+    const labelX = left;
+    const valueX = left + 76;
     const fields = [
       ['日期：', draft.date],
       ['型号：', draft.model],
@@ -894,26 +1133,17 @@ import { getLegacyApp } from '../core/app-context';
     ];
     ctx.fillStyle = '#111827';
     fields.forEach(([label, value], index) => {
-      const y = 320 + index * 48;
-      ctx.font = '700 23px "Microsoft YaHei", sans-serif';
-      ctx.textAlign = 'right';
+      const y = 286 + index * 42;
+      ctx.font = '700 20px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'left';
       ctx.fillText(label, labelX, y);
-      ctx.font = '22px "Microsoft YaHei", sans-serif';
+      ctx.font = '20px "Microsoft YaHei", sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(String(value || ''), valueX, y);
     });
 
-    ctx.font = '22px "Microsoft YaHei", sans-serif';
-    ctx.fillText(draft.intro || '', left, 540);
-
-    const tableX = 68;
-    const tableY = 590;
-    const colWidths = [260, 130, 170, 150];
-    const rowH = 54;
-    const headers = ['检验项目', '单位', '检验范围', '检验值'];
-    const rows = draft.metrics || [];
-    const tableW = colWidths.reduce((sum, item) => sum + item, 0);
-    const tableH = rowH * (rows.length + 1);
+    ctx.font = '19px "Microsoft YaHei", sans-serif';
+    ctx.fillText(draft.intro || '', left, 455);
 
     ctx.strokeStyle = '#2f3742';
     ctx.lineWidth = 1;
@@ -936,13 +1166,13 @@ import { getLegacyApp } from '../core/app-context';
 
     headers.forEach((header, index) => {
       const cellX = tableX + colWidths.slice(0, index).reduce((sum, item) => sum + item, 0);
-      drawCenteredText(ctx, header, cellX + colWidths[index] / 2, tableY + rowH / 2, { font: '700 21px "Microsoft YaHei", sans-serif' });
+      drawCenteredText(ctx, header, cellX + colWidths[index] / 2, tableY + rowH / 2, { font: '700 18px "Microsoft YaHei", sans-serif' });
     });
 
     rows.forEach((row, rowIndex) => {
       [row.item, row.unit, row.range, row.value].forEach((text, colIndex) => {
         const cellX = tableX + colWidths.slice(0, colIndex).reduce((sum, item) => sum + item, 0);
-        drawCenteredText(ctx, text, cellX + colWidths[colIndex] / 2, tableY + rowH * (rowIndex + 1) + rowH / 2, { font: '20px "Microsoft YaHei", sans-serif' });
+        drawCenteredText(ctx, text, cellX + colWidths[colIndex] / 2, tableY + rowH * (rowIndex + 1) + rowH / 2, { font: '16px "Microsoft YaHei", sans-serif' });
       });
     });
   };
@@ -968,7 +1198,7 @@ import { getLegacyApp } from '../core/app-context';
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     const imageBinary = binaryStringFromBase64(dataUrl);
     const width = 595.28;
-    const height = 841.89;
+    const height = width * (canvas.height / canvas.width);
     const contentStream = `q\n${width} 0 0 ${height} 0 0 cm\n/Im0 Do\nQ`;
     const objects = [
       '<< /Type /Catalog /Pages 2 0 R >>',
@@ -995,10 +1225,52 @@ import { getLegacyApp } from '../core/app-context';
     return new Blob([bytes], { type: 'application/pdf' });
   };
 
-  const getReportFileBase = (draft) => sanitizeFileName(`${draft?.batch || '未命名批次'} ${draft?.model || '未命名型号'}`);
+  const getReportFileBase = (draft) => sanitizeFileName(`${draft?.batch || '未命名批次'} ${draft?.fullModel || draft?.model || '未命名型号'}`);
+
+  const buildReportEditorHtml = () => {
+    const draft = getActiveReportDraft();
+    return `
+      <section class="analysis-report-editor">
+        <div class="analysis-report-form-grid">
+          ${[
+            ['companyName', '公司名称'],
+            ['companyAddress', '公司地址'],
+            ['companyTel', '电话'],
+            ['companyFax', '传真'],
+            ['date', '日期'],
+            ['model', '型号'],
+            ['color', '色号'],
+            ['batch', '批号'],
+          ].map(([field, label]) => `
+            <label>
+              <span>${label}</span>
+              <input value="${escapeHtml(draft?.[field] || '')}" data-report-field="${field}">
+            </label>
+          `).join('')}
+          <label class="is-wide">
+            <span>说明</span>
+            <input value="${escapeHtml(draft?.intro || '')}" data-report-field="intro">
+          </label>
+        </div>
+        <div class="analysis-report-metric-editor">
+          <div class="analysis-report-section-title">报告明细</div>
+          <div class="analysis-report-metric-head">
+            <span>检验项目</span><span>单位</span><span>检验范围</span><span>检验值</span>
+          </div>
+          ${(draft?.metrics || []).map((metric, index) => `
+            <div class="analysis-report-metric-row" data-report-metric-index="${index}">
+              <input value="${escapeHtml(metric.item)}" data-report-metric-field="item">
+              <input value="${escapeHtml(metric.unit)}" data-report-metric-field="unit">
+              <input value="${escapeHtml(metric.range)}" data-report-metric-field="range">
+              <input value="${escapeHtml(metric.value)}" data-report-metric-field="value">
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  };
 
   const buildReportDialogHtml = () => {
-    const draft = getActiveReportDraft();
     return `
       <div class="analysis-report-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="导出检验报告">
         <div class="analysis-report-card dialog-card">
@@ -1028,50 +1300,15 @@ import { getLegacyApp } from '../core/app-context';
               <div class="analysis-report-selected-list">
                 ${state.reportDrafts.map((item, index) => `
                   <button class="analysis-report-selected-item${index === state.reportSelectedIndex ? ' is-active' : ''}" type="button" data-report-select="${index}">
-                    <strong>${escapeHtml(item.model || '--')}</strong>
+                    <strong>${escapeHtml(item.fullModel || item.model || '--')}</strong>
                     <span>${escapeHtml(item.batch || '--')}</span>
                   </button>
                 `).join('')}
               </div>
             </aside>
-            <section class="analysis-report-editor">
-              <div class="analysis-report-form-grid">
-                ${[
-                  ['date', '日期'],
-                  ['model', '型号'],
-                  ['color', '色号'],
-                  ['batch', '批号'],
-                ].map(([field, label]) => `
-                  <label>
-                    <span>${label}</span>
-                    <input value="${escapeHtml(draft?.[field] || '')}" data-report-field="${field}">
-                  </label>
-                `).join('')}
-                <label class="is-wide">
-                  <span>说明</span>
-                  <input value="${escapeHtml(draft?.intro || '')}" data-report-field="intro">
-                </label>
-              </div>
-              <div class="analysis-report-metric-editor">
-                <div class="analysis-report-section-title">报告明细</div>
-                <div class="analysis-report-metric-head">
-                  <span>检验项目</span><span>单位</span><span>检验范围</span><span>检验值</span>
-                </div>
-                ${(draft?.metrics || []).map((metric, index) => `
-                  <div class="analysis-report-metric-row" data-report-metric-index="${index}">
-                    <input value="${escapeHtml(metric.item)}" data-report-metric-field="item">
-                    <input value="${escapeHtml(metric.unit)}" data-report-metric-field="unit">
-                    <input value="${escapeHtml(metric.range)}" data-report-metric-field="range">
-                    <input value="${escapeHtml(metric.value)}" data-report-metric-field="value">
-                  </div>
-                `).join('')}
-              </div>
-            </section>
+            ${buildReportEditorHtml()}
             <section class="analysis-report-preview-wrap">
-              <div class="analysis-report-section-title">预览</div>
-              <div class="analysis-report-preview-scroll">
-                <canvas data-report-preview-canvas></canvas>
-              </div>
+              <canvas data-report-preview-canvas></canvas>
             </section>
           </div>
         </div>
@@ -1093,8 +1330,14 @@ import { getLegacyApp } from '../core/app-context';
   const rerenderReportDialog = () => {
     const dialog = document.querySelector('.analysis-report-dialog');
     if (!dialog) return;
-    dialog.outerHTML = buildReportDialogHtml();
-    bindReportDialogEvents();
+    const selectedList = dialog.querySelector('.analysis-report-selected-list');
+    const editor = dialog.querySelector('.analysis-report-editor');
+    if (selectedList) {
+      selectedList.querySelectorAll('[data-report-select]').forEach((button) => {
+        button.classList.toggle('is-active', Number.parseInt(button.getAttribute('data-report-select') || '', 10) === state.reportSelectedIndex);
+      });
+    }
+    if (editor) editor.outerHTML = buildReportEditorHtml();
     renderReportPreview();
   };
 
@@ -1227,9 +1470,29 @@ import { getLegacyApp } from '../core/app-context';
     }));
   };
 
+  const buildRangeMetricNameHtml = (item) => {
+    const config = getReportMetricConfig(item.metricKey);
+    const itemLabel = item.item || config.item;
+    if (item.metricKey !== MELT_INDEX_METRIC_KEY) {
+      return `<div class="analysis-range-metric-name">${escapeHtml(itemLabel)}</div>`;
+    }
+
+    const selectedTemperature = getMeltIndexTemperature(itemLabel);
+    return `
+      <div class="analysis-range-metric-name analysis-range-metric-name-with-select">
+        <span>熔融指数</span>
+        <select data-range-metric-field="meltTemperature" aria-label="熔融指数测试温度">
+          ${MELT_INDEX_TEMPERATURES.map((temperature) => `
+            <option value="${escapeHtml(temperature)}"${temperature === selectedTemperature ? ' selected' : ''}>${escapeHtml(temperature)}</option>
+          `).join('')}
+        </select>
+      </div>
+    `;
+  };
+
   const buildRangeRowsHtml = (model = '') => getRangesForModel(model).map((item) => `
     <div class="analysis-range-metric-row" data-range-metric-key="${escapeHtml(item.metricKey)}">
-      <div class="analysis-range-metric-name">${escapeHtml(item.item || getReportMetricConfig(item.metricKey).item)}</div>
+      ${buildRangeMetricNameHtml(item)}
       <input value="${escapeHtml(item.unit)}" data-range-metric-field="unit" aria-label="${escapeHtml(item.item)}单位">
       <input value="${escapeHtml(item.range)}" data-range-metric-field="range" placeholder="例如 28.0~32.0 或 ≥120" aria-label="${escapeHtml(item.item)}检测范围">
     </div>
@@ -1268,7 +1531,6 @@ import { getLegacyApp } from '../core/app-context';
     <form class="analysis-range-form analysis-range-form-bulk" data-range-form>
       <div class="analysis-range-form-head">
         <div class="analysis-range-current-model">
-          <span>当前型号</span>
           <strong>${escapeHtml(state.rangeManagerSelectedModel)}</strong>
         </div>
         <input data-range-field="model" value="${escapeHtml(state.rangeManagerSelectedModel)}" hidden>
@@ -1295,7 +1557,11 @@ import { getLegacyApp } from '../core/app-context';
   const updateRangeModelList = () => {
     const list = document.querySelector('.analysis-range-model-list');
     const meta = document.querySelector('.analysis-range-model-meta');
-    if (list) list.innerHTML = buildRangeModelListHtml();
+    const scrollTop = list?.scrollTop || 0;
+    if (list) {
+      list.innerHTML = buildRangeModelListHtml();
+      list.scrollTop = scrollTop;
+    }
     if (meta) meta.textContent = `筛选结果型号 ${getRangeCandidateModels().length} 个`;
   };
 
@@ -1304,10 +1570,34 @@ import { getLegacyApp } from '../core/app-context';
     if (panel) panel.innerHTML = buildRangeEditorHtml();
   };
 
+  const updateRangeModelActiveState = () => {
+    document.querySelectorAll('.analysis-range-model-item').forEach((button) => {
+      button.classList.toggle('is-active', button.getAttribute('data-range-model') === state.rangeManagerSelectedModel);
+    });
+  };
+
   const updateRangeManagerSelection = (model) => {
+    if ((model || '') === state.rangeManagerSelectedModel) return;
     state.rangeManagerSelectedModel = model || '';
-    updateRangeModelList();
+    updateRangeModelActiveState();
     updateRangeEditorPanel();
+  };
+
+  const setRangeWordImportStatus = ({ active = false, current = 0, total = 0, success = 0, failed = 0, fileName = '', message = '' } = {}) => {
+    const dialog = document.querySelector('.analysis-range-dialog');
+    const dropzone = dialog?.querySelector('[data-range-word-upload]');
+    const progress = dialog?.querySelector('[data-range-word-progress]');
+    const bar = dialog?.querySelector('[data-range-word-progress-bar]');
+    const text = dialog?.querySelector('[data-range-word-status]');
+    if (!dropzone || !progress || !bar || !text) return;
+
+    const percent = total ? Math.round((current / total) * 100) : 0;
+    state.rangeWordImporting = active;
+    dropzone.classList.toggle('is-importing', active);
+    dropzone.disabled = active;
+    progress.hidden = !active && !message;
+    bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    text.textContent = message || `正在解析 ${current}/${total}，成功 ${success}，失败 ${failed}${fileName ? `：${fileName}` : ''}`;
   };
 
   const buildRangeManagerHtml = (missingItems = []) => `
@@ -1329,6 +1619,17 @@ import { getLegacyApp } from '../core/app-context';
               <span>${missingItems.map((item) => `${escapeHtml(item.model)} / ${escapeHtml(item.item)}`).join('，')}</span>
             </div>
           ` : ''}
+          <button class="analysis-range-word-dropzone" type="button" data-range-word-upload>
+            <span class="analysis-range-word-icon"><i class="ti ti-file-type-docx" aria-hidden="true"></i></span>
+            <span class="analysis-range-word-copy">
+              <strong>导入Word检测范围</strong>
+              <em>点击选择或拖入多个 .docx 文件，自动提取型号、项目、单位和检测范围</em>
+              <span class="analysis-range-word-progress" data-range-word-progress hidden>
+                <span class="analysis-range-word-progress-track"><span data-range-word-progress-bar></span></span>
+                <span class="analysis-range-word-status" data-range-word-status></span>
+              </span>
+            </span>
+          </button>
           <div class="analysis-range-workbench">
             <aside class="analysis-range-model-panel">
               <label class="analysis-range-search">
@@ -1365,10 +1666,11 @@ import { getLegacyApp } from '../core/app-context';
     const ranges = [...form.querySelectorAll('[data-range-metric-key]')].map((row) => {
       const metricKey = row.getAttribute('data-range-metric-key');
       const metric = getReportMetricConfig(metricKey);
+      const meltTemperature = row.querySelector('[data-range-metric-field="meltTemperature"]')?.value;
       return createRangeDraft({
         model,
         metricKey,
-        item: metric.item,
+        item: metricKey === MELT_INDEX_METRIC_KEY ? buildMeltIndexItemLabel(meltTemperature) : metric.item,
         unit: row.querySelector('[data-range-metric-field="unit"]')?.value,
         range: row.querySelector('[data-range-metric-field="range"]')?.value,
       });
@@ -1401,6 +1703,12 @@ import { getLegacyApp } from '../core/app-context';
       const modelButton = target.closest('[data-range-model]');
       if (modelButton) {
         updateRangeManagerSelection(modelButton.getAttribute('data-range-model') || '');
+        return;
+      }
+      if (target.closest('[data-range-word-upload]')) {
+        if (!refs.rangeWordInput) return;
+        refs.rangeWordInput.value = '';
+        refs.rangeWordInput.click();
         return;
       }
       if (target.closest('[data-range-clear-model]')) {
@@ -1447,6 +1755,19 @@ import { getLegacyApp } from '../core/app-context';
     dialog.querySelector('[data-range-search]')?.addEventListener('input', (event) => {
       state.rangeManagerSearch = event.target.value || '';
       updateRangeModelList();
+    });
+    const dropzone = dialog.querySelector('[data-range-word-upload]');
+    dropzone?.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropzone.classList.add('is-dragover');
+    });
+    dropzone?.addEventListener('dragleave', (event) => {
+      if (event.currentTarget === event.target) dropzone.classList.remove('is-dragover');
+    });
+    dropzone?.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('is-dragover');
+      importRangeWordFiles(event.dataTransfer?.files);
     });
     const firstMissing = missingItems[0];
     if (firstMissing && !state.rangeManagerSelectedModel) state.rangeManagerSelectedModel = firstMissing.model;
@@ -2667,6 +2988,91 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
+  const importRangeWordFiles = async (fileList) => {
+    if (state.rangeWordImporting) return;
+    const files = [...(fileList || [])].filter((file) => /\.docx$/i.test(file.name || ''));
+    if (!files.length) {
+      notify('请选择 .docx 格式的检测范围 Word 文档', 'warn', 'property-range-word-empty');
+      return;
+    }
+
+    const imported = [];
+    const failed = [];
+
+    state.rangeWordImporting = true;
+    setUploadStatus(`解析Word范围 0/${files.length}`);
+    setRangeWordImportStatus({ active: true, current: 0, total: files.length, success: 0, failed: 0 });
+    for (const file of files) {
+      try {
+        setRangeWordImportStatus({
+          active: true,
+          current: imported.length + failed.length,
+          total: files.length,
+          success: imported.length,
+          failed: failed.length,
+          fileName: file.name,
+        });
+        const parsed = await parseRangeWordFile(file);
+        imported.push(parsed);
+        setUploadStatus(`解析Word范围 ${imported.length}/${files.length}`);
+      } catch (error) {
+        failed.push({ file: file.name, message: error?.message || '解析失败' });
+        console.error('[property-analysis] Failed to parse range Word:', file.name, error);
+      }
+      setRangeWordImportStatus({
+        active: true,
+        current: imported.length + failed.length,
+        total: files.length,
+        success: imported.length,
+        failed: failed.length,
+        fileName: file.name,
+      });
+    }
+    state.rangeWordImporting = false;
+
+    if (!imported.length) {
+      setUploadStatus('Word范围导入失败');
+      setRangeWordImportStatus({
+        active: false,
+        current: files.length,
+        total: files.length,
+        success: 0,
+        failed: failed.length,
+        message: `导入失败：${failed.length} 个文件未识别到检测范围`,
+      });
+      notify(`未导入任何检测范围。${failed[0]?.message || '请检查Word模板格式'}`, 'error', 'property-range-word-failed');
+      return;
+    }
+
+    const importedModels = new Set(imported.map((item) => item.model));
+    state.reportRanges = [
+      ...state.reportRanges.filter((item) => !importedModels.has(item.model)),
+      ...imported.flatMap((item) => item.ranges),
+    ];
+    saveReportRanges();
+
+    if (importedModels.size) {
+      if (!state.rangeManagerSelectedModel || !importedModels.has(state.rangeManagerSelectedModel)) {
+        state.rangeManagerSelectedModel = imported[0].model;
+      }
+      updateRangeModelList();
+      updateRangeEditorPanel();
+    }
+
+    const rangeCount = imported.reduce((sum, item) => sum + item.ranges.length, 0);
+    const failText = failed.length ? `，${failed.length} 个失败` : '';
+    setUploadStatus(`已导入 ${imported.length} 个型号`);
+    setRangeWordImportStatus({
+      active: false,
+      current: files.length,
+      total: files.length,
+      success: imported.length,
+      failed: failed.length,
+      message: `导入完成：${imported.length} 个型号，${rangeCount} 项范围${failText}`,
+    });
+    notify(`已从Word导入 ${imported.length} 个型号、${rangeCount} 项检测范围${failText}`, failed.length ? 'warn' : 'success', 'property-range-word-import');
+  };
+
   const toggleSelectAllFiltered = () => {
     const { filteredRows } = getVisibleRows();
     const shouldSelect = !isAllFilteredSelected(filteredRows);
@@ -2898,6 +3304,11 @@ import { getLegacyApp } from '../core/app-context';
       importExcelFile(file);
       if (refs.excelInput) refs.excelInput.value = '';
     });
+    refs.rangeWordInput?.addEventListener('change', () => {
+      const files = refs.rangeWordInput?.files;
+      importRangeWordFiles(files);
+      if (refs.rangeWordInput) refs.rangeWordInput.value = '';
+    });
 
     document.addEventListener('click', (event) => {
       const target = event.target;
@@ -2935,3 +3346,4 @@ import { getLegacyApp } from '../core/app-context';
     getAgentContext,
   };
 })();
+

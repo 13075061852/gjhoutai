@@ -14,6 +14,10 @@ import { getLegacyApp } from '../core/app-context';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
   const REPORT_COMPANY_TEL = '0574-63072712';
   const REPORT_COMPANY_FAX = '0574-63805667';
+  const REPORT_SEAL_SRC = '/inspection-seal.png';
+  const REPORT_SEAL_POSITION_STORAGE_KEY = 'gjh-property-report-seal-position-v1';
+  const REPORT_SEAL_DEFAULT = { x: 428, y: 760, size: 150, rotation: 0 };
+  let reportSealImagePromise = null;
   const HEADER_LABELS = {
     型号: '型号',
     批次: '批次',
@@ -143,6 +147,7 @@ import { getLegacyApp } from '../core/app-context';
     rangeManagerSearch: '',
     rangeManagerSelectedModel: '',
     rangeWordImporting: false,
+    reportSealPosition: { ...REPORT_SEAL_DEFAULT },
     dataSource: 'default',
     sourceFileName: '',
     uploadStatusText: '读取中',
@@ -968,6 +973,37 @@ import { getLegacyApp } from '../core/app-context';
     metricKey === MELT_INDEX_METRIC_KEY || metricKey === '冲击强度[Mpa]'
   );
 
+  const parseReportRangeBounds = (rangeText = '') => {
+    const text = normalizeReportText(rangeText).replace(/[～—–至到]/g, '~');
+    const numbers = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+    if (!numbers.length) return null;
+    if (/^[≥>=]/.test(text)) return { min: numbers[0], max: Infinity };
+    if (/^[≤<=]/.test(text)) return { min: -Infinity, max: numbers[0] };
+    if (numbers.length >= 2) return { min: Math.min(numbers[0], numbers[1]), max: Math.max(numbers[0], numbers[1]) };
+    return { min: numbers[0], max: numbers[0] };
+  };
+
+  const getReportMetricValidation = (metric = {}) => {
+    const value = parseNumericValue(metric.value);
+    if (!normalizeReportText(metric.range)) return { status: 'missing', text: '未设置范围' };
+    if (value == null) return { status: 'missing', text: '检验值无效' };
+    const bounds = parseReportRangeBounds(metric.range);
+    if (!bounds) return { status: 'missing', text: '范围格式无效' };
+    const passed = value >= bounds.min && value <= bounds.max;
+    return {
+      status: passed ? 'pass' : 'fail',
+      text: passed ? '检验通过' : '检验异常',
+    };
+  };
+
+  const getReportDraftValidation = (draft = {}) => {
+    const metrics = draft.metrics || [];
+    const results = metrics.map(getReportMetricValidation);
+    if (results.some((item) => item.status === 'fail')) return { status: 'fail', text: '存在异常' };
+    if (results.some((item) => item.status === 'missing')) return { status: 'missing', text: '待完善' };
+    return { status: 'pass', text: '检验通过' };
+  };
+
   const formatReportValue = (row, metricKey, rangeText = '') => {
     const raw = row?.[metricKey];
     const numeric = getMetricValue(row, metricKey);
@@ -1071,7 +1107,132 @@ import { getLegacyApp } from '../core/app-context';
     ctx.restore();
   };
 
-  const drawReportCanvas = (canvas, draft) => {
+  const loadReportSealImage = () => {
+    if (reportSealImagePromise) return reportSealImagePromise;
+    reportSealImagePromise = new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = REPORT_SEAL_SRC;
+    });
+    return reportSealImagePromise;
+  };
+
+  const normalizeReportSealPosition = (value = {}) => ({
+    x: Math.max(0, Number.isFinite(Number(value.x)) ? Number(value.x) : REPORT_SEAL_DEFAULT.x),
+    y: Math.max(0, Number.isFinite(Number(value.y)) ? Number(value.y) : REPORT_SEAL_DEFAULT.y),
+    size: Math.max(40, Math.min(360, Number.isFinite(Number(value.size)) ? Number(value.size) : REPORT_SEAL_DEFAULT.size)),
+    rotation: Number.isFinite(Number(value.rotation)) ? Number(value.rotation) : REPORT_SEAL_DEFAULT.rotation,
+  });
+
+  const loadReportSealPosition = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(REPORT_SEAL_POSITION_STORAGE_KEY) || 'null');
+      state.reportSealPosition = normalizeReportSealPosition({ ...REPORT_SEAL_DEFAULT, ...(parsed && typeof parsed === 'object' ? parsed : {}) });
+    } catch {
+      state.reportSealPosition = normalizeReportSealPosition(REPORT_SEAL_DEFAULT);
+    }
+  };
+
+  const saveReportSealPosition = () => {
+    localStorage.setItem(REPORT_SEAL_POSITION_STORAGE_KEY, JSON.stringify(state.reportSealPosition));
+  };
+
+  const getReportSealScale = (canvas) => {
+    const rect = canvas?.getBoundingClientRect?.();
+    return rect?.width ? rect.width / (canvas.width / 2 || 794) : 1;
+  };
+
+  const fitReportPreviewCanvas = () => {
+    const wrap = document.querySelector('.analysis-report-preview-wrap');
+    const canvasWrap = document.querySelector('.analysis-report-preview-canvas-wrap');
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    if (!wrap || !canvasWrap || !canvas) return;
+
+    const sourceWidth = Number(canvas.style.width.replace('px', '') || 794);
+    const sourceHeight = Number(canvas.style.height.replace('px', '') || 900);
+    const styles = window.getComputedStyle(wrap);
+    const paddingX = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+    const paddingY = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+    const availableWidth = Math.max(1, wrap.clientWidth - paddingX);
+    const availableHeight = Math.max(1, wrap.clientHeight - paddingY);
+    const scale = Math.min(1, availableWidth / sourceWidth, availableHeight / sourceHeight);
+    const displayWidth = sourceWidth * scale;
+    const displayHeight = sourceHeight * scale;
+
+    canvasWrap.style.width = `${displayWidth}px`;
+    canvasWrap.style.height = `${displayHeight}px`;
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+  };
+
+  const syncReportSealOverlay = () => {
+    const canvas = document.querySelector('[data-report-preview-canvas]');
+    const seal = document.querySelector('[data-report-seal-overlay]');
+    if (!canvas || !seal) return;
+    const scale = getReportSealScale(canvas);
+    const { x, y, size, rotation } = state.reportSealPosition;
+    seal.style.left = `${x * scale}px`;
+    seal.style.top = `${y * scale}px`;
+    seal.style.width = `${size * scale}px`;
+    seal.style.height = `${size * scale}px`;
+    seal.style.transform = `rotate(${rotation}deg)`;
+  };
+
+  const syncReportSealInputs = () => {
+    document.querySelectorAll('[data-report-seal-field]').forEach((input) => {
+      const field = input.getAttribute('data-report-seal-field');
+      if (field && field in state.reportSealPosition) input.value = Math.round(state.reportSealPosition[field]);
+    });
+  };
+
+  const syncReportValidationUi = () => {
+    document.querySelectorAll('[data-report-select]').forEach((button) => {
+      const index = Number.parseInt(button.getAttribute('data-report-select') || '', 10);
+      const validation = getReportDraftValidation(state.reportDrafts[index]);
+      button.setAttribute('data-report-validation', validation.status);
+      const badge = button.querySelector('[data-report-validation-badge]');
+      if (badge) badge.textContent = validation.text;
+    });
+
+    const draft = getActiveReportDraft();
+    document.querySelectorAll('[data-report-metric-index]').forEach((row) => {
+      const index = Number.parseInt(row.getAttribute('data-report-metric-index') || '', 10);
+      const validation = getReportMetricValidation(draft?.metrics?.[index]);
+      row.setAttribute('data-report-validation', validation.status);
+      const badge = row.querySelector('[data-report-metric-validation]');
+      if (badge) badge.textContent = validation.text;
+    });
+  };
+
+  const syncReportMetricRangeToGlobal = (metricIndex) => {
+    const draft = getActiveReportDraft();
+    const metric = draft?.metrics?.[metricIndex];
+    const model = draft?.fullModel || draft?.model;
+    if (!draft || !metric || !model || !metric.key) return;
+
+    state.reportRanges = state.reportRanges.filter((item) => !(item.model === model && item.metricKey === metric.key));
+    if (normalizeReportText(metric.range)) {
+      state.reportRanges.push(createRangeDraft({
+        model,
+        metricKey: metric.key,
+        item: metric.item,
+        unit: metric.unit,
+        range: metric.range,
+      }));
+    }
+    saveReportRanges();
+  };
+
+  const saveReportDialogParameters = () => {
+    updateReportDraftFromDialog();
+    const draft = getActiveReportDraft();
+    (draft?.metrics || []).forEach((_, index) => syncReportMetricRangeToGlobal(index));
+    saveReportSealPosition();
+    notify('报告参数已保存', 'success', 'property-report-params-saved');
+  };
+
+  const drawReportCanvas = async (canvas, draft, options = {}) => {
     if (!canvas || !draft) return;
     const scale = 2;
     const width = 794;
@@ -1079,7 +1240,25 @@ import { getLegacyApp } from '../core/app-context';
     const rowH = 48;
     const tableY = 485;
     const tableH = rowH * (rows.length + 1);
-    const height = Math.max(860, tableY + tableH + 180);
+    const sealBottom = options.includeSeal
+      ? state.reportSealPosition.y + state.reportSealPosition.size + 30
+      : 0;
+    const previewWrap = document.querySelector('.analysis-report-preview-wrap');
+    const previewStyle = previewWrap ? window.getComputedStyle(previewWrap) : null;
+    const previewPaddingY = previewStyle
+      ? Number.parseFloat(previewStyle.paddingTop) + Number.parseFloat(previewStyle.paddingBottom)
+      : 0;
+    const previewPaddingX = previewStyle
+      ? Number.parseFloat(previewStyle.paddingLeft) + Number.parseFloat(previewStyle.paddingRight)
+      : 0;
+    const previewAvailableWidth = previewWrap
+      ? Math.max(1, previewWrap.clientWidth - previewPaddingX)
+      : width;
+    const previewWidthScale = Math.min(1, previewAvailableWidth / width);
+    const previewMinHeight = !options.includeSeal && previewWrap
+      ? Math.max(0, (previewWrap.clientHeight - previewPaddingY) / previewWidthScale)
+      : 0;
+    const height = Math.max(820, tableY + tableH + 140, sealBottom, previewMinHeight);
     const contentLeft = 70;
     const contentRight = 724;
     const contentWidth = contentRight - contentLeft;
@@ -1175,12 +1354,28 @@ import { getLegacyApp } from '../core/app-context';
         drawCenteredText(ctx, text, cellX + colWidths[colIndex] / 2, tableY + rowH * (rowIndex + 1) + rowH / 2, { font: '16px "Microsoft YaHei", sans-serif' });
       });
     });
+
+    if (options.includeSeal) {
+      const sealImage = await loadReportSealImage();
+      if (sealImage) {
+        const { x: sealX, y: sealY, size: sealSize, rotation } = state.reportSealPosition;
+        ctx.save();
+        ctx.globalAlpha = 0.92;
+        ctx.translate(sealX + sealSize / 2, sealY + sealSize / 2);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.drawImage(sealImage, -sealSize / 2, -sealSize / 2, sealSize, sealSize);
+        ctx.restore();
+      }
+    }
   };
 
-  const renderReportPreview = () => {
+  const renderReportPreview = async () => {
     const draft = getActiveReportDraft();
     const canvas = document.querySelector('[data-report-preview-canvas]');
-    if (canvas) drawReportCanvas(canvas, draft);
+    if (canvas) await drawReportCanvas(canvas, draft);
+    fitReportPreviewCanvas();
+    syncReportSealOverlay();
+    syncReportValidationUi();
   };
 
   const canvasToBlob = (canvas, type = 'image/png', quality) => new Promise((resolve, reject) => {
@@ -1252,17 +1447,37 @@ import { getLegacyApp } from '../core/app-context';
             <input value="${escapeHtml(draft?.intro || '')}" data-report-field="intro">
           </label>
         </div>
+        <div class="analysis-report-seal-editor">
+          <div class="analysis-report-section-head">
+            <div class="analysis-report-section-title">盖章参数</div>
+            <button class="analysis-report-save-params" type="button" data-report-save-params>保存参数</button>
+          </div>
+          <div class="analysis-report-form-grid">
+            ${[
+              ['x', '横向位置', 0, 794, 1],
+              ['y', '纵向位置', 0, 1200, 1],
+              ['size', '大小', 40, 360, 1],
+              ['rotation', '旋转角度', -180, 180, 1],
+            ].map(([field, label, min, max, step]) => `
+              <label>
+                <span>${label}</span>
+                <input type="number" min="${min}" max="${max}" step="${step}" value="${escapeHtml(state.reportSealPosition[field])}" data-report-seal-field="${field}">
+              </label>
+            `).join('')}
+          </div>
+        </div>
         <div class="analysis-report-metric-editor">
           <div class="analysis-report-section-title">报告明细</div>
           <div class="analysis-report-metric-head">
-            <span>检验项目</span><span>单位</span><span>检验范围</span><span>检验值</span>
+            <span>检验项目</span><span>单位</span><span>检验范围</span><span>检验值</span><span>状态</span>
           </div>
           ${(draft?.metrics || []).map((metric, index) => `
-            <div class="analysis-report-metric-row" data-report-metric-index="${index}">
+            <div class="analysis-report-metric-row" data-report-metric-index="${index}" data-report-validation="${getReportMetricValidation(metric).status}">
               <input value="${escapeHtml(metric.item)}" data-report-metric-field="item">
               <input value="${escapeHtml(metric.unit)}" data-report-metric-field="unit">
               <input value="${escapeHtml(metric.range)}" data-report-metric-field="range">
               <input value="${escapeHtml(metric.value)}" data-report-metric-field="value">
+              <span class="analysis-report-metric-validation" data-report-metric-validation>${escapeHtml(getReportMetricValidation(metric).text)}</span>
             </div>
           `).join('')}
         </div>
@@ -1299,16 +1514,20 @@ import { getLegacyApp } from '../core/app-context';
               <div class="analysis-report-section-title">待生成列表</div>
               <div class="analysis-report-selected-list">
                 ${state.reportDrafts.map((item, index) => `
-                  <button class="analysis-report-selected-item${index === state.reportSelectedIndex ? ' is-active' : ''}" type="button" data-report-select="${index}">
+                  <button class="analysis-report-selected-item${index === state.reportSelectedIndex ? ' is-active' : ''}" type="button" data-report-select="${index}" data-report-validation="${getReportDraftValidation(item).status}">
                     <strong>${escapeHtml(item.fullModel || item.model || '--')}</strong>
                     <span>${escapeHtml(item.batch || '--')}</span>
+                    <em data-report-validation-badge>${escapeHtml(getReportDraftValidation(item).text)}</em>
                   </button>
                 `).join('')}
               </div>
             </aside>
             ${buildReportEditorHtml()}
             <section class="analysis-report-preview-wrap">
-              <canvas data-report-preview-canvas></canvas>
+              <div class="analysis-report-preview-canvas-wrap">
+                <canvas data-report-preview-canvas></canvas>
+                <img class="analysis-report-seal-overlay" src="${REPORT_SEAL_SRC}" alt="检测章" draggable="false" data-report-seal-overlay>
+              </div>
             </section>
           </div>
         </div>
@@ -1320,6 +1539,7 @@ import { getLegacyApp } from '../core/app-context';
     updateReportDraftFromDialog();
     document.querySelector('.analysis-report-dialog')?.remove();
     document.removeEventListener('keydown', handleReportDialogKeydown);
+    window.removeEventListener('resize', renderReportPreview);
     state.reportDialogOpen = false;
   };
 
@@ -1343,29 +1563,74 @@ import { getLegacyApp } from '../core/app-context';
 
   const exportActiveReportImage = async () => {
     updateReportDraftFromDialog();
-    renderReportPreview();
     const draft = getActiveReportDraft();
     const canvas = document.querySelector('[data-report-preview-canvas]');
     if (!draft || !canvas) return;
+    await drawReportCanvas(canvas, draft, { includeSeal: true });
     const blob = await canvasToBlob(canvas, 'image/png');
     downloadBlob(blob, `${getReportFileBase(draft)}.png`);
+    await renderReportPreview();
     notify('报告图片已导出', 'success', 'property-report-image');
   };
 
   const exportActiveReportPdf = async () => {
     updateReportDraftFromDialog();
-    renderReportPreview();
     const draft = getActiveReportDraft();
     const canvas = document.querySelector('[data-report-preview-canvas]');
     if (!draft || !canvas) return;
+    await drawReportCanvas(canvas, draft, { includeSeal: true });
     const blob = createPdfBlobFromCanvas(canvas, `${getReportFileBase(draft)}.PDF`);
     downloadBlob(blob, `${getReportFileBase(draft)}.PDF`);
+    await renderReportPreview();
     notify('报告 PDF 已导出', 'success', 'property-report-pdf');
   };
 
   const bindReportDialogEvents = () => {
     const dialog = document.querySelector('.analysis-report-dialog');
     if (!dialog) return;
+    const sealOverlay = dialog.querySelector('[data-report-seal-overlay]');
+    sealOverlay?.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const delta = event.deltaY < 0 ? 8 : -8;
+      state.reportSealPosition = normalizeReportSealPosition({
+        ...state.reportSealPosition,
+        size: state.reportSealPosition.size + delta,
+      });
+      syncReportSealOverlay();
+      syncReportSealInputs();
+      saveReportSealPosition();
+    }, { passive: false });
+    sealOverlay?.addEventListener('pointerdown', (event) => {
+      const canvas = dialog.querySelector('[data-report-preview-canvas]');
+      if (!canvas) return;
+      event.preventDefault();
+      sealOverlay.setPointerCapture?.(event.pointerId);
+      sealOverlay.classList.add('is-dragging');
+      const scale = getReportSealScale(canvas);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startSeal = { ...state.reportSealPosition };
+
+      const handleMove = (moveEvent) => {
+        state.reportSealPosition = normalizeReportSealPosition({
+          ...startSeal,
+          x: Math.max(0, startSeal.x + (moveEvent.clientX - startX) / scale),
+          y: Math.max(0, startSeal.y + (moveEvent.clientY - startY) / scale),
+        });
+        syncReportSealOverlay();
+        syncReportSealInputs();
+      };
+
+      const handleUp = () => {
+        sealOverlay.classList.remove('is-dragging');
+        saveReportSealPosition();
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+      };
+
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+    });
     dialog.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -1378,6 +1643,10 @@ import { getLegacyApp } from '../core/app-context';
       }
       if (target.closest('[data-report-open-ranges]')) {
         openRangeManagerDialog();
+        return;
+      }
+      if (target.closest('[data-report-save-params]')) {
+        saveReportDialogParameters();
         return;
       }
       if (target.closest('[data-report-export-image]')) {
@@ -1393,9 +1662,27 @@ import { getLegacyApp } from '../core/app-context';
     dialog.addEventListener('input', (event) => {
       const target = event.target;
       if (!(target instanceof HTMLInputElement)) return;
+      const sealField = target.getAttribute('data-report-seal-field');
+      if (sealField) {
+        state.reportSealPosition = normalizeReportSealPosition({
+          ...state.reportSealPosition,
+          [sealField]: target.value,
+        });
+        syncReportSealOverlay();
+        syncReportSealInputs();
+        saveReportSealPosition();
+        return;
+      }
       updateReportDraftFromDialog();
+      const metricField = target.getAttribute('data-report-metric-field');
+      if (metricField === 'range') {
+        const row = target.closest('[data-report-metric-index]');
+        const metricIndex = Number.parseInt(row?.getAttribute('data-report-metric-index') || '', 10);
+        if (Number.isFinite(metricIndex)) syncReportMetricRangeToGlobal(metricIndex);
+      }
       renderReportPreview();
     });
+    window.addEventListener('resize', renderReportPreview);
   };
 
   const openReportDialog = () => {
@@ -1416,6 +1703,7 @@ import { getLegacyApp } from '../core/app-context';
     state.reportDrafts = selectedRows.map(createReportDraft);
     state.reportSelectedIndex = 0;
     state.reportDialogOpen = true;
+    loadReportSealPosition();
     document.body.insertAdjacentHTML('beforeend', buildReportDialogHtml());
     bindReportDialogEvents();
     document.addEventListener('keydown', handleReportDialogKeydown);

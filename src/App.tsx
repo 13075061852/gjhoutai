@@ -1,22 +1,16 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { LegacyShell } from './pages/LegacyShell';
 import { mountIconParkAdapter } from './utils/iconParkAdapter';
-import { applyInitialThemeState } from './utils/themeBootstrap';
 
 function App() {
-  useMemo(() => {
-    applyInitialThemeState();
-    return null;
-  }, []);
-
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     let disposed = false;
     const cleanupIcons = mountIconParkAdapter();
 
-    void import('./legacy/bootstrap').then(({ bootLegacyApp, teardownLegacyApp }) => {
+    void import('./legacy/bootstrap').then(async ({ bootLegacyApp, teardownLegacyApp }) => {
       if (disposed) return;
-      cleanup = bootLegacyApp();
+      cleanup = await bootLegacyApp();
       if (disposed) {
         cleanup?.();
         teardownLegacyApp();

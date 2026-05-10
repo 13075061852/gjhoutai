@@ -2,6 +2,15 @@
 import { renderDashboard } from './dashboard';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
 import {
+  INVENTORY_CATEGORY_STORAGE_KEY,
+  INVENTORY_STORAGE_KEY,
+  inventoryStateOptions,
+  inventoryTypeOptions,
+  normalizeInventoryCategories,
+  normalizeInventoryRow,
+  normalizeInventoryRows,
+} from './inventory';
+import {
   ORDER_FALLBACK_CUSTOMERS,
   ORDER_FALLBACK_FORMULAS,
   ORDER_LOG_KEY,
@@ -17,6 +26,13 @@ import {
   orderStatusOptions,
   productionQueueStatuses,
 } from './orders';
+import {
+  PROCUREMENT_STORAGE_KEY,
+  createNormalizeProcurement,
+  createNormalizeProcurements,
+  procurementPageSizeOptions,
+  procurementStatusOptions,
+} from './procurement';
 import { createBusinessPageShared } from './shared';
 
 (function () {
@@ -63,40 +79,10 @@ import { createBusinessPageShared } from './shared';
   let orderRows = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
   let orderLogs = normalizeOrderLogs(utils.readJson(ORDER_LOG_KEY, null));
 
-  const PROCUREMENT_STORAGE_KEY = 'gjh-procurements-v1';
-  const procurementStatusOptions = ['已下单', '已到货', '已入库', '已质检', '已结算'];
-  const procurementPageSizeOptions = [5, 10, 20, 50];
-  const defaultProcurementRows = [
-    { id: 'PR-20260420', supplier: '南通星辰合成材料', material: 'ABS PA-757', quantity: 5000, unitPrice: 15.5, purchaseDate: '2026-04-20', status: '已入库', note: '月度常规采购' },
-    { id: 'PR-20260415', supplier: '中石化仪征化纤', material: 'PP T30S', quantity: 8000, unitPrice: 9.2, purchaseDate: '2026-04-15', status: '已入库', note: '锁定排产计划价' },
-    { id: 'PR-20260410', supplier: '巨石集团', material: '玻纤 ECS3011B', quantity: 3000, unitPrice: 12.8, purchaseDate: '2026-04-10', status: '已质检', note: '关注含水率指标' },
-    { id: 'PR-20260405', supplier: '巴斯夫中国', material: 'PA6 B3EG6', quantity: 2000, unitPrice: 28.0, purchaseDate: '2026-04-05', status: '已结算', note: '高性能树脂样品转化' },
-    { id: 'PR-20260401', supplier: '南通星辰合成材料', material: 'PC 110', quantity: 4000, unitPrice: 22.5, purchaseDate: '2026-04-01', status: '已结算', note: '' },
-    { id: 'PR-20260325', supplier: '陶氏化学', material: 'POE 8150', quantity: 1500, unitPrice: 18.6, purchaseDate: '2026-03-25', status: '已到货', note: '增韧剂样品测试中' },
-    { id: 'PR-20260320', supplier: '科莱恩化工', material: '色母 UN2014', quantity: 800, unitPrice: 35.0, purchaseDate: '2026-03-20', status: '已入库', note: '色母粒，交期确认' },
-    { id: 'PR-20260315', supplier: '以色列化工集团(ICL)', material: '阻燃剂 FR-802', quantity: 2000, unitPrice: 45.0, purchaseDate: '2026-03-15', status: '已入库', note: '进口原料，年度资质待补齐' },
-    { id: 'PR-20260310', supplier: '巴斯夫添加剂', material: '抗氧剂 B225', quantity: 500, unitPrice: 52.0, purchaseDate: '2026-03-10', status: '已结算', note: '' },
-    { id: 'PR-20260305', supplier: '南京曙光化工', material: 'PA6-GF25', quantity: 3000, unitPrice: 16.8, purchaseDate: '2026-03-05', status: '已发货', note: '协同销售渠道' },
-  ];
-  const normalizeProcurement = (procurement = {}, index = 0) => {
-    const status = procurementStatusOptions.includes(procurement.status) ? procurement.status : procurementStatusOptions[0];
-    return {
-      id: String(procurement.id || `PR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
-      supplier: String(procurement.supplier || supplierRows[0]?.name || '').trim(),
-      material: String(procurement.material || '').trim(),
-      quantity: Math.max(0, Number(procurement.quantity || 0)),
-      unitPrice: Math.max(0, Number(procurement.unitPrice || 0)),
-      purchaseDate: String(procurement.purchaseDate || new Date().toISOString().slice(0, 10)).trim(),
-      status,
-      note: String(procurement.note || '').trim(),
-    };
-  };
-  const normalizeProcurements = (value) => {
-    const rows = Array.isArray(value)
-      ? value.map(normalizeProcurement).filter((p) => p.id && p.supplier)
-      : [];
-    return rows.length ? rows : defaultProcurementRows.map(normalizeProcurement);
-  };
+  const normalizeProcurement = createNormalizeProcurement({
+    getDefaultSupplierName: () => supplierRows[0]?.name || '',
+  });
+  const normalizeProcurements = createNormalizeProcurements(normalizeProcurement);
   const procurementRows = normalizeProcurements(utils.readJson(PROCUREMENT_STORAGE_KEY, null));
   let procurementSupplierFilter = '全部';
   let procurementSearchQuery = '';
@@ -1573,52 +1559,6 @@ import { createBusinessPageShared } from './shared';
     ])}
   `;
 
-  const INVENTORY_STORAGE_KEY = 'gjh-inventory-materials-v1';
-  const INVENTORY_CATEGORY_STORAGE_KEY = 'gjh-inventory-categories-v1';
-  const defaultInventoryRows = [
-    ['ABS 757K', '原材料', '基础树脂', '上海恒裕化工', '12.4 吨', '正常'],
-    ['玻纤 GF-30', '原材料', '增强填料', '宁波华纤材料', '4.6 吨', '预警'],
-    ['阻燃剂 FR-530', '原材料', '阻燃助剂', '常州新禾助剂', '1.8 吨', '紧急'],
-    ['增韧剂 IM-88', '原材料', '改性助剂', '常州新禾助剂', '2.4 吨', '正常'],
-    ['黑色母 B-204', '原材料', '色母助剂', '苏州蓝石物流', '0.9 吨', '预警'],
-    ['PP K8003', '原材料', '基础树脂', '上海恒裕化工', '9.6 吨', '正常'],
-    ['抗氧剂 AO-1010', '原材料', '稳定助剂', '常州新禾助剂', '1.2 吨', '正常'],
-    ['润滑剂 EBS-16', '原材料', '加工助剂', '苏州蓝石物流', '0.7 吨', '预警'],
-    ['PC/ABS 基料 901', '原材料', '基础树脂', '广州瑞丰树脂', '6.3 吨', '正常'],
-    ['相容剂 MAH-42', '原材料', '改性助剂', '广州瑞丰树脂', '1.5 吨', '正常'],
-    ['GJ-ABS-FR-760', '成品材料', '阻燃 ABS', '上海恒裕化工', '5.8 吨', '可发货'],
-    ['GJ-PP-GF30', '成品材料', '增强 PP', '宁波华纤材料', '8.2 吨', '锁库中'],
-    ['GJ-PCABS-901', '成品材料', 'PC/ABS 合金', '广州瑞丰树脂', '3.7 吨', '待检'],
-  ];
-  const inventoryTypeOptions = ['原材料', '成品材料', '库存材料'];
-  const inventoryStateOptions = ['正常', '预警', '紧急', '可发货', '锁库中', '待检', '待确认'];
-  const normalizeInventoryRow = (row) => {
-    const cells = Array.isArray(row) ? row : [];
-    return [
-      String(cells[0] || '').trim(),
-      String(cells[1] || '原材料').trim() || '原材料',
-      String(cells[2] || '未分类').trim() || '未分类',
-      String(cells[3] || '未关联供应商').trim() || '未关联供应商',
-      String(cells[4] || '--').trim() || '--',
-      String(cells[5] || '待确认').trim() || '待确认',
-      String(cells[6] || '').trim(),
-      String(cells[7] || '').trim(),
-      String(cells[8] || '').trim(),
-      String(cells[9] || '').trim(),
-      String(cells[10] || '').trim(),
-    ];
-  };
-  const normalizeInventoryRows = (value) => {
-    const rows = Array.isArray(value) ? value.map(normalizeInventoryRow).filter((row) => row[0]) : [];
-    return rows.length ? rows : defaultInventoryRows.map(normalizeInventoryRow);
-  };
-  const getDefaultInventoryCategories = (rows = defaultInventoryRows) => (
-    [...new Set(rows.map((row) => normalizeInventoryRow(row)[2]).filter(Boolean))]
-  );
-  const normalizeInventoryCategories = (value, rows) => {
-    const categories = Array.isArray(value) ? value.map((item) => String(item || '').trim()).filter(Boolean) : [];
-    return [...new Set([...categories, ...getDefaultInventoryCategories(rows)])];
-  };
   const inventoryRows = normalizeInventoryRows(utils.readJson(INVENTORY_STORAGE_KEY, null));
   let inventoryCategories = normalizeInventoryCategories(utils.readJson(INVENTORY_CATEGORY_STORAGE_KEY, null), inventoryRows);
   let inventoryCategory = '全部';

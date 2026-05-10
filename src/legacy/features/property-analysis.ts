@@ -74,6 +74,26 @@ import { getLegacyApp } from '../core/app-context';
     { key: '弯曲模量[Mpa]', item: '弯曲模量', unit: 'MPa' },
     { key: '冲击强度[Mpa]', item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
   ];
+  const REPORT_METRIC_ALIASES = {
+    灰份: ['灰份', '灰分', '灰份(%)', '灰分(%)', '灰份[%]', '灰分[%]', '灰份（%）', '灰分（%）'],
+  };
+  const normalizeMetricHeaderIdentity = (value) => String(value ?? '')
+    .replace(/\s+/g, '')
+    .replace(/[（]/g, '(')
+    .replace(/[）]/g, ')')
+    .toLowerCase();
+  const REPORT_METRIC_ALIAS_MAP = new Map(
+    Object.entries(REPORT_METRIC_ALIASES).flatMap(([key, aliases]) => (
+      aliases.map((alias) => [normalizeMetricHeaderIdentity(alias), key])
+    ))
+  );
+  const getCanonicalReportMetricKey = (value) => {
+    const identity = normalizeMetricHeaderIdentity(value);
+    if (!identity) return '';
+    if (REPORT_METRIC_ALIAS_MAP.has(identity)) return REPORT_METRIC_ALIAS_MAP.get(identity);
+    if (identity.includes('灰份') || identity.includes('灰分')) return '灰份';
+    return '';
+  };
   const MELT_INDEX_METRIC_KEY = '熔指';
   const MELT_INDEX_TEMPERATURES = ['250℃', '260℃', '275℃'];
   const AGENT_CONTEXT_ROW_LIMIT = 12;
@@ -267,7 +287,8 @@ import { getLegacyApp } from '../core/app-context';
 
   const normalizeHeaderName = (value, index) => {
     const text = String(value ?? '').replace(/\s+/g, ' ').trim();
-    return text || `_empty_${index + 1}`;
+    if (!text) return `_empty_${index + 1}`;
+    return getCanonicalReportMetricKey(text) || text;
   };
 
   const formatDateValue = (value) => {
@@ -714,8 +735,23 @@ import { getLegacyApp } from '../core/app-context';
     return average.toFixed(precision).replace(/\.?0+$/, '');
   };
 
+  const getMetricRawValue = (row, key) => {
+    if (!row) return undefined;
+    if (hasMeaningfulValue(row[key])) return row[key];
+    const aliases = REPORT_METRIC_ALIASES[key] || [];
+    const matchedKey = aliases.find((alias) => hasMeaningfulValue(row[alias]));
+    if (matchedKey) return row[matchedKey];
+    const normalizedKey = normalizeMetricHeaderIdentity(key);
+    const scannedKey = Object.keys(row).find((rowKey) => {
+      if (!hasMeaningfulValue(row[rowKey])) return false;
+      const canonicalKey = getCanonicalReportMetricKey(rowKey);
+      return canonicalKey === key || normalizeMetricHeaderIdentity(rowKey) === normalizedKey;
+    });
+    return scannedKey ? row[scannedKey] : row[key];
+  };
+
   const getMetricValue = (row, key) => {
-    const value = row?.[key];
+    const value = getMetricRawValue(row, key);
     if (Array.isArray(value)) {
       const numericValues = value
         .map((item) => parseNumericValue(item))
@@ -741,6 +777,18 @@ import { getLegacyApp } from '../core/app-context';
   const getRowModel = (row) => normalizeReportText(row?.型号);
 
   const getReportDisplayModel = (row) => getRowModel(row).split('-')[0] || getRowModel(row);
+
+  const getAshValueFromModel = (model = '') => {
+    const match = normalizeReportText(model).match(/G(\d{1,2})(?:-|$)/i);
+    if (!match) return null;
+    const ashBase = Number.parseInt(match[1], 10);
+    return Number.isFinite(ashBase) ? ashBase * 5 : null;
+  };
+
+  const getDerivedReportMetricValue = (row, metricKey) => {
+    if (metricKey !== '灰份') return null;
+    return getAshValueFromModel(getRowModel(row));
+  };
 
   const getRowBatch = (row) => normalizeReportText(row?.批次);
 
@@ -1005,9 +1053,13 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const formatReportValue = (row, metricKey, rangeText = '') => {
-    const raw = row?.[metricKey];
+    const raw = getMetricRawValue(row, metricKey);
     const numeric = getMetricValue(row, metricKey);
-    if (numeric == null) return normalizeReportText(Array.isArray(raw) ? raw.join(' / ') : raw);
+    if (numeric == null) {
+      const derived = getDerivedReportMetricValue(row, metricKey);
+      if (derived != null) return String(derived);
+      return normalizeReportText(Array.isArray(raw) ? raw.join(' / ') : raw);
+    }
 
     if (!canReportValueKeepDecimal(metricKey)) return String(Math.round(numeric));
 
@@ -1017,9 +1069,16 @@ import { getLegacyApp } from '../core/app-context';
     return rangePrecision > 0 ? fixed : fixed.replace(/\.?0+$/, '');
   };
 
-  const getReportMetricsForRow = (row) => REPORT_METRICS
-    .filter((metric) => hasMeaningfulValue(row?.[metric.key]))
-    .map((metric) => metric.key);
+  const getReportMetricsForRow = (row) => {
+    const model = getRowModel(row);
+    return REPORT_METRICS
+      .filter((metric) => (
+        hasMeaningfulValue(getMetricRawValue(row, metric.key))
+        || getDerivedReportMetricValue(row, metric.key) != null
+        || Boolean(model && getReportRange(model, metric.key))
+      ))
+      .map((metric) => metric.key);
+  };
 
   const getMissingRangeItems = (rows) => {
     const missing = [];
@@ -1040,6 +1099,17 @@ import { getLegacyApp } from '../core/app-context';
     });
 
     return missing;
+  };
+
+  const getMissingRangeModels = (missingItems = []) => {
+    const seen = new Set();
+    return missingItems.reduce((models, item) => {
+      const model = normalizeReportText(item?.model);
+      if (!model || seen.has(model)) return models;
+      seen.add(model);
+      models.push(model);
+      return models;
+    }, []);
   };
 
   const createReportDraft = (row) => {
@@ -1727,7 +1797,8 @@ import { getLegacyApp } from '../core/app-context';
 
     const missingRanges = getMissingRangeItems(selectedRows);
     if (missingRanges.length) {
-      notify(`有 ${missingRanges.length} 项数据还未设置检测范围值，请先在检测范围中设置。`, 'warn', 'property-report-missing-ranges');
+      const missingModels = getMissingRangeModels(missingRanges);
+      notify(`有 ${missingModels.length} 个型号还未设置检测范围值，请先在检测范围中设置。`, 'warn', 'property-report-missing-ranges');
       openRangeManagerDialog(missingRanges);
       return;
     }
@@ -1856,9 +1927,8 @@ import { getLegacyApp } from '../core/app-context';
         </div>
         <input data-range-field="model" value="${escapeHtml(state.rangeManagerSelectedModel)}" hidden>
         <div class="analysis-range-form-actions">
-          <button class="analysis-report-btn" type="button" data-range-reset>清空表单</button>
-          <button class="analysis-report-btn" type="button" data-range-clear-model>清除已设置</button>
-          <button class="analysis-report-btn is-primary" type="submit">保存整套范围</button>
+          <button class="analysis-report-btn" type="button" data-range-clear-model>清除</button>
+          <button class="analysis-report-btn is-primary" type="submit">保存</button>
         </div>
       </div>
       <div class="analysis-range-metric-list">
@@ -1921,7 +1991,10 @@ import { getLegacyApp } from '../core/app-context';
     text.textContent = message || `正在解析 ${current}/${total}，成功 ${success}，失败 ${failed}${fileName ? `：${fileName}` : ''}`;
   };
 
-  const buildRangeManagerHtml = (missingItems = []) => `
+  const buildRangeManagerHtml = (missingItems = []) => {
+    const missingModels = getMissingRangeModels(missingItems);
+
+    return `
     <div class="analysis-range-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="检测范围管理">
       <div class="analysis-range-card dialog-card">
         <div class="analysis-report-head">
@@ -1934,10 +2007,10 @@ import { getLegacyApp } from '../core/app-context';
           </button>
         </div>
         <div class="analysis-range-body">
-          ${missingItems.length ? `
+          ${missingModels.length ? `
             <div class="analysis-range-warning">
-              <strong>以下项目还未设置检测范围值</strong>
-              <span>${missingItems.map((item) => `${escapeHtml(item.model)} / ${escapeHtml(item.item)}`).join('，')}</span>
+              <strong>以下型号还未设置检测范围值</strong>
+              <span>${missingModels.map((model) => escapeHtml(model)).join('，')}</span>
             </div>
           ` : ''}
           <button class="analysis-range-word-dropzone" type="button" data-range-word-upload>
@@ -1968,6 +2041,7 @@ import { getLegacyApp } from '../core/app-context';
       </div>
     </div>
   `;
+  };
 
   const fillRangeForm = (range = {}) => {
     const dialog = document.querySelector('.analysis-range-dialog');
@@ -2039,13 +2113,6 @@ import { getLegacyApp } from '../core/app-context';
         updateRangeModelList();
         updateRangeEditorPanel();
         notify('该型号检测范围已删除', 'success', 'property-range-delete');
-        return;
-      }
-      if (target.closest('[data-range-reset]')) {
-        fillRangeForm({ model: state.rangeManagerSelectedModel });
-        document.querySelectorAll('.analysis-range-dialog [data-range-metric-field="range"]').forEach((input) => {
-          input.value = '';
-        });
         return;
       }
       if (target.closest('[data-range-close]') || target === dialog) closeRangeManagerDialog();
@@ -3667,4 +3734,3 @@ import { getLegacyApp } from '../core/app-context';
     getAgentContext,
   };
 })();
-

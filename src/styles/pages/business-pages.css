@@ -877,9 +877,9 @@
     /* ============ NEW DASHBOARD ============ */
     .biz-dashboard-kpi-row{
       display:grid;
-      grid-template-columns:repeat(6,minmax(0,1fr));
+      grid-template-columns:repeat(6,minmax(150px,1fr));
       gap:10px;
-      margin-bottom:12px;
+      margin-bottom:0;
     }
     .biz-dashboard-kpi{
       display:flex;
@@ -944,18 +944,27 @@
     .kpi-trend .ti{font-size:13px}
 
     /* Main Dashboard Grid */
-    .biz-dashboard-main-grid{
+    .biz-dashboard-main-grid,
+    .biz-dashboard-workbench{
       display:grid;
       grid-template-columns:minmax(0,1.35fr) minmax(340px,.65fr);
       gap:10px;
       margin-bottom:12px;
     }
+    .biz-dashboard-workbench{
+      align-items:start;
+      margin-bottom:0;
+    }
     .biz-dashboard-left,
-    .biz-dashboard-right{
+    .biz-dashboard-right,
+    .biz-dashboard-primary,
+    .biz-dashboard-aside{
       display:flex;
       flex-direction:column;
       gap:10px;
+      min-width:0;
     }
+    .biz-dashboard-aside{position:sticky;top:12px}
     .biz-dashboard-panel{
       border:1px solid var(--border);
       border-radius:12px;
@@ -1010,14 +1019,14 @@
     }
 
     /* Chart Panel */
-    .biz-chart-panel{min-height:240px}
+    .biz-chart-panel{min-height:228px}
     .biz-chart-body{position:relative}
     .biz-chart-bars{
       display:grid;
       grid-template-columns:repeat(7,minmax(0,1fr));
       gap:10px;
       align-items:end;
-      height:180px;
+      height:168px;
       padding-top:8px;
     }
     .biz-bar-col{
@@ -1047,7 +1056,7 @@
     }
 
     /* Production Status Grid */
-    .biz-production-panel{min-height:220px}
+    .biz-production-panel{min-height:0}
     .biz-production-status-grid{
       display:grid;
       grid-template-columns:1fr 1fr;
@@ -1111,7 +1120,7 @@
     .biz-status-fill.done{background:var(--success)}
 
     /* Risk Panel */
-    .biz-risk-panel{flex:1}
+    .biz-risk-panel{flex:0 0 auto}
     .biz-risk-list{
       display:flex;
       flex-direction:column;
@@ -1327,7 +1336,9 @@
     /* Responsive dashboard */
     @media (max-width:1200px){
       .biz-dashboard-kpi-row{grid-template-columns:repeat(3,1fr)}
-      .biz-dashboard-main-grid{grid-template-columns:1fr}
+      .biz-dashboard-main-grid,
+      .biz-dashboard-workbench{grid-template-columns:1fr}
+      .biz-dashboard-aside{position:static}
       .biz-dashboard-bottom-grid{grid-template-columns:1fr}
     }
     @media (max-width:768px){

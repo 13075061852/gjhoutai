@@ -52,8 +52,8 @@ export const renderDashboard = () => `
       </article>
     </section>
 
-    <section class="biz-dashboard-main-grid">
-      <div class="biz-dashboard-left">
+    <section class="biz-dashboard-workbench">
+      <div class="biz-dashboard-primary">
         <article class="biz-dashboard-panel biz-chart-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-chart-line" aria-hidden="true"></i>近7天订单趋势</h2>
@@ -65,7 +65,7 @@ export const renderDashboard = () => `
           <div class="biz-chart-body">
             <div class="biz-chart-bars">
               ${[
-                ['周一', 28, '#06b6d4'], ['周二','周二', 32, '#0891b2'], ['周三','周三', 36, '#0e7490'], ['周四','周四', 31, '#06b6d4'], ['周五', 34, '#0891b2'], ['周六', 22, '#0e7490'], ['周日', 18, '#06b6d4'],
+                ['周一', 28, '#06b6d4'], ['周二', 32, '#0891b2'], ['周三', 36, '#0e7490'], ['周四', 31, '#06b6d4'], ['周五', 34, '#0891b2'], ['周六', 22, '#0e7490'], ['周日', 18, '#06b6d4'],
               ].map(([label, value, color]) => `
                 <div class="biz-bar-col">
                   <div class="biz-bar-fill" style="height:${(Number(value)/40)*100}%;background:${color}"></div>
@@ -117,9 +117,85 @@ export const renderDashboard = () => `
             </div>
           </div>
         </article>
+
+        <section class="biz-dashboard-bottom-grid">
+          <article class="biz-dashboard-panel biz-todo-panel">
+            <div class="biz-panel-head">
+              <h2><i class="ti ti-calendar-check" aria-hidden="true"></i>今日待办</h2>
+              <span class="biz-panel-meta">3 项</span>
+            </div>
+            <div class="biz-todo-list">
+              <div class="biz-todo-item urgent">
+                <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
+                <div class="biz-todo-body">
+                  <strong>确认 GJ-PP-2308 加急订单交期</strong>
+                  <span>美的集团 · 16:00 前</span>
+                </div>
+                <span class="biz-todo-tag">加急</span>
+              </div>
+              <div class="biz-todo-item">
+                <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
+                <div class="biz-todo-body">
+                  <strong>复核 TGA 图谱异常样品报告</strong>
+                  <span>实验室 · 18:00 前</span>
+                </div>
+                <span class="biz-todo-tag normal">正常</span>
+              </div>
+              <div class="biz-todo-item">
+                <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
+                <div class="biz-todo-body">
+                  <strong>华东仓安全库存盘点核对</strong>
+                  <span>仓库 · 明天上午</span>
+                </div>
+                <span class="biz-todo-tag normal">正常</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="biz-dashboard-panel biz-recent-panel">
+            <div class="biz-panel-head">
+              <h2><i class="ti ti-clock-history" aria-hidden="true"></i>最近动态</h2>
+              <span class="biz-panel-meta">实时更新</span>
+            </div>
+            <div class="biz-recent-list">
+              <div class="biz-recent-item">
+                <div class="biz-recent-line"></div>
+                <div class="biz-recent-content">
+                  <div class="biz-recent-time">15:42</div>
+                  <strong>订单 ORD-0412 已完成生产</strong>
+                  <span>PP 滑石粉填充 · 5000kg → 美的集团</span>
+                </div>
+              </div>
+              <div class="biz-recent-item">
+                <div class="biz-recent-line"></div>
+                <div class="biz-recent-content">
+                  <div class="biz-recent-time">15:18</div>
+                  <strong>物性检测通过 — GJ-PP-2405 批次</strong>
+                  <span>拉伸强度 32.5MPa · 冲击 8.2kJ/m²</span>
+                </div>
+              </div>
+              <div class="biz-recent-item">
+                <div class="biz-recent-line"></div>
+                <div class="biz-recent-content">
+                  <div class="biz-recent-time">14:55</div>
+                  <strong>新增 2 家客户建档</strong>
+                  <span>宁波XX塑业 · 温州XX电器</span>
+                </div>
+              </div>
+              <div class="biz-recent-item">
+                <div class="biz-recent-line"></div>
+                <div class="biz-recent-content">
+                  <div class="biz-recent-time">14:20</div>
+                  <strong>原料入库 — 阻燃剂 FR-802</strong>
+                  <span>供应商：XX化工 · 2000kg</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
       </div>
 
-      <div class="biz-dashboard-right">
+      <aside class="biz-dashboard-aside">
         <article class="biz-dashboard-panel biz-risk-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-radar" aria-hidden="true"></i>风险雷达</h2>
@@ -180,82 +256,6 @@ export const renderDashboard = () => `
             <button class="biz-qk-btn" type="button" data-quick="report"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>导出报表</button>
           </div>
         </article>
-      </div>
-    </section>
-
-    <section class="biz-dashboard-bottom-grid">
-      <article class="biz-dashboard-panel biz-todo-panel">
-        <div class="biz-panel-head">
-          <h2><i class="ti ti-calendar-check" aria-hidden="true"></i>今日待办</h2>
-          <span class="biz-panel-meta">3 项</span>
-        </div>
-        <div class="biz-todo-list">
-          <div class="biz-todo-item urgent">
-            <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
-            <div class="biz-todo-body">
-              <strong>确认 GJ-PP-2308 加急订单交期</strong>
-              <span>美的集团 · 16:00 前</span>
-            </div>
-            <span class="biz-todo-tag">加急</span>
-          </div>
-          <div class="biz-todo-item">
-            <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
-            <div class="biz-todo-body">
-              <strong>复核 TGA 图谱异常样品报告</strong>
-              <span>实验室 · 18:00 前</span>
-            </div>
-            <span class="biz-todo-tag normal">正常</span>
-          </div>
-          <div class="biz-todo-item">
-            <div class="biz-todo-check"><i class="ti ti-circle" aria-hidden="true"></i></div>
-            <div class="biz-todo-body">
-              <strong>华东仓安全库存盘点核对</strong>
-              <span>仓库 · 明天上午</span>
-            </div>
-            <span class="biz-todo-tag normal">正常</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="biz-dashboard-panel biz-recent-panel">
-        <div class="biz-panel-head">
-          <h2><i class="ti ti-clock-history" aria-hidden="true"></i>最近动态</h2>
-          <span class="biz-panel-meta">实时更新</span>
-        </div>
-        <div class="biz-recent-list">
-          <div class="biz-recent-item">
-            <div class="biz-recent-line"></div>
-            <div class="biz-recent-content">
-              <div class="biz-recent-time">15:42</div>
-              <strong>订单 ORD-0412 已完成生产</strong>
-              <span>PP 滑石粉填充 · 5000kg → 美的集团</span>
-            </div>
-          </div>
-          <div class="biz-recent-item">
-            <div class="biz-recent-line"></div>
-            <div class="biz-recent-content">
-              <div class="biz-recent-time">15:18</div>
-              <strong>物性检测通过 — GJ-PP-2405 批次</strong>
-              <span>拉伸强度 32.5MPa · 冲击 8.2kJ/m²</span>
-            </div>
-          </div>
-          <div class="biz-recent-item">
-            <div class="biz-recent-line"></div>
-            <div class="biz-recent-content">
-              <div class="biz-recent-time">14:55</div>
-              <strong>新增 2 家客户建档</strong>
-              <span>宁波XX塑业 · 温州XX电器</span>
-            </div>
-          </div>
-          <div class="biz-recent-item">
-            <div class="biz-recent-line"></div>
-            <div class="biz-recent-content">
-              <div class="biz-recent-time">14:20</div>
-              <strong>原料入库 — 阻燃剂 FR-802</strong>
-              <span>供应商：XX化工 · 2000kg</span>
-            </div>
-          </div>
-        </div>
-      </article>
+      </aside>
     </section>
   `;

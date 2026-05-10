@@ -91,6 +91,14 @@
     body:not([data-theme="dark"]) .spectrum-gallery.is-list .spectrum-card-image img{
       background:var(--surface);
     }
+    body:not([data-theme="dark"]) .spectrum-view-switch::before,
+    body:not([data-theme="dark"]) .spectrum-mode-switch::before{
+      background:#2563eb;
+    }
+    body:not([data-theme="dark"]) .spectrum-mode-btn.is-active,
+    body:not([data-theme="dark"]) .spectrum-icon-btn.is-active{
+      color:#fff;
+    }
     body:not([data-theme="dark"]) .spectrum-card,
     body:not([data-theme="dark"]) .spectrum-filter-btn,
     body:not([data-theme="dark"]) .spectrum-selected-item{
@@ -567,6 +575,14 @@
     body[data-theme="dark"] .spectrum-view-switch::before,
     body[data-theme="dark"] .spectrum-mode-switch::before{
       background:var(--surface);
+    }
+    body[data-theme="dark"] .spectrum-view-switch::before,
+    body[data-theme="dark"] .spectrum-mode-switch::before{
+      background:#60a5fa;
+    }
+    body[data-theme="dark"] .spectrum-mode-btn.is-active,
+    body[data-theme="dark"] .spectrum-icon-btn.is-active{
+      color:#06131f;
     }
     body[data-theme="dark"] .spectrum-gallery-panel.is-drag-over,
     body[data-theme="dark"] .spectrum-gallery-panel.is-drag-over::after{

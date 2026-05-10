@@ -122,7 +122,7 @@
       left:4px;
       height:34px;
       border-radius:6px;
-      background:#fff;
+      background:#2563eb;
       transition:transform .24s cubic-bezier(.22,.9,.25,1), width .24s cubic-bezier(.22,.9,.25,1);
       pointer-events:none;
     }
@@ -138,13 +138,13 @@
       width:34px;
     }
     .spectrum-mode-switch:has([data-spectrum-mode="DSC"].is-active)::before{
-      transform:translateX(52px);
+      transform:translateX(58px);
     }
     .spectrum-mode-switch:has([data-spectrum-mode="TGA"].is-active)::before{
-      transform:translateX(104px);
+      transform:translateX(116px);
     }
     .spectrum-view-switch:has([data-spectrum-view="list"].is-active)::before{
-      transform:translateX(40px);
+      transform:translateX(46px);
     }
     .spectrum-mode-btn{
       min-width:46px;
@@ -158,17 +158,20 @@
       font-size:12px;
       font-weight:850;
       cursor:pointer;
+      display:grid;
+      place-items:center;
+      line-height:1;
       position:relative;
       z-index:1;
     }
     .spectrum-mode-btn.is-active{
-      color:var(--accent);
+      color:#fff;
     }
     .spectrum-mode-btn[data-spectrum-mode="DSC"].is-active{
-      color:var(--accent);
+      color:#fff;
     }
     .spectrum-mode-btn[data-spectrum-mode="TGA"].is-active{
-      color:#059669;
+      color:#fff;
     }
     .spectrum-icon-btn{
       width:34px;
@@ -180,11 +183,16 @@
       background:transparent;
       color:#64748b;
       cursor:pointer;
+      line-height:1;
       position:relative;
       z-index:1;
     }
+    .spectrum-icon-btn i{
+      display:block;
+      line-height:1;
+    }
     .spectrum-icon-btn.is-active{
-      color:var(--accent);
+      color:#fff;
     }
     .spectrum-workbench{
       min-height:0;

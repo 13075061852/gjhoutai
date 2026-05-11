@@ -28,6 +28,10 @@ import { ensureLegacyApp } from './app-context';
       appTitle: 'OpenRouter',
       httpReferer: '',
       modelChoice: 'openai/gpt-4o-mini',
+      agentModels: {
+        data: '',
+        spectrum: '',
+      },
       systemPrompt: '你是一个专业、简洁的企业 AI 助手，擅长分析问题、提炼结论并给出可执行建议。',
       temperature: 0.7,
       maxTokens: 4096,

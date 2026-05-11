@@ -266,6 +266,29 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
+  const fillSpectrumSearchInputFallback = (input = {}, prompt = '') => {
+    const action = String(input?.action || 'search').trim() || 'search';
+    if (action !== 'search') return input;
+    const explicitQuery = String(input.query || '').trim();
+    const explicitTarget = String(input.target || '').trim();
+    const explicitQuestion = String(input.question || '').trim();
+    if (explicitQuery) return input;
+
+    const promptInput = extractSpectrumSearchInput(prompt);
+    const fallbackQuery = explicitTarget || explicitQuestion || promptInput.query || '';
+    const rangeModes = new Set(['selected', 'filtered', 'active']);
+    const inputMode = String(input.mode || '').trim();
+    const promptMode = String(promptInput.mode || '').trim();
+    const fallbackMode = rangeModes.has(promptMode)
+      ? promptMode
+      : (fallbackQuery ? 'query' : (inputMode || 'query'));
+    return {
+      ...input,
+      query: fallbackQuery,
+      mode: fallbackMode,
+    };
+  };
+
   const hasSpectrumVisualAnalysisIntent = (prompt) => {
     const text = String(prompt || '');
     const wantsAnalysis = /(?:分析|对比|比较|看看|查看|看一下|看|判断|总结|解读)/.test(text);
@@ -494,7 +517,7 @@ import { getLegacyApp } from '../core/app-context';
         if (!App.spectrumAnalysis?.searchByAgent) {
           return { ok: false, message: '图谱分析模块尚未暴露检索技能接口。' };
         }
-        return withAction(await App.spectrumAnalysis.searchByAgent(input));
+        return withAction(await App.spectrumAnalysis.searchByAgent(fillSpectrumSearchInputFallback(input, input.prompt || input.question || input.target || '')));
       },
     },
     {
@@ -606,7 +629,10 @@ import { getLegacyApp } from '../core/app-context';
       examples: ['把当前型号的物性和图谱合成分析包', '生成 320G6-N11 的联合分析上下文'],
       infer(prompt) {
         const text = String(prompt || '');
-        if (!/(?:联合|结合|合成|打包|分析包).*(?:物性|图谱|数据)|(?:物性|图谱|数据).*(?:联合|结合|合成|打包|分析包)/.test(text)) return null;
+        const mentionsProperty = /(?:物性|参数|批次|指标|熔指|拉伸|弯曲|冲击|阻燃|灰份|强度)/.test(text);
+        const mentionsSpectrum = /(?:图谱|谱图|图片|图像|曲线|dsc|tga)/i.test(text);
+        const explicitJointIntent = /(?:联合|结合|综合|合成|打包|分析包|一起|同时).*(?:物性|图谱|数据)|(?:物性|图谱|数据).*(?:联合|结合|综合|合成|打包|分析包|一起|同时)/.test(text);
+        if (!(explicitJointIntent || (mentionsProperty && mentionsSpectrum))) return null;
         return { skillId: this.id, confidence: 0.8, input: { question: text, forceCurrentPage: false } };
       },
       async handler(input = {}) {
@@ -930,6 +956,9 @@ import { getLegacyApp } from '../core/app-context';
           : 'selected',
       };
     }
+    if (call.skillId === 'spectrum.manageImages' && call.input?.action === 'search') {
+      call.input = fillSpectrumSearchInputFallback(call.input, meta.prompt);
+    }
     if (typeof meta.onBeforeExecute === 'function') {
       try {
         meta.onBeforeExecute(call);
@@ -957,6 +986,7 @@ import { getLegacyApp } from '../core/app-context';
       formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
       '技能执行后，前端会把执行结果回写给用户。',
       '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
+      '用户在同一句里同时提到物性和图谱，或要求“结合/联合/综合”物性与图谱分析时，必须优先使用 analysis.buildJointPackage；联合意图优先于下面的单独物性或单独图谱规则。',
       '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。',
       '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用 spectrum.manageImages，并用 action=search 检索；不要因为问题里有型号或系列号就改调 property.searchRows。',
       '只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',

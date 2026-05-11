@@ -220,6 +220,36 @@
     .config-module-search > .form-grid > .form-grid-3{
       display:contents;
     }
+    .agent-routing-section{
+      grid-column:1 / -1;
+      display:grid;
+      grid-template-columns:repeat(2,minmax(260px,1fr));
+      gap:12px;
+      min-width:0;
+      padding-top:0;
+    }
+    .agent-routing-section input{
+      min-height:44px;
+    }
+    .agent-routing-section .agent-model-dropdown .model-dropdown-panel{
+      width:min(720px, calc(100vw - 64px));
+      max-width:720px;
+    }
+    .agent-routing-section .field:last-child .agent-model-dropdown .model-dropdown-panel{
+      left:auto;
+      right:0;
+    }
+    @media (max-width: 900px){
+      .agent-routing-section{
+        grid-template-columns:1fr;
+      }
+      .agent-routing-section .agent-model-dropdown .model-dropdown-panel,
+      .agent-routing-section .field:last-child .agent-model-dropdown .model-dropdown-panel{
+        left:0;
+        right:auto;
+        width:min(720px, calc(100vw - 40px));
+      }
+    }
     .field.full{grid-column:1 / -1}
     .hidden-field{display:none}
     .provider-segment{

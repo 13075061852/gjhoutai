@@ -550,7 +550,6 @@ import { getLegacyApp } from '../core/app-context';
         hints: ['等待首次调用', '自动统计 Token', '按模型汇总'],
       });
     }
-    const maxTokens = rows[0]?.tokens || 1;
     const rankIcons = ['ti-medal', 'ti-medal-2', 'ti-medal'];
     return rows.map((item, index) => `
       <div class="ai-call-model-row ${index < 3 ? `is-top-${index + 1}` : ''}">
@@ -562,14 +561,8 @@ import { getLegacyApp } from '../core/app-context';
           <div class="ai-call-model-meta">
             <span>${formatNumber(item.calls)} 次调用</span>
             <span>${esc(formatCnyCost(item.cny))}</span>
+            <span>${formatNumber(item.tokens)} Token</span>
           </div>
-          <div class="ai-call-model-bar-wrap">
-            <span class="ai-call-model-bar" style="width:${clampPercent((item.tokens / maxTokens) * 100)}"></span>
-          </div>
-        </div>
-        <div class="ai-call-model-token">
-          <strong>${formatNumber(item.tokens)}</strong>
-          <span>${Math.round((item.tokens / maxTokens) * 100)}%</span>
         </div>
       </div>
     `).join('');

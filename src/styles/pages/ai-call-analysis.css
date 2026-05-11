@@ -378,7 +378,7 @@
       border-radius:8px;
       background:var(--surface-2);
       display:grid;
-      grid-template-columns:28px minmax(0, 1fr) 68px;
+      grid-template-columns:28px minmax(0, 1fr);
       gap:12px;
       align-items:center;
       transition:border-color .16s ease, background .16s ease;
@@ -423,7 +423,7 @@
       min-width:0;
       display:flex;
       flex-direction:column;
-      gap:8px;
+      gap:9px;
     }
     .ai-call-model-row strong,
     .ai-call-analysis-table td strong{
@@ -448,33 +448,9 @@
       margin:0;
       max-width:100%;
       overflow:hidden;
-      display:-webkit-box;
-      -webkit-box-orient:vertical;
-      -webkit-line-clamp:2;
-    }
-    .ai-call-model-token{
-      min-width:0;
-      text-align:right;
-    }
-    .ai-call-model-token strong{
-      display:block;
-      color:var(--text);
-      font-size:14px;
-      line-height:1.15;
-      font-weight:900;
       white-space:nowrap;
-      overflow:hidden;
       text-overflow:ellipsis;
-    }
-    .ai-call-model-token span{
       display:block;
-      margin-top:4px;
-      color:var(--muted);
-      font-size:11px;
-      line-height:1;
-      font-weight:800;
-      text-transform:none;
-      white-space:nowrap;
     }
     .ai-call-model-meta{
       min-width:0;
@@ -482,6 +458,7 @@
       align-items:center;
       justify-content:flex-start;
       gap:10px;
+      flex-wrap:wrap;
     }
     .ai-call-model-meta span{
       min-width:0;
@@ -497,29 +474,6 @@
       overflow:hidden;
       text-overflow:ellipsis;
       word-break:normal;
-    }
-    .ai-call-model-bar-wrap{
-      height:4px;
-      margin-top:2px;
-      border-radius:999px;
-      background:var(--surface);
-      overflow:hidden;
-    }
-    .ai-call-model-bar{
-      display:block;
-      height:100%;
-      border-radius:999px;
-      background:linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 64%, #8b5cf6));
-      transition:width .4s ease;
-    }
-    .ai-call-model-row.is-top-1 .ai-call-model-bar{
-      background:linear-gradient(90deg, #d4a017, #f59e0b);
-    }
-    .ai-call-model-row.is-top-2 .ai-call-model-bar{
-      background:linear-gradient(90deg, #64748b, #94a3b8);
-    }
-    .ai-call-model-row.is-top-3 .ai-call-model-bar{
-      background:linear-gradient(90deg, #b7794b, #d97706);
     }
     .ai-call-analysis-table-panel{
       min-height:0;

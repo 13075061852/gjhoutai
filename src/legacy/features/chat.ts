@@ -590,9 +590,14 @@ import { getLegacyApp } from '../core/app-context';
   const renderImageUploadAuthorization = (auth) => {
     const item = normalizeImageUploadAuth(auth);
     if (!item) return '';
-    const pending = item.status === 'pending';
+    const livePending = item.status === 'pending' && imageUploadAuthResolvers.has(item.id);
+    const expired = item.status === 'pending' && !livePending;
+    const pending = livePending;
     const approved = item.status === 'approved';
-    const statusText = pending ? '等待授权' : approved ? '已授权' : '已取消';
+    const statusText = pending ? '等待授权' : approved ? '已授权' : expired ? '已失效' : '已取消';
+    const helpText = expired
+      ? '这次上传授权请求已失效，请重新发送问题后再授权上传图谱图片。'
+      : '授权后才会把这些图片发送给当前配置的 AI 服务，用于曲线、峰形、标注和异常点分析。';
     return `
       <div class="ai-upload-auth ${pending ? 'is-pending' : approved ? 'is-approved' : 'is-cancelled'}">
         <div class="ai-upload-auth-head">
@@ -602,7 +607,7 @@ import { getLegacyApp } from '../core/app-context';
             <em>${utils.escapeHtml(item.source)} · ${utils.escapeHtml(String(item.count))} 张 · ${utils.escapeHtml(statusText)}</em>
           </span>
         </div>
-        <p>授权后才会把这些图片发送给当前配置的 AI 服务，用于曲线、峰形、标注和异常点分析。</p>
+        <p>${utils.escapeHtml(helpText)}</p>
         ${renderImageUploadItems(item.items, item.count)}
         <div class="ai-upload-auth-actions">
           <button class="ai-upload-auth-btn is-primary" type="button" data-chat-image-auth="${utils.escapeHtml(item.id)}:approve" ${pending ? '' : 'disabled aria-disabled="true"'}>
@@ -1233,7 +1238,30 @@ import { getLegacyApp } from '../core/app-context';
 
   const settleImageUploadAuthorization = (requestId, approved) => {
     const request = imageUploadAuthResolvers.get(requestId);
-    if (!request) return;
+    if (!request) {
+      const expiredIndex = state.chatHistory.findIndex((message) => message?.imageUploadAuth?.id === requestId);
+      if (expiredIndex >= 0) {
+        const message = state.chatHistory[expiredIndex];
+        const baseContent = stripPendingStatus(String(message?.content || ''), message?.pendingStatus);
+        state.chatHistory[expiredIndex] = {
+          ...message,
+          content: [
+            baseContent,
+            '【提示】这次上传授权请求已失效，请重新发送问题后再授权上传图谱图片。',
+          ].filter(Boolean).join('\n\n'),
+          pending: false,
+          pendingStatus: '',
+          imageUploadAuth: {
+            ...message.imageUploadAuth,
+            status: 'cancelled',
+          },
+        };
+        saveChatState();
+        renderChatMessages({ autoScroll: true });
+      }
+      App.notify?.warn?.('上传授权已失效，请重新发送问题后再试。', { key: `image-upload-expired:${requestId}` });
+      return;
+    }
     imageUploadAuthResolvers.delete(requestId);
     request.cleanup?.();
 
@@ -1338,6 +1366,7 @@ import { getLegacyApp } from '../core/app-context';
           getProjectContext(),
           '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
           '用户要求分析、查询、对比、总结当前项目数据、当前页数据或选中数据时，不要直接强答，必须先输出项目技能调用 JSON。',
+          '用户在同一句里同时提到物性和图谱，或要求“结合/联合/综合”物性与图谱分析时，必须优先调用 analysis.buildJointPackage，不要只调用 property.searchRows 或 spectrum.manageImages。',
           '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，调用 property.searchRows 获取物性数据后再分析。',
           '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用图谱相关技能 spectrum.manageImages，并用 action 参数区分查询、新增、更新、删除等动作；不要因为问题里有型号就改调用物性表。',
           '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
@@ -1762,6 +1791,232 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
+  const getAgentRoleModel = (config, role, fallbackModel) => {
+    const model = String(config?.agentModels?.[role] || '').trim();
+    return model || fallbackModel;
+  };
+
+  const cleanCompositeUserFacingText = (content = '') => String(content || '')
+    .replace(/作为主\s*Agent[，,、\s]*/g, '')
+    .replace(/主\s*Agent/g, '汇总分析')
+    .replace(/子\s*Agent/g, '专项分析')
+    .replace(/数据分析\s*Agent/g, '物性分析')
+    .replace(/图谱分析\s*Agent/g, '图谱分析')
+    .trim();
+
+  const synthesizeCompositeAgentResults = async ({
+    config,
+    model,
+    prompt,
+    propertyContent,
+    spectrumContent,
+    signal = null,
+  }) => {
+    const messages = [
+      { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+      {
+        role: 'system',
+        content: [
+          getProjectContext(),
+          '你负责把物性数据分析和图谱分析整理成一份面向用户的统一结论。',
+          '物性部分已经整理了表格和指标，图谱部分已经整理了曲线图片和图谱上下文。',
+          '你的任务是综合两边结论，指出一致性、冲突点、缺口和最终判断；不要重复输出项目技能调用 JSON。',
+          '最终回答只能出现和用户问题有关的信息，不要提及“主 Agent”“子 Agent”“数据分析 Agent”“图谱分析 Agent”等内部流程或角色名称。',
+        ].join('\n\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          '【用户原始问题】',
+          prompt,
+          '',
+          '【物性分析结果】',
+          propertyContent || '物性分析未返回可用结果。',
+          '',
+          '【图谱分析结果】',
+          spectrumContent || '图谱分析未返回可用结果。',
+          '',
+          '请结合物性数据和图谱结论给出统一分析，重点说明：1. 综合结论；2. 关键依据；3. 物性和图谱之间是否互相印证；4. 风险或数据缺口；5. 后续建议。',
+        ].join('\n'),
+      },
+    ];
+    const streamEnabled = config.aiProvider === 'lmstudio' || Boolean(config.streamEnabled);
+    const requestTimer = createAbortTimer('综合汇总分析', SKILL_SYNTHESIS_TIMEOUT_MS, signal);
+
+    try {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config.getRequestHeaders(config),
+        signal: requestTimer.signal,
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: config.temperature,
+          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
+          stream: streamEnabled,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+      }
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const usedStream = streamEnabled
+        && response.body
+        && (config.aiProvider === 'lmstudio' || contentType.includes('text/event-stream'));
+      if (usedStream) {
+        let content = '';
+        const streamResult = await consumeChatCompletionStream(response, (delta) => {
+          content += delta;
+        }, { signal: requestTimer.signal });
+        if (!streamResult.receivedDelta) {
+          throw new Error('综合汇总没有返回流式内容。');
+        }
+        return {
+          content,
+          usage: streamResult.usage || null,
+          finishReason: streamResult.finishReason || '',
+          messages,
+          usedStream: true,
+        };
+      }
+      const data = await response.json();
+      return {
+        content: data?.choices?.[0]?.message?.content?.trim() || '',
+        usage: data?.usage || null,
+        finishReason: String(data?.choices?.[0]?.finish_reason || ''),
+        messages,
+        usedStream: false,
+      };
+    } catch (error) {
+      throw new Error(requestTimer.formatError(error));
+    } finally {
+      requestTimer.clear();
+    }
+  };
+
+  const runCompositeAgentAnalysis = async ({ config, mainModel, prompt, pendingIndex, signal = null }) => {
+    flushStreamRender(pendingIndex, '正在分别调用物性和图谱技能...', { pending: true, pendingStatus: '正在获取项目数据' });
+    const [propertyExecution, spectrumExecution] = await Promise.all([
+      App.projectSkills.executeSkill('property.searchRows', { query: prompt }, {
+        source: 'chat-composite-agent',
+        prompt,
+        reason: '联合分析中的物性数据子任务',
+      }),
+      App.projectSkills.executeSkill('spectrum.manageImages', { action: 'search', query: prompt }, {
+        source: 'chat-composite-agent',
+        prompt,
+        reason: '联合分析中的图谱数据子任务',
+      }),
+    ]);
+
+    const dataModel = getAgentRoleModel(config, 'data', mainModel);
+    const spectrumModel = getAgentRoleModel(config, 'spectrum', mainModel);
+    let propertyContent = App.projectSkills.formatSkillMessage(propertyExecution);
+    let spectrumContent = App.projectSkills.formatSkillMessage(spectrumExecution);
+    let usage = null;
+    let messages = [];
+    let finishReason = '';
+    let usedStream = false;
+
+    if (shouldSynthesizeSkillResult(propertyExecution)) {
+      flushStreamRender(pendingIndex, `物性分析（${dataModel}）正在整理数据...`, { pending: true, pendingStatus: '物性分析中' });
+      try {
+        const synthesized = await synthesizeSkillResult({
+          config,
+          model: dataModel,
+          prompt,
+          execution: propertyExecution,
+          pendingIndex,
+          displayPrefix: getSkillDisplayPrefix(propertyExecution),
+          signal,
+          images: [],
+        });
+        propertyContent = synthesized.content || propertyContent;
+        usage = synthesized.usage || usage;
+        messages = synthesized.messages || messages;
+        finishReason = synthesized.finishReason || finishReason;
+        usedStream = usedStream || Boolean(synthesized.usedStream);
+      } catch (error) {
+        propertyContent = `${propertyContent}\n\n【提示】物性分析失败：${error?.message || '未知错误'}`;
+      }
+    }
+
+    const rawSpectrumImages = getSkillResultImages(spectrumExecution);
+    if (shouldSynthesizeSkillResult(spectrumExecution)) {
+      flushStreamRender(pendingIndex, `图谱分析（${spectrumModel}）正在分析图谱...`, { pending: true, pendingStatus: '图谱分析中' });
+      try {
+        let skillImages = [];
+        if (rawSpectrumImages.length) {
+          const approved = await requestImageUploadAuthorization(rawSpectrumImages, {
+            pendingIndex,
+            displayPrefix: spectrumContent,
+            source: '图谱检索结果',
+            signal,
+          });
+          if (!approved) {
+            spectrumContent = `${spectrumContent}\n\n【提示】已取消上传 ${rawSpectrumImages.length} 张图谱图片，本次图谱分析仅使用图谱元数据。`;
+          } else {
+            skillImages = await compressImagesForAi(rawSpectrumImages, { prompt });
+          }
+        }
+        const synthesized = await synthesizeSkillResult({
+          config,
+          model: spectrumModel,
+          prompt,
+          execution: spectrumExecution,
+          pendingIndex,
+          displayPrefix: '',
+          signal,
+          images: skillImages,
+        });
+        spectrumContent = synthesized.content || spectrumContent;
+        usage = synthesized.usage || usage;
+        messages = synthesized.messages || messages;
+        finishReason = synthesized.finishReason || finishReason;
+        usedStream = usedStream || Boolean(synthesized.usedStream);
+      } catch (error) {
+        spectrumContent = `${spectrumContent}\n\n【提示】图谱分析失败：${error?.message || '未知错误'}`;
+      }
+    }
+
+    flushStreamRender(pendingIndex, `综合汇总（${mainModel}）正在合并物性和图谱结论...`, { pending: true, pendingStatus: '综合汇总中' });
+    let finalResult = null;
+    try {
+      finalResult = await synthesizeCompositeAgentResults({
+        config,
+        model: mainModel,
+        prompt,
+        propertyContent,
+        spectrumContent,
+        signal,
+      });
+      finalResult.content = cleanCompositeUserFacingText(finalResult.content);
+    } catch (error) {
+      finalResult = {
+        content: [
+          '联合分析汇总失败，以下保留两个专项分析结果。',
+          '',
+          `【提示】${error?.message || '未知错误'}`,
+          '',
+          '## 物性分析',
+          propertyContent,
+          '',
+          '## 图谱分析',
+          spectrumContent,
+        ].join('\n'),
+      };
+    }
+    return {
+      content: finalResult.content || [propertyContent, spectrumContent].filter(Boolean).join('\n\n'),
+      usage: finalResult.usage || usage,
+      finishReason: finalResult.finishReason || finishReason,
+      messages: finalResult.messages || messages,
+      usedStream: usedStream || Boolean(finalResult.usedStream),
+    };
+  };
+
   const runLocalSkillPlan = async (prompt, plan) => {
     setChatBusyState(true);
 
@@ -2167,18 +2422,23 @@ import { getLegacyApp } from '../core/app-context';
     try {
       attachedDataFile = projectAccessEnabled ? getAttachedDataFile(prompt) : null;
       attachedDataContext = projectAccessEnabled ? getAttachedDataContext(prompt) : '';
-      flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
-      try {
-        searchDecision = await decideSearchWithAi(config, model, prompt, {
-          signal: activeChatAbortController?.signal,
-        });
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        searchDecision = null;
-        console.warn('[chat] Search decision failed, fallback to local rules:', error);
+      if (webSearchEnabled) {
+        flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
+        try {
+          searchDecision = await decideSearchWithAi(config, model, prompt, {
+            signal: activeChatAbortController?.signal,
+          });
+        } catch (error) {
+          if (isAbortError(error)) throw error;
+          searchDecision = null;
+          console.warn('[chat] Search decision failed, fallback to local rules:', error);
+        }
+        const localSearchRequired = promptRequiresWebSearch(prompt);
+        needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
+      } else {
+        searchDecision = { needsSearch: false, reason: 'Web search disabled by chat toggle' };
+        needsWebSearch = false;
       }
-      const localSearchRequired = promptRequiresWebSearch(prompt);
-      needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
 
       if (needsWebSearch && !webSearchEnabled) {
         streamedContent = buildSearchUnavailableAnswer('聊天框的“联网搜索”已关闭');
@@ -2247,6 +2507,20 @@ import { getLegacyApp } from '../core/app-context';
       wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
 
       if (!skipAiRequest) {
+      if (localPlan?.skillId === 'analysis.buildJointPackage') {
+        const compositeResult = await runCompositeAgentAnalysis({
+          config,
+          mainModel: model,
+          prompt,
+          pendingIndex,
+          signal: activeChatAbortController?.signal,
+        });
+        streamedContent = compositeResult.content;
+        apiUsage = compositeResult.usage || apiUsage;
+        finishReason = compositeResult.finishReason || finishReason;
+        apiMessages = compositeResult.messages || apiMessages;
+        usedStream = usedStream || Boolean(compositeResult.usedStream);
+      } else {
       const requestMessages = state.chatHistory
         .slice(0, pendingIndex)
         .filter((item) => item.role === 'user' || item.role === 'assistant')
@@ -2332,6 +2606,7 @@ import { getLegacyApp } from '../core/app-context';
             onBeforeExecute: () => flushStreamRender(pendingIndex, '正在获取项目数据...', { pending: true, pendingStatus: '正在获取项目数据' }),
           })
         : null;
+      }
       if (activeChatAbortController?.signal.aborted) throw createAbortError();
       if (skillExecution) {
         const needsSynthesis = shouldSynthesizeSkillResult(skillExecution);
@@ -2540,6 +2815,19 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
+  const handleImageUploadAuthClick = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return false;
+    const imageAuthButton = target.closest('[data-chat-image-auth]');
+    if (!imageAuthButton) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (imageAuthButton.hasAttribute('disabled')) return true;
+    const [requestId, decision] = String(imageAuthButton.getAttribute('data-chat-image-auth') || '').split(':');
+    if (requestId) settleImageUploadAuthorization(requestId, decision === 'approve');
+    return true;
+  };
+
   const bindChat = () => {
     ensureWebSearchToggleButton();
     moveClearChatButtonToHeader();
@@ -2608,16 +2896,11 @@ import { getLegacyApp } from '../core/app-context';
       }
     });
 
+    document.addEventListener('click', handleImageUploadAuthClick, true);
+
     refs.chatMessages?.addEventListener('click', (event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
-
-      const imageAuthButton = target.closest('[data-chat-image-auth]');
-      if (imageAuthButton) {
-        const [requestId, decision] = String(imageAuthButton.getAttribute('data-chat-image-auth') || '').split(':');
-        if (requestId) settleImageUploadAuthorization(requestId, decision === 'approve');
-        return;
-      }
 
       const actionButton = target.closest('[data-chat-skill-action]');
       if (actionButton) {

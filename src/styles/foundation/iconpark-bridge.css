@@ -130,7 +130,7 @@
 .ti-binary-tree-2{--ip-icon:var(--ip-code-tree)}
 .ti-braces{--ip-icon:var(--ip-braces)}
 .ti-category,.ti-tags{--ip-icon:var(--ip-tag)}
-.ti-chart-bar,.ti-chart-dots{--ip-icon:var(--ip-bar-chart)}
+.ti-chart-bar,.ti-chart-dots,.ti-chart-dots-3{--ip-icon:var(--ip-bar-chart)}
 .ti-chart-bar-off,.ti-database-off{--ip-icon:var(--ip-database)}
 .ti-check,.ti-checks,.ti-checklist,.ti-square-check{--ip-icon:var(--ip-check)}
 .ti-chevron-down{--ip-icon:var(--ip-chevron-down)}
@@ -152,7 +152,7 @@
 .ti-file-description,.ti-file-text,.ti-file-type-docx{--ip-icon:var(--ip-file)}
 .ti-file-plus{--ip-icon:var(--ip-add)}
 .ti-file-search,.ti-photo-search{--ip-icon:var(--ip-search)}
-.ti-file-spreadsheet,.ti-table-options{--ip-icon:var(--ip-table)}
+.ti-file-spreadsheet,.ti-table,.ti-table-options{--ip-icon:var(--ip-table)}
 .ti-flask-2,.ti-test-pipe{--ip-icon:var(--ip-flask)}
 .ti-globe,.ti-world{--ip-icon:var(--ip-globe)}
 .ti-history,.ti-restore,.ti-refresh,.ti-loader-2{--ip-icon:var(--ip-refresh)}

@@ -17,6 +17,7 @@ import { getLegacyApp } from '../core/app-context';
   let openRouterModelRefreshTimer = null;
   let lastLoadedOpenRouterApiKey = '';
   let modelSearchQuery = '';
+  const agentModelSearchQuery = { data: '', spectrum: '' };
 
   const getSearchRefs = () => ({
     provider: document.getElementById('searchProvider'),
@@ -27,6 +28,283 @@ import { getLegacyApp } from '../core/app-context';
     apiKeyToggle: document.getElementById('searchApiKeyToggle'),
     apiKeyIcon: document.querySelector('#searchApiKeyToggle .search-key-toggle-icon'),
   });
+
+  const getAgentModelRefs = () => ({
+    data: document.getElementById('agentDataModelSelect'),
+    spectrum: document.getElementById('agentSpectrumModelSelect'),
+    dataDropdown: document.getElementById('agentDataModelDropdown'),
+    spectrumDropdown: document.getElementById('agentSpectrumModelDropdown'),
+    dataTrigger: document.getElementById('agentDataModelTrigger'),
+    spectrumTrigger: document.getElementById('agentSpectrumModelTrigger'),
+    dataLabel: document.getElementById('agentDataModelLabel'),
+    spectrumLabel: document.getElementById('agentSpectrumModelLabel'),
+    dataPanel: document.getElementById('agentDataModelPanel'),
+    spectrumPanel: document.getElementById('agentSpectrumModelPanel'),
+    dataCustom: document.getElementById('agentDataModelCustom'),
+    spectrumCustom: document.getElementById('agentSpectrumModelCustom'),
+  });
+
+  const normalizeAgentModels = (agentModels = {}) => ({
+    data: String(agentModels.data || '').trim(),
+    spectrum: String(agentModels.spectrum || '').trim(),
+  });
+
+  const getAgentModelValue = (role) => {
+    const agentRefs = getAgentModelRefs();
+    const select = agentRefs[role];
+    const custom = agentRefs[`${role}Custom`];
+    return String(select?.value === 'custom' ? custom?.value : select?.value || '').trim();
+  };
+
+  const getAgentModelLabel = (role) => {
+    const value = getAgentModelValue(role);
+    if (!value) return '使用默认主模型';
+    const match = Array.from(refs.modelSelect?.options || []).find((option) => option.value === value);
+    const parts = splitModelLabel(match?.textContent || value);
+    return parts.title || value;
+  };
+
+  const setAgentModelValue = (role, value = '') => {
+    const agentRefs = getAgentModelRefs();
+    const select = agentRefs[role];
+    const custom = agentRefs[`${role}Custom`];
+    if (!select) return;
+    const normalized = String(value || '').trim();
+    if (!normalized) {
+      select.value = '';
+      if (custom) custom.value = '';
+    } else if (Array.from(select.options).some((option) => option.value === normalized)) {
+      select.value = normalized;
+      if (custom) custom.value = '';
+    } else {
+      select.value = 'custom';
+      if (custom) custom.value = normalized;
+    }
+    if (custom) custom.hidden = select.value !== 'custom';
+  };
+
+  const setAgentDropdownOpen = (role, open) => {
+    const agentRefs = getAgentModelRefs();
+    const dropdown = agentRefs[`${role}Dropdown`];
+    const trigger = agentRefs[`${role}Trigger`];
+    if (!dropdown || !trigger) return;
+    dropdown.classList.toggle('is-open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+  };
+
+  const closeAgentDropdown = (role) => {
+    setAgentDropdownOpen(role, false);
+    if (agentModelSearchQuery[role]) {
+      agentModelSearchQuery[role] = '';
+      renderAgentModelDropdown(role);
+    }
+  };
+
+  const renderAgentModelDropdown = (role) => {
+    const agentRefs = getAgentModelRefs();
+    const panel = agentRefs[`${role}Panel`];
+    const label = agentRefs[`${role}Label`];
+    if (!panel || !label) return;
+    const currentValue = getAgentModelValue(role);
+    const selectedValue = agentRefs[role]?.value || '';
+    const isLocal = isLmStudioProvider(getAiProvider());
+    const searchQuery = normalizeModelSearchText(agentModelSearchQuery[role]);
+    label.textContent = getAgentModelLabel(role);
+
+    const defaultActive = !currentValue && selectedValue !== 'custom';
+    const fixedOptions = [
+      {
+        value: '',
+        label: '使用默认主模型',
+        meta: '继承上方',
+        active: defaultActive,
+      },
+      {
+        value: 'custom',
+        label: '自定义模型 ID...',
+        meta: '手动输入',
+        active: selectedValue === 'custom',
+      },
+    ].map((item) => `
+      <button
+        type="button"
+        class="model-dropdown-option${item.active ? ' is-active' : ''}"
+        role="option"
+        aria-selected="${item.active ? 'true' : 'false'}"
+        data-agent-model-role="${role}"
+        data-agent-model-value="${item.value}">
+        <span class="model-dropdown-option-body">
+          <span class="model-dropdown-option-label">${utils.escapeHtml(item.label)}</span>
+        </span>
+        <span class="model-dropdown-option-meta">${utils.escapeHtml(item.meta)}</span>
+      </button>
+    `).join('');
+
+    const grouped = new Map();
+    getModelOptions().forEach((option) => {
+      const parts = splitModelLabel(option.label);
+      const provider = getProviderGroupLabel(option.value);
+      const pricing = option.pricing ? (() => {
+        try {
+          return JSON.parse(option.pricing);
+        } catch {
+          return null;
+        }
+      })() : null;
+      const category = option.category || getModelCategoryLabel(option);
+      const contextLabel = formatContextLength(option.contextLength);
+      const normalized = {
+        ...option,
+        title: parts.title,
+        pricingLabel: getPricingLabel(pricing),
+        category,
+        contextLabel,
+      };
+      if (modelMatchesSearch(normalized, provider, searchQuery)) {
+        const items = grouped.get(provider) || [];
+        items.push(normalized);
+        grouped.set(provider, items);
+      }
+    });
+
+    const groupedHtml = Array.from(grouped.entries()).length
+      ? Array.from(grouped.entries()).map(([provider, items]) => {
+        const rows = items.map((option) => {
+          const isActive = option.value === currentValue && selectedValue !== 'custom';
+          const showSubline = !isLocal && (option.pricingLabel || option.contextLabel);
+          return `
+            <button
+              type="button"
+              class="model-dropdown-option${isActive ? ' is-active' : ''}"
+              role="option"
+              aria-selected="${isActive ? 'true' : 'false'}"
+              data-agent-model-role="${role}"
+              data-agent-model-value="${option.value}">
+              <span class="model-dropdown-option-body">
+                <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
+                ${showSubline ? `<span class="model-dropdown-option-subline">
+                  <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
+                  ${option.contextLabel ? `<span class="model-dropdown-option-context">${utils.escapeHtml(option.contextLabel)}</span>` : ''}
+                </span>` : ''}
+              </span>
+              <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
+            </button>
+          `;
+        }).join('');
+        return `
+          <div class="model-dropdown-group">
+            <div class="model-dropdown-group-title">${utils.escapeHtml(provider)}</div>
+            <div class="model-dropdown-group-body">${rows}</div>
+          </div>
+        `;
+      }).join('')
+      : '<div class="model-dropdown-empty">没有匹配的模型</div>';
+
+    panel.innerHTML = `
+      <label class="model-dropdown-search">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input
+          class="model-dropdown-search-input"
+          type="search"
+          placeholder="搜索模型、供应商或分类"
+          aria-label="搜索子 Agent 模型"
+          data-agent-model-search="${role}"
+          value="${utils.escapeHtml(agentModelSearchQuery[role])}">
+      </label>
+      <div class="model-dropdown-results">
+        <div class="model-dropdown-group">
+          <div class="model-dropdown-group-title">Agent 选项</div>
+          <div class="model-dropdown-group-body">${fixedOptions}</div>
+        </div>
+        ${groupedHtml}
+      </div>
+    `;
+  };
+
+  const syncAgentModelSelects = () => {
+    const agentRefs = getAgentModelRefs();
+    const current = {
+      data: getAgentModelValue('data'),
+      spectrum: getAgentModelValue('spectrum'),
+    };
+    const sourceOptions = Array.from(refs.modelSelect?.options || [])
+      .filter((option) => option.value)
+      .map((option) => ({
+        value: option.value,
+        label: option.textContent || option.value,
+        category: option.dataset.category || '',
+      }));
+    const fillSelect = (select) => {
+      if (!select) return;
+      select.innerHTML = '';
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = '使用默认主模型';
+      select.appendChild(defaultOption);
+      sourceOptions.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.textContent = item.category ? `${item.label} · ${item.category}` : item.label;
+        select.appendChild(option);
+      });
+      const customOption = document.createElement('option');
+      customOption.value = 'custom';
+      customOption.textContent = '自定义模型 ID...';
+      select.appendChild(customOption);
+    };
+    fillSelect(agentRefs.data);
+    fillSelect(agentRefs.spectrum);
+    setAgentModelValue('data', current.data);
+    setAgentModelValue('spectrum', current.spectrum);
+    renderAgentModelDropdown('data');
+    renderAgentModelDropdown('spectrum');
+  };
+
+  const mountAgentRoutingConfigSection = () => {
+    if (!refs.aiConfigForm || document.getElementById('agentRoutingConfigModule')) return;
+    const aiModuleGrid = refs.aiConfigForm.querySelector('.config-module-ai > .form-grid');
+    if (!aiModuleGrid) return;
+    const section = document.createElement('div');
+    section.className = 'agent-routing-section';
+    section.id = 'agentRoutingConfigModule';
+    section.innerHTML = `
+      <div class="field">
+        <label for="agentDataModelTrigger">
+          <span class="field-label-main">
+            <i class="field-label-icon ti ti-table" aria-hidden="true"></i>
+            <span>数据分析模型</span>
+          </span>
+        </label>
+        <div class="model-dropdown agent-model-dropdown" id="agentDataModelDropdown">
+          <button class="model-dropdown-trigger" id="agentDataModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="agentDataModelPanel">
+            <span class="model-dropdown-value" id="agentDataModelLabel">使用默认主模型</span>
+            <span class="model-dropdown-arrow" aria-hidden="true"></span>
+          </button>
+          <div class="model-dropdown-panel" id="agentDataModelPanel" role="listbox" aria-label="数据分析模型选择列表"></div>
+          <select id="agentDataModelSelect" name="agentDataModelSelect" hidden></select>
+        </div>
+        <input id="agentDataModelCustom" name="agentDataModelCustom" type="text" placeholder="输入自定义模型 ID，例如 deepseek/deepseek-chat" autocomplete="off" hidden />
+      </div>
+      <div class="field">
+        <label for="agentSpectrumModelTrigger">
+          <span class="field-label-main">
+            <i class="field-label-icon ti ti-chart-dots-3" aria-hidden="true"></i>
+            <span>图谱分析模型</span>
+          </span>
+        </label>
+        <div class="model-dropdown agent-model-dropdown" id="agentSpectrumModelDropdown">
+          <button class="model-dropdown-trigger" id="agentSpectrumModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="agentSpectrumModelPanel">
+            <span class="model-dropdown-value" id="agentSpectrumModelLabel">使用默认主模型</span>
+            <span class="model-dropdown-arrow" aria-hidden="true"></span>
+          </button>
+          <div class="model-dropdown-panel" id="agentSpectrumModelPanel" role="listbox" aria-label="图谱分析模型选择列表"></div>
+          <select id="agentSpectrumModelSelect" name="agentSpectrumModelSelect" hidden></select>
+        </div>
+        <input id="agentSpectrumModelCustom" name="agentSpectrumModelCustom" type="text" placeholder="输入自定义模型 ID，例如 qwen/qwen-vl-plus" autocomplete="off" hidden />
+      </div>
+    `;
+    aiModuleGrid.appendChild(section);
+  };
 
   const mountSearchConfigSection = () => {
     if (!refs.aiConfigForm || document.getElementById('searchConfigModule')) return;
@@ -332,6 +610,7 @@ import { getLegacyApp } from '../core/app-context';
     }
     syncProviderUi();
     syncModelState();
+    syncAgentModelSelects();
     syncPreview();
   };
 
@@ -347,6 +626,10 @@ import { getLegacyApp } from '../core/app-context';
       appTitle: activeDraft.appTitle,
       httpReferer: (refs.httpReferer?.value || '').trim(),
       modelChoice: activeDraft.modelChoice,
+      agentModels: normalizeAgentModels({
+        data: getAgentModelValue('data'),
+        spectrum: getAgentModelValue('spectrum'),
+      }),
       openrouterConfig: { ...providerDrafts[PROVIDER_OPENROUTER] },
       lmStudioConfig: { ...providerDrafts[PROVIDER_LM_STUDIO], apiKey: '', appTitle: 'LM Studio' },
       systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
@@ -445,6 +728,10 @@ import { getLegacyApp } from '../core/app-context';
     if (searchRefs.depth) searchRefs.depth.value = next.searchDepth || constants.DEFAULT_CONFIG.searchDepth;
     if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
     if (searchRefs.topic) searchRefs.topic.value = next.searchTopic || constants.DEFAULT_CONFIG.searchTopic;
+    const agentModels = normalizeAgentModels(next.agentModels || constants.DEFAULT_CONFIG.agentModels || {});
+    syncAgentModelSelects();
+    setAgentModelValue('data', agentModels.data);
+    setAgentModelValue('spectrum', agentModels.spectrum);
     if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
     if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
     if (refs.ossObjectKey) refs.ossObjectKey.value = next.ossObjectKey || '';
@@ -453,6 +740,7 @@ import { getLegacyApp } from '../core/app-context';
     if (refs.ossExcelBackupPrefix) refs.ossExcelBackupPrefix.value = next.ossExcelBackupPrefix || '';
     syncModelProviderField();
     syncModelState();
+    syncAgentModelSelects();
     syncTemperatureLabel();
     syncPreview();
   };
@@ -476,6 +764,7 @@ import { getLegacyApp } from '../core/app-context';
   const syncModelState = () => {
     if (!refs.modelSelect) return;
     syncModelDropdown();
+    syncAgentModelSelects();
     syncModelProviderField();
   };
 
@@ -1360,6 +1649,10 @@ import { getLegacyApp } from '../core/app-context';
       getSearchRefs().depth,
       getSearchRefs().maxResults,
       getSearchRefs().topic,
+      getAgentModelRefs().data,
+      getAgentModelRefs().spectrum,
+      getAgentModelRefs().dataCustom,
+      getAgentModelRefs().spectrumCustom,
       refs.ossBucket,
       refs.ossEndpoint,
       refs.ossObjectKey,
@@ -1369,6 +1662,13 @@ import { getLegacyApp } from '../core/app-context';
     ]
       .filter(Boolean)
       .forEach((input) => input.addEventListener('input', () => {
+        if (input === getAgentModelRefs().data || input === getAgentModelRefs().spectrum) {
+          const agentRefs = getAgentModelRefs();
+          if (agentRefs.dataCustom) agentRefs.dataCustom.hidden = agentRefs.data?.value !== 'custom';
+          if (agentRefs.spectrumCustom) agentRefs.spectrumCustom.hidden = agentRefs.spectrum?.value !== 'custom';
+        }
+        if (input === getAgentModelRefs().dataCustom) renderAgentModelDropdown('data');
+        if (input === getAgentModelRefs().spectrumCustom) renderAgentModelDropdown('spectrum');
         syncProviderUi();
         storeActiveProviderDraft();
         syncPreview();
@@ -1381,6 +1681,66 @@ import { getLegacyApp } from '../core/app-context';
       syncTemperatureLabel();
       syncPreview();
     });
+
+    [getAgentModelRefs().data, getAgentModelRefs().spectrum]
+      .filter(Boolean)
+      .forEach((select) => select.addEventListener('change', () => {
+        const agentRefs = getAgentModelRefs();
+        if (agentRefs.dataCustom) agentRefs.dataCustom.hidden = agentRefs.data?.value !== 'custom';
+        if (agentRefs.spectrumCustom) agentRefs.spectrumCustom.hidden = agentRefs.spectrum?.value !== 'custom';
+        renderAgentModelDropdown('data');
+        renderAgentModelDropdown('spectrum');
+        syncPreview();
+      }));
+
+    [
+      ['data', getAgentModelRefs().dataTrigger],
+      ['spectrum', getAgentModelRefs().spectrumTrigger],
+    ].forEach(([role, trigger]) => {
+      trigger?.addEventListener('click', () => {
+        const agentRefs = getAgentModelRefs();
+        const isOpen = agentRefs[`${role}Dropdown`]?.classList.contains('is-open');
+        closeAgentDropdown(role === 'data' ? 'spectrum' : 'data');
+        renderAgentModelDropdown(role);
+        setAgentDropdownOpen(role, !isOpen);
+        requestAnimationFrame(() => {
+          agentRefs[`${role}Panel`]?.querySelector('.model-dropdown-search-input')?.focus();
+        });
+      });
+    });
+
+    [getAgentModelRefs().dataPanel, getAgentModelRefs().spectrumPanel]
+      .filter(Boolean)
+      .forEach((panel) => {
+        panel.addEventListener('input', (event) => {
+          const searchInput = event.target.closest('.model-dropdown-search-input[data-agent-model-search]');
+          if (!searchInput) return;
+          const role = searchInput.dataset.agentModelSearch;
+          agentModelSearchQuery[role] = searchInput.value || '';
+          renderAgentModelDropdown(role);
+          requestAnimationFrame(() => {
+            const nextInput = getAgentModelRefs()[`${role}Panel`]?.querySelector('.model-dropdown-search-input');
+            nextInput?.focus();
+            if (nextInput) {
+              const length = nextInput.value.length;
+              nextInput.setSelectionRange(length, length);
+            }
+          });
+        });
+
+        panel.addEventListener('click', (event) => {
+          const option = event.target.closest('.model-dropdown-option[data-agent-model-role]');
+          if (!option) return;
+          const role = option.dataset.agentModelRole;
+          const value = option.dataset.agentModelValue || '';
+          const agentRefs = getAgentModelRefs();
+          if (!agentRefs[role]) return;
+          agentRefs[role].value = value;
+          agentRefs[role].dispatchEvent(new Event('change', { bubbles: true }));
+          closeAgentDropdown(role);
+          agentRefs[`${role}Trigger`]?.focus();
+        });
+      });
 
     refs.openrouterBaseUrl?.addEventListener('blur', () => {
       if (!isLmStudioProvider(getAiProvider())) return;
@@ -1500,6 +1860,15 @@ import { getLegacyApp } from '../core/app-context';
       closeModelDropdown();
     });
 
+    document.addEventListener('click', (event) => {
+      const agentRefs = getAgentModelRefs();
+      ['data', 'spectrum'].forEach((role) => {
+        const dropdown = agentRefs[`${role}Dropdown`];
+        if (!dropdown || dropdown.contains(event.target)) return;
+        closeAgentDropdown(role);
+      });
+    });
+
     refs.loadModelsBtn?.addEventListener('click', fetchModels);
     refs.importConfigBtn?.addEventListener('click', importConfig);
     refs.exportConfigBtn?.addEventListener('click', exportConfig);
@@ -1530,6 +1899,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const init = () => {
     mountSearchConfigSection();
+    mountAgentRoutingConfigSection();
     mountOssHelpLink();
     mountConfigContentPanel();
     syncConfigBindings();

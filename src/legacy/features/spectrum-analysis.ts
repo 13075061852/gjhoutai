@@ -1167,6 +1167,13 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     .replace(/\s+/g, ' ')
     .trim();
 
+  const isStructuredSpectrumQuery = (value) => /[a-z0-9]+(?:[-_/][a-z0-9]+)+/i.test(String(value || ''));
+  const compactStructuredSpectrumText = (value) => normalizeAgentText(value).replace(/[^a-z0-9\u4e00-\u9fff]+/g, '');
+
+  const getStructuredSpectrumTerms = (value) => (String(value || '').match(/[A-Za-z0-9]+(?:[-_/][A-Za-z0-9]+)+/g) || [])
+    .map(normalizeAgentText)
+    .filter(Boolean);
+
   const extractAgentTerms = (question = '') => {
     const text = String(question || '');
     const terms = [
@@ -1187,13 +1194,25 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     ...(Array.isArray(item?.tags) ? item.tags : []),
   ].filter(Boolean).join(' '));
 
+  const matchesStructuredSpectrumTerm = (item, term) => {
+    const normalizedTerm = normalizeAgentText(term);
+    const itemText = getItemSearchText(item);
+    if (itemText.includes(normalizedTerm)) return true;
+    const compactTerm = compactStructuredSpectrumText(normalizedTerm);
+    if (!compactTerm) return false;
+    return compactStructuredSpectrumText(itemText).includes(compactTerm);
+  };
+
   const scoreAgentItem = (item, terms) => {
     if (!terms.length) return 0;
     const itemText = getItemSearchText(item);
     return terms.reduce((score, term) => {
       const normalizedTerm = normalizeAgentText(term);
       if (!normalizedTerm) return score;
-      if (itemText.includes(normalizedTerm)) return score + 3;
+      if (itemText.includes(normalizedTerm)) return score + (isStructuredSpectrumQuery(normalizedTerm) ? 6 : 3);
+      if (isStructuredSpectrumQuery(normalizedTerm)) {
+        return matchesStructuredSpectrumTerm(item, normalizedTerm) ? score + 5 : score;
+      }
       if (normalizedTerm.length >= 4 && itemText.includes(normalizedTerm.slice(0, Math.max(3, Math.floor(normalizedTerm.length * 0.7))))) return score + 1;
       return score;
     }, 0);
@@ -1208,11 +1227,16 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     if (selected.length) return { items: selected, reason: '使用当前已选图谱' };
 
     const terms = extractAgentTerms(question);
+    const structuredTerms = terms.map(normalizeAgentText).filter(isStructuredSpectrumQuery);
     const scored = state.items
       .map((item) => ({ item, score: scoreAgentItem(item, terms) }))
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score)
       .map((entry) => entry.item);
+    const structuredMatches = structuredTerms.length
+      ? scored.filter((item) => structuredTerms.some((term) => matchesStructuredSpectrumTerm(item, term)))
+      : [];
+    if (structuredMatches.length) return { items: structuredMatches, reason: '根据结构化编号匹配图谱库' };
     if (scored.length) return { items: scored, reason: '根据问题关键词匹配图谱库' };
 
     const active = getActiveItem();
@@ -1269,15 +1293,36 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const normalizedQuery = normalizeSkillText(query);
     const text = getItemSearchText(item);
     if (!normalizedQuery) return 0;
+    const isStructuredQuery = isStructuredSpectrumQuery(normalizedQuery);
+    const structuredTerms = getStructuredSpectrumTerms(query);
     const exactValues = [item.id, item.code, item.title]
       .map(normalizeSkillText)
       .filter(Boolean);
+    const compactValues = exactValues.map(compactStructuredSpectrumText).filter(Boolean);
+    const scoreStructuredTerm = (term) => {
+      const normalizedTerm = normalizeSkillText(term);
+      if (!normalizedTerm) return 0;
+      if (exactValues.includes(normalizedTerm)) return 100;
+      if (exactValues.some((value) => value.includes(normalizedTerm))) return 96;
+      const compactTerm = compactStructuredSpectrumText(normalizedTerm);
+      if (compactTerm && compactValues.some((value) => value.includes(compactTerm) || compactTerm.includes(value))) return 94;
+      return matchesStructuredSpectrumTerm(item, normalizedTerm) ? 90 : 0;
+    };
+    const structuredScore = structuredTerms.reduce((score, term) => Math.max(score, scoreStructuredTerm(term)), 0);
+    if (structuredScore) return structuredScore;
     if (exactValues.includes(normalizedQuery)) return 100;
-    if (exactValues.some((value) => value.includes(normalizedQuery) || normalizedQuery.includes(value))) return 80;
+    if (exactValues.some((value) => value.includes(normalizedQuery))) return isStructuredQuery ? 96 : 80;
+    if (isStructuredQuery) {
+      const compactQuery = compactStructuredSpectrumText(normalizedQuery);
+      if (compactQuery && compactValues.some((value) => value.includes(compactQuery) || compactQuery.includes(value))) return 94;
+      if (matchesStructuredSpectrumTerm(item, normalizedQuery)) return 90;
+    }
+    if (!isStructuredQuery && exactValues.some((value) => normalizedQuery.includes(value))) return 80;
 
     const terms = normalizedQuery.split(/[\s,，。;；]+/).filter((term) => term.length >= 2);
     return terms.reduce((score, term) => {
-      if (text.includes(term)) return score + 12;
+      if (text.includes(term)) return score + (isStructuredSpectrumQuery(term) ? 24 : 12);
+      if (isStructuredSpectrumQuery(term)) return score;
       if (term.length >= 4 && text.includes(term.slice(0, Math.max(3, Math.floor(term.length * 0.7))))) return score + 4;
       return score;
     }, 0);
@@ -1336,8 +1381,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const parsedLimit = Number.parseInt(limit, 10);
     const hasExplicitLimit = Number.isFinite(parsedLimit) && parsedLimit > 0;
     const searchMode = normalizeAgentSearchMode(mode, query);
+    const normalizedQuery = String(query || '').trim();
     let matchedItems = [];
-    let reason = query ? `按关键词“${query}”检索` : '未提供关键词，返回图谱库概览';
+    let reason = normalizedQuery ? `按关键词“${normalizedQuery}”检索` : '未提供关键词，未返回全库图谱';
 
     if (searchMode === 'selected') {
       matchedItems = getSelectedItems();
@@ -1349,11 +1395,19 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       matchedItems = getFilteredItems();
       reason = '使用当前筛选结果';
     } else {
-      const scoredItems = state.items
-        .map((item) => ({ item, score: scoreSkillItem(item, query) }))
-        .filter((entry) => entry.score > 0 || !String(query || '').trim())
-        .sort((a, b) => b.score - a.score);
-      matchedItems = scoredItems.map((entry) => entry.item);
+      if (normalizedQuery) {
+        const structuredTerms = getStructuredSpectrumTerms(normalizedQuery);
+        const scoredItems = state.items
+          .map((item) => ({ item, score: scoreSkillItem(item, normalizedQuery) }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score);
+        const structuredItems = structuredTerms.length
+          ? scoredItems
+            .map((entry) => entry.item)
+            .filter((item) => structuredTerms.some((term) => matchesStructuredSpectrumTerm(item, term)))
+          : [];
+        matchedItems = structuredItems.length ? structuredItems : scoredItems.map((entry) => entry.item);
+      }
     }
 
     if (hasExplicitLimit) matchedItems = matchedItems.slice(0, parsedLimit);

@@ -2820,10 +2820,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
   const getPreviewItems = (id) => {
     const selected = getSelectedItems();
-    if (!selected.length) return state.items.filter((item) => item.id === id);
-    return selected.some((item) => item.id === id)
-      ? selected
-      : [state.items.find((item) => item.id === id), ...selected].filter(Boolean);
+    if (selected.length) return selected;
+    return state.items.filter((item) => item.id === id);
   };
 
   const renderImagePreview = () => {
@@ -2924,7 +2922,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     document.body.appendChild(dialog);
     refs.previewDialog = dialog;
     refs.previewItems = getPreviewItems(id);
-    refs.previewActiveId = id;
+    refs.previewActiveId = refs.previewItems.some((entry) => entry.id === id)
+      ? id
+      : refs.previewItems[0]?.id || id;
     renderImagePreview();
   };
 

@@ -25,6 +25,7 @@ async function loadLegacyFeatures(): Promise<void> {
     import('./features/image-cutout'),
     import('./features/theme-settings'),
     import('./features/config'),
+    import('./features/apimart-media'),
     import('./features/ai-call-analysis'),
     import('./features/project-skills'),
     import('./features/agent-butler'),
@@ -47,6 +48,7 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
     App?.spectrumAnalysis?.init?.();
     App?.imageCutout?.init?.();
     App?.config?.init?.();
+    App?.apimartMedia?.init?.();
     App?.aiCallAnalysis?.init?.();
     App?.projectSkills?.init?.();
     App?.chat?.init?.();

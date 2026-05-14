@@ -623,6 +623,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const isImageCutoutPage = pageId === 'image-cutout';
     const isThemeSettingsPage = pageId === 'theme-settings';
     const isProjectSkillPage = pageId === 'project-skills';
+    const isApimartMediaPage = pageId === 'apimart-media';
     const isAiCallAnalysisPage = pageId === 'ai-call-analysis';
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
@@ -634,13 +635,17 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.imageCutoutPageSection?.classList.toggle('active', isImageCutoutPage);
     refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
     refs.projectSkillPageSection?.classList.toggle('active', isProjectSkillPage);
+    refs.apimartMediaPageSection?.classList.toggle('active', isApimartMediaPage);
     refs.aiCallAnalysisPageSection?.classList.toggle('active', isAiCallAnalysisPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isAiCallAnalysisPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isAiCallAnalysisPage) {
+    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage) {
       App.businessPages?.render?.(pageId, def);
+    }
+    if (isApimartMediaPage) {
+      App.apimartMedia?.render?.(false);
     }
     if (isAiCallAnalysisPage) {
       App.aiCallAnalysis?.render?.();

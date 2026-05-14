@@ -8,6 +8,7 @@ declare global {
 
   interface LegacyAppNamespace extends Record<string, unknown> {
     aiCallAnalysis?: LegacyLifecycleModule;
+    apimartMedia?: LegacyLifecycleModule;
     animations?: LegacyLifecycleModule;
     chat?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;

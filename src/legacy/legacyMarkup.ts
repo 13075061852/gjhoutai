@@ -26,6 +26,8 @@ const THEME_SETTINGS_MARKUP = "<section class=\"dashboard theme-settings-page pa
 
 const PROJECT_SKILLS_MARKUP = "<section class=\"dashboard project-skill-page page-section\" data-page-section=\"project-skills\">\r\n            <div class=\"project-skill-shell\" id=\"projectSkillPanel\"></div>\r\n          </section>\r\n\r\n          ";
 
+const APIMART_MEDIA_MARKUP = "<section class=\"dashboard apimart-media-page page-section\" data-page-section=\"apimart-media\">\r\n            <div class=\"apimart-media-shell\" id=\"apimartMediaPanel\"></div>\r\n          </section>\r\n\r\n          ";
+
 const AI_CALL_ANALYSIS_MARKUP = "<section class=\"dashboard ai-call-analysis-page page-section\" data-page-section=\"ai-call-analysis\">\r\n            <div class=\"ai-call-analysis-shell\" id=\"aiCallAnalysisPanel\"></div>\r\n          </section>\r\n\r\n          ";
 
 const BUSINESS_PAGE_MARKUP = "<section class=\"dashboard business-page page-section\" data-page-section=\"placeholder\">\r\n            <div class=\"business-page-shell\" id=\"businessPageContent\"></div>\r\n          </section>\r\n    ";
@@ -48,6 +50,7 @@ export const legacyMarkup = [
   IMAGE_CUTOUT_MARKUP,
   THEME_SETTINGS_MARKUP,
   PROJECT_SKILLS_MARKUP,
+  APIMART_MEDIA_MARKUP,
   AI_CALL_ANALYSIS_MARKUP,
   BUSINESS_PAGE_MARKUP,
   AFTER_CONTENT,

@@ -21,6 +21,7 @@ import { ensureLegacyApp } from './app-context';
     AI_CALL_LOG_KEY: 'openrouter-ai-call-log-v1',
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     DEFAULT_LM_STUDIO_BASE_URL: 'http://127.0.0.1:1234/v1',
+    DEFAULT_APIMART_BASE_URL: 'https://api.apimart.ai',
     DEFAULT_CONFIG: {
       apiKey: '',
       aiProvider: 'openrouter',
@@ -43,6 +44,10 @@ import { ensureLegacyApp } from './app-context';
       searchDepth: 'basic',
       searchMaxResults: 5,
       searchTopic: 'general',
+      apimartApiKey: '',
+      apimartBaseUrl: 'https://api.apimart.ai',
+      apimartImageModel: 'gpt-image-2',
+      apimartVideoModel: 'sora-2',
       ossBucket: 'gjhoutai',
       ossEndpoint: 'oss-cn-shanghai.aliyuncs.com',
       ossObjectKey: '测试数据.json',
@@ -140,6 +145,11 @@ import { ensureLegacyApp } from './app-context';
         title: 'AI技能面板',
         eyebrow: '业务中心',
         desc: '集中管理本项目专属技能、AI 调用协议和执行记录，让 Gjun AI 可以按规范调取技能完成项目内操作。',
+      },
+      'apimart-media': {
+        title: 'AI绘图',
+        eyebrow: 'AI 创作',
+        desc: '通过 APIMart 异步生成图片和视频，提交任务后轮询任务状态并展示结果链接。',
       },
       'ai-call-analysis': {
         title: 'AI调用分析',

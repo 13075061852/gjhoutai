@@ -120,6 +120,7 @@
   --ip-phone:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M9 8h30c2 0 4 2 4 4v24c0 2-2 4-4 4H9c-2 0-4-2-4-4V12c0-2 2-4 4-4ZM24 34h.1' fill='none' stroke='black' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='24' cy='34' r='2' fill='black'/%3E%3C/svg%3E");
   --ip-radar:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='24' cy='24' r='18' fill='none' stroke='black' stroke-width='4'/%3E%3Ccircle cx='24' cy='24' r='12' fill='none' stroke='black' stroke-width='3'/%3E%3Ccircle cx='24' cy='24' r='6' fill='none' stroke='black' stroke-width='2'/%3E%3Cpath d='M24 24l10-6' stroke='black' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
   --ip-star:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m24 4 6 12 13 2-9 9 2 13-12-6-12 6 2-13-9-9 13-2 6-12Z' fill='none' stroke='black' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --ip-sparkles:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 6l3 9 9 3-9 3-3 9-3-9-9-3 9-3 3-9ZM34 25l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6Z' fill='none' stroke='black' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ip-success:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='24' cy='24' r='18' fill='none' stroke='black' stroke-width='4'/%3E%3Cpath d='m17 24 5 5 9-11' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ip-trend-up:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 36 20 20l8 6 14-18M36 8h8v8' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ip-zoom:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='21' cy='21' r='13' fill='none' stroke='black' stroke-width='4'/%3E%3Cpath d='m31 31 9 9M21 14v14M14 21h14' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -168,8 +169,9 @@
 .ti-package,.ti-package-export,.ti-package-import{--ip-icon:var(--ip-package)}
 .ti-palette{--ip-icon:var(--ip-palette)}
 .ti-percentage{--ip-icon:var(--ip-percent)}
-.ti-photo-up{--ip-icon:var(--ip-photo)}
+.ti-photo,.ti-photo-spark,.ti-photo-up{--ip-icon:var(--ip-photo)}
 .ti-player-play{--ip-icon:var(--ip-play)}
+.ti-video{--ip-icon:var(--ip-play)}
 .ti-player-stop-filled{--ip-icon:var(--ip-stop)}
 .ti-plug-connected{--ip-icon:var(--ip-plug)}
 .ti-plug-off{--ip-icon:var(--ip-x)}
@@ -211,6 +213,7 @@
 .ti-player-play-filled{--ip-icon:var(--ip-play)}
 .ti-radar{--ip-icon:var(--ip-radar)}
 .ti-star{--ip-icon:var(--ip-star)}
+.ti-sparkles{--ip-icon:var(--ip-sparkles)}
 .ti-trending-up{--ip-icon:var(--ip-trend-up)}
 .ti-zoom-check-filled{--ip-icon:var(--ip-zoom)}
 .ti-building-factory-2{--ip-icon:var(--ip-building)}

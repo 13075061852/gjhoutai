@@ -3080,6 +3080,7 @@ import { getLegacyApp } from '../core/app-context';
     const selectedRows = getSelectedRowsForAllSheets();
     const terms = extractAgentTerms(question);
     const identifierTerms = getIdentifierTerms(terms);
+    const exactOnly = Boolean(options.exactOnly);
     const rowWindow = extractAgentRowWindow(question);
     const requestedRowLimit = rowWindow.limit;
     const exactMatches = [];
@@ -3099,8 +3100,8 @@ import { getLegacyApp } from '../core/app-context';
     });
 
     scoredRows.sort((a, b) => b.score - a.score);
-    const strongMatches = exactMatches.length ? exactMatches : scoredRows.filter((item) => item.score >= 3);
-    const similarMatches = exactMatches.length ? [] : scoredRows.filter((item) => item.score > 0 && item.score < 3);
+    const strongMatches = exactOnly ? exactMatches : (exactMatches.length ? exactMatches : scoredRows.filter((item) => item.score >= 3));
+    const similarMatches = exactOnly ? [] : (exactMatches.length ? [] : scoredRows.filter((item) => item.score > 0 && item.score < 3));
     const fallbackRows = selectedRows.length
       ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
       : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
@@ -3150,7 +3151,7 @@ import { getLegacyApp } from '../core/app-context';
 
     appendRows(`${exactMatches.length ? '精确匹配数据' : '强匹配数据'}（共 ${strongMatches.length} 行）：`, strongMatches, requestedRowLimit);
     appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches, requestedRowLimit ?? AGENT_CONTEXT_SIMILAR_LIMIT);
-    if (!strongMatches.length && !similarMatches.length) {
+    if (!exactOnly && !strongMatches.length && !similarMatches.length) {
       appendRows(selectedRows.length ? '当前已选数据：' : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`, fallbackRows, requestedRowLimit ?? AGENT_CONTEXT_ROW_LIMIT);
     }
     if (metrics.length) sections.push('表格之后再输出的分析摘要：', ...metrics.map((item) => `- ${item}`));

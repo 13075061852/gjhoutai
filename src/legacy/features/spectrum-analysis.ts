@@ -12,6 +12,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const STORAGE_KEY = 'gjh-spectrum-user-images-v2';
   const EDIT_STORAGE_KEY = 'gjh-spectrum-edits-v2';
   const FILTER_STORAGE_KEY = 'gjh-spectrum-filter-state-v1';
+  const PREVIEW_AI_STORAGE_KEY = 'gjh-spectrum-preview-ai-results-v1';
+  const PREVIEW_AI_CACHE_LIMIT = 120;
   const IMAGE_DB_NAME = 'gjh-spectrum-images-db';
   const IMAGE_DB_VERSION = 1;
   const IMAGE_STORE_NAME = 'images';
@@ -38,6 +40,11 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   };
 
   const refs = {};
+  const previewAiState = {};
+  let previewAiCollapsed = false;
+  let previewAiMergeMode = false;
+  let previewAiMergeViewMode = 'table';
+  let previewAiMergeRunning = false;
   let imageDbPromise = null;
   let categoryDragActive = false;
   const DETAIL_COMPACT_MQ = window.matchMedia('(max-width: 1200px)');
@@ -65,6 +72,55 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.detailPanel = document.getElementById('spectrumDetailPanel');
     refs.viewButtons = document.querySelectorAll('[data-spectrum-view]');
     refs.modeButtons = document.querySelectorAll('[data-spectrum-mode]');
+  };
+
+  const getPreviewAiCache = () => {
+    const cache = utils.readJson(PREVIEW_AI_STORAGE_KEY, {});
+    return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
+  };
+
+  const getStoredPreviewAiResult = (id) => {
+    const cached = getPreviewAiCache()[id];
+    if (!cached || cached.status !== 'success' || !cached.result) return null;
+    return {
+      status: 'success',
+      result: cached.result,
+      rawText: String(cached.rawText || ''),
+      propertyTableHtml: String(cached.propertyTableHtml || ''),
+      model: String(cached.model || ''),
+      modelSource: String(cached.modelSource || ''),
+      updatedAt: cached.updatedAt || '',
+      fromCache: true,
+    };
+  };
+
+  const restorePreviewAiResult = (id) => {
+    if (!id || previewAiState[id]) return;
+    const cached = getStoredPreviewAiResult(id);
+    if (cached) previewAiState[id] = cached;
+  };
+
+  const savePreviewAiResult = (id, aiState) => {
+    if (!id || !aiState || aiState.status !== 'success' || !aiState.result) return;
+    const cache = getPreviewAiCache();
+    cache[id] = {
+      status: 'success',
+      result: aiState.result,
+      rawText: aiState.rawText || '',
+      propertyTableHtml: aiState.propertyTableHtml || '',
+      model: aiState.model || '',
+      modelSource: aiState.modelSource || '',
+      updatedAt: aiState.updatedAt || new Date().toISOString(),
+    };
+
+    const trimmed = Object.entries(cache)
+      .sort((a, b) => String(b[1]?.updatedAt || '').localeCompare(String(a[1]?.updatedAt || '')))
+      .slice(0, PREVIEW_AI_CACHE_LIMIT)
+      .reduce((map, [key, value]) => {
+        map[key] = value;
+        return map;
+      }, {});
+    utils.writeJson(PREVIEW_AI_STORAGE_KEY, trimmed);
   };
 
   const getSpectrumTypeFromName = (name) => {
@@ -1132,6 +1188,835 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       meta: [item.spectrumType || item.type, item.category].filter(Boolean).join(' · '),
     }));
 
+  const getSpectrumAiConfig = () => {
+    const saved = App.config?.loadSavedConfig?.() || {};
+    const defaults = App.constants?.DEFAULT_CONFIG || {};
+    const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
+    const modelChoice = spectrumModel || saved.modelChoice || defaults.modelChoice || '';
+    return {
+      ...defaults,
+      ...saved,
+      baseUrl: utils.normalizeBaseUrl(saved.baseUrl || defaults.baseUrl || App.constants?.DEFAULT_BASE_URL || ''),
+      modelChoice,
+      modelSource: spectrumModel ? '图谱分析模型' : '默认主模型',
+      maxTokens: Math.max(Number(saved.maxTokens || defaults.maxTokens || 4096), 1024),
+      temperature: Number(saved.temperature ?? defaults.temperature ?? 0.2),
+    };
+  };
+
+  const getPreviewAiModelInfo = (item) => {
+    if (item?.id) {
+      restorePreviewAiResult(item.id);
+      const ai = previewAiState[item.id];
+      if (ai?.model) return `(${ai.model})`;
+    }
+
+    const config = getSpectrumAiConfig();
+    const model = config.modelChoice || config.model || '';
+    return model ? `(${model})` : '';
+  };
+
+  const extractJsonPayload = (content) => {
+    const text = String(content || '').trim();
+    if (!text) return null;
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+    const candidates = [fenced, text].filter(Boolean);
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        const start = candidate.indexOf('{');
+        const end = candidate.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+          try {
+            return JSON.parse(candidate.slice(start, end + 1));
+          } catch {
+            // Keep trying less strict fallbacks.
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  const normalizeSpectrumAiResult = (payload) => {
+    const data = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    const legacySample = data.sample && typeof data.sample === 'object' && !Array.isArray(data.sample)
+      ? data.sample
+      : {};
+    const sourceRows = Array.isArray(data.keyPoints)
+      ? data.keyPoints
+      : Array.isArray(data.items)
+        ? data.items
+        : Array.isArray(data.rows)
+          ? data.rows
+          : [];
+    const keyPoints = sourceRows
+      .map((row) => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+        return {
+          label: String(row.label || row.name || row.item || row.parameter || '').trim(),
+          value: String(row.value ?? row.result ?? row.measurement ?? '').trim(),
+          unit: String(row.unit || '').trim(),
+          curve: String(row.curve || row.channel || row.color || '').trim(),
+          event: String(row.event || row.type || row.category || row.stage || '').trim(),
+          sourceText: String(row.sourceText || row.source || row.note || row.description || '').trim(),
+        };
+      })
+      .filter((row) => row && (row.label || row.value || row.sourceText));
+    const rawPropertyQueryNames = Array.isArray(data.propertyQueryNames)
+      ? data.propertyQueryNames.map((value) => String(value || '').trim())
+      : [];
+    const propertyQueryNames = [
+      rawPropertyQueryNames[0] || legacySample.name || data.sampleName || legacySample.model || data.modelName || '',
+      rawPropertyQueryNames[1] || legacySample.batch || data.batch || '',
+      rawPropertyQueryNames[2] || legacySample.testType || data.testType || '',
+    ].map((value) => String(value || '').trim());
+
+    return {
+      propertyQueryNames,
+      keyPoints,
+      summary: String(data.summary || '').trim(),
+    };
+  };
+
+  const getPropertyMatchQuery = (item, aiResult) => {
+    const stripExtAndType = (str) => {
+      let cleaned = String(str || '').trim();
+      // Remove file extensions
+      cleaned = cleaned.replace(/\.(png|jpg|jpeg|gif|webp|bmp|tiff?|svg)$/i, '');
+      // Remove trailing spectrum type keywords (DSC, TGA, DMA)
+      cleaned = cleaned.replace(/[\s_-]*(DSC|TGA|DMA)\s*$/i, '').trim();
+      return cleaned;
+    };
+    const tokenPattern = /[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+|[A-Za-z]\d{5,}/g;
+    const addTokens = (terms, value) => {
+      const cleaned = stripExtAndType(value);
+      if (!cleaned) return;
+      const tokens = cleaned.match(tokenPattern) || [];
+      tokens.forEach((token) => terms.add(token));
+    };
+
+    const terms = new Set();
+    [
+      item?.title,
+      item?.code,
+      ...(aiResult?.propertyQueryNames || []),
+    ].forEach((value) => addTokens(terms, value));
+
+    return Array.from(terms).join(' ');
+  };
+
+  const getPropertyBatchMatchQuery = (item, aiResult) => {
+    const stripExtAndType = (str) => String(str || '')
+      .replace(/\.(png|jpg|jpeg|gif|webp|bmp|tiff?|svg)$/i, '')
+      .replace(/[\s_-]*(DSC|TGA|DMA)\s*$/i, '')
+      .trim();
+    const batchPattern = /\b[AB]\d{5,}\b/gi;
+    const batches = new Set();
+    [
+      aiResult?.propertyQueryNames?.[1],
+      item?.title,
+      item?.code,
+      ...(aiResult?.propertyQueryNames || []),
+    ].forEach((value) => {
+      const cleaned = stripExtAndType(value);
+      const matches = cleaned.match(batchPattern) || [];
+      matches.forEach((batch) => batches.add(batch.toUpperCase()));
+    });
+    return Array.from(batches).join(' ');
+  };
+
+  const getPropertyMatchResult = (item, aiResult) => {
+    const batchQuery = getPropertyBatchMatchQuery(item, aiResult);
+    if (batchQuery) {
+      const batchResult = App.propertyAnalysis?.getAgentContext?.(batchQuery, { forceCurrentPage: true, exactOnly: true }) || null;
+      if (String(batchResult?.displayTable || '').trim()) return batchResult;
+    }
+
+    const query = getPropertyMatchQuery(item, aiResult);
+    return App.propertyAnalysis?.getAgentContext?.(query, { forceCurrentPage: true, exactOnly: true }) || null;
+  };
+
+  const markdownTableToHtml = (markdown) => {
+    const lines = String(markdown || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const tables = [];
+    let current = [];
+
+    const flush = () => {
+      if (current.length >= 2) tables.push(current);
+      current = [];
+    };
+
+    lines.forEach((line) => {
+      if (/^\|.*\|$/.test(line)) current.push(line);
+      else flush();
+    });
+    flush();
+
+    if (!tables.length) return '';
+
+    const tableLines = tables[0];
+    const rows = tableLines
+      .filter((line) => !/^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|$/.test(line))
+      .map((line) => line.replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()));
+    const headers = (rows.shift() || []).map((cell, index) => cell || `列${index + 1}`);
+    if (!headers.length) return '';
+    const bodyRows = rows.filter((row) => row.some((cell) => String(cell || '').trim()));
+    if (!bodyRows.length) return '';
+
+    return `
+      <div class="spectrum-ai-table-wrap spectrum-ai-property-table-wrap">
+        <table class="spectrum-ai-table spectrum-ai-property-table">
+          <thead><tr>${headers.map((cell) => `<th>${utils.escapeHtml(cell)}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${bodyRows.map((row) => `<tr>${headers.map((_, index) => `<td>${utils.escapeHtml(row[index] || '-')}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const renderAiExtractTable = (aiResult, item) => {
+    const rows = aiResult?.keyPoints || [];
+    if (!rows.length) {
+      return '<div class="spectrum-ai-empty">暂未提取到可表格化的信息点。</div>';
+    }
+    const eventOrder = [];
+    const groups = new Map();
+    rows.forEach((row) => {
+      const label = row.label || '-';
+      const event = row.event || row.curve || '未分类';
+      const valueText = [row.value, row.unit].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || '-';
+      if (!eventOrder.includes(event)) eventOrder.push(event);
+      if (!groups.has(label)) groups.set(label, new Map());
+      const eventValues = groups.get(label).get(event) || [];
+      if (!eventValues.includes(valueText)) {
+        eventValues.push(valueText);
+        groups.get(label).set(event, eventValues);
+      }
+    });
+    const orderedGroups = Array.from(groups.entries());
+    const bodyRows = eventOrder.flatMap((event) => {
+      const maxRows = Math.max(1, ...orderedGroups.map(([, eventMap]) => (eventMap.get(event) || []).length));
+      return Array.from({ length: maxRows }, (_, rowIndex) => ({
+        event,
+        rowIndex,
+        rowSpan: maxRows,
+        values: orderedGroups.map(([, eventMap]) => (eventMap.get(event) || [])[rowIndex] || '-'),
+      }));
+    });
+    const imageName = item?.title || item?.code || aiResult?.propertyQueryNames?.[0] || '-';
+
+    return `
+      <div class="spectrum-ai-table-wrap">
+        <table class="spectrum-ai-table spectrum-ai-keypoint-table">
+          <thead>
+            <tr>
+              <th class="spectrum-ai-keypoint-image-head">图片名称</th>
+              <th class="spectrum-ai-keypoint-project-head">项目</th>
+              ${orderedGroups.map(([label]) => `<th>${utils.escapeHtml(label)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${bodyRows.map((row, index) => `
+              <tr>
+                ${index === 0 ? `<th class="spectrum-ai-keypoint-image-cell" rowspan="${bodyRows.length}" title="${utils.escapeHtml(imageName)}">${utils.escapeHtml(imageName)}</th>` : ''}
+                ${row.rowIndex === 0 ? `<th class="spectrum-ai-keypoint-project-cell" rowspan="${row.rowSpan}">${utils.escapeHtml(row.event)}数值</th>` : ''}
+                ${row.values.map((value) => `<td>${utils.escapeHtml(value)}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const getPreviewMergeItems = () => (refs.previewItems || []).filter((entry) => entry?.id);
+
+  const renderMergedPreviewAiTable = (items) => {
+    const analyzedItems = items.map((item) => {
+      restorePreviewAiResult(item.id);
+      const ai = previewAiState[item.id] || { status: 'idle' };
+      return { item, result: ai.status === 'success' ? ai.result : null };
+    }).filter((entry) => entry.result?.keyPoints?.length);
+
+    if (!analyzedItems.length) {
+      return '<div class="spectrum-ai-empty">暂无可合并的数据。请先点击补全分析，或对单张图谱完成 AI 分析后再查看。</div>';
+    }
+
+    const labels = [];
+    analyzedItems.forEach(({ result }) => {
+      result.keyPoints.forEach((row) => {
+        const label = row.label || '-';
+        if (!labels.includes(label)) labels.push(label);
+      });
+    });
+
+    const itemGroups = analyzedItems.map(({ item, result }) => {
+      const eventOrder = [];
+      const groups = new Map();
+      result.keyPoints.forEach((row) => {
+        const label = row.label || '-';
+        const event = row.event || row.curve || '未分类';
+        const valueText = [row.value, row.unit].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || '-';
+        if (!eventOrder.includes(event)) eventOrder.push(event);
+        if (!groups.has(label)) groups.set(label, new Map());
+        const eventValues = groups.get(label).get(event) || [];
+        if (!eventValues.includes(valueText)) {
+          eventValues.push(valueText);
+          groups.get(label).set(event, eventValues);
+        }
+      });
+
+      const rows = eventOrder.flatMap((event) => {
+        const maxRows = Math.max(1, ...labels.map((label) => (groups.get(label)?.get(event) || []).length));
+        return Array.from({ length: maxRows }, (_, rowIndex) => ({
+          event,
+          rowIndex,
+          rowSpan: maxRows,
+          values: labels.map((label) => (groups.get(label)?.get(event) || [])[rowIndex] || '-'),
+        }));
+      });
+
+      return {
+        imageName: item.title || item.code || result.propertyQueryNames?.[0] || '-',
+        rows,
+      };
+    }).filter((group) => group.rows.length);
+
+    return `
+      <div class="spectrum-ai-table-wrap spectrum-ai-merged-table-wrap">
+        <table class="spectrum-ai-table spectrum-ai-keypoint-table spectrum-ai-merged-table">
+          <thead>
+            <tr>
+              <th class="spectrum-ai-keypoint-image-head">图片名称</th>
+              <th class="spectrum-ai-keypoint-project-head">项目</th>
+              ${labels.map((label) => `<th>${utils.escapeHtml(label)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${itemGroups.map((group) => group.rows.map((row, index) => `
+                <tr>
+                  ${index === 0 ? `<th class="spectrum-ai-keypoint-image-cell" rowspan="${group.rows.length}" title="${utils.escapeHtml(group.imageName)}">${utils.escapeHtml(group.imageName)}</th>` : ''}
+                  ${row.rowIndex === 0 ? `<th class="spectrum-ai-keypoint-project-cell" rowspan="${row.rowSpan}">${utils.escapeHtml(row.event)}数值</th>` : ''}
+                  ${row.values.map((value) => `<td>${utils.escapeHtml(value)}</td>`).join('')}
+                </tr>
+              `).join('')).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  const renderMergedPreviewPropertyTables = (items) => {
+    const entries = items.map((item) => {
+      restorePreviewAiResult(item.id);
+      const ai = previewAiState[item.id] || { status: 'idle' };
+      return {
+        item,
+        propertyTableHtml: ai.status === 'success' ? String(ai.propertyTableHtml || '') : '',
+      };
+    }).filter((entry) => entry.propertyTableHtml);
+
+    if (!entries.length) {
+      return '<div class="spectrum-ai-empty">物性表暂无匹配结果，确认物性分析数据已加载后可重新分析。</div>';
+    }
+
+    return `
+      <div class="spectrum-ai-merged-property-list">
+        ${entries.map(({ item, propertyTableHtml }) => `
+          <section class="spectrum-ai-merged-property-item">
+            <div class="spectrum-ai-merged-property-title">${utils.escapeHtml(item.title || item.code || '-')}</div>
+            ${propertyTableHtml}
+          </section>
+        `).join('')}
+      </div>
+    `;
+  };
+
+  const getMergedPreviewAiJsonText = (items) => {
+    const payload = items.map((item) => {
+      restorePreviewAiResult(item.id);
+      const ai = previewAiState[item.id] || { status: 'idle' };
+      return {
+        id: item.id,
+        title: item.title || item.code || '',
+        spectrumType: item.spectrumType || '',
+        category: item.category || '',
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        status: ai.status || 'idle',
+        error: ai.error || '',
+        result: ai.result || null,
+      };
+    });
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const renderPreviewAiMergeContent = (items, stats) => {
+    if (previewAiMergeViewMode === 'json') {
+      return `<pre class="spectrum-ai-json-view" aria-label="合并 AI JSON 分析结果"><code>${utils.escapeHtml(getMergedPreviewAiJsonText(items))}</code></pre>`;
+    }
+
+    return `
+      <div class="spectrum-ai-summary">
+        <span>合并图谱 ${items.length} 张</span>
+        <span>已分析 ${stats.successCount} 张</span>
+        <span>待补全 ${stats.missingCount} 张</span>
+      </div>
+      ${stats.missingCount ? `<div class="spectrum-ai-empty">还有 ${stats.missingCount} 张图谱没有 AI 提取结果，点击“补全分析”后会逐张分析并自动合并。</div>` : ''}
+      <div class="spectrum-ai-section-title">合并关键数据</div>
+      ${renderMergedPreviewAiTable(items)}
+      <div class="spectrum-ai-section-title">匹配物性参数</div>
+      ${renderMergedPreviewPropertyTables(items)}
+      ${stats.errorItems.length ? `
+        <div class="spectrum-ai-error">以下图谱分析失败：${utils.escapeHtml(stats.errorItems.map((entry) => entry.title || entry.code || entry.id).join('、'))}</div>
+      ` : ''}
+    `;
+  };
+
+  const renderPreviewAiMergePanel = (item, items) => {
+    const states = items.map((entry) => {
+      restorePreviewAiResult(entry.id);
+      return previewAiState[entry.id] || { status: 'idle' };
+    });
+    const successCount = states.filter((ai) => ai.status === 'success' && ai.result).length;
+    const busy = previewAiMergeRunning || states.some((ai) => ai.status === 'loading' || ai.status === 'streaming');
+    const missingCount = states.filter((ai) => ai.status !== 'success' || !ai.result).length;
+    const errorItems = items.filter((entry) => previewAiState[entry.id]?.status === 'error');
+    const stats = { successCount, missingCount, errorItems };
+    const useJsonLayout = previewAiMergeViewMode === 'json';
+    const runLabel = busy ? '合并中' : (missingCount ? '补全分析' : '重新分析全部');
+
+    return `
+      <section class="spectrum-ai-extract-panel${useJsonLayout ? ' is-json-view' : ''}" aria-label="AI 合并分析">
+        <div class="spectrum-ai-extract-head">
+          <div>
+            <div class="spectrum-ai-extract-subtitle">当前合并 ${items.length} 张图谱，正在显示跨图谱对比数据</div>
+          </div>
+          <div class="spectrum-ai-head-actions">
+            <div class="spectrum-ai-view-toggle" role="tablist" aria-label="AI 合并结果显示模式">
+              <button class="${previewAiMergeViewMode === 'json' ? '' : 'is-active'}" type="button" data-spectrum-ai-view="table" role="tab" aria-selected="${previewAiMergeViewMode === 'json' ? 'false' : 'true'}">表格</button>
+              <button class="${previewAiMergeViewMode === 'json' ? 'is-active' : ''}" type="button" data-spectrum-ai-view="json" role="tab" aria-selected="${previewAiMergeViewMode === 'json' ? 'true' : 'false'}">JSON</button>
+            </div>
+            <button class="analysis-toolbar-btn spectrum-ai-merge-btn is-active" type="button" data-spectrum-ai-merge-toggle>
+              <i class="ti ti-layout-grid" aria-hidden="true"></i>
+              <span>单图分析</span>
+            </button>
+            <button class="analysis-toolbar-btn analysis-toolbar-btn-primary spectrum-ai-extract-btn" type="button" data-spectrum-ai-merge-run="${missingCount ? 'missing' : 'all'}" ${busy ? 'disabled' : ''}>
+              <i class="ti ${busy ? 'ti-loader-2' : 'ti-sparkles'}" aria-hidden="true"></i>
+              <span>${runLabel}</span>
+            </button>
+          </div>
+        </div>
+        <div class="spectrum-ai-extract-body${useJsonLayout ? ' is-json-view' : ''}">
+          ${renderPreviewAiMergeContent(items, stats)}
+        </div>
+      </section>
+    `;
+  };
+
+  const getAiJsonText = (ai) => {
+    const raw = String(ai?.rawText || ai?.streamText || '').trim();
+    if (raw) {
+      const payload = extractJsonPayload(raw);
+      if (payload) {
+        try { return JSON.stringify(normalizeSpectrumAiResult(payload), null, 2); } catch { /* fall through */ }
+      }
+      return raw;
+    }
+    if (ai?.result) {
+      try { return JSON.stringify(normalizeSpectrumAiResult(ai.result), null, 2); } catch { /* fall through */ }
+    }
+    return '正在连接模型...';
+  };
+
+  const renderPreviewAiContent = (ai, item, propertyHtml, hasResult) => {
+    const viewMode = ai.viewMode === 'json' ? 'json' : 'table';
+    const streamingRawJson = ai.status === 'streaming' && !hasResult;
+    if (viewMode === 'json' || streamingRawJson) {
+      const ariaLabel = streamingRawJson ? 'AI JSON 实时分析输出' : 'AI JSON 分析结果';
+      return `<pre class="spectrum-ai-json-view${streamingRawJson ? ' is-streaming' : ''}" aria-label="${ariaLabel}"${streamingRawJson ? ' aria-live="polite"' : ''}><code>${utils.escapeHtml(getAiJsonText(ai))}</code></pre>`;
+    }
+    return `
+      <div class="spectrum-ai-section-title">关键信息表</div>
+      ${renderAiExtractTable(ai.result, item)}
+      ${ai.status === 'streaming' ? '<div class="spectrum-ai-streaming-hint">AI 仍在输出中，结果持续更新…</div>' : ''}
+      <div class="spectrum-ai-section-title">匹配物性参数</div>
+      ${propertyHtml || '<div class="spectrum-ai-empty">物性表暂无匹配结果，确认物性分析数据已加载后可重新分析。</div>'}
+    `;
+  };
+
+  const renderPreviewAiPanel = (item) => {
+    const previewItems = getPreviewMergeItems();
+    const canMerge = previewItems.length > 1;
+    if (previewAiMergeMode && canMerge) {
+      return renderPreviewAiMergePanel(item, previewItems);
+    }
+
+    restorePreviewAiResult(item.id);
+    const ai = previewAiState[item.id] || { status: 'idle' };
+    const busy = ai.status === 'loading' || ai.status === 'streaming';
+    const resultVisible = ai.status === 'success' || ai.status === 'error' || ai.status === 'streaming';
+    const propertyHtml = ai.propertyTableHtml || '';
+    const buttonLabel = ai.status === 'streaming' ? '接收中'
+      : (busy ? '分析中' : (ai.status === 'success' ? '重新分析' : 'AI 分析'));
+    const hasResult = Boolean(ai.result && ai.result?.keyPoints?.length);
+    const useJsonLayout = ai.viewMode === 'json' || (ai.status === 'streaming' && !hasResult);
+    return `
+      <section class="spectrum-ai-extract-panel${useJsonLayout ? ' is-json-view' : ''}" aria-label="AI 信息提取">
+        <div class="spectrum-ai-extract-head">
+          <div></div>
+          <div class="spectrum-ai-head-actions">
+            ${resultVisible ? `
+              <div class="spectrum-ai-view-toggle" role="tablist" aria-label="AI 结果显示模式">
+                <button class="${ai.viewMode === 'json' ? '' : 'is-active'}" type="button" data-spectrum-ai-view="table" role="tab" aria-selected="${ai.viewMode === 'json' ? 'false' : 'true'}">表格</button>
+                <button class="${ai.viewMode === 'json' ? 'is-active' : ''}" type="button" data-spectrum-ai-view="json" role="tab" aria-selected="${ai.viewMode === 'json' ? 'true' : 'false'}">JSON</button>
+              </div>
+            ` : ''}
+            ${canMerge ? `
+              <button class="analysis-toolbar-btn spectrum-ai-merge-btn" type="button" data-spectrum-ai-merge-toggle>
+                <i class="ti ti-layout-grid" aria-hidden="true"></i>
+                <span>合并分析</span>
+              </button>
+            ` : ''}
+            <button class="analysis-toolbar-btn analysis-toolbar-btn-primary spectrum-ai-extract-btn" type="button" data-spectrum-ai-extract="${utils.escapeHtml(item.id)}" ${busy ? 'disabled' : ''}>
+              <i class="ti ${busy ? 'ti-loader-2' : 'ti-sparkles'}" aria-hidden="true"></i>
+              <span>${buttonLabel}</span>
+            </button>
+          </div>
+        </div>
+        ${resultVisible ? `
+          <div class="spectrum-ai-extract-body${useJsonLayout ? ' is-json-view' : ''}">
+            ${ai.status === 'error' ? `<div class="spectrum-ai-error">${utils.escapeHtml(ai.error || 'AI 分析失败，请检查模型配置后重试。')}</div>` : `
+              ${renderPreviewAiContent(ai, item, propertyHtml, hasResult)}
+            `}
+          </div>
+        ` : ''}
+      </section>
+    `;
+  };
+
+  const getPreviewAiScrollTarget = (panel) => (
+    panel?.querySelector('.spectrum-ai-json-view')
+    || panel?.querySelector('.spectrum-ai-extract-body')
+    || null
+  );
+
+  const syncPreviewAiScroll = (panel, previousScroll, followBottom = false) => {
+    const target = getPreviewAiScrollTarget(panel);
+    if (!target) return;
+
+    target.scrollLeft = previousScroll?.left || 0;
+    target.scrollTop = followBottom
+      ? target.scrollHeight
+      : Math.min(previousScroll?.top || 0, target.scrollHeight);
+  };
+
+  const updatePreviewAiPanelInPlace = (id) => {
+    if (!refs.previewDialog) return;
+    if (refs.previewActiveId !== id) {
+      const belongsToMerge = previewAiMergeMode && (refs.previewItems || []).some((entry) => entry.id === id);
+      if (!belongsToMerge) return;
+    }
+    const panel = refs.previewDialog.querySelector('.spectrum-ai-extract-panel');
+    if (!panel) return;
+    const item = state.items.find((entry) => entry.id === id);
+    if (!item) return;
+    const scrollTarget = getPreviewAiScrollTarget(panel);
+    const previousScroll = scrollTarget ? {
+      top: scrollTarget.scrollTop,
+      left: scrollTarget.scrollLeft,
+      stickToBottom: scrollTarget.scrollHeight - scrollTarget.scrollTop - scrollTarget.clientHeight <= 64,
+    } : null;
+    const shouldFollowBottom = previewAiState[id]?.status === 'streaming' || Boolean(previousScroll?.stickToBottom);
+    panel.outerHTML = renderPreviewAiPanel(item);
+    window.requestAnimationFrame(() => {
+      const nextPanel = refs.previewDialog?.querySelector('.spectrum-ai-extract-panel');
+      syncPreviewAiScroll(nextPanel, previousScroll, shouldFollowBottom);
+    });
+  };
+
+  const parseSSEChunk = (chunk) => {
+    const lines = String(chunk || '').split(/\r?\n/);
+    const results = [];
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const payload = line.slice(6).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try { results.push(JSON.parse(payload)); } catch { /* skip malformed */ }
+    }
+    return results;
+  };
+
+  const progressiveExtract = (rawText) => {
+    const trimmed = String(rawText || '').trim();
+    if (!trimmed) return null;
+    const payload = extractJsonPayload(trimmed);
+    if (!payload) return null;
+    try { return normalizeSpectrumAiResult(payload); } catch { return null; }
+  };
+
+  const runPreviewAiExtract = async (id) => {
+    const item = state.items.find((entry) => entry.id === id);
+    if (!item || !item.image) return;
+
+    const config = getSpectrumAiConfig();
+    const model = config.modelChoice || config.model || '';
+    const isLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.)/i.test(config.baseUrl || '');
+    if (!config.baseUrl || !model) {
+      previewAiState[id] = {
+        status: 'error',
+        error: '请先在配置中心选择可用于图像理解的模型。',
+        model,
+        modelSource: config.modelSource,
+      };
+      renderImagePreview();
+      return;
+    }
+    if (!config.apiKey && !isLocal) {
+      previewAiState[id] = {
+        status: 'error',
+        error: '请先在配置中心填写 OpenRouter API 密钥，或切换到 LM Studio 本地模型。',
+        model,
+        modelSource: config.modelSource,
+      };
+      renderImagePreview();
+      return;
+    }
+
+    const previousViewMode = previewAiState[id]?.viewMode === 'json' ? 'json' : 'table';
+    previewAiState[id] = { status: 'streaming', model, modelSource: config.modelSource, streamText: '', viewMode: previousViewMode };
+    renderImagePreview();
+
+    const spectrumType = item.spectrumType || '未知';
+    const buildPrompt = () => {
+      const base = [
+        '你是材料热分析图谱信息抽取器。请只分析用户提供的这一张图谱图片。',
+        '必须只返回一个合法 JSON 对象，不要 Markdown，不要解释，不要包裹代码块。',
+      ];
+
+      if (spectrumType === 'DSC') {
+        base.push(
+          '这是一张 DSC（差示扫描量热）图谱。曲线颜色含义如下：',
+          '  - 红色曲线 → 第一次放热（First Exothermic）',
+          '  - 黑色曲线 → 第一次吸热（First Endothermic）',
+          '  - 蓝色曲线 → 第二次吸热（Second Endothermic）',
+          '',
+          '请对每一条曲线分别提取以下信息：',
+          '  1. 峰值温度（℃）—— 该曲线主要吸热/放热峰的最高点温度',
+          '  2. 标准焓值（J/g）—— 该曲线自身峰面积的积分热量，即标准吸热量或放热量，不是总系热量',
+          '  3. 峰高（mW 或 W/g）—— 峰顶点到基线的垂直高度',
+          '  4. 半峰宽（℃）—— 峰高一半处的峰宽度',
+          '',
+          '额外要求：黑色曲线（第一次吸热）还需提取玻璃化转变温度 Tg（℃），读取转折区中点温度。',
+          '',
+          '提取原则：',
+          '- 不要提取无用的额外信息，只聚焦上述指标',
+          '- 焓值必须取单条曲线单个峰的积分热量（标准吸放热量），严禁填写总系热量或全部峰的总积分值',
+          '- 如果图中显示了每一段的标准焓值（比如 Peak: xxx℃, Delta H: xxx J/g），请优先使用图中的标注值',
+          '- 数值尽量从图面标注或坐标轴读取，无法确定则填空字符串',
+          '- 每条曲线的每个指标作为独立一行输出',
+          '- curve 字段填颜色中文：红色 / 黑色 / 蓝色',
+          '- event 字段填：第一次放热 / 第一次吸热 / 第二次吸热',
+          '- 表中看不到的信息就不要编造，留空即可',
+        );
+      } else if (spectrumType === 'TGA') {
+        base.push(
+          '这是一张 TGA（热重分析）图谱。请提取：',
+          '  1. 各失重阶段的起始温度、终止温度、失重率（%）',
+          '  2. DTG 峰值温度（如有）',
+          '  3. 残留质量（%）',
+          '- curve 字段填颜色中文或曲线标识',
+          '- event 字段填：失重阶段1 / 失重阶段2 / ...',
+        );
+      } else {
+        base.push(
+          '请提取图中可见的所有热分析关键信息点。',
+          '- curve 字段填颜色或曲线标识',
+          '- event 字段填对应的热事件类型',
+        );
+      }
+
+      base.push(
+        '',
+        '固定 JSON schema：',
+        '{',
+        '  "propertyQueryNames": ["样品名称/牌号（如 320G6-B11）", "批次号（如 A605283，没有则为空字符串）", "测试类型（DSC/TGA/DMA/未知）"],',
+        '  "keyPoints": [',
+        '    {',
+        '      "label": "中文字段名（如 峰值温度、焓值、峰高、半峰宽、玻璃化转变温度）",',
+        '      "value": "数值",',
+        '      "unit": "℃ / J/g / mJ / mW / W/g / %",',
+        '      "curve": "红色 / 黑色 / 蓝色",',
+        '      "event": "第一次放热 / 第一次吸热 / 第二次吸热 / 失重阶段1 / ...",',
+        '      "sourceText": "图中对应原文，尽量短"',
+        '    }',
+        '  ],',
+        '  "summary": "一句话总结图谱主要特征"',
+        '}',
+        '注意：schema 中不要 sample 字段，不要 model 字段，不要 field 字段，不要 confidence 字段。',
+        'propertyQueryNames 只能输出三个值，顺序固定为：名称/牌号、批次、测试类型。',
+        '每个指标一行，不要合并多项数据到一行。',
+        `当前图谱标题：${item.title || item.code || '-'}`,
+        `当前图谱类型：${spectrumType}`,
+      );
+
+      return base.join('\n');
+    };
+
+    const prompt = buildPrompt();
+
+    const startTime = Date.now();
+    let accumulatedText = '';
+    let lastRenderTime = 0;
+    const RENDER_THROTTLE_MS = 150;
+
+    try {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config?.getRequestHeaders?.(config) || { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: item.image } },
+            ],
+          }],
+          temperature: 0.1,
+          max_tokens: Math.max(Number(config.maxTokens) || 4096, 2048),
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`AI 接口返回 HTTP ${response.status}${errorText ? `：${errorText.slice(0, 180)}` : ''}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop() || '';
+
+        for (const block of parts) {
+          const events = parseSSEChunk(block);
+          for (const evt of events) {
+            const delta = evt?.choices?.[0]?.delta?.content;
+            if (delta) accumulatedText += delta;
+          }
+        }
+
+        previewAiState[id].streamText = accumulatedText;
+        const partialResult = progressiveExtract(accumulatedText);
+        if (partialResult) {
+          previewAiState[id].result = partialResult;
+          previewAiState[id].rawText = accumulatedText;
+        }
+
+        const now = Date.now();
+        if (now - lastRenderTime >= RENDER_THROTTLE_MS) {
+          lastRenderTime = now;
+          updatePreviewAiPanelInPlace(id);
+        }
+      }
+
+      const rawText = accumulatedText.trim();
+      const payload = extractJsonPayload(rawText);
+      const result = normalizeSpectrumAiResult(payload);
+      const propertyResult = getPropertyMatchResult(item, result);
+      const propertyTableHtml = markdownTableToHtml(propertyResult?.displayTable || '');
+
+      const nextAiState = {
+        status: 'success',
+        result,
+        rawText,
+        propertyTableHtml,
+        model,
+        modelSource: config.modelSource,
+        viewMode: previewAiState[id]?.viewMode === 'json' ? 'json' : 'table',
+        updatedAt: new Date().toISOString(),
+      };
+      previewAiState[id] = nextAiState;
+      savePreviewAiResult(id, nextAiState);
+      App.aiCallAnalysis?.record?.({
+        id: `spectrum-preview-ai-${Date.now()}`,
+        source: 'spectrum-preview-ai-extract',
+        status: 'success',
+        endpoint: `${config.baseUrl}/chat/completions`,
+        model,
+        duration: Date.now() - startTime,
+        createdAt: new Date().toISOString(),
+        usage: null,
+        meta: {
+          itemId: id,
+          itemTitle: item.title || item.code || '',
+          extractedRows: result.keyPoints.length,
+        },
+      });
+    } catch (error) {
+      previewAiState[id] = {
+        status: 'error',
+        error: error?.message || 'AI 分析失败，请稍后重试。',
+        model,
+        modelSource: config.modelSource,
+        viewMode: previewAiState[id]?.viewMode === 'json' ? 'json' : 'table',
+      };
+      App.aiCallAnalysis?.record?.({
+        id: `spectrum-preview-ai-${Date.now()}`,
+        source: 'spectrum-preview-ai-extract',
+        status: 'error',
+        endpoint: `${config.baseUrl}/chat/completions`,
+        model,
+        duration: Date.now() - startTime,
+        createdAt: new Date().toISOString(),
+        error: error?.message || String(error || ''),
+        meta: { itemId: id, itemTitle: item.title || item.code || '' },
+      });
+    }
+
+    updatePreviewAiPanelInPlace(id);
+  };
+
+  const runPreviewAiMergeAnalysis = async (mode = 'missing') => {
+    const items = getPreviewMergeItems().filter((item) => item?.image);
+    if (!items.length || previewAiMergeRunning) return;
+
+    const targets = mode === 'all'
+      ? items
+      : items.filter((item) => {
+        restorePreviewAiResult(item.id);
+        const ai = previewAiState[item.id] || { status: 'idle' };
+        return ai.status !== 'success' || !ai.result;
+      });
+
+    if (!targets.length) {
+      renderImagePreview();
+      return;
+    }
+
+    previewAiMergeRunning = true;
+    renderImagePreview();
+    try {
+      for (const target of targets) {
+        await runPreviewAiExtract(target.id);
+        if (previewAiMergeMode && refs.previewDialog) renderImagePreview();
+      }
+    } finally {
+      previewAiMergeRunning = false;
+      if (previewAiMergeMode && refs.previewDialog) renderImagePreview();
+    }
+  };
+
   const getAiContext = () => {
     const items = getSelectedAiItems();
     const filtered = getFilteredItems();
@@ -1929,6 +2814,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.previewDialog = null;
     refs.previewItems = [];
     refs.previewActiveId = '';
+    previewAiMergeMode = false;
+    previewAiMergeRunning = false;
   };
 
   const getPreviewItems = (id) => {
@@ -1947,6 +2834,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     if (!item) return;
 
     refs.previewActiveId = item.id;
+    if ((items || []).length < 2) previewAiMergeMode = false;
+    const modelInfo = getPreviewAiModelInfo(item);
     refs.previewDialog.innerHTML = `
       <aside class="spectrum-preview-rail" aria-label="已选图谱预览列表">
         ${items.map((entry) => `
@@ -1960,18 +2849,26 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         <button class="spectrum-preview-close" type="button" data-spectrum-preview-close aria-label="关闭预览">
           <i class="ti ti-x" aria-hidden="true"></i>
         </button>
-        <div class="spectrum-preview-card dialog-card">
+        <div class="spectrum-preview-card dialog-card${previewAiCollapsed ? ' is-ai-collapsed' : ' is-ai-wide'}">
           <div class="spectrum-preview-card-head">
-            <div>
+            <div class="spectrum-preview-title-row">
               <div class="spectrum-preview-card-title">${utils.escapeHtml(item.title)}</div>
+              <div class="spectrum-preview-model-line">${utils.escapeHtml(modelInfo)}</div>
             </div>
             <div class="spectrum-preview-card-meta">
               <span class="spectrum-type-badge" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}">${utils.escapeHtml(item.spectrumType || '未识别类型')}</span>
               <span>${utils.escapeHtml(item.date || '-')}</span>
+              <button class="spectrum-preview-ai-toggle" type="button" data-spectrum-toggle-ai-panel aria-label="${previewAiCollapsed ? '展开AI分析面板' : '收起AI分析面板'}" title="${previewAiCollapsed ? '展开AI分析面板' : '收起AI分析面板'}">
+                <i class="ti ${previewAiCollapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}" aria-hidden="true"></i>
+                <span>${previewAiCollapsed ? '展开AI' : '收起AI'}</span>
+              </button>
             </div>
           </div>
-          <div class="spectrum-preview-image-frame">
-            <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+          <div class="spectrum-preview-card-body">
+            <div class="spectrum-preview-image-frame">
+              <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+            </div>
+            ${renderPreviewAiPanel(item)}
           </div>
           <div class="spectrum-preview-card-foot">
             <span>分类：${utils.escapeHtml(item.category || '-')}</span>
@@ -1982,6 +2879,29 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     `;
 
     refs.previewDialog.querySelector('.spectrum-preview-thumb.is-active')?.scrollIntoView({ block: 'nearest' });
+  };
+
+  const setPreviewAiCollapsed = (collapsed) => {
+    previewAiCollapsed = Boolean(collapsed);
+    const card = refs.previewDialog?.querySelector('.spectrum-preview-card');
+    const toggleButton = refs.previewDialog?.querySelector('[data-spectrum-toggle-ai-panel]');
+    if (!card || !toggleButton) return;
+
+    card.classList.toggle('is-ai-collapsed', previewAiCollapsed);
+    card.classList.toggle('is-ai-wide', !previewAiCollapsed);
+    const label = previewAiCollapsed ? '展开AI' : '收起AI';
+    const ariaLabel = previewAiCollapsed ? '展开AI分析面板' : '收起AI分析面板';
+    toggleButton.setAttribute('aria-label', ariaLabel);
+    toggleButton.setAttribute('title', ariaLabel);
+
+    const icon = toggleButton.querySelector('.ti');
+    if (icon) {
+      icon.classList.toggle('ti-layout-sidebar-right-expand', previewAiCollapsed);
+      icon.classList.toggle('ti-layout-sidebar-right-collapse', !previewAiCollapsed);
+    }
+    const text = toggleButton.querySelector('span');
+    if (text) text.textContent = label;
+
   };
 
   const switchImagePreview = (step) => {
@@ -2691,10 +3611,53 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         return;
       }
 
+      const toggleAiButton = event.target.closest('[data-spectrum-toggle-ai-panel]');
+      if (toggleAiButton) {
+        setPreviewAiCollapsed(!previewAiCollapsed);
+        return;
+      }
+
+      const aiViewButton = event.target.closest('[data-spectrum-ai-view]');
+      if (aiViewButton) {
+        const mode = aiViewButton.getAttribute('data-spectrum-ai-view') === 'json' ? 'json' : 'table';
+        if (previewAiMergeMode) {
+          previewAiMergeViewMode = mode;
+          renderImagePreview();
+          return;
+        }
+        const id = refs.previewActiveId;
+        previewAiState[id] = {
+          ...(previewAiState[id] || { status: 'idle' }),
+          viewMode: mode,
+        };
+        updatePreviewAiPanelInPlace(id);
+        return;
+      }
+
+      const mergeToggleButton = event.target.closest('[data-spectrum-ai-merge-toggle]');
+      if (mergeToggleButton) {
+        previewAiMergeMode = !previewAiMergeMode;
+        renderImagePreview();
+        if (previewAiMergeMode) runPreviewAiMergeAnalysis('missing');
+        return;
+      }
+
+      const mergeRunButton = event.target.closest('[data-spectrum-ai-merge-run]');
+      if (mergeRunButton) {
+        runPreviewAiMergeAnalysis(mergeRunButton.getAttribute('data-spectrum-ai-merge-run') || 'missing');
+        return;
+      }
+
       const previewOpenButton = event.target.closest('[data-spectrum-preview-open]');
       if (previewOpenButton) {
         refs.previewActiveId = previewOpenButton.getAttribute('data-spectrum-preview-open') || refs.previewActiveId;
         renderImagePreview();
+        return;
+      }
+
+      const aiExtractButton = event.target.closest('[data-spectrum-ai-extract]');
+      if (aiExtractButton) {
+        runPreviewAiExtract(aiExtractButton.getAttribute('data-spectrum-ai-extract'));
       }
     });
 
@@ -2733,6 +3696,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
     document.addEventListener('wheel', (event) => {
       if (!refs.previewDialog) return;
+      if (event.target.closest('.spectrum-ai-extract-body') || event.target.closest('.spectrum-preview-rail')) {
+        return;
+      }
       event.preventDefault();
       switchImagePreview(event.deltaY > 0 ? 1 : -1);
     }, { passive: false });

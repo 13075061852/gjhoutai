@@ -26,6 +26,8 @@ import { ensureLegacyApp } from './app-context';
     themeSettingsPageSection: qs('[data-page-section="theme-settings"]'),
     projectSkillPageSection: qs('[data-page-section="project-skills"]'),
     projectSkillPanel: byId('projectSkillPanel'),
+    apimartMediaPageSection: qs('[data-page-section="apimart-media"]'),
+    apimartMediaPanel: byId('apimartMediaPanel'),
     aiCallAnalysisPageSection: qs('[data-page-section="ai-call-analysis"]'),
     aiCallAnalysisPanel: byId('aiCallAnalysisPanel'),
     placeholderPageSection: qs('[data-page-section="placeholder"]'),

@@ -29,6 +29,46 @@ import { getLegacyApp } from '../core/app-context';
     apiKeyIcon: document.querySelector('#searchApiKeyToggle .search-key-toggle-icon'),
   });
 
+  const getApimartRefs = () => ({
+    apiKey: document.getElementById('apimartApiKey'),
+    apiKeyToggle: document.getElementById('apimartApiKeyToggle'),
+    apiKeyIcon: document.querySelector('#apimartApiKeyToggle .apimart-key-toggle-icon'),
+    baseUrl: document.getElementById('apimartBaseUrl'),
+    imageModel: document.getElementById('apimartImageModel'),
+    imageModelCustom: document.getElementById('apimartImageModelCustom'),
+    videoModel: document.getElementById('apimartVideoModel'),
+    videoModelCustom: document.getElementById('apimartVideoModelCustom'),
+  });
+
+  const APIMART_IMAGE_MODELS = [
+    ['gpt-image-2', 'GPT-Image-2'],
+    ['gpt-image-2-official', 'GPT-Image-2 Official'],
+    ['gpt-image-1-official', 'GPT-Image-1 Official'],
+    ['gpt-image-1.5-official', 'GPT-Image-1.5 Official'],
+    ['flux-2-flex', 'Flux 2 Flex'],
+    ['flux-2-pro', 'Flux 2 Pro'],
+    ['flux-kontext-pro', 'Flux Kontext Pro'],
+    ['wan2.7-image-pro', 'Wan2.7 Image Pro'],
+    ['seedream-4.0', 'Seedream 4.0'],
+    ['seedream-4.5', 'Seedream 4.5'],
+    ['grok-imagine-1.0-apimart', 'Grok Imagine 1.0'],
+  ];
+
+  const APIMART_VIDEO_MODELS = [
+    ['sora-2', 'Sora 2'],
+    ['sora-2-preview', 'Sora 2 Preview'],
+    ['veo3.1-fast', 'VEO3.1 Fast'],
+    ['veo3.1-quality', 'VEO3.1 Quality'],
+    ['veo3.1-lite', 'VEO3.1 Lite'],
+    ['veo3.1-fast-official', 'VEO3.1 Fast Official'],
+    ['wan2.6', 'Wan2.6'],
+    ['doubao-seedance-2.0', 'Doubao Seedance 2.0'],
+    ['doubao-seedance-1-5-pro', 'Doubao Seedance 1.5 Pro'],
+    ['MiniMax-Hailuo-02', 'MiniMax Hailuo 02'],
+    ['grok-imagine-1.0-video-apimart', 'Grok Imagine Video'],
+    ['kling-v2-6-motion-control', 'Kling 2.6 Motion Control'],
+  ];
+
   const getAgentModelRefs = () => ({
     data: document.getElementById('agentDataModelSelect'),
     spectrum: document.getElementById('agentSpectrumModelSelect'),
@@ -48,6 +88,42 @@ import { getLegacyApp } from '../core/app-context';
     data: String(agentModels.data || '').trim(),
     spectrum: String(agentModels.spectrum || '').trim(),
   });
+
+  const renderModelOptions = (models, selectedValue = '') => {
+    const selected = String(selectedValue || '').trim();
+    const options = models.map(([value, label]) => `
+      <option value="${utils.escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${utils.escapeHtml(label)} (${utils.escapeHtml(value)})</option>
+    `).join('');
+    const customSelected = selected && !models.some(([value]) => value === selected);
+    return `${options}<option value="custom" ${customSelected ? 'selected' : ''}>自定义模型 ID...</option>`;
+  };
+
+  const getApimartModelValue = (kind) => {
+    const apimartRefs = getApimartRefs();
+    const select = kind === 'video' ? apimartRefs.videoModel : apimartRefs.imageModel;
+    const custom = kind === 'video' ? apimartRefs.videoModelCustom : apimartRefs.imageModelCustom;
+    return String(select?.value === 'custom' ? custom?.value : select?.value || '').trim();
+  };
+
+  const setApimartModelValue = (kind, value = '') => {
+    const apimartRefs = getApimartRefs();
+    const select = kind === 'video' ? apimartRefs.videoModel : apimartRefs.imageModel;
+    const custom = kind === 'video' ? apimartRefs.videoModelCustom : apimartRefs.imageModelCustom;
+    if (!select) return;
+    const models = kind === 'video' ? APIMART_VIDEO_MODELS : APIMART_IMAGE_MODELS;
+    const normalized = String(value || '').trim();
+    if (models.some(([model]) => model === normalized)) {
+      select.value = normalized;
+      if (custom) custom.value = '';
+    } else if (normalized) {
+      select.value = 'custom';
+      if (custom) custom.value = normalized;
+    } else {
+      select.value = models[0]?.[0] || '';
+      if (custom) custom.value = '';
+    }
+    if (custom) custom.hidden = select.value !== 'custom';
+  };
 
   const getAgentModelValue = (role) => {
     const agentRefs = getAgentModelRefs();
@@ -396,6 +472,81 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
+  const mountApimartConfigSection = () => {
+    if (!refs.aiConfigForm || document.getElementById('apimartConfigModule')) return;
+    const anchor = refs.aiConfigForm.querySelector('.oss-config-block') || refs.aiConfigForm.querySelector('.config-module-assistant');
+    const article = document.createElement('article');
+    article.className = 'panel config-module config-module-apimart';
+    article.id = 'apimartConfigModule';
+    article.innerHTML = `
+      <div class="config-module-head">
+        <div class="config-module-title">
+          <span class="config-module-icon"><i class="ti ti-photo-spark" aria-hidden="true"></i></span>
+          <div>
+            <div class="config-module-kicker">APIMart</div>
+            <h2>图片与视频生成</h2>
+          </div>
+        </div>
+        <a class="panel-help" href="https://docs.apimart.ai/cn/api-reference/tasks/status" target="_blank" rel="noreferrer">APIMart 文档</a>
+      </div>
+      <div class="form-grid apimart-config-grid">
+        <div class="field full apimart-key-field">
+          <label class="field-label-row" for="apimartApiKey">
+            <span class="field-label-main">
+              <i class="field-label-icon ti ti-key" aria-hidden="true"></i>
+              <span>APIMart API Key</span>
+            </span>
+            <span class="field-label-note">仅保存在本机浏览器</span>
+          </label>
+          <div class="password-row">
+            <input id="apimartApiKey" name="apimartApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+            <button class="password-toggle" id="apimartApiKeyToggle" type="button" aria-label="显示或隐藏 APIMart API Key">
+              <i class="apimart-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="apimartBaseUrl">
+            <span class="field-label-main">
+              <i class="field-label-icon ti ti-world" aria-hidden="true"></i>
+              <span>API 基地址</span>
+            </span>
+          </label>
+          <input id="apimartBaseUrl" name="apimartBaseUrl" type="url" value="https://api.apimart.ai" />
+        </div>
+        <div class="field">
+          <label for="apimartImageModel">
+            <span class="field-label-main">
+              <i class="field-label-icon ti ti-photo" aria-hidden="true"></i>
+              <span>默认图片模型</span>
+            </span>
+          </label>
+          <select id="apimartImageModel" name="apimartImageModel">
+            ${renderModelOptions(APIMART_IMAGE_MODELS, constants.DEFAULT_CONFIG.apimartImageModel)}
+          </select>
+          <input id="apimartImageModelCustom" name="apimartImageModelCustom" type="text" placeholder="输入自定义图片模型 ID" autocomplete="off" hidden />
+        </div>
+        <div class="field">
+          <label for="apimartVideoModel">
+            <span class="field-label-main">
+              <i class="field-label-icon ti ti-video" aria-hidden="true"></i>
+              <span>默认视频模型</span>
+            </span>
+          </label>
+          <select id="apimartVideoModel" name="apimartVideoModel">
+            ${renderModelOptions(APIMART_VIDEO_MODELS, constants.DEFAULT_CONFIG.apimartVideoModel)}
+          </select>
+          <input id="apimartVideoModelCustom" name="apimartVideoModelCustom" type="text" placeholder="输入自定义视频模型 ID" autocomplete="off" hidden />
+        </div>
+      </div>
+    `;
+    if (anchor) {
+      refs.aiConfigForm.insertBefore(article, anchor);
+    } else {
+      refs.aiConfigForm.appendChild(article);
+    }
+  };
+
   const mountOssHelpLink = () => {
     const head = document.querySelector('.oss-config-block .config-module-head');
     if (!head || head.querySelector('.panel-help')) return;
@@ -646,6 +797,10 @@ import { getLegacyApp } from '../core/app-context';
       searchDepth: getSearchRefs().depth?.value || constants.DEFAULT_CONFIG.searchDepth,
       searchMaxResults: Math.max(1, Math.min(10, Number(getSearchRefs().maxResults?.value || constants.DEFAULT_CONFIG.searchMaxResults))),
       searchTopic: getSearchRefs().topic?.value || constants.DEFAULT_CONFIG.searchTopic,
+      apimartApiKey: (getApimartRefs().apiKey?.value || '').trim(),
+      apimartBaseUrl: utils.normalizeBaseUrl(getApimartRefs().baseUrl?.value || constants.DEFAULT_APIMART_BASE_URL),
+      apimartImageModel: getApimartModelValue('image') || constants.DEFAULT_CONFIG.apimartImageModel,
+      apimartVideoModel: getApimartModelValue('video') || constants.DEFAULT_CONFIG.apimartVideoModel,
       ossBucket: (refs.ossBucket?.value || '').trim(),
       ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
       ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
@@ -663,6 +818,7 @@ import { getLegacyApp } from '../core/app-context';
     if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
     if (isRedactedValue(next.ossAccessKeySecret)) next.ossAccessKeySecret = '';
     if (isRedactedValue(next.searchApiKey)) next.searchApiKey = '';
+    if (isRedactedValue(next.apimartApiKey)) next.apimartApiKey = '';
     if (next.openrouterConfig && typeof next.openrouterConfig === 'object') {
       next.openrouterConfig = { ...next.openrouterConfig };
       if (isRedactedValue(next.openrouterConfig.apiKey)) next.openrouterConfig.apiKey = '';
@@ -683,6 +839,7 @@ import { getLegacyApp } from '../core/app-context';
     redact(next, 'ossAccessKeyId');
     redact(next, 'ossAccessKeySecret');
     redact(next, 'searchApiKey');
+    redact(next, 'apimartApiKey');
     redact(next.openrouterConfig, 'apiKey');
     redact(next.lmStudioConfig, 'apiKey');
     return next;
@@ -728,6 +885,11 @@ import { getLegacyApp } from '../core/app-context';
     if (searchRefs.depth) searchRefs.depth.value = next.searchDepth || constants.DEFAULT_CONFIG.searchDepth;
     if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
     if (searchRefs.topic) searchRefs.topic.value = next.searchTopic || constants.DEFAULT_CONFIG.searchTopic;
+    const apimartRefs = getApimartRefs();
+    if (apimartRefs.apiKey) apimartRefs.apiKey.value = next.apimartApiKey || '';
+    if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = next.apimartBaseUrl || constants.DEFAULT_APIMART_BASE_URL;
+    setApimartModelValue('image', next.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel);
+    setApimartModelValue('video', next.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel);
     const agentModels = normalizeAgentModels(next.agentModels || constants.DEFAULT_CONFIG.agentModels || {});
     syncAgentModelSelects();
     setAgentModelValue('data', agentModels.data);
@@ -835,6 +997,7 @@ import { getLegacyApp } from '../core/app-context';
         config.jsonMode ? 'json' : 'text',
         config.logEnabled ? 'log' : 'no-log',
         config.searchApiKey ? 'web-search' : 'no-search',
+        config.apimartApiKey ? 'apimart-media' : 'no-apimart',
       ].join(' / ');
     }
     const isLocal = isLmStudioProvider(config.aiProvider);
@@ -871,6 +1034,14 @@ import { getLegacyApp } from '../core/app-context';
     const isVisible = searchRefs.apiKey?.type === 'text';
     searchRefs.apiKeyIcon.classList.toggle('ti-eye', !isVisible);
     searchRefs.apiKeyIcon.classList.toggle('ti-eye-off', isVisible);
+  };
+
+  const syncApimartKeyToggleIcon = () => {
+    const apimartRefs = getApimartRefs();
+    if (!apimartRefs.apiKeyIcon) return;
+    const isVisible = apimartRefs.apiKey?.type === 'text';
+    apimartRefs.apiKeyIcon.classList.toggle('ti-eye', !isVisible);
+    apimartRefs.apiKeyIcon.classList.toggle('ti-eye-off', isVisible);
   };
 
   const updateSavedState = (saved) => {
@@ -1649,6 +1820,12 @@ import { getLegacyApp } from '../core/app-context';
       getSearchRefs().depth,
       getSearchRefs().maxResults,
       getSearchRefs().topic,
+      getApimartRefs().apiKey,
+      getApimartRefs().baseUrl,
+      getApimartRefs().imageModel,
+      getApimartRefs().imageModelCustom,
+      getApimartRefs().videoModel,
+      getApimartRefs().videoModelCustom,
       getAgentModelRefs().data,
       getAgentModelRefs().spectrum,
       getAgentModelRefs().dataCustom,
@@ -1662,6 +1839,11 @@ import { getLegacyApp } from '../core/app-context';
     ]
       .filter(Boolean)
       .forEach((input) => input.addEventListener('input', () => {
+        if (input === getApimartRefs().imageModel || input === getApimartRefs().videoModel) {
+          const apimartRefs = getApimartRefs();
+          if (apimartRefs.imageModelCustom) apimartRefs.imageModelCustom.hidden = apimartRefs.imageModel?.value !== 'custom';
+          if (apimartRefs.videoModelCustom) apimartRefs.videoModelCustom.hidden = apimartRefs.videoModel?.value !== 'custom';
+        }
         if (input === getAgentModelRefs().data || input === getAgentModelRefs().spectrum) {
           const agentRefs = getAgentModelRefs();
           if (agentRefs.dataCustom) agentRefs.dataCustom.hidden = agentRefs.data?.value !== 'custom';
@@ -1754,13 +1936,23 @@ import { getLegacyApp } from '../core/app-context';
       .filter(Boolean)
       .forEach((input) => input.addEventListener('change', syncPreview));
 
+    [getApimartRefs().imageModel, getApimartRefs().videoModel]
+      .filter(Boolean)
+      .forEach((select) => select.addEventListener('change', () => {
+        const apimartRefs = getApimartRefs();
+        if (apimartRefs.imageModelCustom) apimartRefs.imageModelCustom.hidden = apimartRefs.imageModel?.value !== 'custom';
+        if (apimartRefs.videoModelCustom) apimartRefs.videoModelCustom.hidden = apimartRefs.videoModel?.value !== 'custom';
+        syncPreview();
+      }));
+
     refs.aiConfigForm?.addEventListener('submit', (event) => {
       event.preventDefault();
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
-      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig) {
-        setStatus('请先填写 OpenRouter API 密钥或 OSS 配置', 'warn');
-        App.notify?.warn?.('请先填写 OpenRouter API 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
+      const hasApimartConfig = Boolean(config.apimartApiKey);
+      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig) {
+        setStatus('请先填写 OpenRouter API 密钥、APIMart API Key 或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写 OpenRouter API 密钥、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       persistConfig(config);
@@ -1805,6 +1997,18 @@ import { getLegacyApp } from '../core/app-context';
       );
       searchRefs.apiKeyToggle.classList.toggle('is-visible', searchRefs.apiKey.type === 'text');
       syncSearchKeyToggleIcon();
+    });
+
+    getApimartRefs().apiKeyToggle?.addEventListener('click', () => {
+      const apimartRefs = getApimartRefs();
+      if (!apimartRefs.apiKey) return;
+      apimartRefs.apiKey.type = apimartRefs.apiKey.type === 'password' ? 'text' : 'password';
+      apimartRefs.apiKeyToggle.setAttribute(
+        'aria-label',
+        apimartRefs.apiKey.type === 'password' ? '显示 APIMart API Key' : '隐藏 APIMart API Key',
+      );
+      apimartRefs.apiKeyToggle.classList.toggle('is-visible', apimartRefs.apiKey.type === 'text');
+      syncApimartKeyToggleIcon();
     });
 
     refs.modelSelectTrigger?.addEventListener('click', () => {
@@ -1899,6 +2103,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const init = () => {
     mountSearchConfigSection();
+    mountApimartConfigSection();
     mountAgentRoutingConfigSection();
     mountOssHelpLink();
     mountConfigContentPanel();
@@ -1917,6 +2122,7 @@ import { getLegacyApp } from '../core/app-context';
     syncApiKeyToggleIcon();
     syncOssSecretToggleIcon();
     syncSearchKeyToggleIcon();
+    syncApimartKeyToggleIcon();
     syncTemperatureLabel();
     syncPreview();
     const initialConfig = getFormConfig();

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { mountApimartReactBitsShowcase } from '../../components/reactbits/ApimartReactBitsShowcase';
 import { getLegacyApp } from '../core/app-context';
 
 (function () {
@@ -54,14 +55,6 @@ import { getLegacyApp } from '../core/app-context';
     ['1:1', '1:1'],
     ['3:4', '3:4'],
     ['9:16', '9:16'],
-  ];
-  const STYLE_PRESETS = [
-    { id: 'realistic', label: '写实', tone: 'gold', prompt: '真实摄影，电影感自然光' },
-    { id: 'anime', label: '动漫', tone: 'sky', prompt: '精致动漫风，高饱和色彩' },
-    { id: 'oil', label: '油画', tone: 'umber', prompt: '古典油画笔触，厚涂质感' },
-    { id: 'sci-fi', label: '科幻', tone: 'cyan', prompt: '未来科幻，霓虹光影' },
-    { id: 'watercolor', label: '水彩', tone: 'green', prompt: '清透水彩，柔和边缘' },
-    { id: 'cyberpunk', label: '赛博朋克', tone: 'violet', prompt: '赛博朋克，雨夜霓虹' },
   ];
   const ADVANCED_PROMPTS = [
     {
@@ -134,7 +127,6 @@ import { getLegacyApp } from '../core/app-context';
     resolution: '1k',
     count: 1,
     duration: 5,
-    style: 'realistic',
     resultPage: 0,
     imageModel: '',
     videoModel: '',
@@ -142,12 +134,14 @@ import { getLegacyApp } from '../core/app-context';
     videoResolution: '720p',
     imageCount: 1,
     videoDuration: 5,
+    resultCleared: false,
   };
   let bound = false;
   let tasks = [];
   let uiState = { ...DEFAULT_UI_STATE };
   const pollTimers = new Map();
   let previewKeydownHandler = null;
+  let reactBitsShowcaseCleanup = null;
 
   const esc = (value) => utils.escapeHtml(value);
   const getConfig = () => {
@@ -283,10 +277,15 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
-  const parseReferenceUrls = (value) => String(value || '')
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const parseReferenceUrls = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    const lines = text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    return lines.flatMap((line) => {
+      if (line.startsWith('data:')) return [line];
+      return line.split(',').map((item) => item.trim()).filter(Boolean);
+    });
+  };
 
   const renderReferencePreviewItems = (value) => {
     const urls = parseReferenceUrls(value);
@@ -333,6 +332,47 @@ import { getLegacyApp } from '../core/app-context';
     updateReferenceUi(urls.join('\n'));
     App.notify?.success?.('已移除参考图', { key: 'apimart-ref-removed' });
     return true;
+  };
+
+  const readReferenceFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    if (!file?.type?.match?.(/^image\/(jpeg|png)$/)) {
+      reject(new Error(`${file?.name || '文件'} 仅支持 JPG / PNG`));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      reject(new Error(`${file.name} 超过 10MB 限制`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error(`读取 ${file.name} 失败`));
+    reader.readAsDataURL(file);
+  });
+
+  const handleReferenceFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    const fileNamesEl = refs.apimartMediaPanel?.querySelector('#apimartReferenceFileNames');
+    if (fileNamesEl) {
+      fileNamesEl.innerHTML = files.length
+        ? files.map((file) => `<span>${esc(file.name)} · ${esc(formatFileSize(file.size))}</span>`).join('')
+        : renderReferencePreviewItems(uiState.referenceUrls);
+    }
+    if (!files.length) return;
+
+    try {
+      const dataUrls = await Promise.all(files.map(readReferenceFileAsDataUrl));
+      const textarea = refs.apimartMediaPanel?.querySelector('#apimartReferenceUrls');
+      const existingUrls = parseReferenceUrls(textarea?.value || uiState.referenceUrls);
+      const nextUrls = [...existingUrls];
+      dataUrls.forEach((url) => {
+        if (!nextUrls.includes(url)) nextUrls.push(url);
+      });
+      updateReferenceUi(nextUrls.join('\n'));
+      captureUiState();
+    } catch (err) {
+      if (fileNamesEl) fileNamesEl.innerHTML = renderReferencePreviewItems(uiState.referenceUrls);
+      App.notify?.warn?.(err.message || '参考图上传失败', { key: 'apimart-ref-upload' });
+    }
   };
 
   const renderModelOptions = (models, selectedValue = '') => {
@@ -393,7 +433,6 @@ import { getLegacyApp } from '../core/app-context';
       resolution: panel.querySelector('#apimartResolution')?.value || uiState.resolution || (type === 'video' ? '720p' : '1k'),
       count: clampNumber(panel.querySelector('#apimartCount')?.value, 1, 4, uiState.count || 1),
       duration: clampNumber(panel.querySelector('#apimartDuration')?.value, 1, 16, uiState.duration || 5),
-      style: panel.querySelector('[data-apimart-style].is-active')?.getAttribute('data-apimart-style') || uiState.style,
     };
   };
 
@@ -660,18 +699,6 @@ import { getLegacyApp } from '../core/app-context';
             <span>文件大小 <b data-apimart-file-size-label data-apimart-file-size-task="${esc(task.id)}" data-apimart-file-size-url="${esc(url)}">${esc(getFileSizeLabel(task, url))}</b></span>
           </div>
           <div class="apimart-image-preview-actions">
-            <div class="apimart-image-preview-tools" aria-label="图片缩放">
-              <button type="button" data-apimart-preview-zoom="out" aria-label="缩小图片">
-                <span aria-hidden="true">−</span>
-              </button>
-              <span data-apimart-preview-scale>100%</span>
-              <button type="button" data-apimart-preview-zoom="in" aria-label="放大图片">
-                <span aria-hidden="true">+</span>
-              </button>
-              <button type="button" data-apimart-preview-zoom="reset" aria-label="重置图片位置">
-                <i class="ti ti-restore" aria-hidden="true"></i>
-              </button>
-            </div>
             <button class="apimart-image-preview-close" type="button" aria-label="关闭图片预览">
               <i class="ti ti-x" aria-hidden="true"></i>
             </button>
@@ -689,12 +716,10 @@ import { getLegacyApp } from '../core/app-context';
     });
     const body = preview.querySelector('.apimart-image-preview-body');
     const image = preview.querySelector('.apimart-image-preview-body img');
-    const scaleText = preview.querySelector('[data-apimart-preview-scale]');
     const applyTransform = () => {
       if (!image) return;
       image.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
       body?.classList.toggle('is-zoomed', transform.scale > 1);
-      if (scaleText) scaleText.textContent = `${Math.round(transform.scale * 100)}%`;
     };
     const updateScale = (nextScale) => {
       const scale = clampScale(nextScale);
@@ -705,18 +730,6 @@ import { getLegacyApp } from '../core/app-context';
       }
       applyTransform();
     };
-    preview.addEventListener('click', (event) => {
-      const control = event.target.closest('[data-apimart-preview-zoom]');
-      if (!control) return;
-      const action = control.getAttribute('data-apimart-preview-zoom');
-      if (action === 'in') updateScale(transform.scale + 0.25);
-      if (action === 'out') updateScale(transform.scale - 0.25);
-      if (action === 'reset') {
-        transform.x = 0;
-        transform.y = 0;
-        updateScale(1);
-      }
-    });
     body?.addEventListener('wheel', (event) => {
       event.preventDefault();
       updateScale(transform.scale + (event.deltaY < 0 ? 0.18 : -0.18));
@@ -830,13 +843,6 @@ import { getLegacyApp } from '../core/app-context';
     `;
   }).join('');
 
-  const renderStylePresets = () => STYLE_PRESETS.map((style) => `
-    <button class="apimart-style-card ${uiState.style === style.id ? 'is-active' : ''}" type="button" data-apimart-style="${esc(style.id)}" data-style-tone="${esc(style.tone)}" title="${esc(style.prompt)}">
-      <span class="apimart-style-thumb" aria-hidden="true"></span>
-      <span>${esc(style.label)}</span>
-    </button>
-  `).join('');
-
   const renderResultMedia = (task) => {
     const items = getTaskMediaItems(task);
     if (!items.length) return '';
@@ -883,6 +889,7 @@ import { getLegacyApp } from '../core/app-context';
     const desc = hasTask ? '任务完成后会自动展示图片或视频结果，可在历史记录中刷新状态。' : '在左侧设置参数并点击“生成图像”开始创作';
     return `
       <div class="apimart-result-empty">
+        <div id="apimartReactBitsHero" class="apimart-reactbits-mount" aria-label="React Bits AI 绘图展示"></div>
         <div class="apimart-empty-visual" aria-hidden="true">
           <span class="apimart-empty-card apimart-empty-card-back"></span>
           <span class="apimart-empty-card apimart-empty-card-front">
@@ -898,14 +905,14 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const renderLatestResult = () => {
-    const latest = tasks[0];
+    const latest = uiState.resultCleared ? null : tasks[0];
     const media = latest ? renderResultMedia(latest) : '';
     return `
       <section class="apimart-result-panel">
         <div class="apimart-section-head">
           <h2>生成结果</h2>
           <div class="apimart-head-actions">
-            <button class="apimart-ghost-btn" id="apimartClearBtn" type="button">
+            <button class="apimart-ghost-btn" id="apimartClearBtn" type="button" ${latest ? '' : 'disabled'}>
               <i class="ti ti-trash" aria-hidden="true"></i>
               <span>清空</span>
             </button>
@@ -959,13 +966,25 @@ import { getLegacyApp } from '../core/app-context';
     <section class="apimart-history-panel">
       <div class="apimart-section-head">
         <h2><i class="ti ti-clock-history" aria-hidden="true"></i>历史记录</h2>
-        <button class="apimart-ghost-btn" type="button" data-apimart-scroll-history>
+        <button class="apimart-ghost-btn" type="button" data-apimart-scroll-history ${tasks.length ? '' : 'disabled'}>
           <span>查看全部</span>
           <i class="ti ti-arrow-right" aria-hidden="true"></i>
         </button>
       </div>
       <div class="apimart-history-strip">
-        ${tasks.length ? tasks.slice(0, 8).map(renderHistoryItem).join('') : '<div class="apimart-history-empty">还没有生成记录，提交任务后会出现在这里。</div>'}
+        ${tasks.length ? tasks.slice(0, 8).map(renderHistoryItem).join('') : `
+          <div class="apimart-history-empty">
+            <div class="apimart-history-empty-art" aria-hidden="true">
+              <span class="apimart-history-empty-tile"></span>
+              <span class="apimart-history-empty-tile"></span>
+              <span class="apimart-history-empty-tile"></span>
+            </div>
+            <div>
+              <strong>还没有作品记录</strong>
+              <span>生成完成后会在这里保留缩略图、比例和费用信息。</span>
+            </div>
+          </div>
+        `}
       </div>
     </section>
   `;
@@ -1038,6 +1057,7 @@ import { getLegacyApp } from '../core/app-context';
       };
       tasks = [task, ...tasks.filter((item) => item.id !== taskId)].slice(0, MAX_TASKS);
       uiState.resultPage = 0;
+      uiState.resultCleared = false;
       writeTasks();
       render();
       pollTask(taskId, true);
@@ -1053,6 +1073,8 @@ import { getLegacyApp } from '../core/app-context';
   const render = (capture = true) => {
     const panel = refs.apimartMediaPanel;
     if (!panel) return;
+    reactBitsShowcaseCleanup?.();
+    reactBitsShowcaseCleanup = null;
     const isVisible = refs.apimartMediaPageSection?.classList.contains('active');
     if (capture && isVisible) captureUiState();
     const config = getConfig();
@@ -1081,17 +1103,7 @@ import { getLegacyApp } from '../core/app-context';
           <div class="apimart-scroll-area">
             <section class="apimart-panel-block">
               <div class="apimart-field-label">模型</div>
-              <div class="apimart-model-card">
-                <span class="apimart-model-cover" aria-hidden="true"></span>
-                <div class="apimart-model-main">
-                  <select id="apimartModel" aria-label="选择 APIMart 生成模型">
-                    ${renderModelOptions(models, selectedModel)}
-                  </select>
-                  <span>${type === 'video' ? '高质量视频生成模型' : '高质量图像生成模型'}</span>
-                </div>
-                <i class="ti ti-chevron-down" aria-hidden="true"></i>
-              </div>
-              <input id="apimartModelCustom" class="apimart-custom-model" type="text" value="${selectedModelIsCustom ? esc(selectedModel) : ''}" placeholder="输入自定义模型 ID" autocomplete="off" ${selectedModelIsCustom ? '' : 'hidden'} />
+              <div id="apimartReactBitsModel"></div>
             </section>
 
             <section class="apimart-panel-block">
@@ -1109,6 +1121,10 @@ import { getLegacyApp } from '../core/app-context';
                   <span id="apimartPromptCounter">${esc(String(uiState.prompt || '').length)} / 1000</span>
                 </div>
               </div>
+            </section>
+
+            <section class="apimart-panel-block apimart-reactbits-prompt-mount-block">
+              <div id="apimartReactBitsPrompt" class="apimart-reactbits-prompt-mount"></div>
             </section>
 
             <section class="apimart-panel-block">
@@ -1133,13 +1149,6 @@ import { getLegacyApp } from '../core/app-context';
                   </span>
                   <input id="${type === 'video' ? 'apimartCount' : 'apimartDuration'}" type="number" min="${type === 'video' ? '1' : '1'}" max="${type === 'video' ? '4' : '16'}" value="${type === 'video' ? esc(uiState.count) : esc(uiState.duration)}" ${type === 'video' ? 'disabled' : 'disabled'} hidden />
                 </label>
-              </div>
-            </section>
-
-            <section class="apimart-panel-block">
-              <div class="apimart-field-label">风格</div>
-              <div class="apimart-style-grid">
-                ${renderStylePresets()}
               </div>
             </section>
 
@@ -1174,7 +1183,6 @@ import { getLegacyApp } from '../core/app-context';
               <i class="ti ti-send-2" aria-hidden="true"></i>
               <span>${submitText}</span>
             </button>
-            <span class="apimart-price-preview" title="APIMart 任务状态返回 cost 后会在历史记录中显示实际扣费">费用 <b>以实际扣费为准</b></span>
             <button class="apimart-save-btn" id="apimartConfigJumpBtn" type="button" aria-label="配置密钥" title="配置密钥">
               <i class="ti ti-settings" aria-hidden="true"></i>
             </button>
@@ -1187,6 +1195,21 @@ import { getLegacyApp } from '../core/app-context';
         </main>
       </div>
     `;
+    reactBitsShowcaseCleanup = mountApimartReactBitsShowcase({
+      heroTarget: panel.querySelector('#apimartReactBitsHero'),
+      modelTarget: panel.querySelector('#apimartReactBitsModel'),
+      promptTarget: panel.querySelector('#apimartReactBitsPrompt'),
+      ideas: ADVANCED_PROMPTS,
+      models,
+      selectedModel,
+      selectedModelIsCustom,
+      modelHint: type === 'video' ? '高质量视频生成模型' : '高质量图像生成模型',
+      mode: type,
+      taskCount: tasks.length,
+      hasApiKey: Boolean(config.apiKey),
+      latestStatus: tasks[0] ? getTaskStatusLabel(tasks[0].status) : '',
+      onPromptSelect: applyPrompt,
+    });
     updatePromptCounter();
     window.requestAnimationFrame?.(refreshLoadedImageSizes);
   };
@@ -1259,35 +1282,28 @@ import { getLegacyApp } from '../core/app-context';
         else uiState.videoResolution = uiState.resolution;
       }
       if (target?.matches?.('#apimartReferenceFile')) {
-        const files = Array.from(target.files || []);
-        const fileNamesEl = refs.apimartMediaPanel?.querySelector('#apimartReferenceFileNames');
-        if (fileNamesEl) {
-          fileNamesEl.innerHTML = files.length
-            ? files.map((file) => `<span>${esc(file.name)} · ${esc(formatFileSize(file.size))}</span>`).join('')
-            : '未选择文件';
-        }
-        if (!files.length) return;
-        Promise.all(files.map((file) => new Promise((resolve, reject) => {
-          if (file.size > 10 * 1024 * 1024) {
-            reject(new Error(`${file.name} 超过 10MB 限制`));
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error(`读取 ${file.name} 失败`));
-          reader.readAsDataURL(file);
-        }))).then((dataUrls) => {
-          const textarea = refs.apimartMediaPanel?.querySelector('#apimartReferenceUrls');
-          if (textarea) {
-            const existing = textarea.value.trim();
-            updateReferenceUi(existing ? `${existing}\n${dataUrls.join('\n')}` : dataUrls.join('\n'));
-            captureUiState();
-          }
-        }).catch((err) => {
-          App.notify?.warn?.(err.message || '参考图上传失败', { key: 'apimart-ref-upload' });
-        });
+        handleReferenceFiles(target.files);
         target.value = '';
       }
+    });
+    refs.apimartMediaPanel.addEventListener('dragover', (event) => {
+      const dropzone = event.target?.closest?.('#apimartReferenceUploadBtn');
+      if (!dropzone) return;
+      event.preventDefault();
+      dropzone.classList.add('is-drag-over');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    });
+    refs.apimartMediaPanel.addEventListener('dragleave', (event) => {
+      const dropzone = event.target?.closest?.('#apimartReferenceUploadBtn');
+      if (!dropzone || dropzone.contains(event.relatedTarget)) return;
+      dropzone.classList.remove('is-drag-over');
+    });
+    refs.apimartMediaPanel.addEventListener('drop', (event) => {
+      const dropzone = event.target?.closest?.('#apimartReferenceUploadBtn');
+      if (!dropzone) return;
+      event.preventDefault();
+      dropzone.classList.remove('is-drag-over');
+      handleReferenceFiles(event.dataTransfer?.files);
     });
     document.addEventListener('load', (event) => {
       const image = event.target;
@@ -1296,31 +1312,6 @@ import { getLegacyApp } from '../core/app-context';
     }, true);
     refs.apimartMediaPanel.addEventListener('click', async (event) => {
       const target = event.target;
-      const style = target.closest('[data-apimart-style]');
-      if (style) {
-        const styleId = style.getAttribute('data-apimart-style') || uiState.style;
-        uiState.style = styleId;
-        refs.apimartMediaPanel?.querySelectorAll('[data-apimart-style]').forEach((item) => {
-          item.classList.toggle('is-active', item === style);
-        });
-        if (styleId) {
-          const preset = STYLE_PRESETS.find((s) => s.id === styleId);
-          if (preset && preset.prompt) {
-            const textarea = refs.apimartMediaPanel?.querySelector('#apimartPrompt');
-            if (textarea) {
-              const existing = textarea.value.trim();
-              if (existing && !existing.includes(preset.prompt)) {
-                textarea.value = `${existing}，${preset.prompt}`;
-              } else if (!existing) {
-                textarea.value = preset.prompt;
-              }
-              uiState.prompt = textarea.value;
-              updatePromptCounter();
-            }
-          }
-        }
-        return;
-      }
       if (target.closest('#apimartPromptRandom')) {
         const item = ADVANCED_PROMPTS[Math.floor(Math.random() * ADVANCED_PROMPTS.length)];
         applyPrompt(item.prompt);
@@ -1376,9 +1367,8 @@ import { getLegacyApp } from '../core/app-context';
         return;
       }
       if (target.closest('#apimartClearBtn')) {
-        tasks = [];
         uiState.resultPage = 0;
-        writeTasks();
+        uiState.resultCleared = true;
         render();
         return;
       }

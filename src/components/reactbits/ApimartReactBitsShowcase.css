@@ -1,0 +1,306 @@
+.apimart-reactbits-hero,
+.apimart-reactbits-prompt-strip {
+  font-family: inherit;
+}
+
+.apimart-reactbits-hero {
+  position: relative;
+  height: 100%;
+  min-height: 220px;
+  display: grid;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(0, 87, 255, .28), transparent 34%),
+    radial-gradient(circle at 84% 20%, rgba(245, 158, 11, .22), transparent 32%),
+    linear-gradient(135deg, #08111f 0%, #152238 52%, #0f172a 100%);
+}
+
+.apimart-reactbits-hero .card-spotlight {
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: transparent;
+  padding: 22px;
+  color: #fff;
+}
+
+.apimart-reactbits-orbit {
+  position: absolute;
+  inset: -32%;
+  opacity: .72;
+  background:
+    conic-gradient(from 110deg, transparent 0 9%, rgba(77, 163, 255, .24) 13%, transparent 22% 46%, rgba(255, 210, 128, .22) 51%, transparent 62%),
+    radial-gradient(circle at 50% 50%, transparent 0 30%, rgba(255, 255, 255, .07) 31% 32%, transparent 33%);
+  filter: blur(.2px);
+  animation: apimart-reactbits-spin 18s linear infinite;
+  pointer-events: none;
+}
+
+.apimart-reactbits-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .18;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .18) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(180deg, transparent, #000 24%, #000 72%, transparent);
+  pointer-events: none;
+}
+
+.apimart-reactbits-hero-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  justify-items: center;
+}
+
+.apimart-reactbits-kicker {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: rgba(255, 255, 255, .78);
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(12px);
+}
+
+.apimart-reactbits-title {
+  margin: 0;
+  color: #fff;
+  font-size: 34px;
+  line-height: 1.08;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.apimart-reactbits-copy {
+  max-width: 620px;
+  margin: 0;
+  color: rgba(255, 255, 255, .68);
+  font-size: 14px;
+  line-height: 1.7;
+  text-wrap: balance;
+}
+
+.apimart-reactbits-prompt-strip {
+  display: grid;
+  gap: 9px;
+}
+
+.apimart-rb-model-card.card-spotlight {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns:40px minmax(0,1fr) 22px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(203, 213, 225, .82);
+  border-radius: 8px;
+  background: #fff;
+  padding: 11px 12px;
+  color: var(--text);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .04);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.apimart-rb-model-card.card-spotlight:hover,
+.apimart-rb-model-card.card-spotlight:focus-within {
+  border-color: rgba(37, 99, 235, .28);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .07);
+}
+
+.apimart-rb-model-cover {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 58% 30%, #ffba6c 0 7%, transparent 8%),
+    radial-gradient(circle at 42% 48%, #ff5c7a 0 8%, transparent 9%),
+    linear-gradient(145deg, #0f172a 0%, #223461 48%, #0d111a 100%);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2);
+}
+
+.apimart-rb-model-main {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.apimart-rb-model-main select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.apimart-rb-model-main span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apimart-rb-custom-model {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 38px;
+  border: 1px solid rgba(203, 213, 225, .9);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 0 12px;
+  outline: none;
+}
+
+.apimart-reactbits-prompt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.apimart-reactbits-prompt-head strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 900;
+  letter-spacing: .01em;
+}
+
+.apimart-reactbits-prompt-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.apimart-reactbits-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.apimart-reactbits-prompt-card {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.apimart-reactbits-prompt-card .card-spotlight {
+  min-height: 74px;
+  display: grid;
+  grid-template-columns:30px minmax(0,1fr);
+  align-items:start;
+  gap: 8px 9px;
+  border: 1px solid rgba(203, 213, 225, .9);
+  border-radius: 8px;
+  background:#fff;
+  padding: 10px;
+  color: var(--text);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.apimart-reactbits-prompt-card:hover .card-spotlight,
+.apimart-reactbits-prompt-card:focus-visible .card-spotlight {
+  border-color: var(--accent, #0057ff);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .09);
+  transform: translateY(-1px);
+}
+
+.apimart-reactbits-prompt-card:focus-visible {
+  outline: none;
+}
+
+.apimart-reactbits-prompt-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.apimart-reactbits-prompt-card em {
+  grid-row:1 / 3;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-soft, #eef5ff);
+  color: var(--accent, #0057ff);
+  font-style: normal;
+  font-size: 16px;
+}
+
+.apimart-reactbits-prompt-card strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apimart-reactbits-prompt-card span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+body[data-theme="dark"] .apimart-reactbits-prompt-card .card-spotlight {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+body[data-theme="dark"] .apimart-rb-model-card.card-spotlight,
+body[data-theme="dark"] .apimart-rb-custom-model {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+@keyframes apimart-reactbits-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apimart-reactbits-orbit,
+  .shiny-text {
+    animation: none;
+  }
+}

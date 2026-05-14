@@ -1338,6 +1338,15 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     return App.propertyAnalysis?.getAgentContext?.(query, { forceCurrentPage: true, exactOnly: true }) || null;
   };
 
+  const getPreviewSortName = (item) => String(item?.title || item?.code || item?.name || item?.id || '').trim();
+
+  const sortPreviewItemsByName = (items) => [...(items || [])].sort((a, b) => (
+    getPreviewSortName(a).localeCompare(getPreviewSortName(b), 'zh-Hans-CN', {
+      numeric: true,
+      sensitivity: 'base',
+    })
+  ));
+
   const markdownTableToHtml = (markdown) => {
     const lines = String(markdown || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const tables = [];
@@ -1375,6 +1384,26 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         </table>
       </div>
     `;
+  };
+
+  const parsePropertyTableHtml = (html) => {
+    const source = String(html || '').trim();
+    if (!source || typeof document === 'undefined') return null;
+    const container = document.createElement('div');
+    container.innerHTML = source;
+    const table = container.querySelector('table');
+    if (!table) return null;
+
+    const headers = Array.from(table.querySelectorAll('thead th'))
+      .map((cell, index) => cell.textContent?.trim() || `列${index + 1}`);
+    if (!headers.length) return null;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'))
+      .map((row) => Array.from(row.querySelectorAll('th, td')).map((cell) => cell.textContent?.trim() || '-'))
+      .filter((row) => row.some((cell) => String(cell || '').trim() && cell !== '-'));
+    if (!rows.length) return null;
+
+    return { headers, rows };
   };
 
   const renderAiExtractTable = (aiResult, item) => {
@@ -1432,7 +1461,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     `;
   };
 
-  const getPreviewMergeItems = () => (refs.previewItems || []).filter((entry) => entry?.id);
+  const getPreviewMergeItems = () => sortPreviewItemsByName((refs.previewItems || []).filter((entry) => entry?.id));
 
   const renderMergedPreviewAiTable = (items) => {
     const analyzedItems = items.map((item) => {
@@ -1445,64 +1474,109 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       return '<div class="spectrum-ai-empty">暂无可合并的数据。请先点击补全分析，或对单张图谱完成 AI 分析后再查看。</div>';
     }
 
-    const labels = [];
-    analyzedItems.forEach(({ result }) => {
-      result.keyPoints.forEach((row) => {
-        const label = row.label || '-';
-        if (!labels.includes(label)) labels.push(label);
-      });
-    });
+    const eventColumns = [
+      {
+        event: '第一次放热',
+        tone: 'exotherm-1',
+        fields: [
+          { label: '峰值温度', aliases: ['峰值温度', '峰温'] },
+          { label: '标准焓值', aliases: ['标准焓值', '焓值', 'delta h', 'Δh'] },
+          { label: '峰高', aliases: ['峰高', '逢高'] },
+          { label: '半峰宽', aliases: ['半峰宽'] },
+        ],
+      },
+      {
+        event: '第一次吸热',
+        tone: 'endotherm-1',
+        fields: [
+          { label: '峰值温度', aliases: ['峰值温度', '峰温'] },
+          { label: '标准焓值', aliases: ['标准焓值', '焓值', 'delta h', 'Δh'] },
+          { label: '峰高', aliases: ['峰高', '逢高'] },
+          { label: '半峰宽', aliases: ['半峰宽'] },
+          { label: '玻璃化转变温度', aliases: ['玻璃化转变温度', '玻璃化温度', 'tg'] },
+        ],
+      },
+      {
+        event: '第二次吸热',
+        tone: 'endotherm-2',
+        fields: [
+          { label: '峰值温度', aliases: ['峰值温度', '峰温'] },
+          { label: '标准焓值', aliases: ['标准焓值', '焓值', 'delta h', 'Δh'] },
+          { label: '峰高', aliases: ['峰高', '逢高'] },
+          { label: '半峰宽', aliases: ['半峰宽'] },
+        ],
+      },
+    ];
 
-    const itemGroups = analyzedItems.map(({ item, result }) => {
-      const eventOrder = [];
-      const groups = new Map();
+    const getFieldValue = (eventMap, eventName, field) => {
+      const labelMap = eventMap.get(eventName);
+      if (!labelMap) return '-';
+      const aliases = field.aliases.map((alias) => String(alias).toLowerCase());
+      const values = [];
+      labelMap.forEach((labelValues, label) => {
+        const normalizedLabel = String(label || '').toLowerCase();
+        const matched = aliases.some((alias) => normalizedLabel === alias || normalizedLabel.includes(alias) || alias.includes(normalizedLabel));
+        if (!matched) return;
+        labelValues.forEach((value) => {
+          if (!values.includes(value)) values.push(value);
+        });
+      });
+      return values.length ? values.join(' / ') : '-';
+    };
+
+    const itemRows = analyzedItems.map(({ item, result }) => {
+      const eventMap = new Map();
       result.keyPoints.forEach((row) => {
         const label = row.label || '-';
         const event = row.event || row.curve || '未分类';
         const valueText = [row.value, row.unit].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || '-';
-        if (!eventOrder.includes(event)) eventOrder.push(event);
-        if (!groups.has(label)) groups.set(label, new Map());
-        const eventValues = groups.get(label).get(event) || [];
-        if (!eventValues.includes(valueText)) {
-          eventValues.push(valueText);
-          groups.get(label).set(event, eventValues);
-        }
-      });
-
-      const rows = eventOrder.flatMap((event) => {
-        const maxRows = Math.max(1, ...labels.map((label) => (groups.get(label)?.get(event) || []).length));
-        return Array.from({ length: maxRows }, (_, rowIndex) => ({
-          event,
-          rowIndex,
-          rowSpan: maxRows,
-          values: labels.map((label) => (groups.get(label)?.get(event) || [])[rowIndex] || '-'),
-        }));
+        if (!eventMap.has(event)) eventMap.set(event, new Map());
+        const labelMap = eventMap.get(event);
+        const labelValues = labelMap.get(label) || [];
+        if (!labelValues.includes(valueText)) labelValues.push(valueText);
+        labelMap.set(label, labelValues);
       });
 
       return {
         imageName: item.title || item.code || result.propertyQueryNames?.[0] || '-',
-        rows,
+        cells: eventColumns.flatMap((eventColumn) => (
+          eventColumn.fields.map((field) => ({
+            tone: eventColumn.tone,
+            value: getFieldValue(eventMap, eventColumn.event, field),
+          }))
+        )),
       };
-    }).filter((group) => group.rows.length);
+    }).filter((row) => row.cells.some((cell) => cell.value !== '-'));
+
+    if (!itemRows.length) {
+      return '<div class="spectrum-ai-empty">暂无可合并的数据。请先点击补全分析，或对单张图谱完成 AI 分析后再查看。</div>';
+    }
 
     return `
       <div class="spectrum-ai-table-wrap spectrum-ai-merged-table-wrap">
-        <table class="spectrum-ai-table spectrum-ai-keypoint-table spectrum-ai-merged-table">
+        <table class="spectrum-ai-table spectrum-ai-keypoint-table spectrum-ai-merged-table spectrum-ai-pivot-table">
+          <colgroup>
+            <col class="spectrum-ai-image-col">
+            ${eventColumns.flatMap((eventColumn) => eventColumn.fields.map(() => `<col class="spectrum-ai-value-col is-${eventColumn.tone}">`)).join('')}
+          </colgroup>
           <thead>
             <tr>
-              <th class="spectrum-ai-keypoint-image-head">图片名称</th>
-              <th class="spectrum-ai-keypoint-project-head">项目</th>
-              ${labels.map((label) => `<th>${utils.escapeHtml(label)}</th>`).join('')}
+              <th class="spectrum-ai-keypoint-image-head" rowspan="2">图片名称</th>
+              ${eventColumns.map((eventColumn) => `<th class="spectrum-ai-event-head is-${eventColumn.tone}" colspan="${eventColumn.fields.length}">${utils.escapeHtml(eventColumn.event)}</th>`).join('')}
+            </tr>
+            <tr>
+              ${eventColumns.flatMap((eventColumn) => (
+                eventColumn.fields.map((field) => `<th class="spectrum-ai-field-head is-${eventColumn.tone}">${utils.escapeHtml(field.label)}</th>`)
+              )).join('')}
             </tr>
           </thead>
           <tbody>
-            ${itemGroups.map((group) => group.rows.map((row, index) => `
-                <tr>
-                  ${index === 0 ? `<th class="spectrum-ai-keypoint-image-cell" rowspan="${group.rows.length}" title="${utils.escapeHtml(group.imageName)}">${utils.escapeHtml(group.imageName)}</th>` : ''}
-                  ${row.rowIndex === 0 ? `<th class="spectrum-ai-keypoint-project-cell" rowspan="${row.rowSpan}">${utils.escapeHtml(row.event)}数值</th>` : ''}
-                  ${row.values.map((value) => `<td>${utils.escapeHtml(value)}</td>`).join('')}
-                </tr>
-              `).join('')).join('')}
+            ${itemRows.map((row) => `
+              <tr>
+                <th class="spectrum-ai-keypoint-image-cell" title="${utils.escapeHtml(row.imageName)}">${utils.escapeHtml(row.imageName)}</th>
+                ${row.cells.map((cell) => `<td class="spectrum-ai-value-cell is-${cell.tone}">${utils.escapeHtml(cell.value)}</td>`).join('')}
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
@@ -1513,24 +1587,48 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const entries = items.map((item) => {
       restorePreviewAiResult(item.id);
       const ai = previewAiState[item.id] || { status: 'idle' };
+      const propertyResult = getPropertyMatchResult(item, ai.result || null);
+      const propertyTableHtml = markdownTableToHtml(propertyResult?.displayTable || '')
+        || String(ai.propertyTableHtml || '');
       return {
         item,
-        propertyTableHtml: ai.status === 'success' ? String(ai.propertyTableHtml || '') : '',
+        imageName: item.title || item.code || ai.result?.propertyQueryNames?.[0] || '-',
+        table: parsePropertyTableHtml(propertyTableHtml),
       };
-    }).filter((entry) => entry.propertyTableHtml);
+    }).filter((entry) => entry.table?.headers?.length && entry.table?.rows?.length);
 
     if (!entries.length) {
       return '<div class="spectrum-ai-empty">物性表暂无匹配结果，确认物性分析数据已加载后可重新分析。</div>';
     }
 
+    const headers = [];
+    entries.forEach(({ table }) => {
+      table.headers.forEach((header) => {
+        if (!headers.includes(header)) headers.push(header);
+      });
+    });
+
     return `
-      <div class="spectrum-ai-merged-property-list">
-        ${entries.map(({ item, propertyTableHtml }) => `
-          <section class="spectrum-ai-merged-property-item">
-            <div class="spectrum-ai-merged-property-title">${utils.escapeHtml(item.title || item.code || '-')}</div>
-            ${propertyTableHtml}
-          </section>
-        `).join('')}
+      <div class="spectrum-ai-table-wrap spectrum-ai-property-table-wrap spectrum-ai-merged-property-table-wrap">
+        <table class="spectrum-ai-table spectrum-ai-property-table spectrum-ai-merged-property-table">
+          <thead>
+            <tr>
+              <th class="spectrum-ai-property-image-head">图片名称</th>
+              ${headers.map((header) => `<th>${utils.escapeHtml(header)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.map(({ imageName, table }) => {
+              const headerIndex = new Map(table.headers.map((header, index) => [header, index]));
+              return table.rows.map((row, rowIndex) => `
+                <tr>
+                  ${rowIndex === 0 ? `<th class="spectrum-ai-property-image-cell" rowspan="${table.rows.length}" title="${utils.escapeHtml(imageName)}">${utils.escapeHtml(imageName)}</th>` : ''}
+                  ${headers.map((header) => `<td>${utils.escapeHtml(row[headerIndex.get(header)] || '-')}</td>`).join('')}
+                </tr>
+              `).join('');
+            }).join('')}
+          </tbody>
+        </table>
       </div>
     `;
   };
@@ -1559,11 +1657,6 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     }
 
     return `
-      <div class="spectrum-ai-summary">
-        <span>合并图谱 ${items.length} 张</span>
-        <span>已分析 ${stats.successCount} 张</span>
-        <span>待补全 ${stats.missingCount} 张</span>
-      </div>
       ${stats.missingCount ? `<div class="spectrum-ai-empty">还有 ${stats.missingCount} 张图谱没有 AI 提取结果，点击“补全分析”后会逐张分析并自动合并。</div>` : ''}
       <div class="spectrum-ai-section-title">合并关键数据</div>
       ${renderMergedPreviewAiTable(items)}
@@ -2921,7 +3014,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     dialog.className = 'spectrum-preview-dialog dialog-overlay';
     document.body.appendChild(dialog);
     refs.previewDialog = dialog;
-    refs.previewItems = getPreviewItems(id);
+    refs.previewItems = sortPreviewItemsByName(getPreviewItems(id));
     refs.previewActiveId = refs.previewItems.some((entry) => entry.id === id)
       ? id
       : refs.previewItems[0]?.id || id;

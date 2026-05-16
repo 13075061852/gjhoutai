@@ -1244,6 +1244,11 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const legacySample = data.sample && typeof data.sample === 'object' && !Array.isArray(data.sample)
       ? data.sample
       : {};
+    const inferredSpectrumType = String(
+      data.testType
+      || legacySample.testType
+      || (Array.isArray(data.propertyQueryNames) ? data.propertyQueryNames[2] : ''),
+    ).trim().toUpperCase();
     const sourceRows = Array.isArray(data.keyPoints)
       ? data.keyPoints
       : Array.isArray(data.items)
@@ -1251,15 +1256,39 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         : Array.isArray(data.rows)
           ? data.rows
           : [];
+    const DSC_EVENT_BY_CURVE = {
+      红色: '第一次放热',
+      黑色: '第一次吸热',
+      蓝色: '第二次吸热',
+    };
+    const DSC_CURVE_ALIASES = new Map([
+      ['红', '红色'],
+      ['红色', '红色'],
+      ['red', '红色'],
+      ['黑', '黑色'],
+      ['黑色', '黑色'],
+      ['black', '黑色'],
+      ['蓝', '蓝色'],
+      ['蓝色', '蓝色'],
+      ['blue', '蓝色'],
+    ]);
+    const normalizeDscCurve = (value) => {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const compact = raw.toLowerCase().replace(/\s+/g, '');
+      return DSC_CURVE_ALIASES.get(compact) || raw;
+    };
     const keyPoints = sourceRows
       .map((row) => {
         if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+        const curve = normalizeDscCurve(row.curve || row.channel || row.color || '');
+        const rawEvent = String(row.event || row.type || row.category || row.stage || '').trim();
         return {
           label: String(row.label || row.name || row.item || row.parameter || '').trim(),
           value: String(row.value ?? row.result ?? row.measurement ?? '').trim(),
           unit: String(row.unit || '').trim(),
-          curve: String(row.curve || row.channel || row.color || '').trim(),
-          event: String(row.event || row.type || row.category || row.stage || '').trim(),
+          curve,
+          event: inferredSpectrumType === 'DSC' ? (DSC_EVENT_BY_CURVE[curve] || rawEvent) : rawEvent,
           sourceText: String(row.sourceText || row.source || row.note || row.description || '').trim(),
         };
       })
@@ -1406,16 +1435,27 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     return { headers, rows };
   };
 
+  const getSpectrumEvent = (row, spectrumType = '') => {
+    const curve = String(row?.curve || '').trim();
+    if (String(spectrumType || '').trim().toUpperCase() === 'DSC') {
+      if (curve === '红色') return '第一次放热';
+      if (curve === '黑色') return '第一次吸热';
+      if (curve === '蓝色') return '第二次吸热';
+    }
+    return row?.event || curve || '未分类';
+  };
+
   const renderAiExtractTable = (aiResult, item) => {
     const rows = aiResult?.keyPoints || [];
     if (!rows.length) {
       return '<div class="spectrum-ai-empty">暂未提取到可表格化的信息点。</div>';
     }
+    const preferredDscEventOrder = ['第一次放热', '第一次吸热', '第二次吸热'];
     const eventOrder = [];
     const groups = new Map();
     rows.forEach((row) => {
       const label = row.label || '-';
-      const event = row.event || row.curve || '未分类';
+      const event = getSpectrumEvent(row, item?.spectrumType || aiResult?.propertyQueryNames?.[2]);
       const valueText = [row.value, row.unit].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || '-';
       if (!eventOrder.includes(event)) eventOrder.push(event);
       if (!groups.has(label)) groups.set(label, new Map());
@@ -1425,6 +1465,16 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         groups.get(label).set(event, eventValues);
       }
     });
+    if (String(item?.spectrumType || aiResult?.propertyQueryNames?.[2] || '').trim().toUpperCase() === 'DSC') {
+      eventOrder.sort((a, b) => {
+        const aIndex = preferredDscEventOrder.indexOf(a);
+        const bIndex = preferredDscEventOrder.indexOf(b);
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+    }
     const orderedGroups = Array.from(groups.entries());
     const bodyRows = eventOrder.flatMap((event) => {
       const maxRows = Math.max(1, ...orderedGroups.map(([, eventMap]) => (eventMap.get(event) || []).length));
@@ -1528,7 +1578,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       const eventMap = new Map();
       result.keyPoints.forEach((row) => {
         const label = row.label || '-';
-        const event = row.event || row.curve || '未分类';
+        const event = getSpectrumEvent(row, item?.spectrumType || result?.propertyQueryNames?.[2]);
         const valueText = [row.value, row.unit].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || '-';
         if (!eventMap.has(event)) eventMap.set(event, new Map());
         const labelMap = eventMap.get(event);
@@ -1603,7 +1653,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
     const headers = [];
     entries.forEach(({ table }) => {
-      table.headers.forEach((header) => {
+      table.headers.slice(1).forEach((header) => {
         if (!headers.includes(header)) headers.push(header);
       });
     });
@@ -1613,16 +1663,14 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         <table class="spectrum-ai-table spectrum-ai-property-table spectrum-ai-merged-property-table">
           <thead>
             <tr>
-              <th class="spectrum-ai-property-image-head">图片名称</th>
               ${headers.map((header) => `<th>${utils.escapeHtml(header)}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${entries.map(({ imageName, table }) => {
+            ${entries.map(({ table }) => {
               const headerIndex = new Map(table.headers.map((header, index) => [header, index]));
-              return table.rows.map((row, rowIndex) => `
+              return table.rows.map((row) => `
                 <tr>
-                  ${rowIndex === 0 ? `<th class="spectrum-ai-property-image-cell" rowspan="${table.rows.length}" title="${utils.escapeHtml(imageName)}">${utils.escapeHtml(imageName)}</th>` : ''}
                   ${headers.map((header) => `<td>${utils.escapeHtml(row[headerIndex.get(header)] || '-')}</td>`).join('')}
                 </tr>
               `).join('');
@@ -1896,20 +1944,29 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           '  - 黑色曲线 → 第一次吸热（First Endothermic）',
           '  - 蓝色曲线 → 第二次吸热（Second Endothermic）',
           '',
-          '请对每一条曲线分别提取以下信息：',
-          '  1. 峰值温度（℃）—— 该曲线主要吸热/放热峰的最高点温度',
-          '  2. 标准焓值（J/g）—— 该曲线自身峰面积的积分热量，即标准吸热量或放热量，不是总系热量',
-          '  3. 峰高（mW 或 W/g）—— 峰顶点到基线的垂直高度',
-          '  4. 半峰宽（℃）—— 峰高一半处的峰宽度',
+          '请先按颜色把三条曲线严格分开，再分别提取每条曲线上的所有可见吸热峰/放热峰，而不是只提取一个“主要峰”。',
+          '对每一个独立峰都分别提取以下信息：',
+          '  1. 峰值温度（℃）—— 当前这个峰的最高点温度',
+          '  2. 标准焓值（J/g）—— 当前这个峰自身峰面积的积分热量，即标准吸热量或放热量，不是总系热量',
+          '  3. 峰高（mW 或 W/g）—— 当前这个峰顶点到基线的垂直高度',
+          '  4. 半峰宽（℃）—— 当前这个峰在峰高一半处的峰宽度',
           '',
           '额外要求：黑色曲线（第一次吸热）还需提取玻璃化转变温度 Tg（℃），读取转折区中点温度。',
           '',
           '提取原则：',
+          '- 每条曲线可能有多个峰；图中凡是已经标注出的峰，都必须逐个输出，不能因为同属一条曲线就合并、遗漏或只保留最显著的一个',
+          '- 同一个峰的多项指标必须保持相同的 curve 与 event；不同峰即使 label 相同，也要分别作为独立行输出',
+          '- 先依据颜色确定归属，再读取对应颜色附近的文字标注；禁止把黑色曲线的峰填到蓝色曲线，或把蓝色曲线的峰填到黑色曲线',
+          '- 判断峰属于哪条曲线时，只能依据“峰连接到哪一条连续母曲线/基线”来判断，不能依据峰区填充颜色、阴影颜色、标注文字颜色来判断',
+          '- 黑色曲线上的峰即使使用绿色、紫色或其他颜色做积分填充/文字标注，也仍然属于黑色曲线（第一次吸热）',
+          '- 蓝色曲线是图中下方那条连续蓝线；只有真正连接在蓝色母曲线上的峰，才允许归为第二次吸热',
+          '- 若某个峰的标注颜色与母曲线颜色不一致，必须优先服从母曲线颜色，不要被积分区配色误导',
+          '- 颜色与事件的绑定是硬规则：红色只能是第一次放热，黑色只能是第一次吸热，蓝色只能是第二次吸热；若图中文字与颜色冲突，以颜色为准',
           '- 不要提取无用的额外信息，只聚焦上述指标',
           '- 焓值必须取单条曲线单个峰的积分热量（标准吸放热量），严禁填写总系热量或全部峰的总积分值',
           '- 如果图中显示了每一段的标准焓值（比如 Peak: xxx℃, Delta H: xxx J/g），请优先使用图中的标注值',
           '- 数值尽量从图面标注或坐标轴读取，无法确定则填空字符串',
-          '- 每条曲线的每个指标作为独立一行输出',
+          '- 每个峰的每个指标作为独立一行输出',
           '- curve 字段填颜色中文：红色 / 黑色 / 蓝色',
           '- event 字段填：第一次放热 / 第一次吸热 / 第二次吸热',
           '- 表中看不到的信息就不要编造，留空即可',

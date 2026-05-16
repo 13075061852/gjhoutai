@@ -1749,15 +1749,15 @@
     }
     .spectrum-ai-pivot-table{
       --spectrum-ai-head-row-height:34px;
-      width:100%;
+      width:max-content;
       min-width:100%;
-      table-layout:fixed;
+      table-layout:auto;
     }
     .spectrum-ai-pivot-table .spectrum-ai-image-col{
       width:var(--spectrum-keypoint-image-col);
     }
     .spectrum-ai-pivot-table .spectrum-ai-value-col{
-      width:calc((100% - var(--spectrum-keypoint-image-col)) / 13);
+      width:auto;
     }
     .spectrum-ai-pivot-table .spectrum-ai-event-head{
       top:0;
@@ -1767,7 +1767,7 @@
     }
     .spectrum-ai-pivot-table .spectrum-ai-field-head{
       top:var(--spectrum-ai-head-row-height);
-      min-width:0;
+      min-width:max-content;
       max-width:none;
       background:#f8fafc;
       z-index:2;
@@ -1804,8 +1804,10 @@
       white-space:nowrap;
     }
     .spectrum-ai-pivot-table td{
-      min-width:0;
+      min-width:max-content;
       max-width:none;
+      overflow:visible;
+      text-overflow:clip;
     }
     .spectrum-ai-pivot-table .spectrum-ai-value-cell{
       font-weight:650;

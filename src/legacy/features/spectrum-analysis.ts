@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp, getPublicApp } from '../core/app-context';
+import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
   'use strict';
@@ -17,6 +18,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const IMAGE_DB_NAME = 'gjh-spectrum-images-db';
   const IMAGE_DB_VERSION = 1;
   const IMAGE_STORE_NAME = 'images';
+  const EMPTY_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
   const EDITABLE_FIELDS = ['title', 'category', 'date', 'tags', 'note'];
   const DELETE_ANIMATION_MS = 240;
   const SKILL_MUTATION_LIMIT = 30;
@@ -41,11 +43,13 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
   const refs = {};
   const previewAiState = {};
-  let previewAiCollapsed = false;
+  let previewAiCollapsed = true;
   let previewAiMergeMode = false;
   let previewAiMergeViewMode = 'table';
   let previewAiMergeRunning = false;
   let imageDbPromise = null;
+  let imageObserver = null;
+  const pendingImageLoads = new Map();
   let categoryDragActive = false;
   const DETAIL_COMPACT_MQ = window.matchMedia('(max-width: 1200px)');
 
@@ -215,57 +219,56 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const openImageDb = () => {
     if (!window.indexedDB) return Promise.resolve(null);
     if (imageDbPromise) return imageDbPromise;
-
     imageDbPromise = new Promise((resolve) => {
       const request = window.indexedDB.open(IMAGE_DB_NAME, IMAGE_DB_VERSION);
       request.addEventListener('upgradeneeded', () => {
         const db = request.result;
-        if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) {
-          db.createObjectStore(IMAGE_STORE_NAME);
-        }
+        if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) db.createObjectStore(IMAGE_STORE_NAME);
       });
       request.addEventListener('success', () => resolve(request.result));
-      request.addEventListener('error', () => {
-        console.warn('[spectrum-analysis] Failed to open image storage:', request.error);
-        resolve(null);
-      });
+      request.addEventListener('error', () => resolve(null));
     });
-
     return imageDbPromise;
   };
 
   const runImageStore = async (mode, handler) => {
     const db = await openImageDb();
     if (!db) return null;
-
     return new Promise((resolve) => {
       try {
-        const transaction = db.transaction(IMAGE_STORE_NAME, mode);
-        const store = transaction.objectStore(IMAGE_STORE_NAME);
-        const request = handler(store);
+        const tx = db.transaction(IMAGE_STORE_NAME, mode);
+        const request = handler(tx.objectStore(IMAGE_STORE_NAME));
         request.addEventListener('success', () => resolve(request.result));
-        request.addEventListener('error', () => {
-          console.warn('[spectrum-analysis] Image storage request failed:', request.error);
-          resolve(null);
-        });
-      } catch (error) {
-        console.warn('[spectrum-analysis] Image storage transaction failed:', error);
+        request.addEventListener('error', () => resolve(null));
+      } catch {
         resolve(null);
       }
     });
   };
 
-  const getStoredImage = (id) => runImageStore('readonly', (store) => store.get(id));
+  const getCachedImage = async (id, version = '') => {
+    const cached = await runImageStore('readonly', (store) => store.get(id));
+    if (typeof cached === 'string') return version ? null : cached;
+    if (!cached || typeof cached !== 'object') return null;
+    if (version && cached.version !== version) return null;
+    return typeof cached.dataUrl === 'string' ? cached.dataUrl : null;
+  };
 
-  const putStoredImage = async (id, image) => {
-    const result = await runImageStore('readwrite', (store) => store.put(image, id));
-    return result !== null;
+  const putCachedImage = (id, dataUrl, version = '') => runImageStore('readwrite', (store) => store.put({ dataUrl, version }, id));
+
+  const deleteCachedImages = (ids) => ids.forEach((id) => runImageStore('readwrite', (store) => store.delete(id)));
+
+  const getStoredImage = (id) => cloudStorage.getDataUrl('spectrum', id);
+
+  const putStoredImage = async (id, image, version = '') => {
+    const saved = await cloudStorage.putDataUrl('spectrum', id, image);
+    if (saved) await putCachedImage(id, image, version);
+    return saved;
   };
 
   const deleteStoredImages = (ids) => {
-    ids.forEach((id) => {
-      runImageStore('readwrite', (store) => store.delete(id));
-    });
+    ids.forEach((id) => cloudStorage.deleteBlob('spectrum', id));
+    deleteCachedImages(ids);
   };
 
   const toStoredItem = (item) => {
@@ -274,50 +277,63 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     return stored;
   };
 
-  const hydrateUploadedItem = async (item) => {
-    const next = { ...item };
-    if (next.image) {
-      const saved = await putStoredImage(next.id, next.image);
-      next.imageStored = saved;
-      return next;
-    }
+  const getImageVersion = (item) => String(item.imageVersion || item.imageUpdatedAt || '');
 
-    if (next.imageStored) {
-      const image = await getStoredImage(next.id);
-      if (typeof image === 'string' && image) {
-        next.image = image;
-        return next;
-      }
-      next.imageStored = false;
-    }
-
-    return next;
+  const ensureItemImage = async (id) => {
+    const item = state.items.find((entry) => entry.id === id);
+    if (!item || item.image || !item.imageStored) return item?.image || '';
+    if (pendingImageLoads.has(id)) return pendingImageLoads.get(id);
+    const promise = (async () => {
+      const version = getImageVersion(item);
+      const cached = await getCachedImage(id, version);
+      const image = cached || await getStoredImage(id);
+      if (!image) return '';
+      if (!cached) await putCachedImage(id, image, version);
+      item.image = image;
+      document.querySelectorAll(`[data-spectrum-image-id="${CSS.escape(id)}"]`).forEach((node) => {
+        if (node instanceof HTMLImageElement) node.src = image;
+      });
+      if (state.activeId === id) renderDetail();
+      return image;
+    })().finally(() => pendingImageLoads.delete(id));
+    pendingImageLoads.set(id, promise);
+    return promise;
   };
 
   const loadItems = async () => {
-    const edits = utils.readJson(EDIT_STORAGE_KEY, {});
+    const edits = await cloudStorage.getJson(EDIT_STORAGE_KEY) ?? utils.readJson(EDIT_STORAGE_KEY, {});
     state.edits = edits && typeof edits === 'object' && !Array.isArray(edits) ? edits : {};
-    const uploaded = utils.readJson(STORAGE_KEY, []);
-    const hydrated = await Promise.all((Array.isArray(uploaded) ? uploaded : []).map(hydrateUploadedItem));
-    state.items = hydrated
-      .filter((item) => item.image)
-      .map(applyItemEdits);
+    const uploaded = await cloudStorage.getJson(STORAGE_KEY) ?? utils.readJson(STORAGE_KEY, []);
+    state.items = (Array.isArray(uploaded) ? uploaded : []).map(applyItemEdits);
     loadFilterState();
     validateFilterState();
     state.activeId = state.items[0]?.id || '';
-    saveUploadedItems();
   };
 
-  const saveUploadedItems = () => {
+  const saveUploadedItems = async () => {
     const uploaded = state.items.filter((item) => item.uploaded).map(toStoredItem);
-    if (!utils.writeJson(STORAGE_KEY, uploaded)) {
-      console.warn('[spectrum-analysis] Failed to save uploaded image metadata. Browser storage may be full.');
-    }
+    return cloudStorage.putJson(STORAGE_KEY, uploaded);
   };
 
   const saveItemEdits = () => {
-    utils.writeJson(EDIT_STORAGE_KEY, state.edits);
+    cloudStorage.putJson(EDIT_STORAGE_KEY, state.edits);
   };
+
+  const observeLazyImages = () => {
+    imageObserver?.disconnect();
+    imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const image = entry.target;
+        const id = image.getAttribute('data-spectrum-image-id');
+        if (id) ensureItemImage(id);
+        imageObserver?.unobserve(image);
+      });
+    }, { rootMargin: '240px 0px' });
+    document.querySelectorAll('img[data-spectrum-image-id]').forEach((image) => imageObserver.observe(image));
+  };
+
+  const getItemImageSrc = (item) => item.image || EMPTY_IMAGE_SRC;
 
   const loadFilterState = () => {
     const saved = utils.readJson(FILTER_STORAGE_KEY, {});
@@ -568,7 +584,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.selectedList.innerHTML = selected.map((item) => `
       <article class="spectrum-selected-item" data-spectrum-selected-item="${utils.escapeHtml(item.id)}">
         <button class="spectrum-selected-thumb" type="button" data-spectrum-open="${utils.escapeHtml(item.id)}">
-          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+          <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" alt="${utils.escapeHtml(item.title)}" />
         </button>
         <button class="spectrum-selected-main" type="button" data-spectrum-open="${utils.escapeHtml(item.id)}">
           <span>${utils.escapeHtml(item.title)}</span>
@@ -780,6 +796,47 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     document.body.appendChild(dialog);
   };
 
+  const openImportProgressDialog = ({ total, categoryCount, hasTags }) => {
+    refs.importProgressDialog?.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'spectrum-delete-dialog dialog-overlay';
+    dialog.innerHTML = `
+      <div class="spectrum-delete-card spectrum-import-progress-card dialog-card" role="dialog" aria-modal="true" aria-labelledby="spectrumImportProgressTitle">
+        <div class="spectrum-delete-icon"><i class="ti ti-package-import" aria-hidden="true"></i></div>
+        <div class="spectrum-delete-copy">
+          <div class="spectrum-delete-title" id="spectrumImportProgressTitle">正在导入图谱包</div>
+          <div class="spectrum-delete-text" data-spectrum-import-status>已识别 ${total} 张图片，${categoryCount} 个分类，${hasTags ? '已读取 tags.json' : '未发现 tags.json'}</div>
+        </div>
+        <div class="spectrum-import-progress-track" aria-hidden="true">
+          <div class="spectrum-import-progress-bar" data-spectrum-import-bar style="width:0%"></div>
+        </div>
+        <div class="spectrum-import-progress-meta">
+          <span data-spectrum-import-count>0 / ${total}</span>
+          <span data-spectrum-import-stage>准备上传</span>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+    refs.importProgressDialog = dialog;
+    return {
+      update({ completed = 0, stage = '上传中', detail = '' }) {
+        const percent = total ? Math.round((completed / total) * 100) : 0;
+        const bar = dialog.querySelector('[data-spectrum-import-bar]');
+        const count = dialog.querySelector('[data-spectrum-import-count]');
+        const stageNode = dialog.querySelector('[data-spectrum-import-stage]');
+        const status = dialog.querySelector('[data-spectrum-import-status]');
+        if (bar) bar.style.width = `${percent}%`;
+        if (count) count.textContent = `${completed} / ${total}`;
+        if (stageNode) stageNode.textContent = `${stage} ${percent}%`;
+        if (status && detail) status.textContent = detail;
+      },
+      close() {
+        dialog.remove();
+        if (refs.importProgressDialog === dialog) refs.importProgressDialog = null;
+      },
+    };
+  };
+
   const renderGallery = () => {
     const items = syncActiveWithFilteredItems();
     const selectedCount = state.selectedIds.size;
@@ -813,7 +870,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       return `
         <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
           <div class="spectrum-card-image">
-            <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+            <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" alt="${utils.escapeHtml(item.title)}" />
           </div>
           <div class="spectrum-card-body">
             <div class="spectrum-card-top">
@@ -830,6 +887,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         </article>
       `;
     }).join('');
+    observeLazyImages();
   };
 
   const getCategoryButtons = () => [...(refs.categoryFilters?.querySelectorAll('[data-spectrum-category]') || [])];
@@ -877,7 +935,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
     refs.detailPanel.innerHTML = `
       <button class="spectrum-detail-image" type="button" data-spectrum-preview="${utils.escapeHtml(item.id)}" aria-label="放大查看 ${utils.escapeHtml(item.title)}">
-        <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+        <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" alt="${utils.escapeHtml(item.title)}" />
       </button>
       <div class="spectrum-detail-body">
         <div class="spectrum-detail-modal-head">
@@ -996,7 +1054,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           </button>
         </div>
         <button class="spectrum-compact-detail-image" type="button" data-spectrum-preview="${utils.escapeHtml(item.id)}" aria-label="放大查看 ${utils.escapeHtml(item.title)}">
-          <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+          <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" alt="${utils.escapeHtml(item.title)}" />
         </button>
         <form class="spectrum-detail-form" data-spectrum-detail-form>
           <input name="id" type="hidden" value="${utils.escapeHtml(item.id)}" />
@@ -1165,6 +1223,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     renderGallery();
     renderDetail();
     renderSelectedList();
+    observeLazyImages();
     updateActions();
     updateDetailCollapsed();
   };
@@ -2988,7 +3047,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       <aside class="spectrum-preview-rail" aria-label="已选图谱预览列表">
         ${items.map((entry) => `
           <button class="spectrum-preview-thumb${entry.id === item.id ? ' is-active' : ''}" type="button" data-spectrum-preview-open="${utils.escapeHtml(entry.id)}" aria-label="查看 ${utils.escapeHtml(entry.title)}">
-            <img src="${utils.escapeHtml(entry.image)}" alt="${utils.escapeHtml(entry.title)}" />
+            <img src="${utils.escapeHtml(getItemImageSrc(entry))}" data-spectrum-image-id="${utils.escapeHtml(entry.id)}" loading="lazy" alt="${utils.escapeHtml(entry.title)}" />
             <span>${utils.escapeHtml(entry.title)}</span>
           </button>
         `).join('')}
@@ -3014,7 +3073,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           </div>
           <div class="spectrum-preview-card-body">
             <div class="spectrum-preview-image-frame">
-              <img src="${utils.escapeHtml(item.image)}" alt="${utils.escapeHtml(item.title)}" />
+              <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" alt="${utils.escapeHtml(item.title)}" />
             </div>
             ${renderPreviewAiPanel(item)}
           </div>
@@ -3027,6 +3086,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     `;
 
     refs.previewDialog.querySelector('.spectrum-preview-thumb.is-active')?.scrollIntoView({ block: 'nearest' });
+    observeLazyImages();
+    ensureItemImage(item.id);
   };
 
   const setPreviewAiCollapsed = (collapsed) => {
@@ -3052,6 +3113,15 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
   };
 
+  const ensurePreviewAiResultOnExpand = (id) => {
+    if (!id) return;
+    restorePreviewAiResult(id);
+    const ai = previewAiState[id];
+    const alreadyAnalyzed = ai?.status === 'success' && Boolean(ai.result);
+    const busy = ai?.status === 'loading' || ai?.status === 'streaming';
+    if (!alreadyAnalyzed && !busy) runPreviewAiExtract(id);
+  };
+
   const switchImagePreview = (step) => {
     const items = refs.previewItems || [];
     if (!refs.previewDialog || items.length < 2) return;
@@ -3062,11 +3132,13 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     renderImagePreview();
   };
 
-  const openImagePreview = (id) => {
+  const openImagePreview = async (id) => {
     const item = state.items.find((entry) => entry.id === id);
     if (!item) return;
+    await ensureItemImage(id);
 
     closeImagePreview();
+    previewAiCollapsed = true;
     const dialog = document.createElement('div');
     dialog.className = 'spectrum-preview-dialog dialog-overlay';
     document.body.appendChild(dialog);
@@ -3309,7 +3381,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       return;
     }
 
-    const imageEntries = Object.values(zip.files)
+    const allEntries = Object.values(zip.files);
+    const hasTagsEntry = allEntries.some((entry) => !entry.dir && getPathFileName(entry.name).toLowerCase() === 'tags.json');
+    const imageEntries = allEntries
       .filter((entry) => !entry.dir && isImageArchivePath(entry.name));
 
     if (!imageEntries.length) {
@@ -3338,13 +3412,37 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       };
     });
 
+    const categories = new Set(plans.map((plan) => plan.category).filter(Boolean));
+    const invalidPlans = plans.filter((plan) => !plan.category || !plan.title);
+    if (invalidPlans.length) {
+      openUploadIssueDialog(invalidPlans.map((plan) => ({
+        name: plan.fileName,
+        reason: !plan.category ? '缺少分类目录' : '缺少图谱名称',
+      })));
+      return;
+    }
+
     const conflictCount = plans.filter((plan) => plan.existing).length;
     const conflictAction = conflictCount ? await openImportConflictDialog(conflictCount) : 'overwrite';
     let changed = false;
     let editsChanged = false;
+    let uploadedCount = 0;
+    const importProgress = openImportProgressDialog({
+      total: plans.length,
+      categoryCount: categories.size,
+      hasTags: hasTagsEntry,
+    });
 
     for (const plan of plans) {
-      if (plan.existing && conflictAction === 'skip') continue;
+      if (plan.existing && conflictAction === 'skip') {
+        uploadedCount += 1;
+        importProgress.update({
+          completed: uploadedCount,
+          stage: '跳过冲突',
+          detail: `已跳过同名图谱：${plan.title}`,
+        });
+        continue;
+      }
 
       let image = '';
       try {
@@ -3362,7 +3460,14 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       }
 
       if (plan.existing) {
-        const imageStored = await putStoredImage(plan.existing.id, image);
+        const imageVersion = new Date().toISOString();
+        const imageStored = await putStoredImage(plan.existing.id, image, imageVersion);
+        if (!imageStored) {
+          issues.push({ name: plan.fileName, reason: '云端文件上传失败' });
+          uploadedCount += 1;
+          importProgress.update({ completed: uploadedCount, stage: '上传失败', detail: `上传失败：${plan.fileName}` });
+          continue;
+        }
         const index = state.items.findIndex((item) => item.id === plan.existing.id);
         if (index < 0) continue;
         if (state.edits[plan.existing.id]) {
@@ -3379,12 +3484,20 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           note: plan.note,
           image,
           imageStored,
+          imageVersion,
           uploaded: true,
         };
         revealItemInGallery(state.items[index]);
       } else {
         const id = `import-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const imageStored = await putStoredImage(id, image);
+        const imageVersion = new Date().toISOString();
+        const imageStored = await putStoredImage(id, image, imageVersion);
+        if (!imageStored) {
+          issues.push({ name: plan.fileName, reason: '云端文件上传失败' });
+          uploadedCount += 1;
+          importProgress.update({ completed: uploadedCount, stage: '上传失败', detail: `上传失败：${plan.fileName}` });
+          continue;
+        }
         const item = {
           id,
           code: `IMPORT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
@@ -3396,6 +3509,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           tags: plan.tags,
           image,
           imageStored,
+          imageVersion,
           note: plan.note,
           uploaded: true,
         };
@@ -3403,13 +3517,31 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         revealItemInGallery(item);
       }
       changed = true;
+      uploadedCount += 1;
+      importProgress.update({
+        completed: uploadedCount,
+        stage: '上传中',
+        detail: `正在处理 ${plan.category} / ${plan.fileName}`,
+      });
     }
 
     if (changed) {
       if (editsChanged) saveItemEdits();
-      saveUploadedItems();
+      importProgress.update({ completed: uploadedCount, stage: '写入索引', detail: '图片已上传，正在写入 D1 图谱目录' });
+      const indexSaved = await saveUploadedItems();
+      if (!indexSaved) {
+        issues.push({ name: '图谱目录', reason: 'D1 索引写入失败，请勿刷新页面并重试导入' });
+      }
       render();
     }
+    importProgress.update({
+      completed: plans.length,
+      stage: issues.length ? '完成但有异常' : '导入完成',
+      detail: issues.length
+        ? `已完成 ${plans.length - issues.length} 张，发现 ${issues.length} 个问题`
+        : `已完成 ${plans.length} 张，分类与标签已写入云端`,
+    });
+    window.setTimeout(() => importProgress.close(), issues.length ? 1200 : 700);
     openUploadIssueDialog(issues);
   };
 
@@ -3459,7 +3591,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       const today = new Date().toISOString().slice(0, 10);
       const spectrumType = getSpectrumTypeFromName(file.name);
       if (existing) {
-        const imageStored = await putStoredImage(existing.id, image);
+        const imageVersion = new Date().toISOString();
+        const imageStored = await putStoredImage(existing.id, image, imageVersion);
         const index = state.items.findIndex((item) => item.id === existing.id);
         if (index < 0) continue;
         state.items[index] = {
@@ -3468,6 +3601,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           spectrumType,
           image,
           imageStored,
+          imageVersion,
           uploaded: true,
         };
         revealItemInGallery(state.items[index]);
@@ -3475,7 +3609,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         const inheritedCategory = state.category === '全部' ? '' : state.category;
         const inheritedTags = state.tag === '全部' ? [] : [state.tag];
         const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const imageStored = await putStoredImage(id, image);
+        const imageVersion = new Date().toISOString();
+        const imageStored = await putStoredImage(id, image, imageVersion);
         const item = {
           id,
           code: `UPLOAD-${today.replace(/-/g, '')}`,
@@ -3487,13 +3622,14 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
           tags: inheritedTags,
           image,
           imageStored,
+          imageVersion,
           note: '',
           uploaded: true,
         };
         state.items.unshift(item);
         revealItemInGallery(item);
       }
-      saveUploadedItems();
+      await saveUploadedItems();
       render();
     }
 
@@ -3763,7 +3899,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
       const toggleAiButton = event.target.closest('[data-spectrum-toggle-ai-panel]');
       if (toggleAiButton) {
-        setPreviewAiCollapsed(!previewAiCollapsed);
+        const nextCollapsed = !previewAiCollapsed;
+        setPreviewAiCollapsed(nextCollapsed);
+        if (!nextCollapsed) ensurePreviewAiResultOnExpand(refs.previewActiveId);
         return;
       }
 
@@ -3945,6 +4083,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const init = async () => {
     initRefs();
     if (!refs.gallery) return;
+    if (refs.uploadBtn) refs.uploadBtn.disabled = true;
+    if (refs.importBtn) refs.importBtn.disabled = true;
     bindEvents();
     setupDetailAutoCollapse();
     refs.gallery.className = 'spectrum-gallery is-empty';
@@ -3956,6 +4096,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       </div>
     `;
     await loadItems();
+    if (refs.uploadBtn) refs.uploadBtn.disabled = false;
+    if (refs.importBtn) refs.importBtn.disabled = false;
     render();
   };
 

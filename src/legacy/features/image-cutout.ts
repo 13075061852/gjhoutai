@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
   'use strict';
@@ -136,55 +137,9 @@ import { getLegacyApp } from '../core/app-context';
     syncActionButtons();
   };
 
-  const openImageDb = () => {
-    if (!window.indexedDB) return Promise.resolve(null);
-    if (imageDbPromise) return imageDbPromise;
+  const getStoredImage = () => cloudStorage.getDataUrl('cutout', LAST_IMAGE_KEY);
 
-    imageDbPromise = new Promise((resolve) => {
-      const request = window.indexedDB.open(IMAGE_DB_NAME, IMAGE_DB_VERSION);
-      request.addEventListener('upgradeneeded', () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(IMAGE_STORE_NAME)) {
-          db.createObjectStore(IMAGE_STORE_NAME);
-        }
-      });
-      request.addEventListener('success', () => resolve(request.result));
-      request.addEventListener('error', () => {
-        console.warn('[image-cutout] Failed to open image storage:', request.error);
-        resolve(null);
-      });
-    });
-
-    return imageDbPromise;
-  };
-
-  const runImageStore = async (mode, handler) => {
-    const db = await openImageDb();
-    if (!db) return null;
-
-    return new Promise((resolve) => {
-      try {
-        const transaction = db.transaction(IMAGE_STORE_NAME, mode);
-        const store = transaction.objectStore(IMAGE_STORE_NAME);
-        const request = handler(store);
-        request.addEventListener('success', () => resolve(request.result));
-        request.addEventListener('error', () => {
-          console.warn('[image-cutout] Image storage request failed:', request.error);
-          resolve(null);
-        });
-      } catch (error) {
-        console.warn('[image-cutout] Image storage transaction failed:', error);
-        resolve(null);
-      }
-    });
-  };
-
-  const getStoredImage = () => runImageStore('readonly', (store) => store.get(LAST_IMAGE_KEY));
-
-  const putStoredImage = async (image) => {
-    const result = await runImageStore('readwrite', (store) => store.put(image, LAST_IMAGE_KEY));
-    return result !== null;
-  };
+  const putStoredImage = (image) => cloudStorage.putDataUrl('cutout', LAST_IMAGE_KEY, image);
 
   const getControlSnapshot = () => ({
     tolerance: refs.tolerance?.value || '34',
@@ -193,7 +148,7 @@ import { getLegacyApp } from '../core/app-context';
   });
 
   const saveSession = (extra = {}) => {
-    utils.writeJson(STORAGE_KEY, {
+    cloudStorage.putJson(STORAGE_KEY, {
       fileName: state.fileName || '',
       imageStored: state.imageStored,
       confirmed: false,
@@ -376,7 +331,7 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const restoreStoredSession = async () => {
-    const saved = utils.readJson(STORAGE_KEY, {});
+    const saved = await cloudStorage.getJson(STORAGE_KEY) ?? utils.readJson(STORAGE_KEY, {});
     if (!saved || typeof saved !== 'object' || !saved.imageStored) return;
     applySavedControls(saved.controls || {});
     setStatus('正在恢复本地图片...', 'loading');
@@ -455,43 +410,95 @@ import { getLegacyApp } from '../core/app-context';
     }
 
     if (count < Math.max(24, width * height * 0.002)) return null;
-    const pad = 0;
-    const bridgeGap = Math.max(3, Math.round(Math.min(width, height) * 0.02));
     const mask = new Uint8Array(width * height);
-    const minColPixels = Math.max(3, Math.round(height * 0.006));
+    const protectRadius = Math.max(1, Math.round(Math.min(width, height) * 0.003));
 
-    for (let x = 0; x < width; x += 1) {
-      let start = -1;
-      let lastStrong = -1;
-      let strongCount = 0;
-
-      const commitSegment = () => {
-        if (start < 0 || strongCount < minColPixels) return;
-        const from = clamp(start - pad, 0, height - 1);
-        const to = clamp(lastStrong + pad, 0, height - 1);
-        for (let yy = from; yy <= to; yy += 1) {
-          mask[yy * width + x] = 1;
-        }
-      };
-
-      for (let y = 0; y < height; y += 1) {
-        if (strong[y * width + x]) {
-          if (start < 0) start = y;
-          lastStrong = y;
-          strongCount += 1;
-          continue;
-        }
-        if (start >= 0 && y - lastStrong > bridgeGap) {
-          commitSegment();
-          start = -1;
-          lastStrong = -1;
-          strongCount = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (!strong[y * width + x]) continue;
+        const fromY = clamp(y - protectRadius, 0, height - 1);
+        const toY = clamp(y + protectRadius, 0, height - 1);
+        const fromX = clamp(x - protectRadius, 0, width - 1);
+        const toX = clamp(x + protectRadius, 0, width - 1);
+        for (let yy = fromY; yy <= toY; yy += 1) {
+          for (let xx = fromX; xx <= toX; xx += 1) {
+            mask[yy * width + xx] = 1;
+          }
         }
       }
-      commitSegment();
     }
 
     return mask;
+  };
+
+  const getBackgroundAlpha = (distance, tolerance, feather) => {
+    const fadeRange = Math.max(1, feather);
+    return distance <= tolerance
+      ? 0
+      : Math.round(255 * clamp((distance - tolerance) / fadeRange, 0, 1));
+  };
+
+  const clearLargeEnclosedBackgroundRegions = (data, width, height, bg, tolerance, feather, subjectMask, visited) => {
+    const candidate = new Uint8Array(width * height);
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      if (visited[pixel] || subjectMask?.[pixel]) continue;
+      const index = pixel * 4;
+      if (data[index + 3] < 8) continue;
+      if (colorDistance(data, index, bg) <= tolerance + feather) {
+        candidate[pixel] = 1;
+      }
+    }
+
+    const componentVisited = new Uint8Array(width * height);
+    const minLargeArea = Math.max(64, Math.round(width * height * 0.006));
+    const minWideSpan = Math.round(width * 0.12);
+    const minTallSpan = Math.round(height * 0.12);
+    const stack = [];
+
+    const enqueue = (x, y) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return;
+      const pixel = y * width + x;
+      if (!candidate[pixel] || componentVisited[pixel]) return;
+      componentVisited[pixel] = 1;
+      stack.push(pixel);
+    };
+
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      if (!candidate[pixel] || componentVisited[pixel]) continue;
+      componentVisited[pixel] = 1;
+      stack.push(pixel);
+      const component = [];
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+
+      while (stack.length) {
+        const current = stack.pop();
+        component.push(current);
+        const x = current % width;
+        const y = Math.floor(current / width);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+        enqueue(x + 1, y);
+        enqueue(x - 1, y);
+        enqueue(x, y + 1);
+        enqueue(x, y - 1);
+      }
+
+      const spanW = maxX - minX + 1;
+      const spanH = maxY - minY + 1;
+      const shouldClear = component.length >= minLargeArea || (spanW >= minWideSpan && spanH >= minTallSpan);
+      if (!shouldClear) continue;
+
+      component.forEach((current) => {
+        const index = current * 4;
+        const distance = colorDistance(data, index, bg);
+        data[index + 3] = Math.min(data[index + 3], getBackgroundAlpha(distance, tolerance, feather));
+      });
+    }
   };
 
   const renderCutout = () => {
@@ -547,16 +554,15 @@ import { getLegacyApp } from '../core/app-context';
         const y = Math.floor(pixel / width);
         const index = pixel * 4;
         const distance = colorDistance(data, index, bg);
-        const fadeRange = Math.max(1, feather);
-        const alpha = distance <= tolerance
-          ? 0
-          : Math.round(255 * clamp((distance - tolerance) / fadeRange, 0, 1));
+        const alpha = getBackgroundAlpha(distance, tolerance, feather);
         data[index + 3] = Math.min(data[index + 3], alpha);
         enqueue(x + 1, y);
         enqueue(x - 1, y);
         enqueue(x, y + 1);
         enqueue(x, y - 1);
       }
+
+      clearLargeEnclosedBackgroundRegions(data, width, height, bg, tolerance, feather, subjectMask, visited);
 
       ctx.putImageData(imageData, 0, 0);
       drawCanvasIntoOutput(state.cutoutCanvas);

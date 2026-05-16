@@ -2462,29 +2462,49 @@ import { getLegacyApp } from '../core/app-context';
     if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
   };
 
-  const formatSelectedRowsTableForAi = (sheetName, rows, columns) => {
-    const visibleColumns = columns.filter((column) => column !== '__rowKey');
-    const payload = {
-      source: 'property-analysis',
-      sheetName: sheetName || '',
-      selectedCount: rows.length,
-      columns: visibleColumns.map((column) => ({
-        key: column,
-        label: formatHeader(column),
-      })),
-      rows: rows.map((row, index) => {
-        const values = {};
-        visibleColumns.forEach((column) => {
-          values[formatHeader(column)] = row[column] ?? '';
-        });
-        return {
-          index: index + 1,
-          values,
-        };
-      }),
-    };
+  const escapeCsvCell = (value) => {
+    const text = String(value ?? '')
+      .replace(/\r?\n/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
 
-    return JSON.stringify(payload, null, 2);
+  const formatRowsCsvForAi = (rows, columns, options = {}) => {
+    const visibleColumns = (columns || []).filter((column) => column !== '__rowKey');
+    const includeIndex = options.includeIndex !== false;
+    const tableRows = options.limit == null ? rows : rows.slice(0, options.limit);
+    if (!tableRows.length || !visibleColumns.length) return '';
+
+    const headers = [
+      ...(includeIndex ? ['序号'] : []),
+      ...visibleColumns.map(formatHeader),
+    ];
+    const lines = [headers.map(escapeCsvCell).join(',')];
+
+    tableRows.forEach((row, index) => {
+      const values = visibleColumns.map((column) => {
+        const value = Array.isArray(row[column]) ? row[column].join(' / ') : valueToText(row[column]);
+        return escapeCsvCell(value || '-');
+      });
+      lines.push([
+        ...(includeIndex ? [String(index + 1)] : []),
+        ...values,
+      ].join(','));
+    });
+
+    return lines.join('\n');
+  };
+
+  const formatSelectedRowsTableForAi = (sheetName, rows, columns) => {
+    const csv = formatRowsCsvForAi(rows, columns);
+    return [
+      'source=property-analysis',
+      `sheet_name=${sheetName || ''}`,
+      `selected_count=${rows.length}`,
+      'format=csv',
+      csv,
+    ].filter(Boolean).join('\n');
   };
 
   const summarizeMetric = (rows, key) => {
@@ -2859,22 +2879,12 @@ import { getLegacyApp } from '../core/app-context';
     });
   };
 
-  const formatSheetTableForAi = (sheetName, rows, columns) => {
-    const headers = columns.map(formatHeader);
-    const lines = rows.map((row, index) => {
-      const values = columns.map((column) => {
-        const text = Array.isArray(row[column]) ? row[column].join('/') : valueToText(row[column]);
-        return String(text || '-').replace(/\s+/g, ' ');
-      });
-      return `${index + 1}\t${values.join('\t')}`;
-    });
-
-    return [
-      `### 工作表：${sheetName}（共 ${rows.length} 行）`,
-      `序号\t${headers.join('\t')}`,
-      ...lines,
-    ].join('\n');
-  };
+  const formatSheetTableForAi = (sheetName, rows, columns) => [
+    `### 工作表：${sheetName}（共 ${rows.length} 行）`,
+    '```csv',
+    formatRowsCsvForAi(rows, columns),
+    '```',
+  ].join('\n');
 
   const getFullAiContext = (question = '') => {
     if (!state.data) return '';
@@ -2949,7 +2959,7 @@ import { getLegacyApp } from '../core/app-context';
       `已选数据行数：${selectedRows.length}`,
       questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
       matchedRows.length ? `已选数据中的问题相关匹配行：\n${summarizeRowsForAi(matchedRows, selectedColumns, 30).join('\n')}` : '已选数据中的问题相关匹配行：未匹配到完全或相近行，请基于全部已选数据继续查找并说明。',
-      '已选数据 JSON：',
+      '已选数据（CSV）：',
       formatSelectedRowsTableForAi(sheetName, selectedRows, selectedColumns),
     ].filter(Boolean).join('\n');
   };
@@ -3136,11 +3146,18 @@ import { getLegacyApp } from '../core/app-context';
         const displayColumns = getAgentDetailColumns(group.columns);
         const limitedRows = sliceAgentRowsByWindow(group.rows, { limit: rowLimit, mode: rowWindow.mode });
         const limit = limitedRows.length;
-        const table = formatRowsMarkdownTableForAi(limitedRows, displayColumns, null);
-        if (table) {
+        const displayTable = formatRowsMarkdownTableForAi(limitedRows, displayColumns, null);
+        const csvTable = formatRowsCsvForAi(limitedRows, displayColumns);
+        if (displayTable && csvTable) {
           const tableTitle = `### ${sheetName}（${limit} / ${group.rows.length} 行）`;
-          displayTableSections.push(tableTitle, table);
-          sections.push('【用于分析的数据表；前端会展示，请不要在分析中重复输出】', tableTitle, table);
+          displayTableSections.push(tableTitle, displayTable);
+          sections.push(
+            '【用于分析的数据表；已压缩为 CSV 以减少输入体积，前端会展示表格，回答时不要重复整表。】',
+            tableTitle,
+            '```csv',
+            csvTable,
+            '```'
+          );
         }
         if (rowLimit != null && group.rows.length > limit) {
           const hiddenPosition = rowWindow.mode === 'tail' ? '靠前的较早' : '靠后的较新';

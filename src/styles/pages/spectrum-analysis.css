@@ -2301,9 +2301,36 @@
       display:block;
       overflow-wrap:anywhere;
     }
-    .spectrum-upload-issue-list em{
+.spectrum-upload-issue-list em{
       display:block;
       color:#dc2626;
       font-style:normal;
       font-weight:750;
-    }
+}
+
+.spectrum-import-progress-card{
+  width:min(460px, calc(100vw - 32px));
+}
+
+.spectrum-import-progress-track{
+  width:100%;
+  height:10px;
+  overflow:hidden;
+  border-radius:999px;
+  background:var(--surface-3);
+}
+
+.spectrum-import-progress-bar{
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg, #2563eb, #60a5fa);
+  transition:width .18s ease;
+}
+
+.spectrum-import-progress-meta{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  color:var(--text-muted);
+  font-size:12px;
+}

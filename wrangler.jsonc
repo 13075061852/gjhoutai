@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gjhoutai-storage",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-16",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gjhoutai",
+      "database_id": "bbe30b6f-234d-40ec-989c-4628c20e1280"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "gjhoutai-files"
+    }
+  ]
+}

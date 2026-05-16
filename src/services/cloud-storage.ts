@@ -10,7 +10,7 @@ const parseJson = async <T>(response: Response): Promise<T | null> => {
 export const cloudStorage = {
   async getJson<T>(key: string): Promise<T | null> {
     try {
-      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`));
+      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), { credentials: 'include' });
       const payload = await parseJson<{ value: T }>(response);
       return payload?.value ?? null;
     } catch {
@@ -22,6 +22,7 @@ export const cloudStorage = {
     try {
       const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ value }),
       });
@@ -33,7 +34,7 @@ export const cloudStorage = {
 
   async getDataUrl(namespace: string, key: string): Promise<string | null> {
     try {
-      const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`));
+      const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), { credentials: 'include' });
       if (response.status === 204) return null;
       if (!response.ok) return null;
       const blob = await response.blob();
@@ -54,6 +55,7 @@ export const cloudStorage = {
       const blob = await response.blob();
       const upload = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
         method: 'PUT',
+        credentials: 'include',
         headers: { 'content-type': blob.type || 'application/octet-stream' },
         body: blob,
       });
@@ -67,6 +69,7 @@ export const cloudStorage = {
     try {
       const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
         method: 'DELETE',
+        credentials: 'include',
       });
       return response.ok;
     } catch {

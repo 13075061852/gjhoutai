@@ -254,6 +254,61 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
     await audit(env, user.id, 'users.create', 'user', id, { role: payload.role });
     return json({ ok: true, id }, { status: 201 });
   }
+  if (url.pathname.startsWith('/api/users/') && request.method === 'PUT') {
+    const targetUserId = decodeURIComponent(url.pathname.slice('/api/users/'.length));
+    const payload = await request.json<{ displayName?: string; role?: Role; password?: string }>();
+    if (!targetUserId || !payload.role || !(payload.role in ROLE_PERMISSIONS)) return badRequest('invalid_user_payload');
+    if (payload.password && !validatePassword(payload.password)) return badRequest('invalid_password_payload');
+    const password = payload.password ? await hashPassword(payload.password) : null;
+    await env.DB.prepare(`
+      UPDATE users
+      SET display_name = COALESCE(?1, display_name),
+          role = ?2,
+          password_hash = COALESCE(?3, password_hash),
+          password_salt = COALESCE(?4, password_salt),
+          must_change_password = CASE WHEN ?3 IS NULL THEN must_change_password ELSE 1 END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?5
+    `).bind(payload.displayName || null, payload.role, password?.hash || null, password?.salt || null, targetUserId).run();
+    await audit(env, user.id, 'users.update', 'user', targetUserId, { role: payload.role, passwordReset: Boolean(password) });
+    return json({ ok: true });
+  }
+  return notFound();
+}
+
+async function handleProfile(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname !== '/api/profile/avatar') return null;
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  const objectKey = `avatars/${user.id}`;
+
+  if (request.method === 'GET') {
+    const object = await env.FILES.get(objectKey);
+    if (!object) return new Response(null, { status: 204 });
+    return new Response(object.body, {
+      headers: {
+        'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
+        etag: object.httpEtag,
+      },
+    });
+  }
+
+  if (request.method === 'PUT') {
+    const contentType = request.headers.get('content-type') || '';
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(contentType)) return badRequest('invalid_avatar_type');
+    const body = await request.arrayBuffer();
+    if (body.byteLength === 0 || body.byteLength > 2 * 1024 * 1024) return badRequest('invalid_avatar_size');
+    await env.FILES.put(objectKey, body, { httpMetadata: { contentType } });
+    await audit(env, user.id, 'profile.avatar_update', 'user', user.id);
+    return json({ ok: true });
+  }
+
+  if (request.method === 'DELETE') {
+    await env.FILES.delete(objectKey);
+    await audit(env, user.id, 'profile.avatar_delete', 'user', user.id);
+    return json({ ok: true });
+  }
+
   return notFound();
 }
 
@@ -266,6 +321,8 @@ export default {
     if (authResponse) return withCors(request, env, authResponse);
     const usersResponse = await handleUsers(request, env, url);
     if (usersResponse) return withCors(request, env, usersResponse);
+    const profileResponse = await handleProfile(request, env, url);
+    if (profileResponse) return withCors(request, env, profileResponse);
 
     const user = await getSessionUser(request, env);
     if (!user) return withCors(request, env, unauthorized());

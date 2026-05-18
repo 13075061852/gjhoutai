@@ -47,4 +47,48 @@ export const authClient = {
     });
     return Boolean(payload?.ok);
   },
+  async getAvatarUrl(): Promise<string | null> {
+    const response = await fetch(buildUrl('/api/profile/avatar'), { credentials: 'include' });
+    if (response.status === 204 || !response.ok) return null;
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  },
+  async uploadAvatar(file: File): Promise<boolean> {
+    const response = await fetch(buildUrl('/api/profile/avatar'), {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': file.type },
+      body: file,
+    });
+    return response.ok;
+  },
+  async clearAvatar(): Promise<boolean> {
+    const response = await fetch(buildUrl('/api/profile/avatar'), {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return response.ok;
+  },
+  async createUser(input: { username: string; displayName: string; role: AppRole; password: string }): Promise<boolean> {
+    const response = await fetch(buildUrl('/api/users'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return response.ok;
+  },
+  async listUsers(): Promise<Array<{ id: string; username: string; display_name: string; role: AppRole }>> {
+    const payload = await request<{ users: Array<{ id: string; username: string; display_name: string; role: AppRole }> }>('/api/users');
+    return payload?.users ?? [];
+  },
+  async updateUser(id: string, input: { displayName: string; role: AppRole; password?: string }): Promise<boolean> {
+    const response = await fetch(buildUrl(`/api/users/${encodeURIComponent(id)}`), {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return response.ok;
+  },
 };

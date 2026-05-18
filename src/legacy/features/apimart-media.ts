@@ -468,10 +468,26 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const getTaskUrls = (task) => ({
-    images: task?.images || [],
-    videos: task?.videos || [],
-    thumbnail: task?.thumbnail || '',
+    images: (task?.images || []).filter((url) => !(task?.invalidMediaUrls || []).includes(url)),
+    videos: (task?.videos || []).filter((url) => !(task?.invalidMediaUrls || []).includes(url)),
+    thumbnail: (task?.invalidMediaUrls || []).includes(task?.thumbnail) ? '' : (task?.thumbnail || ''),
   });
+
+  const markInvalidMediaUrl = (taskId, url) => {
+    if (!taskId || !url) return;
+    let changed = false;
+    tasks = tasks.map((task) => {
+      if (task.id !== taskId) return task;
+      const invalidMediaUrls = Array.from(new Set([...(task.invalidMediaUrls || []), url]));
+      if ((task.invalidMediaUrls || []).length === invalidMediaUrls.length) return task;
+      changed = true;
+      return { ...task, invalidMediaUrls };
+    });
+    if (changed) {
+      writeTasks();
+      render();
+    }
+  };
 
   const getTaskMediaItems = (task) => {
     const urls = getTaskUrls(task);
@@ -1309,6 +1325,11 @@ import { getLegacyApp } from '../core/app-context';
       const image = event.target;
       if (!image?.matches?.('img[data-apimart-size-image]')) return;
       recordImageSize(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'), image);
+    }, true);
+    document.addEventListener('error', (event) => {
+      const image = event.target;
+      if (!image?.matches?.('img[data-apimart-size-image]')) return;
+      markInvalidMediaUrl(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'));
     }, true);
     refs.apimartMediaPanel.addEventListener('click', async (event) => {
       const target = event.target;

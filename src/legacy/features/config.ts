@@ -465,7 +465,7 @@ import { getLegacyApp } from '../core/app-context';
         </div>
       </div>
     `;
-    if (anchor) {
+    if (anchor && anchor.parentElement === refs.aiConfigForm) {
       refs.aiConfigForm.insertBefore(article, anchor);
     } else {
       refs.aiConfigForm.appendChild(article);
@@ -540,7 +540,7 @@ import { getLegacyApp } from '../core/app-context';
         </div>
       </div>
     `;
-    if (anchor) {
+    if (anchor && anchor.parentElement === refs.aiConfigForm) {
       refs.aiConfigForm.insertBefore(article, anchor);
     } else {
       refs.aiConfigForm.appendChild(article);

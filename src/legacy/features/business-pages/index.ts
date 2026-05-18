@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { renderDashboard } from './dashboard';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
+import { authClient } from '../../../services/auth';
 import {
   INVENTORY_CATEGORY_STORAGE_KEY,
   INVENTORY_STORAGE_KEY,
@@ -3667,6 +3668,7 @@ import { createBusinessPageShared } from './shared';
 
   const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
   const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
+  let authUsers = [];
   const archiveConfigs = {
     customer: {
       pageId: 'customer-archive',
@@ -3748,6 +3750,7 @@ import { createBusinessPageShared } from './shared';
   ];
 
   const getArchiveByCode = (kind, code) => archiveStates[kind]?.rows.find((record) => record.code === code);
+  const getAuthUserForRecord = (record) => authUsers.find((user) => user.display_name === record?.name);
 
   const getArchiveStatusClass = (status) => {
     if (/暂停|停用/.test(status)) return 'is-danger';
@@ -3794,7 +3797,8 @@ import { createBusinessPageShared } from './shared';
     const config = archiveConfigs[kind];
     const root = refs.businessPageContent;
     const read = (field) => String(root?.querySelector(`[data-archive-field="${field}"]`)?.value || '').trim();
-    return normalizeArchiveRecord(config, {
+    return {
+      record: normalizeArchiveRecord(config, {
       code: read('code'),
       name: read('name'),
       contact: read('contact'),
@@ -3804,13 +3808,19 @@ import { createBusinessPageShared } from './shared';
       status: read('status'),
       address: read('address'),
       note: read('note'),
-    });
+      }),
+      account: kind === 'personnel' ? {
+        username: read('username'),
+        password: read('password'),
+        role: read('role'),
+      } : null,
+    };
   };
 
-  const saveArchiveRecord = (kind) => {
+  const saveArchiveRecord = async (kind) => {
     const config = archiveConfigs[kind];
     const state = archiveStates[kind];
-    const record = getArchiveFormData(kind);
+    const { record, account } = getArchiveFormData(kind);
     if (!record.code) {
       state.draftNote = `请先填写${config.codeLabel}`;
       notifyAction(state.draftNote, 'warn', `${kind}-code-required`);
@@ -3833,6 +3843,54 @@ import { createBusinessPageShared } from './shared';
       state.draftNote = `${config.nameLabel}已存在，请换一个名称`;
       notifyAction(state.draftNote, 'warn', `${kind}-name-duplicated`);
       return false;
+    }
+    if (kind === 'personnel' && currentIndex < 0 && account?.username) {
+      if (!account.password || account.password.length < 10) {
+        state.draftNote = '初始密码至少需要 10 位';
+        notifyAction(state.draftNote, 'warn', `${kind}-password-invalid`);
+        return false;
+      }
+      if (!account.role) {
+        state.draftNote = '请选择成员角色';
+        notifyAction(state.draftNote, 'warn', `${kind}-role-required`);
+        return false;
+      }
+      const created = await authClient.createUser({
+        username: account.username,
+        displayName: record.name,
+        role: account.role,
+        password: account.password,
+      });
+      if (!created) {
+        state.draftNote = '账号创建失败，请确认账号未重复且当前用户有权限';
+        notifyAction(state.draftNote, 'warn', `${kind}-account-create-failed`);
+        return false;
+      }
+    }
+    if (kind === 'personnel' && currentIndex >= 0 && account?.username) {
+      const existingUser = authUsers.find((user) => user.username === account.username) || getAuthUserForRecord(state.rows[currentIndex]);
+      if (existingUser) {
+        if (account.password && account.password.length < 10) {
+          state.draftNote = '密码至少需要 10 位';
+          notifyAction(state.draftNote, 'warn', `${kind}-password-invalid`);
+          return false;
+        }
+        if (!account.role) {
+          state.draftNote = '请选择成员角色';
+          notifyAction(state.draftNote, 'warn', `${kind}-role-required`);
+          return false;
+        }
+        const updated = await authClient.updateUser(existingUser.id, {
+          displayName: record.name,
+          role: account.role,
+          ...(account.password ? { password: account.password } : {}),
+        });
+        if (!updated) {
+          state.draftNote = '账号更新失败';
+          notifyAction(state.draftNote, 'warn', `${kind}-account-update-failed`);
+          return false;
+        }
+      }
     }
     if (currentIndex >= 0) {
       state.rows[currentIndex] = record;
@@ -4160,6 +4218,7 @@ import { createBusinessPageShared } from './shared';
     const pageStart = (state.page - 1) * state.pageSize;
     const pagedRows = visibleRows.slice(pageStart, pageStart + state.pageSize);
     const editingRecord = state.editingCode ? getArchiveByCode(kind, state.editingCode) : null;
+    const editingAuthUser = kind === 'personnel' && editingRecord ? getAuthUserForRecord(editingRecord) : null;
     const formRecord = editingRecord || normalizeArchiveRecord(config, {
       code: getNextArchiveCode(kind),
       category: state.filter === '全部' ? categories[0] || config.categories[0] : state.filter,
@@ -4287,10 +4346,32 @@ import { createBusinessPageShared } from './shared';
                   <span>${esc(config.statusLabel)}</span>
                   <select data-archive-field="status">${renderOptions(config.statuses, formRecord.status)}</select>
                 </label>
-                <label class="is-address">
-                  <span>${kind === 'personnel' ? '组织归属' : '地址'}</span>
-                  <textarea placeholder="${kind === 'personnel' ? '组织归属、权限范围' : '客户地址'}" data-archive-field="address">${esc(formRecord.address)}</textarea>
-                </label>
+                ${kind === 'personnel' ? `
+                  <label>
+                    <span>登录账号</span>
+                    <input type="text" value="${esc(editingAuthUser?.username || '')}" placeholder="例如：zhangsan" data-archive-field="username">
+                  </label>
+                  <label>
+                    <span>${state.editingCode ? '新密码' : '初始密码'}</span>
+                    <input type="password" placeholder="${state.editingCode ? '留空则不修改' : '至少 10 位'}" data-archive-field="password">
+                  </label>
+                  <label>
+                    <span>账号角色</span>
+                    <select data-archive-field="role">
+                      <option value="">不创建账号</option>
+                      <option value="sales_manager" ${editingAuthUser?.role === 'sales_manager' ? 'selected' : ''}>销售主管</option>
+                      <option value="lab_engineer" ${editingAuthUser?.role === 'lab_engineer' ? 'selected' : ''}>实验室工程师</option>
+                      <option value="warehouse_manager" ${editingAuthUser?.role === 'warehouse_manager' ? 'selected' : ''}>仓储管理员</option>
+                      <option value="system_admin" ${editingAuthUser?.role === 'system_admin' ? 'selected' : ''}>系统管理员</option>
+                    </select>
+                  </label>
+                ` : ''}
+                ${kind === 'personnel' ? '' : `
+                  <label class="is-address">
+                    <span>地址</span>
+                    <textarea placeholder="客户地址" data-archive-field="address">${esc(formRecord.address)}</textarea>
+                  </label>
+                `}
                 <label class="is-note">
                   <span>备注</span>
                   <textarea placeholder="${esc(config.entityName)}档案备注" data-archive-field="note">${esc(formRecord.note)}</textarea>
@@ -5438,7 +5519,7 @@ import { createBusinessPageShared } from './shared';
       const config = archiveConfigs[kind];
       const state = archiveStates[kind];
       if (!config || !state) return;
-      const saved = saveArchiveRecord(kind);
+      const saved = await saveArchiveRecord(kind);
       state.modalOpen = !saved;
       render(config.pageId);
       if (!saved) refs.businessPageContent?.querySelector('[data-archive-field="name"]')?.focus();
@@ -5557,6 +5638,10 @@ import { createBusinessPageShared } from './shared';
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     formulaAddCard.click();
+  });
+
+  void authClient.listUsers().then((users) => {
+    authUsers = users;
   });
 
   App.businessPages = { render, createFormulaByAgent };

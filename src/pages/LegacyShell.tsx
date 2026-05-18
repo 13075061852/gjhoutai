@@ -1,7 +1,7 @@
 import { legacyMarkup } from '../legacy/legacyMarkup';
 
 const NAV_PAGE_KEY = 'sidebar-active-page';
-const DEFAULT_PAGE_ID = 'ai-config';
+const DEFAULT_PAGE_ID = 'dashboard';
 const DIRECT_PAGE_SECTIONS = new Set([
   'ai-config',
   'property-analysis',

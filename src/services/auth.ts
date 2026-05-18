@@ -48,7 +48,10 @@ export const authClient = {
     return Boolean(payload?.ok);
   },
   async getAvatarUrl(): Promise<string | null> {
-    const response = await fetch(buildUrl('/api/profile/avatar'), { credentials: 'include' });
+    const response = await fetch(buildUrl('/api/profile/avatar'), {
+      credentials: 'include',
+      cache: 'no-store',
+    });
     if (response.status === 204 || !response.ok) return null;
     const blob = await response.blob();
     return URL.createObjectURL(blob);

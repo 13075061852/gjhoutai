@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { cloudConfig } from '../../services/cloud-config';
 
 (function () {
   'use strict';
@@ -1054,8 +1055,10 @@ import { getLegacyApp } from '../core/app-context';
     utils.writeJson(constants.CONFIG_LOG_KEY, next);
   };
 
-  const persistConfig = (config) => {
-    utils.writeJson(constants.CONFIG_STORAGE_KEY, config);
+  const persistConfig = async (config) => {
+    const saved = await cloudConfig.put(config);
+    if (!saved) throw new Error('cloud_config_save_failed');
+    localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
     if (config.logEnabled) {
       saveLog({
         type: 'save',
@@ -1123,7 +1126,21 @@ import { getLegacyApp } from '../core/app-context';
     return headers;
   };
 
-  const loadSavedConfig = () => utils.readJson(constants.CONFIG_STORAGE_KEY, null);
+  const loadSavedConfig = async () => {
+    const remoteConfig = await cloudConfig.get();
+    if (remoteConfig) {
+      localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
+      return remoteConfig;
+    }
+    const legacyLocalConfig = utils.readJson(constants.CONFIG_STORAGE_KEY, null);
+    if (!legacyLocalConfig) return null;
+    const migrated = await cloudConfig.put(legacyLocalConfig);
+    if (migrated) {
+      localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
+      return legacyLocalConfig;
+    }
+    return null;
+  };
   const getUsdToCnyRate = () => usdToCny;
 
   const getModelOptions = () => {
@@ -1728,7 +1745,7 @@ import { getLegacyApp } from '../core/app-context';
       const text = await file.text();
       const parsed = JSON.parse(text);
       setFormConfig(dropRedactedSecrets(parsed));
-      persistConfig(getFormConfig());
+      await persistConfig(getFormConfig());
       updateSavedState(true);
       syncPreview();
       setStatus('已导入配置', 'success');
@@ -1764,6 +1781,12 @@ import { getLegacyApp } from '../core/app-context';
     });
     if (!confirmed) return;
     clearOpenRouterModelRefreshTimer();
+    const cleared = await cloudConfig.clear();
+    if (!cleared) {
+      setStatus('云端配置清空失败，请稍后重试', 'warn');
+      App.notify?.warn?.('云端配置清空失败，请稍后重试', { key: 'config-clear-failed' });
+      return;
+    }
     localStorage.removeItem(constants.CONFIG_STORAGE_KEY);
     setFormConfig(constants.DEFAULT_CONFIG);
     lastLoadedOpenRouterApiKey = '';
@@ -1945,7 +1968,7 @@ import { getLegacyApp } from '../core/app-context';
         syncPreview();
       }));
 
-    refs.aiConfigForm?.addEventListener('submit', (event) => {
+    refs.aiConfigForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
@@ -1955,7 +1978,13 @@ import { getLegacyApp } from '../core/app-context';
         App.notify?.warn?.('请先填写 OpenRouter API 密钥、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
-      persistConfig(config);
+      try {
+        await persistConfig(config);
+      } catch {
+        setStatus('云端保存失败，请稍后重试', 'warn');
+        App.notify?.warn?.('云端保存失败，请稍后重试', { key: 'config-save-failed' });
+        return;
+      }
       clearOpenRouterModelRefreshTimer();
       if (!isLmStudioProvider(config.aiProvider) && config.apiKey) {
         fetchModels();
@@ -2101,7 +2130,18 @@ import { getLegacyApp } from '../core/app-context';
     });
   };
 
-  const init = () => {
+  const init = async () => {
+    const configPage = document.querySelector('.ai-config');
+    if (configPage && !configPage.querySelector('.config-loading-shell')) {
+      const loadingShell = document.createElement('div');
+      loadingShell.className = 'config-loading-shell';
+      loadingShell.innerHTML = `
+        <span class="config-loading-spinner" aria-hidden="true"></span>
+        <strong>正在加载配置中心</strong>
+        <span>同步云端配置并准备页面布局</span>
+      `;
+      configPage.appendChild(loadingShell);
+    }
     mountSearchConfigSection();
     mountApimartConfigSection();
     mountAgentRoutingConfigSection();
@@ -2109,7 +2149,7 @@ import { getLegacyApp } from '../core/app-context';
     mountConfigContentPanel();
     syncConfigBindings();
 
-    const savedConfig = loadSavedConfig();
+    const savedConfig = await loadSavedConfig();
     if (savedConfig) {
       setFormConfig(savedConfig);
       updateSavedState(true);
@@ -2133,6 +2173,7 @@ import { getLegacyApp } from '../core/app-context';
     } else {
       setStatus('配置已加载；模型列表和实时汇率将在手动刷新时联网获取。', 'success');
     }
+    configPage?.classList.add('config-ready');
   };
 
   App.config = {

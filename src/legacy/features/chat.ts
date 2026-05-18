@@ -53,6 +53,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const buildCurrentDateLocalAnswer = () => `今天是 ${getCurrentDateTimeLabel()}。`;
 
+
   const buildPromptWithCurrentDate = (prompt) => [
     '【当前日期时间】',
     `${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
@@ -1092,6 +1093,11 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const isProjectAccessEnabled = () => Boolean(state.dataAttachmentEnabled);
+  const shouldUseProjectContext = (prompt) => {
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+    return /(?:后台|系统|页面|打开|进入|切换|查看|订单|库存|生产|物性|图谱|抠图|配方|客户|供应商|人员|权限|审计|调用分析|当前页|当前页面|选中|筛选|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰分|dsc|tga|图谱库|图片库)/i.test(text);
+  };
 
   const getProjectContext = () => {
     const activePageId = getActivePageId();
@@ -1342,10 +1348,9 @@ import { getLegacyApp } from '../core/app-context';
     });
   });
 
-  const getContextMessages = (config, prompt) => {
+  const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled()) => {
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
-    const projectAccessEnabled = isProjectAccessEnabled();
-    const attachedDataContext = projectAccessEnabled && prompt ? getAttachedDataContext(prompt) : '';
+    const attachedDataContext = projectContextEnabled && prompt ? getAttachedDataContext(prompt) : '';
     const currentDateTime = getCurrentDateTimeLabel();
     const messages = [
       { role: 'system', content: basePrompt },
@@ -1357,9 +1362,9 @@ import { getLegacyApp } from '../core/app-context';
         ].join('\n'),
       },
     ];
-    const skillProtocolContext = projectAccessEnabled ? (App.projectSkills?.getAiProtocolContext?.() || '') : '';
+    const skillProtocolContext = projectContextEnabled ? (App.projectSkills?.getAiProtocolContext?.() || '') : '';
 
-    if (projectAccessEnabled) {
+    if (projectContextEnabled) {
       messages.push({
         role: 'system',
         content: [
@@ -2348,6 +2353,7 @@ import { getLegacyApp } from '../core/app-context';
     if (!prompt) return;
 
     const projectAccessEnabled = isProjectAccessEnabled();
+    const projectContextEnabled = projectAccessEnabled && shouldUseProjectContext(prompt);
     if (shouldAnswerCurrentDateLocally(prompt)) {
       pushChatMessage('user', prompt);
       if (refs.chatInput) refs.chatInput.value = '';
@@ -2355,7 +2361,7 @@ import { getLegacyApp } from '../core/app-context';
       return;
     }
 
-    const localPlan = projectAccessEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
+    const localPlan = projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
     if (localPlan?.skillId === 'assistant.openPage' || Array.isArray(localPlan?.steps)) {
       await runLocalSkillPlan(prompt, localPlan);
       return;
@@ -2383,7 +2389,7 @@ import { getLegacyApp } from '../core/app-context';
     const rawAttachedImages = supportsImageInput
       ? [
           ...pendingDraftImages,
-          ...(projectAccessEnabled ? getAttachedDataImages(prompt) : []),
+          ...(projectContextEnabled ? getAttachedDataImages(prompt) : []),
         ]
         .slice(0, 8)
       : [];
@@ -2420,8 +2426,8 @@ import { getLegacyApp } from '../core/app-context';
     const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
-      attachedDataFile = projectAccessEnabled ? getAttachedDataFile(prompt) : null;
-      attachedDataContext = projectAccessEnabled ? getAttachedDataContext(prompt) : '';
+      attachedDataFile = projectContextEnabled ? getAttachedDataFile(prompt) : null;
+      attachedDataContext = projectContextEnabled ? getAttachedDataContext(prompt) : '';
       if (webSearchEnabled) {
         flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
         try {
@@ -2538,7 +2544,7 @@ import { getLegacyApp } from '../core/app-context';
           });
         });
       apiMessages = [
-        ...getContextMessages(config, ''),
+        ...getContextMessages(config, '', projectContextEnabled),
         ...(webSearchContext ? [
           { role: 'user', content: webSearchContext },
           { role: 'assistant', content: '已读取联网搜索资料。我会结合资料回答，并在需要时列出来源链接。' },
@@ -2599,7 +2605,7 @@ import { getLegacyApp } from '../core/app-context';
           : [];
       }
 
-      skillExecution = projectAccessEnabled
+      skillExecution = projectContextEnabled
         ? await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
             source: 'assistant-skill-call',
             prompt,

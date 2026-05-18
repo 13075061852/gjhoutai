@@ -3,6 +3,7 @@ export interface Env {
   FILES: R2Bucket;
   CORS_ORIGINS?: string;
   BOOTSTRAP_ADMIN_TOKEN?: string;
+  CONFIG_ENCRYPTION_KEY?: string;
 }
 
 type Role = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
@@ -30,6 +31,7 @@ interface SessionUser {
 const SESSION_COOKIE = 'gjh_session';
 const SESSION_DAYS = 7;
 const PASSWORD_ITERATIONS = 100_000;
+const CONFIG_ALGORITHM = 'AES-GCM';
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'users:manage'],
@@ -50,6 +52,37 @@ const unauthorized = () => json({ error: 'unauthorized' }, { status: 401 });
 const forbidden = () => json({ error: 'forbidden' }, { status: 403 });
 const badRequest = (error: string) => json({ error }, { status: 400 });
 const getBlobKey = (namespace: string, key: string) => `${namespace}/${key}`;
+const USER_SCOPED_STATE_KEYS = new Set([
+  'openrouter-ai-chat-v1',
+  'openrouter-ai-chat-sessions-v1',
+  'openrouter-ai-chat-active-session-v1',
+  'openrouter-ai-chat-data-attachment-v1',
+  'openrouter-ai-chat-search-enabled-v1',
+]);
+const GLOBAL_AI_CALL_LOG_KEY = 'openrouter-ai-call-log-v1';
+const MAX_AI_CALL_LOGS = 500;
+const getStateStorageKey = (user: SessionUser, key: string) => USER_SCOPED_STATE_KEYS.has(key)
+  ? `users/${user.id}/${key}`
+  : key;
+const mergeAiCallLogs = (currentValue: unknown, nextValue: unknown, user: SessionUser) => {
+  const currentLogs = Array.isArray(currentValue) ? currentValue : [];
+  const nextLogs = Array.isArray(nextValue) ? nextValue.map((item) => item && typeof item === 'object' ? {
+    ...item,
+    actorUserId: (item as any).actorUserId || user.id,
+    actorUsername: (item as any).actorUsername || user.username,
+    actorDisplayName: (item as any).actorDisplayName || user.displayName,
+    actorRole: (item as any).actorRole || user.role,
+  } : item) : [];
+  const merged = [...nextLogs, ...currentLogs].filter((item) => item && typeof item === 'object');
+  const seen = new Set<string>();
+  return merged.filter((item: any) => {
+    const id = String(item?.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).sort((left: any, right: any) => String(right?.at || right?.endedAt || '').localeCompare(String(left?.at || left?.endedAt || '')))
+    .slice(0, MAX_AI_CALL_LOGS);
+};
 
 const getAllowedOrigin = (request: Request, env: Env) => {
   const origin = request.headers.get('origin');
@@ -82,6 +115,34 @@ const randomHex = (size: number) => {
 const sha256 = async (value: string) => bytesToHex(new Uint8Array(
   await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)),
 ));
+const bytesToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+};
+const base64ToBytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+const getConfigKey = async (env: Env) => {
+  if (!env.CONFIG_ENCRYPTION_KEY) throw new Error('missing_config_encryption_key');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.CONFIG_ENCRYPTION_KEY));
+  return crypto.subtle.importKey('raw', digest, CONFIG_ALGORITHM, false, ['encrypt', 'decrypt']);
+};
+const encryptConfig = async (env: Env, value: unknown) => {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = new TextEncoder().encode(JSON.stringify(value));
+  const ciphertext = await crypto.subtle.encrypt({ name: CONFIG_ALGORITHM, iv }, await getConfigKey(env), plaintext);
+  return {
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+    iv: bytesToBase64(iv),
+  };
+};
+const decryptConfig = async (env: Env, ciphertext: string, iv: string) => {
+  const plaintext = await crypto.subtle.decrypt(
+    { name: CONFIG_ALGORITHM, iv: base64ToBytes(iv) },
+    await getConfigKey(env),
+    base64ToBytes(ciphertext),
+  );
+  return JSON.parse(new TextDecoder().decode(plaintext));
+};
 const hashPassword = async (password: string, salt = randomHex(16)) => {
   const keyMaterial = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
@@ -312,6 +373,49 @@ async function handleProfile(request: Request, env: Env, url: URL): Promise<Resp
   return notFound();
 }
 
+async function handleConfig(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname !== '/api/config') return null;
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
+
+  if (request.method === 'GET') {
+    const row = await env.DB.prepare(
+      'SELECT ciphertext, iv FROM shared_config WHERE id = 1',
+    ).first<{ ciphertext: string; iv: string }>();
+    if (!row) return json({ value: null });
+    try {
+      return json({ value: await decryptConfig(env, row.ciphertext, row.iv) });
+    } catch {
+      return json({ error: 'config_decrypt_failed' }, { status: 500 });
+    }
+  }
+
+  if (request.method === 'PUT') {
+    const payload = await request.json<{ value?: unknown }>();
+    if (!Object.prototype.hasOwnProperty.call(payload, 'value')) return badRequest('invalid_config_payload');
+    const encrypted = await encryptConfig(env, payload.value);
+    await env.DB.prepare(`
+      INSERT INTO shared_config (id, ciphertext, iv, updated_at)
+      VALUES (1, ?1, ?2, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        ciphertext = excluded.ciphertext,
+        iv = excluded.iv,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(encrypted.ciphertext, encrypted.iv).run();
+    await audit(env, user.id, 'config.write', 'shared_config', 'global');
+    return json({ ok: true });
+  }
+
+  if (request.method === 'DELETE') {
+    await env.DB.prepare('DELETE FROM shared_config WHERE id = 1').run();
+    await audit(env, user.id, 'config.delete', 'shared_config', 'global');
+    return json({ ok: true });
+  }
+
+  return notFound();
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -323,6 +427,8 @@ export default {
     if (usersResponse) return withCors(request, env, usersResponse);
     const profileResponse = await handleProfile(request, env, url);
     if (profileResponse) return withCors(request, env, profileResponse);
+    const configResponse = await handleConfig(request, env, url);
+    if (configResponse) return withCors(request, env, configResponse);
 
     const user = await getSessionUser(request, env);
     if (!user) return withCors(request, env, unauthorized());
@@ -331,20 +437,26 @@ export default {
     if (url.pathname.startsWith('/api/state/')) {
       const key = decodeURIComponent(url.pathname.slice('/api/state/'.length));
       if (!key) return withCors(request, env, notFound());
+      const storageKey = getStateStorageKey(user, key);
       if (request.method === 'GET') {
         if (!can(user, 'state:read')) return withCors(request, env, forbidden());
-        const row = await env.DB.prepare('SELECT value FROM app_state WHERE key = ?1').bind(key).first<{ value: string }>();
+        const row = await env.DB.prepare('SELECT value FROM app_state WHERE key = ?1').bind(storageKey).first<{ value: string }>();
         return withCors(request, env, json({ value: row ? JSON.parse(row.value) : null }));
       }
       if (request.method === 'PUT') {
         if (!can(user, 'state:write')) return withCors(request, env, forbidden());
         const payload = await request.json<{ value: unknown }>();
+        let nextValue = payload.value;
+        if (key === GLOBAL_AI_CALL_LOG_KEY) {
+          const current = await env.DB.prepare('SELECT value FROM app_state WHERE key = ?1').bind(storageKey).first<{ value: string }>();
+          nextValue = mergeAiCallLogs(current ? JSON.parse(current.value) : null, payload.value, user);
+        }
         await env.DB.prepare(`
           INSERT INTO app_state (key, value, updated_at)
           VALUES (?1, ?2, CURRENT_TIMESTAMP)
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-        `).bind(key, JSON.stringify(payload.value)).run();
-        await audit(env, user.id, 'state.write', 'state', key);
+        `).bind(storageKey, JSON.stringify(nextValue)).run();
+        await audit(env, user.id, 'state.write', 'state', storageKey);
         return withCors(request, env, json({ ok: true }));
       }
     }

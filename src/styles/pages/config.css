@@ -119,6 +119,48 @@
       height:100%;
       min-height:0;
       overflow:hidden;
+      position:relative;
+    }
+    .ai-config:not(.config-ready) .config-layout{
+      opacity:0;
+      pointer-events:none;
+    }
+    .config-loading-shell{
+      content:"";
+      position:absolute;
+      inset:0;
+      z-index:2;
+      display:grid;
+      place-content:center;
+      justify-items:center;
+      gap:10px;
+      background:var(--bg);
+      color:var(--muted);
+      font-size:14px;
+      text-align:center;
+    }
+    .config-loading-shell strong{
+      color:var(--text);
+      font-size:15px;
+    }
+    .config-loading-shell span:last-child{
+      font-size:12px;
+    }
+    .config-loading-spinner{
+      width:42px;
+      height:42px;
+      border:3px solid rgba(37,99,235,.14);
+      border-top-color:var(--accent);
+      border-radius:50%;
+      animation:config-loading-spin .9s linear infinite;
+    }
+    .ai-config.config-ready .config-loading-shell{
+      display:none;
+    }
+    @keyframes config-loading-spin{
+      to{
+        transform:rotate(360deg);
+      }
     }
     .ai-config > .bottom-space{
       display:none;

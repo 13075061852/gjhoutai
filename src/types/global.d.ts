@@ -7,6 +7,13 @@ declare global {
   };
 
   interface LegacyAppNamespace extends Record<string, unknown> {
+    currentUser?: {
+      id: string;
+      username: string;
+      displayName: string;
+      role: string;
+      mustChangePassword: boolean;
+    };
     aiCallAnalysis?: LegacyLifecycleModule;
     apimartMedia?: LegacyLifecycleModule;
     animations?: LegacyLifecycleModule;

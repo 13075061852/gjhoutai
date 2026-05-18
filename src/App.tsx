@@ -249,7 +249,9 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
 function App() {
   const [user, setUser] = useState<AppUser | null | undefined>(undefined);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  useEffect(() => { void authClient.me().then(setUser); }, []);
+  useEffect(() => {
+    void authClient.me().then(setUser).catch(() => setUser(null));
+  }, []);
   useEffect(() => {
     if (!user || user.mustChangePassword) return;
     void authClient.getAvatarUrl().then(setAvatarUrl);
@@ -259,6 +261,8 @@ function App() {
     let cleanup: (() => void) | undefined;
     let disposed = false;
     const cleanupIcons = mountIconParkAdapter();
+    window.GJHApp = window.GJHApp || {};
+    window.GJHApp.currentUser = user;
     void (async () => {
       await hydrateCloudBackedLocalStorage();
       installCloudBackedLocalStorageSync();
@@ -281,6 +285,13 @@ function App() {
             ${avatarUrl ? `<img src="${avatarUrl}" alt="" />` : '<i class="ti ti-user"></i>'}
           </span>
         `;
+        const renderAccountAvatar = (url: string | null) => {
+          accountButton.innerHTML = `
+            <span class="top-auth-avatar" aria-hidden="true">
+              ${url ? `<img src="${url}" alt="" />` : '<i class="ti ti-user"></i>'}
+            </span>
+          `;
+        };
         const menu = document.createElement('div');
         menu.className = 'top-auth-panel';
         menu.setAttribute('role', 'menu');
@@ -303,20 +314,27 @@ function App() {
         avatarInput.addEventListener('change', async () => {
           const file = avatarInput.files?.[0];
           if (!file) return;
+          avatarButton.disabled = true;
           const ok = await authClient.uploadAvatar(file);
+          avatarButton.disabled = false;
+          avatarInput.value = '';
           if (!ok) return;
-          const nextUrl = await authClient.getAvatarUrl();
+          const previewUrl = URL.createObjectURL(file);
           if (avatarUrl) URL.revokeObjectURL(avatarUrl);
-          setAvatarUrl(nextUrl);
+          renderAccountAvatar(previewUrl);
+          setAvatarUrl(previewUrl);
         });
         const resetAvatarButton = document.createElement('button');
         resetAvatarButton.className = 'top-auth-menu-item';
         resetAvatarButton.type = 'button';
         resetAvatarButton.textContent = '恢复默认头像';
         resetAvatarButton.addEventListener('click', async () => {
+          resetAvatarButton.disabled = true;
           const ok = await authClient.clearAvatar();
+          resetAvatarButton.disabled = false;
           if (!ok) return;
           if (avatarUrl) URL.revokeObjectURL(avatarUrl);
+          renderAccountAvatar(null);
           setAvatarUrl(null);
         });
         const logoutButton = document.createElement('button');

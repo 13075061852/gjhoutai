@@ -206,6 +206,15 @@ import { getLegacyApp } from '../core/app-context';
     const parts = value.split('/').map((item) => item.trim()).filter(Boolean);
     return parts.length > 1 ? parts[parts.length - 1] : (value || '未选择模型');
   };
+  const ACTOR_ROLE_LABELS = {
+    system_admin: '系统管理员',
+    sales_manager: '销售主管',
+    lab_engineer: '实验室工程师',
+    warehouse_manager: '仓储管理员',
+  };
+  const getActorLabel = (item) => item?.actorUsername || item?.actorDisplayName || '历史记录';
+  const getActorSubLabel = (item) => ACTOR_ROLE_LABELS[item?.actorRole]
+    || (item?.actorUsername ? '未标注角色' : '未记录用户');
   const getSourceLabel = (source) => ({
     chat: '右侧聊天',
     'config-test': '配置测试',
@@ -227,8 +236,13 @@ import { getLegacyApp } from '../core/app-context';
       tokenUsage.cost = null;
     }
     const pageId = String(entry.pageId || getCurrentPageId() || '');
+    const currentUser = App.currentUser || {};
     const log = {
       id: String(entry.id || `ai-call-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+      actorUserId: String(entry.actorUserId || currentUser.id || ''),
+      actorUsername: String(entry.actorUsername || currentUser.username || ''),
+      actorDisplayName: String(entry.actorDisplayName || currentUser.displayName || ''),
+      actorRole: String(entry.actorRole || currentUser.role || ''),
       at: entry.at || endedAt,
       startedAt: entry.startedAt || entry.at || endedAt,
       endedAt,
@@ -572,7 +586,7 @@ import { getLegacyApp } from '../core/app-context';
     if (!logs.length) {
       return `
         <tr class="ai-call-empty-row">
-          <td colspan="8">
+          <td colspan="9">
             ${renderEmptyState({
               icon: 'ti-list-details',
               title: '暂无调用明细',
@@ -602,6 +616,10 @@ import { getLegacyApp } from '../core/app-context';
           <td>
             <strong class="ai-call-cell-main">${esc(formatDateTime(item.at))}</strong>
             <span class="ai-call-cell-sub">${esc(getSourceLabel(item.source))} · ${esc(item.pageTitle || getPageTitle(item.pageId))}</span>
+          </td>
+          <td>
+            <strong class="ai-call-cell-main">${esc(getActorLabel(item))}</strong>
+            <span class="ai-call-cell-sub">${esc(getActorSubLabel(item))}</span>
           </td>
           <td>
             <strong class="ai-call-cell-main">${esc(getModelDisplayName(item.model || '-'))}</strong>
@@ -765,6 +783,7 @@ import { getLegacyApp } from '../core/app-context';
     const completionRatio = totalTokens ? 100 - promptRatio : 0;
     const detailRows = [
       renderDetailField('时间', formatDateTime(item.at)),
+      renderDetailField('用户', `${getActorLabel(item)} · ${getActorSubLabel(item)}`),
       renderDetailField('来源', `${getSourceLabel(item.source)} · ${item.pageTitle || getPageTitle(item.pageId)}`),
       renderDetailField('模型', getModelDisplayName(item.model)),
       renderDetailField('供应商', getProviderLabel(item.provider)),
@@ -932,6 +951,7 @@ import { getLegacyApp } from '../core/app-context';
               <thead>
                 <tr>
                   <th>时间/来源</th>
+                  <th>用户</th>
                   <th>模型</th>
                   <th>状态</th>
                   <th>Tokens</th>

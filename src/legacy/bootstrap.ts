@@ -47,7 +47,7 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
     App?.propertyAnalysis?.init?.();
     App?.spectrumAnalysis?.init?.();
     App?.imageCutout?.init?.();
-    App?.config?.init?.();
+    await App?.config?.init?.();
     App?.apimartMedia?.init?.();
     App?.aiCallAnalysis?.init?.();
     App?.projectSkills?.init?.();

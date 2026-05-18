@@ -491,8 +491,8 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
-  const getOssConfig = () => {
-    const savedConfig = App.config?.loadSavedConfig?.() || {};
+  const getOssConfig = async () => {
+    const savedConfig = await (App.config?.loadSavedConfig?.() || {});
     const defaultConfig = constants.DEFAULT_CONFIG || {};
     const getValue = (key) => String(savedConfig[key] || defaultConfig[key] || '').trim();
     const bucket = getValue('ossBucket');
@@ -686,7 +686,7 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const uploadPropertyDataToOss = async (data, sourceFile, onProgress) => {
-    const config = getOssConfig();
+    const config = await getOssConfig();
     if (!hasOssWriteConfig(config)) {
       throw new Error('请先在配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
     }
@@ -3506,7 +3506,7 @@ import { getLegacyApp } from '../core/app-context';
     const startedAt = performance.now();
     try {
       setUploadStatus('读取中', 'loading');
-      const ossConfig = getOssConfig();
+      const ossConfig = await getOssConfig();
       const shouldReadOss = hasOssReadConfig(ossConfig);
       if (!shouldReadOss) {
         throw new Error('请先在配置中心填写 OSS Bucket、Endpoint 和 JSON 路径。');

@@ -2312,7 +2312,8 @@ import { getLegacyApp } from '../core/app-context';
     refs.clearChatBtn.setAttribute('aria-label', '清空聊天');
     refs.clearChatBtn.setAttribute('title', '清空聊天');
     refs.clearChatBtn.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
-    headActions.insertBefore(refs.clearChatBtn, refs.assistantExpandBtn || refs.assistantCloseBtn || null);
+    const anchor = [refs.assistantExpandBtn, refs.assistantCloseBtn].find((node) => node?.parentNode === headActions) || null;
+    headActions.insertBefore(refs.clearChatBtn, anchor);
   };
 
   const renderChatSubmitState = () => {

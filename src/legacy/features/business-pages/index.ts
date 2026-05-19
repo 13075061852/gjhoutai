@@ -1669,10 +1669,43 @@ import { createBusinessPageShared } from './shared';
       note: String(source.note || '').trim(),
     };
   };
+  const personnelDepartments = ['研发部', '测试部', '销售部', '生产部', '生产部主管'];
+  const personnelDepartmentAliases = {
+    实验室: '测试部',
+    系统管理: '研发部',
+    仓储部: '生产部',
+  };
+  const personnelPermissions = [
+    { label: '系统管理员', role: 'system_admin' },
+    { label: '销售主管', role: 'sales_manager' },
+    { label: '实验室工程师', role: 'lab_engineer' },
+    { label: '仓储管理员', role: 'warehouse_manager' },
+  ];
+  const permissionToRole = (permission) => personnelPermissions.find((item) => item.label === permission)?.role || '';
+  const roleToPermission = (role) => personnelPermissions.find((item) => item.role === role)?.label || personnelPermissions[0].label;
+  const normalizePersonnelDepartment = (department) => {
+    const value = String(department || '').trim();
+    return personnelDepartments.includes(value) ? value : personnelDepartmentAliases[value] || personnelDepartments[0];
+  };
+  const isDemoPersonnelRows = (rows) => {
+    if (rows.length !== 5) return false;
+    return rows.every((record, index) => (
+      record.code === `P${String(index + 1).padStart(3, '0')}`
+      && record.phone === `1380001000${index + 1}`
+      && record.email.endsWith('@gj-plastic.com')
+    ));
+  };
   const normalizeArchiveRows = (config, value) => {
     const rows = Array.isArray(value)
       ? value.map((record, index) => normalizeArchiveRecord(config, record, index)).filter((record) => record.code && record.name)
       : [];
+    if (config.storageKey === PERSONNEL_STORAGE_KEY) {
+      if (isDemoPersonnelRows(rows)) return [];
+      return rows.map((record) => ({
+        ...record,
+        category: normalizePersonnelDepartment(record.category),
+      }));
+    }
     return rows.length ? rows : config.defaults.map((record, index) => normalizeArchiveRecord(config, record, index));
   };
 
@@ -3713,20 +3746,14 @@ import { createBusinessPageShared } from './shared';
       filterAllLabel: '全部部门',
       categoryLabel: '部门',
       statusLabel: '在岗状态',
-      searchPlaceholder: '搜索姓名、部门、岗位...',
+      searchPlaceholder: '搜索姓名、部门、权限...',
       searchLabel: '搜索人员档案',
       addText: '新增人员',
       emptyText: '暂无匹配人员',
-      categories: ['销售部', '实验室', '仓储部', '生产部', '财务部', '系统管理'],
+      categories: personnelDepartments,
       statuses: ['在岗', '试用', '权限待确认', '停用'],
-      columns: ['编号', '姓名', '部门', '岗位', '电话', '邮箱', '状态', '操作'],
-      defaults: [
-        { code: 'P001', name: '王敏', contact: '销售主管', phone: '13800010001', email: 'wangmin@gj-plastic.com', category: '销售部', status: '在岗', address: '销售部 / 华东客户组', note: '负责重点客户、报价审批和客户跟进列表。' },
-        { code: 'P002', name: '陈工', contact: '质检工程师', phone: '13800010002', email: 'chengong@gj-plastic.com', category: '实验室', status: '在岗', address: '实验室 / 物性检测', note: '负责物性、图谱异常复核和报告归档。' },
-        { code: 'P003', name: '刘洋', contact: '仓储管理员', phone: '13800010003', email: 'liuyang@gj-plastic.com', category: '仓储部', status: '权限待确认', address: '仓储部 / 原料仓', note: '负责库存盘点、出入库复核和仓库预警。' },
-        { code: 'P004', name: '赵磊', contact: '销售经理', phone: '13800010004', email: 'zhaolei@gj-plastic.com', category: '销售部', status: '在岗', address: '销售部 / 华南客户组', note: '负责 PC/ABS 客户报价与交付协调。' },
-        { code: 'P005', name: '何佳', contact: '生产计划员', phone: '13800010005', email: 'hejia@gj-plastic.com', category: '生产部', status: '试用', address: '生产部 / 排产中心', note: '跟进产线排程、齐套状态和插单评估。' },
-      ],
+      columns: ['编号', '姓名', '部门', '权限', '电话', '邮箱', '状态', '操作'],
+      defaults: [],
     },
   };
 
@@ -3750,7 +3777,16 @@ import { createBusinessPageShared } from './shared';
   ];
 
   const getArchiveByCode = (kind, code) => archiveStates[kind]?.rows.find((record) => record.code === code);
-  const getAuthUserForRecord = (record) => authUsers.find((user) => user.display_name === record?.name);
+  const getAuthUserForRecord = (record) => authUsers.find((user) => (
+    user.display_name === record?.name
+    || String(record?.note || '').includes(user.username)
+  ));
+  const authRolePersonnelMeta = {
+    system_admin: { category: personnelDepartments[0], contact: '系统管理员' },
+    sales_manager: { category: '销售部', contact: '销售主管' },
+    lab_engineer: { category: '测试部', contact: '实验室工程师' },
+    warehouse_manager: { category: '生产部', contact: '仓储管理员' },
+  };
 
   const getArchiveStatusClass = (status) => {
     if (/暂停|停用/.test(status)) return 'is-danger';
@@ -3793,6 +3829,58 @@ import { createBusinessPageShared } from './shared';
     return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`;
   };
 
+  const hasUnreadableText = (value) => /(?:\?{2,}|�)/.test(String(value || ''));
+  const getPersonnelDisplayName = (user) => {
+    const displayName = String(user.display_name || user.username || '').trim();
+    if (user.role === 'system_admin' && hasUnreadableText(displayName)) {
+      return user.username && user.username !== 'admin' ? `${user.username} 管理员` : '系统管理员';
+    }
+    return displayName;
+  };
+
+  const syncPersonnelFromAuthUsers = () => {
+    const config = archiveConfigs['personnel'];
+    const state = archiveStates['personnel'];
+    if (!config || !state || !authUsers.length) return;
+    let changed = false;
+    authUsers.forEach((user) => {
+      const rawDisplayName = String(user.display_name || user.username || '').trim();
+      const displayName = getPersonnelDisplayName(user);
+      if (!displayName) return;
+      const linkedAccountNote = `已关联登录账号：${user.username}`;
+      const existingRecord = state.rows.find((record) => (
+        record.name === displayName
+        || record.name === rawDisplayName
+        || getAuthUserForRecord(record)?.id === user.id
+        || String(record.note || '').includes(user.username)
+      ));
+      const roleMeta = authRolePersonnelMeta[user.role] || authRolePersonnelMeta.system_admin;
+      if (existingRecord) {
+        if (existingRecord.name !== displayName || hasUnreadableText(existingRecord.name)) {
+          existingRecord.name = displayName;
+          existingRecord.contact = existingRecord.contact || roleMeta.contact;
+          existingRecord.category = existingRecord.category || roleMeta.category;
+          existingRecord.status = existingRecord.status || '在岗';
+          existingRecord.note = linkedAccountNote;
+          changed = true;
+        }
+        return;
+      }
+      state.rows.push(normalizeArchiveRecord(config, {
+        code: getNextArchiveCode('personnel'),
+        name: displayName,
+        contact: roleMeta.contact,
+        phone: '',
+        email: '',
+        category: roleMeta.category,
+        status: '在岗',
+        note: linkedAccountNote,
+      }));
+      changed = true;
+    });
+    if (changed) persistArchive('personnel', `已同步 ${authUsers.length} 个系统账号到人员档案`);
+  };
+
   const getArchiveFormData = (kind) => {
     const config = archiveConfigs[kind];
     const root = refs.businessPageContent;
@@ -3812,7 +3900,7 @@ import { createBusinessPageShared } from './shared';
       account: kind === 'personnel' ? {
         username: read('username'),
         password: read('password'),
-        role: read('role'),
+        role: permissionToRole(read('contact')),
       } : null,
     };
   };
@@ -4264,10 +4352,17 @@ import { createBusinessPageShared } from './shared';
                   <tr>
                     <td>${esc(record.code)}</td>
                     <td class="biz-supplier-name-cell">${kind === 'customer' ? `<button class="biz-order-code" type="button" data-customer-detail="${esc(record.code)}">${esc(record.name)}</button>` : esc(record.name)}</td>
-                    <td>${esc(record.contact || '--')}</td>
-                    <td>${esc(record.phone || '--')}</td>
-                    <td>${esc(record.email || '--')}</td>
-                    <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
+                    ${kind === 'personnel' ? `
+                      <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
+                      <td>${esc(record.contact || '--')}</td>
+                      <td>${esc(record.phone || '--')}</td>
+                      <td>${esc(record.email || '--')}</td>
+                    ` : `
+                      <td>${esc(record.contact || '--')}</td>
+                      <td>${esc(record.phone || '--')}</td>
+                      <td>${esc(record.email || '--')}</td>
+                      <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
+                    `}
                     <td><span class="biz-formula-status ${getArchiveStatusClass(record.status)}">${esc(record.status)}</span></td>
                     <td>
                       <div class="biz-supplier-row-actions">
@@ -4327,8 +4422,10 @@ import { createBusinessPageShared } from './shared';
                   <input type="text" value="${esc(formRecord.name)}" placeholder="${esc(config.namePlaceholder)}" data-archive-field="name">
                 </label>
                 <label>
-                  <span>${kind === 'personnel' ? '岗位' : '联系人'}</span>
-                  <input type="text" value="${esc(formRecord.contact)}" placeholder="${kind === 'personnel' ? '岗位' : '联系人'}" data-archive-field="contact">
+                  <span>${kind === 'personnel' ? '权限' : '联系人'}</span>
+                  ${kind === 'personnel'
+                    ? `<select data-archive-field="contact">${renderOptions(personnelPermissions.map((item) => item.label), formRecord.contact || roleToPermission(editingAuthUser?.role))}</select>`
+                    : `<input type="text" value="${esc(formRecord.contact)}" placeholder="联系人" data-archive-field="contact">`}
                 </label>
                 <label>
                   <span>电话</span>
@@ -4354,16 +4451,6 @@ import { createBusinessPageShared } from './shared';
                   <label>
                     <span>${state.editingCode ? '新密码' : '初始密码'}</span>
                     <input type="password" placeholder="${state.editingCode ? '留空则不修改' : '至少 10 位'}" data-archive-field="password">
-                  </label>
-                  <label>
-                    <span>账号角色</span>
-                    <select data-archive-field="role">
-                      <option value="">不创建账号</option>
-                      <option value="sales_manager" ${editingAuthUser?.role === 'sales_manager' ? 'selected' : ''}>销售主管</option>
-                      <option value="lab_engineer" ${editingAuthUser?.role === 'lab_engineer' ? 'selected' : ''}>实验室工程师</option>
-                      <option value="warehouse_manager" ${editingAuthUser?.role === 'warehouse_manager' ? 'selected' : ''}>仓储管理员</option>
-                      <option value="system_admin" ${editingAuthUser?.role === 'system_admin' ? 'selected' : ''}>系统管理员</option>
-                    </select>
                   </label>
                 ` : ''}
                 ${kind === 'personnel' ? '' : `
@@ -5642,6 +5729,9 @@ import { createBusinessPageShared } from './shared';
 
   void authClient.listUsers().then((users) => {
     authUsers = users;
+    syncPersonnelFromAuthUsers();
+    const activePageId = localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page');
+    if (activePageId === 'personnel-archive') render('personnel-archive');
   });
 
   App.businessPages = { render, createFormulaByAgent };

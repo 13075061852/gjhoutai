@@ -2,6 +2,7 @@
 import { renderDashboard } from './dashboard';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
 import { authClient } from '../../../services/auth';
+import { cloudStorage } from '../../../services/cloud-storage';
 import {
   INVENTORY_CATEGORY_STORAGE_KEY,
   INVENTORY_STORAGE_KEY,
@@ -1681,8 +1682,66 @@ import { createBusinessPageShared } from './shared';
     { label: '实验室工程师', role: 'lab_engineer' },
     { label: '仓储管理员', role: 'warehouse_manager' },
   ];
+  const roleApiPermissions = {
+    system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
+    sales_manager: ['state:read', 'state:write', 'blob:read'],
+    lab_engineer: ['state:read', 'state:write', 'blob:read', 'blob:write'],
+    warehouse_manager: ['state:read', 'state:write', 'blob:read'],
+  };
+  const rolePermissionLabels = {
+    'state:read': '数据查看',
+    'state:write': '业务编辑',
+    'blob:read': '附件查看',
+    'blob:write': '附件维护',
+    'config:read': '配置查看',
+    'config:write': '配置维护',
+    'users:manage': '账号管理',
+  };
+  const rolePageAccess = {
+    system_admin: null,
+    sales_manager: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'sales-stock', 'customer-archive', 'customer-detail']),
+    lab_engineer: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'image-cutout', 'inventory-management']),
+    warehouse_manager: new Set(['dashboard', 'sales-stock', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
+  };
+  const pageEditAccess = {
+    dashboard: [],
+    'order-detail': ['sales_manager', 'system_admin'],
+    'supplier-detail': ['warehouse_manager', 'system_admin'],
+    'customer-detail': ['sales_manager', 'system_admin'],
+    'order-management': ['sales_manager', 'system_admin'],
+    'invoice-print': ['sales_manager', 'warehouse_manager', 'system_admin'],
+    'sales-stock': ['sales_manager', 'warehouse_manager', 'system_admin'],
+    'formula-management': ['lab_engineer', 'system_admin'],
+    'production-plan': ['warehouse_manager', 'system_admin'],
+    'inventory-management': ['warehouse_manager', 'lab_engineer', 'system_admin'],
+    'supplier-archive': ['warehouse_manager', 'system_admin'],
+    'raw-material-procurement': ['warehouse_manager', 'system_admin'],
+    'customer-archive': ['sales_manager', 'system_admin'],
+    'personnel-archive': ['system_admin'],
+    'property-analysis': ['lab_engineer', 'system_admin'],
+    'spectrum-analysis': ['lab_engineer', 'system_admin'],
+    'image-cutout': ['lab_engineer', 'system_admin'],
+    'project-skills': ['system_admin'],
+    'apimart-media': ['system_admin'],
+    'ai-call-analysis': ['system_admin'],
+    'permission-management': ['system_admin'],
+    'audit-log': ['system_admin'],
+    'theme-settings': ['system_admin'],
+    'ai-config': ['system_admin'],
+  };
+  let permissionActiveDepartment = personnelDepartments[0];
+  const ROLE_PAGE_PERMISSION_STORAGE_KEY = 'gjh-role-page-permissions-v1';
+  let rolePagePermissionOverrides = utils.readJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, {});
   const permissionToRole = (permission) => personnelPermissions.find((item) => item.label === permission)?.role || '';
   const roleToPermission = (role) => personnelPermissions.find((item) => item.role === role)?.label || personnelPermissions[0].label;
+  const departmentToRole = (department) => ({
+    [personnelDepartments[0]]: 'system_admin',
+    [personnelDepartments[1]]: 'lab_engineer',
+    [personnelDepartments[2]]: 'sales_manager',
+    [personnelDepartments[3]]: 'warehouse_manager',
+    [personnelDepartments[4]]: 'warehouse_manager',
+  }[normalizePersonnelDepartment(department)] || 'system_admin');
+  const getPersonnelRecordRole = (record) => departmentToRole(record?.category) || permissionToRole(record?.contact);
   const normalizePersonnelDepartment = (department) => {
     const value = String(department || '').trim();
     return personnelDepartments.includes(value) ? value : personnelDepartmentAliases[value] || personnelDepartments[0];
@@ -3702,6 +3761,7 @@ import { createBusinessPageShared } from './shared';
   const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
   const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
   let authUsers = [];
+  let personnelArchiveCloudLoaded = false;
   const archiveConfigs = {
     customer: {
       pageId: 'customer-archive',
@@ -3746,13 +3806,13 @@ import { createBusinessPageShared } from './shared';
       filterAllLabel: '全部部门',
       categoryLabel: '部门',
       statusLabel: '在岗状态',
-      searchPlaceholder: '搜索姓名、部门、权限...',
+      searchPlaceholder: '搜索姓名、部门、电话、邮箱...',
       searchLabel: '搜索人员档案',
       addText: '新增人员',
       emptyText: '暂无匹配人员',
       categories: personnelDepartments,
       statuses: ['在岗', '试用', '权限待确认', '停用'],
-      columns: ['编号', '姓名', '部门', '权限', '电话', '邮箱', '状态', '操作'],
+      columns: ['编号', '姓名', '部门', '电话', '邮箱', '状态', '操作'],
       defaults: [],
     },
   };
@@ -3762,12 +3822,14 @@ import { createBusinessPageShared } from './shared';
   ];
 
   const archiveStates = Object.fromEntries(Object.entries(archiveConfigs).map(([kind, config]) => [kind, {
-    rows: normalizeArchiveRows(config, utils.readJson(config.storageKey, null)),
+    rows: config.storageKey === PERSONNEL_STORAGE_KEY ? [] : normalizeArchiveRows(config, utils.readJson(config.storageKey, null)),
     filter: '全部',
     search: '',
+    permissionFilter: '全部',
+    statusFilter: '全部',
     editingCode: '',
     modalOpen: false,
-    draftNote: `${config.entityName}档案自动保存到本地`,
+    draftNote: config.storageKey === PERSONNEL_STORAGE_KEY ? `${config.entityName}档案从云端读取` : `${config.entityName}档案自动保存到本地`,
     page: 1,
     pageSize: 10,
   }]));
@@ -3809,12 +3871,17 @@ import { createBusinessPageShared } from './shared';
     return Object.values(map).sort((a, b) => b.totalAmount - a.totalAmount);
   };
 
-  const persistArchive = (kind, note) => {
+  const persistArchive = async (kind, note) => {
     const config = archiveConfigs[kind];
     const state = archiveStates[kind];
-    if (!config || !state) return;
+    if (!config || !state) return false;
     state.draftNote = note || `${config.entityName}档案已保存`;
-    utils.writeJson(config.storageKey, state.rows);
+    if (config.storageKey === PERSONNEL_STORAGE_KEY) {
+      const saved = await cloudStorage.putJson(config.storageKey, state.rows);
+      if (!saved) state.draftNote = `${config.entityName}档案云端保存失败`;
+      return saved;
+    }
+    return utils.writeJson(config.storageKey, state.rows);
   };
 
   const getNextArchiveCode = (kind) => {
@@ -3838,9 +3905,10 @@ import { createBusinessPageShared } from './shared';
     return displayName;
   };
 
-  const syncPersonnelFromAuthUsers = () => {
+  const syncPersonnelFromAuthUsers = async () => {
     const config = archiveConfigs['personnel'];
     const state = archiveStates['personnel'];
+    if (!personnelArchiveCloudLoaded) return;
     if (!config || !state || !authUsers.length) return;
     let changed = false;
     authUsers.forEach((user) => {
@@ -3878,7 +3946,24 @@ import { createBusinessPageShared } from './shared';
       }));
       changed = true;
     });
-    if (changed) persistArchive('personnel', `已同步 ${authUsers.length} 个系统账号到人员档案`);
+    if (changed) await persistArchive('personnel', `已同步 ${authUsers.length} 个系统账号到人员档案`);
+  };
+
+  const renderPersonnelArchiveIfActive = () => {
+    const activePageId = localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page');
+    if (activePageId === 'personnel-archive') render('personnel-archive');
+  };
+
+  const loadPersonnelArchiveFromCloud = async () => {
+    const config = archiveConfigs['personnel'];
+    const state = archiveStates['personnel'];
+    if (!config || !state) return;
+    const cloudRows = await cloudStorage.getJson(config.storageKey);
+    state.rows = normalizeArchiveRows(config, Array.isArray(cloudRows) ? cloudRows : []);
+    personnelArchiveCloudLoaded = true;
+    state.draftNote = `${config.entityName}档案已从云端加载`;
+    await syncPersonnelFromAuthUsers();
+    renderPersonnelArchiveIfActive();
   };
 
   const getArchiveFormData = (kind) => {
@@ -3889,7 +3974,7 @@ import { createBusinessPageShared } from './shared';
       record: normalizeArchiveRecord(config, {
       code: read('code'),
       name: read('name'),
-      contact: read('contact'),
+      contact: kind === 'personnel' ? roleToPermission(departmentToRole(read('category'))) : read('contact'),
       phone: read('phone'),
       email: read('email'),
       category: read('category'),
@@ -3900,7 +3985,7 @@ import { createBusinessPageShared } from './shared';
       account: kind === 'personnel' ? {
         username: read('username'),
         password: read('password'),
-        role: permissionToRole(read('contact')),
+        role: departmentToRole(read('category')),
       } : null,
     };
   };
@@ -3984,14 +4069,28 @@ import { createBusinessPageShared } from './shared';
       state.rows[currentIndex] = record;
       state.editingCode = record.code;
       state.filter = record.category;
-      persistArchive(kind, `已更新${config.entityName} ${record.name} · ${getTimeCode()}`);
+      if (kind === 'personnel') {
+        state.statusFilter = record.status || '全部';
+      }
+      const saved = await persistArchive(kind, `已更新${config.entityName} ${record.name} · ${getTimeCode()}`);
+      if (!saved) {
+        notifyAction(state.draftNote, 'warn', `${kind}-save-failed:${record.code}`);
+        return false;
+      }
       notifyAction(`已保存${config.entityName} ${record.name}`, 'success', `${kind}-save:${record.code}`);
       return true;
     }
     state.rows.unshift(record);
     state.editingCode = record.code;
     state.filter = record.category;
-    persistArchive(kind, `已新增${config.entityName} ${record.name} · ${getTimeCode()}`);
+    if (kind === 'personnel') {
+      state.statusFilter = record.status || '全部';
+    }
+    const saved = await persistArchive(kind, `已新增${config.entityName} ${record.name} · ${getTimeCode()}`);
+    if (!saved) {
+      notifyAction(state.draftNote, 'warn', `${kind}-save-failed:${record.code}`);
+      return false;
+    }
     notifyAction(`已新增${config.entityName} ${record.name}`, 'success', `${kind}-save:${record.code}`);
     return true;
   };
@@ -4009,7 +4108,11 @@ import { createBusinessPageShared } from './shared';
     if (!confirmed) return false;
     state.rows.splice(index, 1);
     if (state.editingCode === code) state.editingCode = '';
-    persistArchive(kind, `已删除${config.entityName} ${record.name} · ${getTimeCode()}`);
+    const saved = await persistArchive(kind, `已删除${config.entityName} ${record.name} · ${getTimeCode()}`);
+    if (!saved) {
+      notifyAction(state.draftNote, 'warn', `${kind}-delete-failed:${code}`);
+      return false;
+    }
     notifyAction(`已删除${config.entityName} ${record.name}`, 'success', `${kind}-delete:${code}`);
     return true;
   };
@@ -4293,12 +4396,15 @@ import { createBusinessPageShared } from './shared';
     const categories = getArchiveCategories(config, state);
     const categoryTabs = ['全部', ...categories];
     if (!categoryTabs.includes(state.filter)) state.filter = '全部';
+    const statusTabs = ['全部', ...new Set([...config.statuses, ...state.rows.map((record) => record.status).filter(Boolean)])];
+    if (!statusTabs.includes(state.statusFilter)) state.statusFilter = '全部';
     const normalizedSearch = state.search.trim().toLowerCase();
     const visibleRows = state.rows.filter((record) => {
       const matchedCategory = state.filter === '全部' || record.category === state.filter;
-      const values = [record.code, record.name, record.contact, record.phone, record.email, record.category, record.address, record.status, record.note];
+      const matchedStatus = kind !== 'personnel' || state.statusFilter === '全部' || record.status === state.statusFilter;
+      const values = [record.code, record.name, record.phone, record.email, record.category, record.address, record.status, record.note];
       const matchedSearch = !normalizedSearch || values.some((value) => String(value).toLowerCase().includes(normalizedSearch));
-      return matchedCategory && matchedSearch;
+      return matchedCategory && matchedStatus && matchedSearch;
     });
     const filteredCount = visibleRows.length;
     const totalPages = Math.max(1, Math.ceil(filteredCount / state.pageSize));
@@ -4336,6 +4442,13 @@ import { createBusinessPageShared } from './shared';
                   <option value="${esc(category)}" ${category === state.filter ? 'selected' : ''}>${esc(category === '全部' ? config.filterAllLabel : category)}</option>
                 `).join('')}
               </select>
+              ${kind === 'personnel' ? `
+                <select data-archive-status-filter="${esc(kind)}" aria-label="状态筛选">
+                  ${statusTabs.map((status) => `
+                    <option value="${esc(status)}" ${status === state.statusFilter ? 'selected' : ''}>${esc(status === '全部' ? '全部状态' : status)}</option>
+                  `).join('')}
+                </select>
+              ` : ''}
               <button class="biz-formula-new-btn" type="button" data-archive-new="${esc(kind)}">
                 <i class="ti ti-plus" aria-hidden="true"></i>
                 <span>${esc(config.addText)}</span>
@@ -4354,7 +4467,6 @@ import { createBusinessPageShared } from './shared';
                     <td class="biz-supplier-name-cell">${kind === 'customer' ? `<button class="biz-order-code" type="button" data-customer-detail="${esc(record.code)}">${esc(record.name)}</button>` : esc(record.name)}</td>
                     ${kind === 'personnel' ? `
                       <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
-                      <td>${esc(record.contact || '--')}</td>
                       <td>${esc(record.phone || '--')}</td>
                       <td>${esc(record.email || '--')}</td>
                     ` : `
@@ -4421,12 +4533,12 @@ import { createBusinessPageShared } from './shared';
                   <span>${esc(config.nameLabel)} *</span>
                   <input type="text" value="${esc(formRecord.name)}" placeholder="${esc(config.namePlaceholder)}" data-archive-field="name">
                 </label>
-                <label>
-                  <span>${kind === 'personnel' ? '权限' : '联系人'}</span>
-                  ${kind === 'personnel'
-                    ? `<select data-archive-field="contact">${renderOptions(personnelPermissions.map((item) => item.label), formRecord.contact || roleToPermission(editingAuthUser?.role))}</select>`
-                    : `<input type="text" value="${esc(formRecord.contact)}" placeholder="联系人" data-archive-field="contact">`}
-                </label>
+                ${kind === 'personnel' ? '' : `
+                  <label>
+                    <span>联系人</span>
+                    <input type="text" value="${esc(formRecord.contact)}" placeholder="联系人" data-archive-field="contact">
+                  </label>
+                `}
                 <label>
                   <span>电话</span>
                   <input type="text" value="${esc(formRecord.phone)}" placeholder="联系电话" data-archive-field="phone">
@@ -4475,7 +4587,7 @@ import { createBusinessPageShared } from './shared';
     `;
   };
 
-  const renderPermission = () => `
+  const renderPermissionLegacy = () => `
     <section class="biz-permission-layout">
       <aside class="business-panel biz-role-list">
         <div class="business-panel-head"><h2>角色</h2><span>12 个</span></div>
@@ -4489,6 +4601,197 @@ import { createBusinessPageShared } from './shared';
       </article>
     </section>
   `;
+
+  const getPermissionPages = () => Object.entries(App.constants?.PAGE_DEFS || {})
+    .map(([id, def]) => ({ id, title: def?.title || id, eyebrow: def?.eyebrow || '项目页面' }))
+    .filter((page) => page.id && page.id !== 'permission-management');
+  const getPermissionDepartments = () => [
+    ...new Set([
+      ...personnelDepartments,
+      ...(archiveStates['personnel']?.rows || []).map((record) => normalizePersonnelDepartment(record.category)).filter(Boolean),
+    ]),
+  ];
+  const getPermissionDepartmentKey = (department) => `department:${normalizePersonnelDepartment(department)}`;
+  const getPermissionKeyRole = (permissionKey) => (
+    String(permissionKey || '').startsWith('department:')
+      ? departmentToRole(String(permissionKey).slice('department:'.length))
+      : permissionKey
+  );
+  const getDefaultRoleCanViewPage = (permissionKey, pageId) => {
+    const role = getPermissionKeyRole(permissionKey);
+    return !rolePageAccess[role] || rolePageAccess[role].has(pageId);
+  };
+  const getDefaultRoleCanEditPage = (permissionKey, pageId) => {
+    const role = getPermissionKeyRole(permissionKey);
+    return role === 'system_admin' || (pageEditAccess[pageId] || []).includes(role);
+  };
+  const getRolePageOverride = (permissionKey, pageId) => {
+    const override = rolePagePermissionOverrides?.[permissionKey]?.[pageId];
+    return override && typeof override === 'object' ? override : {};
+  };
+  const isLockedPermissionPage = (permissionKey, pageId) => (
+    getPermissionKeyRole(permissionKey) === 'system_admin' && pageId === 'ai-config'
+  );
+  const canRoleViewPage = (permissionKey, pageId) => {
+    if (isLockedPermissionPage(permissionKey, pageId)) return true;
+    const override = getRolePageOverride(permissionKey, pageId);
+    return typeof override.view === 'boolean' ? override.view : getDefaultRoleCanViewPage(permissionKey, pageId);
+  };
+  const canRoleEditPage = (permissionKey, pageId) => {
+    if (isLockedPermissionPage(permissionKey, pageId)) return true;
+    const override = getRolePageOverride(permissionKey, pageId);
+    if (typeof override.edit === 'boolean') return canRoleViewPage(permissionKey, pageId) && override.edit;
+    return canRoleViewPage(permissionKey, pageId) && getDefaultRoleCanEditPage(permissionKey, pageId);
+  };
+  const persistRolePagePermissions = () => {
+    utils.writeJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, rolePagePermissionOverrides);
+  };
+  const setRolePagePermission = (permissionKey, pageId, field, enabled) => {
+    if (isLockedPermissionPage(permissionKey, pageId)) return;
+    rolePagePermissionOverrides = rolePagePermissionOverrides && typeof rolePagePermissionOverrides === 'object'
+      ? rolePagePermissionOverrides
+      : {};
+    rolePagePermissionOverrides[permissionKey] = rolePagePermissionOverrides[permissionKey] || {};
+    const next = {
+      view: canRoleViewPage(permissionKey, pageId),
+      edit: canRoleEditPage(permissionKey, pageId),
+      ...getRolePageOverride(permissionKey, pageId),
+      [field]: enabled,
+    };
+    if (field === 'view' && !enabled) next.edit = false;
+    if (field === 'edit' && enabled) next.view = true;
+    rolePagePermissionOverrides[permissionKey][pageId] = next;
+    persistRolePagePermissions();
+  };
+  const resetRolePagePermissions = (permissionKey) => {
+    if (rolePagePermissionOverrides?.[permissionKey]) {
+      delete rolePagePermissionOverrides[permissionKey];
+      persistRolePagePermissions();
+    }
+  };
+  const getPermissionKeyForUser = (user = App.currentUser) => {
+    const role = String(user?.role || '');
+    const username = String(user?.username || '').trim();
+    const displayName = String(user?.displayName || user?.display_name || username).trim();
+    const personnelRows = archiveStates['personnel']?.rows || [];
+    const record = personnelRows.find((item) => (
+      (displayName && item.name === displayName)
+      || (username && String(item.note || '').includes(username))
+    ));
+    if (record?.category) return getPermissionDepartmentKey(record.category);
+    const department = personnelDepartments.find((item) => departmentToRole(item) === role);
+    return department ? getPermissionDepartmentKey(department) : role;
+  };
+  const canUserViewPage = (pageId, user = App.currentUser) => {
+    if (!pageId) return true;
+    return canRoleViewPage(getPermissionKeyForUser(user), pageId);
+  };
+  const canUserEditPage = (pageId, user = App.currentUser) => {
+    if (!pageId) return true;
+    return canRoleEditPage(getPermissionKeyForUser(user), pageId);
+  };
+  const renderLockedPermissionToggle = (pageId, field, label) => (
+    `<button class="biz-permission-toggle on" type="button" data-permission-toggle="${esc(field)}" data-permission-page="${esc(pageId)}" data-permission-enabled="true" aria-pressed="true" disabled aria-disabled="true">${esc(label)}</button>`
+  );
+  const getPermissionScope = (permissionKey, pageId) => {
+    const role = getPermissionKeyRole(permissionKey);
+    if (!canRoleViewPage(permissionKey, pageId)) return '不可见';
+    if (role === 'system_admin') return '全项目';
+    if (/detail|archive|management|plan|procurement|stock|invoice/.test(pageId)) return '本角色业务域';
+    return '当前页面数据';
+  };
+  const renderPermissionToggle = (pageId, field, enabled, label, mutedLabel = '关闭') => (
+    `<button class="biz-permission-toggle ${enabled ? 'on' : ''}" type="button" data-permission-toggle="${esc(field)}" data-permission-page="${esc(pageId)}" data-permission-enabled="${enabled ? 'true' : 'false'}" aria-pressed="${enabled ? 'true' : 'false'}">${esc(enabled ? label : mutedLabel)}</button>`
+  );
+  const getPermissionTableScroll = () => {
+    const table = refs.businessPageContent?.querySelector('.biz-permission-table');
+    if (!(table instanceof HTMLElement)) return { top: 0, left: 0 };
+    return { top: table.scrollTop, left: table.scrollLeft };
+  };
+  const restorePermissionTableScroll = (scroll) => {
+    requestAnimationFrame(() => {
+      const table = refs.businessPageContent?.querySelector('.biz-permission-table');
+      if (!(table instanceof HTMLElement)) return;
+      table.scrollTop = scroll?.top || 0;
+      table.scrollLeft = scroll?.left || 0;
+    });
+  };
+  const renderPermissionWithScroll = () => {
+    const scroll = getPermissionTableScroll();
+    render('permission-management');
+    restorePermissionTableScroll(scroll);
+  };
+  const getPermissionDepartmentMemberCount = (department) => {
+    const personnelRows = archiveStates['personnel']?.rows || [];
+    if (personnelRows.length) {
+      const normalizedDepartment = normalizePersonnelDepartment(department);
+      return personnelRows.filter((record) => normalizePersonnelDepartment(record.category) === normalizedDepartment).length;
+    }
+    const role = departmentToRole(department);
+    return authUsers.filter((user) => user.role === role).length;
+  };
+  const renderPermission = () => {
+    const pages = getPermissionPages();
+    const departments = getPermissionDepartments();
+    if (!departments.includes(permissionActiveDepartment)) permissionActiveDepartment = departments[0] || personnelDepartments[0];
+    const activePermissionKey = getPermissionDepartmentKey(permissionActiveDepartment);
+    const activeRole = departmentToRole(permissionActiveDepartment);
+    const activeRoleUserCount = getPermissionDepartmentMemberCount(permissionActiveDepartment);
+    const visiblePageCount = pages.filter((page) => canRoleViewPage(activePermissionKey, page.id)).length;
+    const editablePageCount = pages.filter((page) => canRoleEditPage(activePermissionKey, page.id)).length;
+    const apiPermissions = roleApiPermissions[activeRole] || [];
+    return `
+      <section class="biz-permission-layout">
+        <aside class="business-panel biz-role-list">
+          <div class="business-panel-head"><h2>部门</h2><span>${departments.length} 个</span></div>
+          ${departments.map((department) => {
+            const role = departmentToRole(department);
+            const count = getPermissionDepartmentMemberCount(department);
+            const isActive = department === permissionActiveDepartment;
+            return `
+              <button class="biz-role-card ${isActive ? 'is-active' : ''}" type="button" data-permission-department="${esc(department)}">
+                <span>
+                  <strong>${esc(department)}</strong>
+                  <em>${esc(role)}</em>
+                </span>
+                <b>${count}</b>
+              </button>
+            `;
+          }).join('')}
+        </aside>
+        <article class="business-panel biz-permission-matrix">
+          <div class="business-panel-head">
+            <h2>${esc(permissionActiveDepartment)}</h2>
+            <span>${visiblePageCount} / ${pages.length} 个页面可见</span>
+            <button class="biz-permission-reset-btn" type="button" data-permission-reset-key="${esc(activePermissionKey)}">恢复默认</button>
+          </div>
+          <div class="biz-permission-summary">
+            <article><strong>${visiblePageCount}</strong><span>可见页面</span></article>
+            <article><strong>${editablePageCount}</strong><span>可编辑页面</span></article>
+            <article><strong>${apiPermissions.length}</strong><span>后端能力</span></article>
+            <article><strong>${activeRoleUserCount}</strong><span>关联人员</span></article>
+          </div>
+          <div class="biz-permission-table" role="table" aria-label="页面权限矩阵">
+            <div class="biz-permission-row biz-permission-row-head" role="row">
+              <strong>项目页面</strong><span>查看</span><span>编辑</span><span>数据范围</span>
+            </div>
+            ${pages.map((page) => {
+              const canView = canRoleViewPage(activePermissionKey, page.id);
+              const canEdit = canRoleEditPage(activePermissionKey, page.id);
+              return `
+                <div class="biz-permission-row" role="row">
+                  <strong><small>${esc(page.eyebrow)}</small>${esc(page.title)}</strong>
+                  ${renderPermissionToggle(page.id, 'view', canView, '可见')}
+                  ${renderPermissionToggle(page.id, 'edit', canEdit, '可编辑', '只读')}
+                  <span class="${canView ? 'on' : ''}">${esc(getPermissionScope(activePermissionKey, page.id))}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </article>
+      </section>
+    `;
+  };
 
   const renderAudit = () => `
     <section class="biz-audit-layout">
@@ -4534,10 +4837,13 @@ import { createBusinessPageShared } from './shared';
     if (!refs.businessPageContent) return;
     const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement';
     const usesInvoiceWorkbench = pageId === 'invoice-print';
+    const usesPermissionWorkbench = pageId === 'permission-management';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
     refs.businessPageContent.classList.toggle('biz-invoice-shell', usesInvoiceWorkbench);
+    refs.businessPageContent.classList.toggle('biz-permission-shell', usesPermissionWorkbench);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-invoice-active', usesInvoiceWorkbench);
+    refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-permission-active', usesPermissionWorkbench);
     refs.businessPageContent.innerHTML = `
       ${renderBody(pageId)}
     `;
@@ -4870,6 +5176,16 @@ import { createBusinessPageShared } from './shared';
       render(config.pageId);
       return;
     }
+    if (event.target.hasAttribute('data-archive-status-filter')) {
+      const kind = event.target.getAttribute('data-archive-status-filter');
+      const config = archiveConfigs[kind];
+      const state = archiveStates[kind];
+      if (!config || !state) return;
+      state.statusFilter = event.target.value || '全部';
+      state.page = 1;
+      render(config.pageId);
+      return;
+    }
     if (event.target.hasAttribute('data-archive-page-size')) {
       const kind = event.target.getAttribute('data-archive-page-size');
       const config = archiveConfigs[kind];
@@ -4899,6 +5215,42 @@ import { createBusinessPageShared } from './shared';
 
   refs.businessPageContent?.addEventListener('click', async (event) => {
     if (!(event.target instanceof Element)) return;
+
+    const permissionDepartmentButton = event.target.closest('[data-permission-department]');
+    if (permissionDepartmentButton && refs.businessPageContent.contains(permissionDepartmentButton)) {
+      permissionActiveDepartment = permissionDepartmentButton.getAttribute('data-permission-department') || permissionActiveDepartment;
+      render('permission-management');
+      return;
+    }
+
+    const permissionToggle = event.target.closest('[data-permission-toggle]');
+    if (permissionToggle && refs.businessPageContent.contains(permissionToggle)) {
+      const pageId = permissionToggle.getAttribute('data-permission-page') || '';
+      const field = permissionToggle.getAttribute('data-permission-toggle') || '';
+      const enabled = permissionToggle.getAttribute('data-permission-enabled') === 'true';
+      if (pageId && (field === 'view' || field === 'edit')) {
+        const permissionKey = getPermissionDepartmentKey(permissionActiveDepartment);
+        if (isLockedPermissionPage(permissionKey, pageId)) {
+          renderPermissionWithScroll();
+          return;
+        }
+        setRolePagePermission(permissionKey, pageId, field, !enabled);
+        App.navigation?.refreshAccess?.();
+        notifyAction('权限配置已保存', 'success', `permission:${permissionKey}:${pageId}:${field}`);
+        renderPermissionWithScroll();
+      }
+      return;
+    }
+
+    const permissionResetButton = event.target.closest('[data-permission-reset-key]');
+    if (permissionResetButton && refs.businessPageContent.contains(permissionResetButton)) {
+      const permissionKey = permissionResetButton.getAttribute('data-permission-reset-key') || getPermissionDepartmentKey(permissionActiveDepartment);
+      resetRolePagePermissions(permissionKey);
+      App.navigation?.refreshAccess?.();
+      notifyAction('已恢复当前部门默认权限', 'success', `permission-reset:${permissionKey}`);
+      renderPermissionWithScroll();
+      return;
+    }
 
     const datePickerTrigger = event.target.closest('[data-date-picker-trigger]');
     if (datePickerTrigger && refs.businessPageContent.contains(datePickerTrigger)) {
@@ -5729,10 +6081,17 @@ import { createBusinessPageShared } from './shared';
 
   void authClient.listUsers().then((users) => {
     authUsers = users;
-    syncPersonnelFromAuthUsers();
-    const activePageId = localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page');
-    if (activePageId === 'personnel-archive') render('personnel-archive');
+    void syncPersonnelFromAuthUsers().then(() => {
+      App.navigation?.refreshAccess?.();
+      renderPersonnelArchiveIfActive();
+    });
   });
+  void loadPersonnelArchiveFromCloud().then(() => App.navigation?.refreshAccess?.());
 
   App.businessPages = { render, createFormulaByAgent };
+  App.permissions = {
+    canCurrentUserViewPage: canUserViewPage,
+    canCurrentUserEditPage: canUserEditPage,
+    getCurrentUserPermissionKey: getPermissionKeyForUser,
+  };
 })();

@@ -1,6 +1,11 @@
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 
 const buildUrl = (path: string) => `${API_BASE}${path}`;
+const currentRole = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.role || ''));
+const shouldSkipAdminConfigRequest = () => {
+  const role = currentRole();
+  return Boolean(role && role !== 'system_admin');
+};
 
 async function parseJson<T>(response: Response): Promise<T | null> {
   if (!response.ok) return null;
@@ -9,6 +14,7 @@ async function parseJson<T>(response: Response): Promise<T | null> {
 
 export const cloudConfig = {
   async get<T>(): Promise<T | null> {
+    if (shouldSkipAdminConfigRequest()) return null;
     try {
       const response = await fetch(buildUrl('/api/config'), { credentials: 'include' });
       const payload = await parseJson<{ value: T | null }>(response);

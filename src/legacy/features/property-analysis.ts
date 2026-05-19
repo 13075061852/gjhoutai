@@ -172,6 +172,8 @@ import { cloudStorage } from '../../services/cloud-storage';
     dataSource: 'default',
     sourceFileName: '',
     uploadStatusText: '读取中',
+    loadRequestId: 0,
+    loadingStartedAt: 0,
   };
 
   const escapeHtml = (value) => utils.escapeHtml(value);
@@ -494,8 +496,9 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getOssConfig = async () => {
     const savedConfig = await (App.config?.loadSavedConfig?.() || {});
+    const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaultConfig = constants.DEFAULT_CONFIG || {};
-    const getValue = (key) => String(savedConfig[key] || defaultConfig[key] || '').trim();
+    const getValue = (key) => String(saved[key] || defaultConfig[key] || '').trim();
     const bucket = getValue('ossBucket');
     const endpoint = getValue('ossEndpoint').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     const objectKey = getValue('ossObjectKey').replace(/^\/+/, '');
@@ -523,6 +526,21 @@ import { cloudStorage } from '../../services/cloud-storage';
   const getOssObjectUrl = (config, objectKey = config.objectKey) => {
     const endpoint = String(config.endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
     return `https://${config.bucket}.${endpoint}/${encodeOssObjectKey(objectKey)}`;
+  };
+
+  const fetchJsonWithTimeout = async (url, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new Error('request_timeout');
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
   };
 
   const formatDuration = (startTime) => {
@@ -3565,6 +3583,9 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const loadData = async (options = {}) => {
+    const requestId = state.loadRequestId + 1;
+    state.loadRequestId = requestId;
+    state.loadingStartedAt = performance.now();
     const startedAt = performance.now();
     try {
       setUploadStatus('读取中', 'loading');
@@ -3577,15 +3598,16 @@ import { cloudStorage } from '../../services/cloud-storage';
       const url = options.bustCache
         ? `${dataUrl}${dataUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
         : dataUrl;
-      const response = await fetch(url, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await fetchJsonWithTimeout(url);
+      if (requestId !== state.loadRequestId) return;
 
-      setAnalysisData(await response.json(), {
+      setAnalysisData(data, {
         source: 'oss',
         fileName: ossConfig.objectKey,
       });
       setUploadStatus(`读取成功 ${formatDuration(startedAt)}`, 'success');
     } catch (error) {
+      if (requestId !== state.loadRequestId) return;
       state.data = null;
       state.dataSource = 'oss';
       state.sourceFileName = '';
@@ -3602,6 +3624,15 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (refs.pagination) refs.pagination.hidden = true;
 
       console.error('[property-analysis] Failed to load data:', error);
+    }
+  };
+
+  const ensureLoaded = () => {
+    const isLoading = getStatusTone(state.uploadStatusText) === 'loading';
+    const hasData = Boolean(state.data);
+    const loadingFor = performance.now() - (state.loadingStartedAt || 0);
+    if (!hasData && (!isLoading || loadingFor > 8000)) {
+      loadData({ bustCache: true });
     }
   };
 
@@ -3800,11 +3831,17 @@ import { cloudStorage } from '../../services/cloud-storage';
     loadReportRanges();
     bind();
     loadData();
+    window.setTimeout(() => {
+      if (document.querySelector('[data-page-section="property-analysis"]')?.classList.contains('active')) {
+        ensureLoaded();
+      }
+    }, 8500);
   };
 
   App.propertyAnalysis = {
     init,
     loadData,
+    ensureLoaded,
     render,
     parseExcelWorkbook,
     getAiContext,

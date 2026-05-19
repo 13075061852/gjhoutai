@@ -103,6 +103,15 @@
       .biz-formula-builder .biz-formula-mini-stats{
         grid-template-columns:1fr;
       }
+      .page-section.active.business-page.biz-permission-active,
+      .business-page-shell.biz-permission-shell,
+      .biz-permission-layout{
+        height:auto;
+        overflow:visible;
+      }
+      .biz-permission-matrix{
+        max-height:calc(100dvh - var(--topbar) - 72px);
+      }
       .biz-formula-table-head{
         align-items:flex-start;
         flex-direction:column;
@@ -851,6 +860,9 @@
       .business-kpi-grid{grid-template-columns:1fr}
       .biz-stat-strip,
       .biz-warehouse-map{grid-template-columns:1fr}
+      .biz-permission-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .biz-permission-row{min-width:560px}
+      .biz-role-list .biz-role-card{min-height:58px}
       .biz-inventory-category-editor,
       .biz-inventory-material-editor{
         grid-template-columns:1fr;

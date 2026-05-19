@@ -287,17 +287,61 @@ import { cloudStorage } from '../../services/cloud-storage';
       const version = getImageVersion(item);
       const cached = await getCachedImage(id, version);
       const image = cached || await getStoredImage(id);
-      if (!image) return '';
+      if (!image) {
+        document.querySelectorAll(`[data-spectrum-image-id="${CSS.escape(id)}"]`).forEach((node) => {
+          if (node instanceof HTMLImageElement) setSpectrumImageMissing(node, true);
+        });
+        return '';
+      }
       if (!cached) await putCachedImage(id, image, version);
       item.image = image;
       document.querySelectorAll(`[data-spectrum-image-id="${CSS.escape(id)}"]`).forEach((node) => {
-        if (node instanceof HTMLImageElement) node.src = image;
+        if (node instanceof HTMLImageElement) {
+          setSpectrumImageMissing(node, false);
+          node.src = image;
+        }
       });
       if (state.activeId === id) renderDetail();
       return image;
     })().finally(() => pendingImageLoads.delete(id));
     pendingImageLoads.set(id, promise);
     return promise;
+  };
+
+  const getSpectrumImageFrame = (image) => image.closest?.([
+    '.spectrum-card-image',
+    '.spectrum-detail-image',
+    '.spectrum-compact-detail-image',
+    '.spectrum-preview-thumb',
+    '.spectrum-preview-image-frame',
+  ].join(','));
+
+  const setSpectrumImageMissing = (image, missing) => {
+    image.classList.toggle('is-image-missing', missing);
+    getSpectrumImageFrame(image)?.classList.toggle('is-image-missing', missing);
+  };
+
+  const syncSpectrumImageState = (image) => {
+    const id = image.getAttribute('data-spectrum-image-id') || '';
+    const item = id ? state.items.find((entry) => entry.id === id) : null;
+    if (image.complete && image.naturalWidth === 0) {
+      setSpectrumImageMissing(image, true);
+      return;
+    }
+    if (image.getAttribute('src') === EMPTY_IMAGE_SRC && item && !item.imageStored && !item.image) {
+      setSpectrumImageMissing(image, true);
+    }
+  };
+
+  const bindSpectrumImageFallbacks = (root = document) => {
+    root.querySelectorAll?.('img[data-spectrum-image-id]').forEach((image) => {
+      if (!image.dataset.spectrumFallbackBound) {
+        image.dataset.spectrumFallbackBound = 'true';
+        image.addEventListener('load', () => setSpectrumImageMissing(image, false));
+        image.addEventListener('error', () => setSpectrumImageMissing(image, true));
+      }
+      syncSpectrumImageState(image);
+    });
   };
 
   const loadItems = async () => {
@@ -330,6 +374,7 @@ import { cloudStorage } from '../../services/cloud-storage';
         imageObserver?.unobserve(image);
       });
     }, { rootMargin: '240px 0px' });
+    bindSpectrumImageFallbacks();
     document.querySelectorAll('img[data-spectrum-image-id]').forEach((image) => imageObserver.observe(image));
   };
 
@@ -1247,15 +1292,34 @@ import { cloudStorage } from '../../services/cloud-storage';
       meta: [item.spectrumType || item.type, item.category].filter(Boolean).join(' · '),
     }));
 
-  const getSpectrumAiConfig = () => {
-    const saved = App.config?.loadSavedConfig?.() || {};
+  const getSpectrumAiConfig = async () => {
+    const savedConfig = await (App.config?.loadSavedConfig?.() || {});
+    const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaults = App.constants?.DEFAULT_CONFIG || {};
+    const provider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase() === 'lmstudio'
+      ? 'lmstudio'
+      : 'openrouter';
+    const providerConfig = provider === 'lmstudio'
+      ? saved.lmStudioConfig
+      : saved.openrouterConfig;
+    const activeProviderConfig = providerConfig && typeof providerConfig === 'object' ? providerConfig : {};
     const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
-    const modelChoice = spectrumModel || saved.modelChoice || defaults.modelChoice || '';
+    const modelChoice = spectrumModel
+      || saved.modelChoice
+      || activeProviderConfig.modelChoice
+      || defaults.modelChoice
+      || '';
+    const baseUrl = saved.baseUrl
+      || activeProviderConfig.baseUrl
+      || defaults.baseUrl
+      || App.constants?.DEFAULT_BASE_URL
+      || '';
     return {
       ...defaults,
+      ...activeProviderConfig,
       ...saved,
-      baseUrl: utils.normalizeBaseUrl(saved.baseUrl || defaults.baseUrl || App.constants?.DEFAULT_BASE_URL || ''),
+      apiKey: provider === 'lmstudio' ? '' : String(saved.apiKey || activeProviderConfig.apiKey || '').trim(),
+      baseUrl: utils.normalizeBaseUrl(baseUrl),
       modelChoice,
       modelSource: spectrumModel ? '图谱分析模型' : '默认主模型',
       maxTokens: Math.max(Number(saved.maxTokens || defaults.maxTokens || 4096), 1024),
@@ -1270,7 +1334,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (ai?.model) return `(${ai.model})`;
     }
 
-    const config = getSpectrumAiConfig();
+    const config = App.config?.getFormConfig?.() || App.constants?.DEFAULT_CONFIG || {};
     const model = config.modelChoice || config.model || '';
     return model ? `(${model})` : '';
   };
@@ -1961,7 +2025,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const item = state.items.find((entry) => entry.id === id);
     if (!item || !item.image) return;
 
-    const config = getSpectrumAiConfig();
+    const config = await getSpectrumAiConfig();
     const model = config.modelChoice || config.model || '';
     const isLocal = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.)/i.test(config.baseUrl || '');
     if (!config.baseUrl || !model) {
@@ -3251,6 +3315,38 @@ import { cloudStorage } from '../../services/cloud-storage';
     image.src = dataUrl;
   });
 
+  const ensureUploadProgressNode = () => {
+    if (!refs.galleryPanel) return null;
+    if (refs.uploadProgress && refs.uploadProgress.isConnected) return refs.uploadProgress;
+
+    const progress = document.createElement('div');
+    progress.className = 'spectrum-upload-progress';
+    progress.setAttribute('role', 'status');
+    progress.setAttribute('aria-live', 'polite');
+    progress.innerHTML = `
+      <span class="spectrum-upload-progress-icon"><i class="ti ti-loader-2" aria-hidden="true"></i></span>
+      <span class="spectrum-upload-progress-body">
+        <strong>\u6b63\u5728\u4e0a\u4f20\u56fe\u8c31</strong>
+        <span data-spectrum-upload-progress-text>\u6b63\u5728\u51c6\u5907\u56fe\u7247...</span>
+      </span>
+    `;
+    refs.galleryPanel.appendChild(progress);
+    refs.uploadProgress = progress;
+    return progress;
+  };
+
+  const setUploadProgress = (active, message = '') => {
+    if (!refs.galleryPanel) return;
+    const progress = ensureUploadProgressNode();
+    const text = progress?.querySelector('[data-spectrum-upload-progress-text]');
+    if (text) text.textContent = message || '\u6b63\u5728\u5904\u7406\u56fe\u7247...';
+
+    refs.galleryPanel.classList.toggle('is-uploading', active);
+    refs.galleryPanel.setAttribute('aria-busy', active ? 'true' : 'false');
+    refs.uploadBtn?.classList.toggle('is-uploading', active);
+    if (refs.uploadBtn) refs.uploadBtn.disabled = active;
+  };
+
   const downloadBlob = (blob, fileName) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -3559,16 +3655,25 @@ import { cloudStorage } from '../../services/cloud-storage';
       return false;
     });
 
-    let conflictAction = '';
-    for (const file of files) {
-      const title = getUploadTitle(file);
-      const existing = findItemByTitle(title);
-      if (existing) {
-        if (!conflictAction) {
-          conflictAction = await openUploadConflictDialog(file.name);
-        }
-        if (conflictAction === 'skip') continue;
-      }
+    if (files.length) {
+      let conflictAction = '';
+      let completed = 0;
+      setUploadProgress(true, `\u5df2\u9009\u62e9 ${files.length} \u5f20\u56fe\u8c31\uff0c\u6b63\u5728\u51c6\u5907\u4e0a\u4f20`);
+      try {
+        for (const file of files) {
+          const title = getUploadTitle(file);
+          const existing = findItemByTitle(title);
+          setUploadProgress(true, `\u6b63\u5728\u4e0a\u4f20 ${completed + 1}/${files.length}\uff1a${file.name}`);
+          if (existing) {
+            if (!conflictAction) {
+              conflictAction = await openUploadConflictDialog(file.name);
+            }
+            if (conflictAction === 'skip') {
+              completed += 1;
+              setUploadProgress(true, `\u5df2\u5904\u7406 ${completed}/${files.length}`);
+              continue;
+            }
+          }
 
       const image = await readFileAsDataUrl(file);
       if (!image) {
@@ -3576,7 +3681,9 @@ import { cloudStorage } from '../../services/cloud-storage';
           name: getUploadIssueName(file),
           reason: '文件读取失败',
         });
-        continue;
+            completed += 1;
+            setUploadProgress(true, `\u5df2\u5904\u7406 ${completed}/${files.length}`);
+            continue;
       }
 
       const decoded = await canDecodeImage(image);
@@ -3585,7 +3692,9 @@ import { cloudStorage } from '../../services/cloud-storage';
           name: getUploadIssueName(file),
           reason: '图片无法解析或文件已损坏',
         });
-        continue;
+            completed += 1;
+            setUploadProgress(true, `\u5df2\u5904\u7406 ${completed}/${files.length}`);
+            continue;
       }
 
       const today = new Date().toISOString().slice(0, 10);
@@ -3594,7 +3703,11 @@ import { cloudStorage } from '../../services/cloud-storage';
         const imageVersion = new Date().toISOString();
         const imageStored = await putStoredImage(existing.id, image, imageVersion);
         const index = state.items.findIndex((item) => item.id === existing.id);
-        if (index < 0) continue;
+            if (index < 0) {
+              completed += 1;
+              setUploadProgress(true, `\u5df2\u5904\u7406 ${completed}/${files.length}`);
+              continue;
+            }
         state.items[index] = {
           ...state.items[index],
           title,
@@ -3629,8 +3742,14 @@ import { cloudStorage } from '../../services/cloud-storage';
         state.items.unshift(item);
         revealItemInGallery(item);
       }
-      await saveUploadedItems();
-      render();
+          await saveUploadedItems();
+          completed += 1;
+          setUploadProgress(true, `\u5df2\u4e0a\u4f20 ${completed}/${files.length}`);
+          render();
+        }
+      } finally {
+        setUploadProgress(false);
+      }
     }
 
     openUploadIssueDialog(issues);

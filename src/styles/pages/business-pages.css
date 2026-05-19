@@ -5298,23 +5298,163 @@
       font-weight:800;
     }
     .biz-permission-matrix{
-      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      overflow:hidden;
+    }
+    .page-section.active.business-page.biz-permission-active{
+      height:100%;
+      min-height:0;
+      overflow:hidden;
+    }
+    .business-page-shell.biz-permission-shell{
+      height:100%;
+      min-height:0;
+      overflow:hidden;
     }
     .biz-permission-layout{
-      grid-template-columns:minmax(220px,.72fr) minmax(380px,1.28fr);
+      grid-template-columns:minmax(176px,.46fr) minmax(520px,1.54fr);
+      align-items:stretch;
+      height:100%;
+      min-height:0;
+      overflow:hidden;
+    }
+    .biz-permission-layout > .business-panel{
+      height:100%;
+      max-height:100%;
+    }
+    .biz-permission-layout > .biz-role-list{
+      min-height:0;
+      overflow:auto;
+      scrollbar-width:thin;
+    }
+    .biz-role-list .biz-role-card{
+      min-height:58px;
+      gap:12px;
+      padding:10px 12px;
+    }
+    .biz-role-card span{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .biz-role-card strong{
+      color:var(--text);
+      font-size:13px;
+      line-height:1.3;
+    }
+    .biz-role-card em{
+      overflow:hidden;
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      font-weight:800;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .biz-role-card b{
+      width:34px;
+      height:34px;
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--accent);
+      font-size:14px;
+      font-weight:900;
+    }
+    .biz-role-card.is-active b{
+      background:var(--accent);
+      color:#fff;
+    }
+    .biz-permission-summary{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+      margin-bottom:12px;
+    }
+    .biz-permission-summary article{
+      min-height:74px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:5px;
+      padding:12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:linear-gradient(180deg,var(--surface),var(--surface-2));
+    }
+    .biz-permission-summary strong{
+      color:var(--text);
+      font-size:24px;
+      font-weight:950;
+      line-height:1;
+    }
+    .biz-permission-summary span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-permission-table{
+      flex:1 1 auto;
+      min-height:0;
+      min-width:0;
+      overflow:auto;
+      padding-right:4px;
+      scrollbar-width:thin;
+    }
+    .biz-permission-reset-btn{
+      min-height:30px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+    }
+    .biz-permission-reset-btn:hover,
+    .biz-permission-toggle:hover{
+      border-color:var(--accent);
+      color:var(--accent);
     }
     .biz-permission-row{
+      min-width:620px;
       display:grid;
-      grid-template-columns:130px repeat(3,minmax(74px,1fr));
+      grid-template-columns:minmax(190px,1.5fr) repeat(3,minmax(92px,1fr));
       gap:12px;
       align-items:center;
-      padding:9px 0;
+      padding:10px 0;
       border-bottom:1px solid var(--border);
     }
     .biz-permission-row:last-child{border-bottom:0}
+    .biz-permission-row-head{
+      position:sticky;
+      top:0;
+      z-index:1;
+      padding-top:0;
+      background:var(--surface);
+    }
     .biz-permission-row strong{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:3px;
       color:var(--text);
       font-size:13px;
+    }
+    .biz-permission-row small{
+      overflow:hidden;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      text-overflow:ellipsis;
+      white-space:nowrap;
     }
     .biz-permission-row span{
       min-height:30px;
@@ -5326,7 +5466,21 @@
       font-size:12px;
       font-weight:850;
     }
-    .biz-permission-row .on{
+    .biz-permission-toggle{
+      min-height:30px;
+      display:grid;
+      place-items:center;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--muted);
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+    }
+    .biz-permission-row .on,
+    .biz-permission-toggle.on{
       border-color:var(--accent);
       background:var(--accent-soft);
       color:var(--accent);

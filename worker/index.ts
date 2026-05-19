@@ -29,6 +29,7 @@ interface SessionUser {
 }
 
 const SESSION_COOKIE = 'gjh_session';
+const SESSION_MARKER_COOKIE = 'gjh_session_present';
 const SESSION_DAYS = 7;
 const PASSWORD_ITERATIONS = 100_000;
 const CONFIG_ALGORITHM = 'AES-GCM';
@@ -186,14 +187,28 @@ const getCookieAttributes = (request: Request) => {
   const isSecure = new URL(request.url).protocol === 'https:';
   return `${isSecure ? 'Secure; SameSite=None' : 'SameSite=Lax'}`;
 };
-const appendSessionCookie = (request: Request, headers: Headers, token: string, maxAgeSeconds: number) => headers.append(
-  'set-cookie',
-  `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; ${getCookieAttributes(request)}; Max-Age=${maxAgeSeconds}`,
-);
-const clearSessionCookie = (request: Request, headers: Headers) => headers.append(
-  'set-cookie',
-  `${SESSION_COOKIE}=; Path=/; HttpOnly; ${getCookieAttributes(request)}; Max-Age=0`,
-);
+const appendSessionCookie = (request: Request, headers: Headers, token: string, maxAgeSeconds: number) => {
+  const attributes = getCookieAttributes(request);
+  headers.append(
+    'set-cookie',
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; ${attributes}; Max-Age=${maxAgeSeconds}`,
+  );
+  headers.append(
+    'set-cookie',
+    `${SESSION_MARKER_COOKIE}=1; Path=/; ${attributes}; Max-Age=${maxAgeSeconds}`,
+  );
+};
+const clearSessionCookie = (request: Request, headers: Headers) => {
+  const attributes = getCookieAttributes(request);
+  headers.append(
+    'set-cookie',
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; ${attributes}; Max-Age=0`,
+  );
+  headers.append(
+    'set-cookie',
+    `${SESSION_MARKER_COOKIE}=; Path=/; ${attributes}; Max-Age=0`,
+  );
+};
 const audit = async (env: Env, actorUserId: string | null, action: string, targetType?: string, targetId?: string, metadata?: unknown) => {
   await env.DB.prepare(`
     INSERT INTO audit_logs (id, actor_user_id, action, target_type, target_id, metadata)

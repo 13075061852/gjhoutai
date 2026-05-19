@@ -10,6 +10,30 @@ export interface AppUser {
 
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 const buildUrl = (path: string) => `${API_BASE}${path}`;
+const currentRole = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.role || ''));
+const canManageUsers = () => currentRole() === 'system_admin';
+const SESSION_MARKER_COOKIE = 'gjh_session_present';
+const SESSION_MARKER_STORAGE_KEY = 'gjh-auth-session-present';
+const isSameOriginApi = () => {
+  if (typeof window === 'undefined' || !API_BASE) return true;
+  try {
+    return new URL(API_BASE, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+};
+const hasSessionMarker = () => {
+  if (typeof window === 'undefined') return true;
+  if (localStorage.getItem(SESSION_MARKER_STORAGE_KEY) === '1') return true;
+  if (!isSameOriginApi() || typeof document === 'undefined') return false;
+  return document.cookie.split(';').some((cookie) => cookie.trim().startsWith(`${SESSION_MARKER_COOKIE}=`));
+};
+const rememberSessionMarker = () => {
+  if (typeof window !== 'undefined') localStorage.setItem(SESSION_MARKER_STORAGE_KEY, '1');
+};
+const clearSessionMarker = () => {
+  if (typeof window !== 'undefined') localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
   const response = await fetch(buildUrl(path), {
@@ -26,18 +50,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
 
 export const authClient = {
   async me(): Promise<AppUser | null> {
+    if (!hasSessionMarker()) return null;
     const payload = await request<{ user: AppUser }>('/api/auth/me');
-    return payload?.user ?? null;
+    const user = payload?.user ?? null;
+    if (!user) clearSessionMarker();
+    return user;
   },
   async login(username: string, password: string): Promise<AppUser | null> {
     const payload = await request<{ user: AppUser }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    return payload?.user ?? null;
+    const user = payload?.user ?? null;
+    if (user) rememberSessionMarker();
+    return user;
   },
   async logout(): Promise<boolean> {
     const payload = await request<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' });
+    clearSessionMarker();
     return Boolean(payload?.ok);
   },
   async changePassword(currentPassword: string, nextPassword: string): Promise<boolean> {
@@ -82,6 +112,7 @@ export const authClient = {
     return response.ok;
   },
   async listUsers(): Promise<Array<{ id: string; username: string; display_name: string; role: AppRole }>> {
+    if (!canManageUsers()) return [];
     const payload = await request<{ users: Array<{ id: string; username: string; display_name: string; role: AppRole }> }>('/api/users');
     return payload?.users ?? [];
   },

@@ -47,8 +47,61 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
   const isSidebarCollapsed = () => refs.shell?.classList.contains('sidebar-collapsed');
 
+  const getNavPageButtons = () => [...document.querySelectorAll('[data-page]')];
+
+  const isPageVisible = (pageId) => {
+    if (!pageId) return true;
+    const canView = App.permissions?.canCurrentUserViewPage;
+    return typeof canView === 'function' ? canView(pageId) !== false : true;
+  };
+
+  const getFallbackPageId = () => (
+    ['dashboard', 'ai-config', ...Object.keys(constants.PAGE_DEFS || {})].find((pageId) => isAvailablePageId(pageId) && isPageVisible(pageId))
+    || DEFAULT_PAGE_ID
+  );
+
+  const refreshNavAccess = (options = {}) => {
+    const { redirect = true } = options;
+    getNavPageButtons().forEach((button) => {
+      const pageId = button.dataset.page || button.getAttribute('data-page') || '';
+      const visible = isPageVisible(pageId);
+      button.hidden = !visible;
+      button.setAttribute('aria-hidden', visible ? 'false' : 'true');
+      if (visible) button.removeAttribute('tabindex');
+      else button.setAttribute('tabindex', '-1');
+    });
+
+    document.querySelectorAll('.nav-group').forEach((group) => {
+      const visibleChildren = [...group.querySelectorAll('.nav-subitem[data-page]')].filter((item) => !item.hidden);
+      const hidden = visibleChildren.length === 0;
+      group.hidden = hidden;
+      group.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+      if (hidden) group.classList.remove('expanded');
+    });
+
+    document.querySelectorAll('.sidebar-section').forEach((section) => {
+      if (section.querySelector('.sidebar-search')) return;
+      const pageButtons = [...section.querySelectorAll('[data-page]')];
+      const groups = [...section.querySelectorAll('.nav-group')];
+      const hasVisiblePage = pageButtons.some((button) => !button.hidden);
+      const hasVisibleGroup = groups.some((group) => !group.hidden);
+      const hidden = Boolean(pageButtons.length || groups.length) && !hasVisiblePage && !hasVisibleGroup;
+      section.hidden = hidden;
+      section.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    });
+
+    const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || '';
+    const visibleRecentPages = getRecentPages().filter((pageId) => isPageVisible(pageId));
+    saveRecentPages(visibleRecentPages);
+    renderRecentPages(isPageVisible(currentPage) ? currentPage : '');
+
+    if (redirect && currentPage && !isPageVisible(currentPage)) {
+      showPage(getFallbackPageId(), { scrollTop: false });
+    }
+  };
+
   const createCollapsedNavFlyout = (groupToggle, group) => {
-    const subitems = [...group.querySelectorAll('.nav-subitem[data-page]')];
+    const subitems = [...group.querySelectorAll('.nav-subitem[data-page]')].filter((item) => isPageVisible(item.dataset.page || ''));
     if (!subitems.length || !isSidebarCollapsed()) return;
 
     removeCollapsedNavFlyout();
@@ -450,7 +503,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     if (!refs.topVisitedPages) return;
 
     const recentPages = getRecentPages()
-      .filter((pageId) => constants.PAGE_DEFS[pageId] || document.querySelector(`[data-page="${pageId}"]`))
+      .filter((pageId) => isPageVisible(pageId) && (constants.PAGE_DEFS[pageId] || document.querySelector(`[data-page="${pageId}"]`)))
       .slice(0, MAX_RECENT_PAGES);
 
     if (!recentPages.length) {
@@ -616,6 +669,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
   const showPage = (pageId, options = {}) => {
     pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
+    if (!isPageVisible(pageId)) pageId = getFallbackPageId();
     const { scrollTop = true, trackRecent = true } = options;
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
@@ -649,6 +703,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     }
     if (isAiCallAnalysisPage) {
       App.aiCallAnalysis?.render?.();
+    }
+    if (isAnalysisPage) {
+      App.propertyAnalysis?.ensureLoaded?.();
     }
 
     setActiveNavPage(pageId);
@@ -777,7 +834,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.navPageButtons.forEach((button) => {
       button.addEventListener('click', () => {
         const pageId = button.dataset.page;
-        if (pageId) {
+        if (pageId && isPageVisible(pageId)) {
           showPage(pageId);
           setMobileSidebarOpen(false);
         }
@@ -801,9 +858,10 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       const button = event.target.closest('[data-visited-page]');
       if (!button) return;
       const pageId = button.getAttribute('data-visited-page') || '';
-      if (pageId) showPage(pageId, { trackRecent: false });
+      if (pageId && isPageVisible(pageId)) showPage(pageId, { trackRecent: false });
     });
 
+    refreshNavAccess({ redirect: false });
     const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
     showPage(savedPage, { scrollTop: false });
     restoreLayoutState();
@@ -833,6 +891,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   App.navigation = {
     init: bindNavigation,
     showPage,
+    refreshAccess: refreshNavAccess,
     restoreLayoutState,
     setAssistantCollapsed,
     updateSidebarToggle,

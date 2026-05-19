@@ -27,10 +27,11 @@ function getInitialLegacyMarkup() {
 
   let markup = legacyMarkup
     .replace(/\bpage-section active\b/g, 'page-section')
+    .replace('class="shell"', 'class="shell legacy-shell-booting"')
     .replace(sectionPattern, '$1 active$2');
 
   if (pageId !== DEFAULT_PAGE_ID) {
-    markup = markup.replace('class="shell"', 'class="shell page-other"');
+    markup = markup.replace('class="shell legacy-shell-booting"', 'class="shell legacy-shell-booting page-other"');
   }
 
   return markup;

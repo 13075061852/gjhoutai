@@ -68,6 +68,8 @@ const getAttachmentFileName = (key: string) => {
   return fileName.replace(/[\\\r\n"]/g, '_');
 };
 const USER_SCOPED_STATE_KEYS = new Set([
+  'sidebar-active-page',
+  'sidebar-recent-pages',
   'openrouter-ai-chat-v1',
   'openrouter-ai-chat-sessions-v1',
   'openrouter-ai-chat-active-session-v1',

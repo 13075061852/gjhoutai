@@ -1096,7 +1096,7 @@ import { getLegacyApp } from '../core/app-context';
   const shouldUseProjectContext = (prompt) => {
     const text = String(prompt || '').trim();
     if (!text) return false;
-    return /(?:后台|系统|页面|打开|进入|切换|查看|订单|库存|生产|物性|图谱|抠图|配方|客户|供应商|人员|权限|审计|调用分析|当前页|当前页面|选中|筛选|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰分|dsc|tga|图谱库|图片库)/i.test(text);
+    return /(?:项目|网站|站点|本站|应用|平台|后台|系统|页面|打开|进入|切换|查看|订单|库存|商品|产品|成品|生产|物性|图谱|抠图|配方|客户|供应商|人员|员工|账号|账户|用户|部门|权限|审计|调用分析|当前页|当前页面|选中|筛选|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰分|dsc|tga|图谱库|图片库|几个|多少|数量|总数|最低|最少|最小|最高|最多|最大|详细|说明|展开|继续|具体|多说|讲讲|介绍|梳理|总结)/i.test(text);
   };
 
   const getProjectContext = () => {
@@ -1108,6 +1108,8 @@ import { getLegacyApp } from '../core/app-context';
     return [
       '【项目背景】',
       '你正在广俊塑料科技后台管理系统中工作。',
+      '当用户说“这个项目”“这个网站”“本站”“这个系统”或“这个应用”时，均指广俊塑料科技后台管理系统本身，而不是外部互联网页面。',
+      '当用户追问“详细说明一下”“展开说说”“继续”“具体点”等承接性问题时，必须沿用上一轮项目主题继续回答，不要重新要求用户提供背景。',
       `项目当前已注册页面：${pageCatalog}`,
       `当前页面：${activePageTitle}`,
       '默认流程：先判断是否需要项目技能；需要数据或页面操作时输出技能调用 JSON，由前端获取数据或执行操作后再交给 AI 分析。',
@@ -1809,6 +1811,50 @@ import { getLegacyApp } from '../core/app-context';
     .replace(/图谱分析\s*Agent/g, '图谱分析')
     .trim();
 
+  const parseJsonLikeAssistantContent = (content = '') => {
+    const text = String(content || '').trim();
+    if (!text || !/^\s*(?:```json\s*)?\{/.test(text)) return null;
+    const jsonText = text
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim();
+    try {
+      const parsed = JSON.parse(jsonText);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const formatInternalJsonAnswer = (content = '') => {
+    const payload = parseJsonLikeAssistantContent(content);
+    if (!payload || !('context' in payload || 'data' in payload)) return content;
+
+    const lines = [];
+    const context = String(payload.context || payload.message || '').trim();
+    if (context) lines.push(context);
+
+    if (Array.isArray(payload.data) && payload.data.length) {
+      if (lines.length) lines.push('');
+      payload.data.slice(0, 20).forEach((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          lines.push(`${index + 1}. ${String(item)}`);
+          return;
+        }
+        const name = item.姓名 || item.name || item.title || item.名称 || item.编号 || item.id || `记录 ${index + 1}`;
+        const code = item.编号 || item.code || item.id || '';
+        const details = Object.entries(item)
+          .filter(([key, value]) => value != null && value !== '' && !['姓名', 'name', 'title', '名称', '编号', 'code', 'id'].includes(key))
+          .map(([key, value]) => `${key}：${value}`)
+          .join('，');
+        const heading = code && String(code) !== String(name) ? `${name}（${code}）` : String(name);
+        lines.push(`${index + 1}. ${heading}${details ? ` - ${details}` : ''}`);
+      });
+    }
+
+    return lines.join('\n').trim() || content;
+  };
+
   const synthesizeCompositeAgentResults = async ({
     config,
     model,
@@ -2345,6 +2391,29 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
+  const getRecentBusinessTopic = () => {
+    const recentText = state.chatHistory
+      .slice(-6)
+      .map((item) => String(item?.content || ''))
+      .join('\n');
+    if (/配方/.test(recentText)) return '配方';
+    if (/账号|账户|用户|登录/.test(recentText)) return '账号';
+    if (/人员|员工/.test(recentText)) return '人员';
+    if (/订单/.test(recentText)) return '订单';
+    if (/供应商/.test(recentText)) return '供应商';
+    if (/客户/.test(recentText)) return '客户';
+    if (/库存|物料|材料|商品|产品|成品/.test(recentText)) return '库存物料';
+    return '';
+  };
+
+  const buildDeterministicProjectQuestion = (prompt) => {
+    const text = String(prompt || '').trim();
+    if (!/^(哪|哪几|哪四|哪几个|列举|列出|展示|罗列|具体|详细|明细|列表|都有|分别|展开|说一下|说明一下)/.test(text)) return text;
+    if (/配方|账号|账户|用户|人员|员工|订单|供应商|客户|库存|物料|材料|商品|产品|成品/.test(text)) return text;
+    const topic = getRecentBusinessTopic();
+    return topic ? `${text} ${topic}` : text;
+  };
+
   const sendChatMessage = async () => {
     if (state.chatBusy) {
       stopCurrentChatAnalysis();
@@ -2359,6 +2428,18 @@ import { getLegacyApp } from '../core/app-context';
       pushChatMessage('user', prompt);
       if (refs.chatInput) refs.chatInput.value = '';
       pushChatMessage('assistant', buildCurrentDateLocalAnswer());
+      return;
+    }
+
+    const deterministicQuestion = buildDeterministicProjectQuestion(prompt);
+    const deterministicProjectAnswer = projectContextEnabled
+      ? App.agentButler?.answerQuestion?.(deterministicQuestion, { activePageId: getActivePageId(), originalQuestion: prompt })
+      : '';
+    if (deterministicProjectAnswer) {
+      pushChatMessage('user', prompt);
+      if (refs.chatInput) refs.chatInput.value = '';
+      pendingDraftImages = [];
+      pushChatMessage('assistant', deterministicProjectAnswer);
       return;
     }
 
@@ -2720,6 +2801,7 @@ import { getLegacyApp } from '../core/app-context';
         streamedImages = [];
       }
       }
+      streamedContent = formatInternalJsonAnswer(streamedContent);
       const skillActions = skillExecution
         ? (App.projectSkills.getResultActions?.(skillExecution) || [])
         : [];

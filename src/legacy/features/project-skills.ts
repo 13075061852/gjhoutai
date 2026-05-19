@@ -321,8 +321,12 @@ import { getLegacyApp } from '../core/app-context';
 
   const hasOpenPageIntent = (prompt) => {
     const text = String(prompt || '');
-    return /(?:打开|进入|切换到|跳转到|转到|去|查看).*(?:页面|面板|中心|档案|管理|计划|库存|日志|仪表盘|助手|分析|配置|主题|技能|调用|费用|订单|客户|供应商|人员|权限|审计|数据源|生产|配方|销售|开单|抠图|图谱|物性)/.test(text);
+    if (/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|统计|当前|现在)/.test(text)) return false;
+    return /(?:打开|进入|切换到|跳转到|转到|去).*(?:页面|面板|中心|档案|管理|计划|库存|日志|仪表盘|助手|分析|配置|主题|技能|调用|费用|订单|客户|供应商|人员|权限|审计|数据源|生产|配方|销售|开单|抠图|图谱|物性)/.test(text)
+      || /查看.*(?:页面|面板|中心|档案|管理页|计划页|库存页|日志页|仪表盘|配置页)/.test(text);
   };
+
+  const isDataQueryIntent = (prompt) => /(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|统计|当前|现在)/.test(String(prompt || ''));
 
   const getPageCatalog = () => Object.entries(constants.PAGE_DEFS || {})
     .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
@@ -959,6 +963,10 @@ import { getLegacyApp } from '../core/app-context';
     if (call.skillId === 'spectrum.manageImages' && call.input?.action === 'search') {
       call.input = fillSpectrumSearchInputFallback(call.input, meta.prompt);
     }
+    if (call.skillId === 'assistant.openPage' && isDataQueryIntent(meta.prompt)) {
+      console.info('[project-skills] Ignored accidental openPage skill call for data query:', meta.prompt);
+      return null;
+    }
     if (typeof meta.onBeforeExecute === 'function') {
       try {
         meta.onBeforeExecute(call);
@@ -981,7 +989,8 @@ import { getLegacyApp } from '../core/app-context';
       '【项目技能调用协议】',
       '你是项目技能调度器：先理解用户真实意图，再从可用技能中选择最合适的技能和参数。',
       '当用户要求执行项目内操作、修改页面数据、整理/删除/归类/打标/跳转/查询项目数据时，优先调用项目技能，不要凭空声称已经操作。',
-      `用户要求打开、进入、切换或查看系统页面时，优先调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
+      `用户明确要求打开、进入、切换、跳转或查看某个“页面/面板/中心”时，才调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
+      '用户询问“几个、多少、有哪些、哪几个、列表、明细、统计、当前、现在”等数据问题时，不要调用 assistant.openPage，应直接回答或调取数据上下文。',
       '如果需要让前端执行技能，只输出严格 JSON，不要混入解释、Markdown 或自然语言：',
       formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
       '技能执行后，前端会把执行结果回写给用户。',

@@ -2437,6 +2437,10 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const getAgentImages = (question = '', options = {}) => {
+    const text = String(question || '').trim();
+    const asksAboutPage = /(?:这个|当前|本|该)?(?:页面|模块|功能|系统|项目|网站|应用|平台)|做什么|是什么|用途|作用|介绍|说明|怎么用|如何使用/.test(text);
+    const asksToAnalyzeMedia = /(?:分析|看看|识别|读取|提取|对比|判断).*(?:图谱|谱图|曲线|图片|图像|dsc|tga|峰|峰值|温区|失重)|(?:图谱|谱图|曲线|图片|图像).*(?:分析|识别|读取|提取|对比|判断)|分析这张|看这张|当前图/.test(text);
+    if (asksAboutPage && !asksToAnalyzeMedia) return [];
     const shouldAttach = options.forceCurrentPage || /(?:图谱|图片|图像|曲线|谱图|分析这张|看这张|当前图)/.test(String(question || ''));
     if (!shouldAttach) return [];
     return getAiImages(getAgentItems(question, options).items);

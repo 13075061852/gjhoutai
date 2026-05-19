@@ -210,7 +210,7 @@ import { getLegacyApp } from '../core/app-context';
     system_admin: '系统管理员',
     sales_manager: '销售主管',
     lab_engineer: '实验室工程师',
-    warehouse_manager: '仓储管理员',
+    warehouse_manager: '生产部主管',
   };
   const getActorLabel = (item) => item?.actorUsername || item?.actorDisplayName || '历史记录';
   const getActorSubLabel = (item) => ACTOR_ROLE_LABELS[item?.actorRole]

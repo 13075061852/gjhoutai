@@ -137,6 +137,9 @@
         min-width:900px;
         font-size:13px;
       }
+      .biz-formula-list-page .biz-formula-table{
+        min-width:1120px;
+      }
       .biz-formula-table th,
       .biz-formula-table td{
         height:56px;
@@ -913,6 +916,9 @@
       .biz-formula-table{
         min-width:820px;
         font-size:12px;
+      }
+      .biz-formula-list-page .biz-formula-table{
+        min-width:1120px;
       }
       .biz-formula-table th,
       .biz-formula-table td{

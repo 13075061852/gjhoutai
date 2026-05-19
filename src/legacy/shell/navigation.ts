@@ -18,7 +18,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
   let navigationBound = false;
-  const DEFAULT_PAGE_ID = 'ai-config';
+  const DEFAULT_PAGE_ID = 'dashboard';
+  const NAV_GROUP_STATE_KEY = 'sidebar-expanded-groups';
   const SIDEBAR_TRANSITION_MS = 520;
   const MAX_RECENT_PAGES = 8;
 
@@ -48,6 +49,39 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const isSidebarCollapsed = () => refs.shell?.classList.contains('sidebar-collapsed');
 
   const getNavPageButtons = () => [...document.querySelectorAll('[data-page]')];
+
+  const getNavGroupKey = (group) => [...group.querySelectorAll('[data-page]')]
+    .map((button) => button.dataset.page || button.getAttribute('data-page') || '')
+    .filter(Boolean)
+    .join('|');
+
+  const readExpandedGroups = () => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(NAV_GROUP_STATE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveExpandedGroups = () => {
+    const state = {};
+    document.querySelectorAll('.nav-group').forEach((group) => {
+      const key = getNavGroupKey(group);
+      if (key) state[key] = group.classList.contains('expanded');
+    });
+    localStorage.setItem(NAV_GROUP_STATE_KEY, JSON.stringify(state));
+  };
+
+  const restoreExpandedGroups = () => {
+    const state = readExpandedGroups();
+    document.querySelectorAll('.nav-group').forEach((group) => {
+      const key = getNavGroupKey(group);
+      const expanded = Boolean(key && state[key]);
+      group.classList.toggle('expanded', expanded);
+      group.querySelector('[data-toggle="group"]')?.setAttribute('aria-expanded', String(expanded));
+    });
+  };
 
   const isPageVisible = (pageId) => {
     if (!pageId) return true;
@@ -110,7 +144,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const flyout = document.createElement('div');
     flyout.className = 'sidebar-flyout';
 
-    const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
+    const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || DEFAULT_PAGE_ID;
     const itemsHtml = subitems.map((item) => {
       const pageId = item.dataset.page || '';
       const active = pageId === currentPage ? ' is-active' : '';
@@ -783,6 +817,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         if (!group) return;
         const expanded = group.classList.toggle('expanded');
         groupToggle.setAttribute('aria-expanded', String(expanded));
+        saveExpandedGroups();
       });
 
       const group = groupToggle.closest('.nav-group');
@@ -861,8 +896,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       if (pageId && isPageVisible(pageId)) showPage(pageId, { trackRecent: false });
     });
 
+    restoreExpandedGroups();
     refreshNavAccess({ redirect: false });
-    const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || 'ai-config';
+    const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || getFallbackPageId();
     showPage(savedPage, { scrollTop: false });
     restoreLayoutState();
 

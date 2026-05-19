@@ -108,6 +108,10 @@
       position:relative;
       overflow:hidden;
     }
+    .shell.legacy-shell-booting{
+      visibility:hidden;
+      pointer-events:none;
+    }
     .shell::before{
       content:'';
       position:absolute;

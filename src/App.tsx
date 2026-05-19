@@ -8,7 +8,7 @@ const ROLE_LABELS: Record<AppUser['role'], string> = {
   system_admin: '系统管理员',
   sales_manager: '销售主管',
   lab_engineer: '实验室工程师',
-  warehouse_manager: '仓储管理员',
+  warehouse_manager: '生产部主管',
 };
 
 type AuthParticle = {
@@ -252,6 +252,16 @@ function App() {
   useEffect(() => {
     void authClient.me().then(setUser).catch(() => setUser(null));
   }, []);
+
+  useEffect(() => {
+    const refreshCurrentUser = () => {
+      void authClient.me().then((nextUser) => {
+        if (nextUser) setUser(nextUser);
+      });
+    };
+    window.addEventListener('gjh:auth-users-changed', refreshCurrentUser);
+    return () => window.removeEventListener('gjh:auth-users-changed', refreshCurrentUser);
+  }, []);
   useEffect(() => {
     if (!user || user.mustChangePassword) return;
     void authClient.getAvatarUrl().then(setAvatarUrl);
@@ -269,6 +279,7 @@ function App() {
       const { bootLegacyApp, teardownLegacyApp } = await import('./legacy/bootstrap');
       if (disposed) return;
       cleanup = await bootLegacyApp();
+      document.getElementById('shell')?.classList.remove('legacy-shell-booting');
       const topActions = document.querySelector('.top-actions');
       const accountButton = topActions?.querySelector<HTMLButtonElement>('.icon-btn');
       if (accountButton && topActions) {
@@ -343,8 +354,11 @@ function App() {
         logoutButton.setAttribute('role', 'menuitem');
         logoutButton.textContent = '退出登录';
         logoutButton.addEventListener('click', async () => {
+          logoutButton.disabled = true;
           await authClient.logout();
           setUser(null);
+          setAvatarUrl(null);
+          window.location.reload();
         });
         menu.append(avatarButton, resetAvatarButton, logoutButton, avatarInput);
         accountButton.addEventListener('click', () => {

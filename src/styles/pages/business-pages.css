@@ -3681,6 +3681,10 @@
       table-layout:auto;
       font-size:14px;
     }
+    .biz-formula-list-page .biz-formula-table{
+      min-width:1120px;
+      table-layout:fixed;
+    }
     .biz-formula-table th,
     .biz-formula-table td{
       height:62px;
@@ -3688,6 +3692,30 @@
       color:var(--text);
       text-align:center;
     }
+    .biz-formula-list-page .biz-formula-table th,
+    .biz-formula-list-page .biz-formula-table td{
+      white-space:nowrap;
+    }
+    .biz-formula-list-page .biz-formula-table th:nth-child(1),
+    .biz-formula-list-page .biz-formula-table td:nth-child(1){width:118px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(2),
+    .biz-formula-list-page .biz-formula-table td:nth-child(2){width:230px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(3),
+    .biz-formula-list-page .biz-formula-table td:nth-child(3){width:96px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(4),
+    .biz-formula-list-page .biz-formula-table td:nth-child(4){width:82px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(5),
+    .biz-formula-list-page .biz-formula-table td:nth-child(5){width:72px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(6),
+    .biz-formula-list-page .biz-formula-table td:nth-child(6){width:104px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(7),
+    .biz-formula-list-page .biz-formula-table td:nth-child(7){width:116px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(8),
+    .biz-formula-list-page .biz-formula-table td:nth-child(8){width:74px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(9),
+    .biz-formula-list-page .biz-formula-table td:nth-child(9){width:82px}
+    .biz-formula-list-page .biz-formula-table th:nth-child(10),
+    .biz-formula-list-page .biz-formula-table td:nth-child(10){width:146px}
     .biz-formula-table td > em{
       display:block;
       margin-top:5px;
@@ -3701,6 +3729,7 @@
       color:var(--muted);
       font-size:12px;
       font-weight:850;
+      white-space:nowrap;
     }
     .biz-formula-table th{
       height:50px;
@@ -3753,6 +3782,13 @@
       overflow-wrap:anywhere;
       line-height:1.4;
     }
+    .biz-formula-list-page .biz-formula-name-link{
+      display:block;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      overflow-wrap:normal;
+    }
     .biz-formula-name-link:hover{
       text-decoration:underline;
       text-underline-offset:3px;
@@ -3768,6 +3804,7 @@
       font-size:12px;
       line-height:1;
       font-weight:900;
+      white-space:nowrap;
     }
     .biz-formula-chip{
       background:color-mix(in srgb, var(--accent) 14%, transparent);
@@ -3796,6 +3833,7 @@
       align-items:center;
       justify-content:center;
       gap:10px;
+      flex-wrap:nowrap;
     }
     .biz-formula-row-actions button{
       width:74px;

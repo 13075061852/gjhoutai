@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
   'use strict';
@@ -8,7 +9,7 @@ import { getLegacyApp } from '../core/app-context';
   if (!App) return;
 
   const { constants, utils } = App;
-  const PAGE_SIZE_DEFAULT = 15;
+  const PAGE_SIZE_DEFAULT = 20;
   const REPORT_RANGE_STORAGE_KEY = 'gjh-property-report-ranges-v1';
   const REPORT_COMPANY_NAME = '宁波广俊塑料科技有限公司';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
@@ -798,20 +799,37 @@ import { getLegacyApp } from '../core/app-context';
     return match?.[1] || normalizeReportText(row?.色号 || row?.颜色 || '');
   };
 
+  const normalizeReportRanges = (value) => (Array.isArray(value) ? value.map((item, index) => ({
+    id: normalizeReportText(item.id) || `range-${Date.now()}-${index}`,
+    model: normalizeReportText(item.model),
+    metricKey: normalizeReportText(item.metricKey),
+    item: normalizeReportText(item.item),
+    unit: normalizeReportText(item.unit),
+    range: normalizeReportText(item.range),
+  })).filter((item) => item.model && item.metricKey && item.range) : []);
+
   const loadReportRanges = () => {
     try {
       const parsed = JSON.parse(localStorage.getItem(REPORT_RANGE_STORAGE_KEY) || '[]');
-      state.reportRanges = Array.isArray(parsed) ? parsed.map((item, index) => ({
-        id: normalizeReportText(item.id) || `range-${Date.now()}-${index}`,
-        model: normalizeReportText(item.model),
-        metricKey: normalizeReportText(item.metricKey),
-        item: normalizeReportText(item.item),
-        unit: normalizeReportText(item.unit),
-        range: normalizeReportText(item.range),
-      })).filter((item) => item.model && item.metricKey && item.range) : [];
+      state.reportRanges = normalizeReportRanges(parsed);
     } catch {
       state.reportRanges = [];
     }
+  };
+
+  const loadReportRangesFromCloud = async () => {
+    const remoteValue = await cloudStorage.getJson(REPORT_RANGE_STORAGE_KEY);
+    if (typeof remoteValue !== 'string') {
+      loadReportRanges();
+      return false;
+    }
+    localStorage.setItem(REPORT_RANGE_STORAGE_KEY, remoteValue);
+    try {
+      state.reportRanges = normalizeReportRanges(JSON.parse(remoteValue || '[]'));
+    } catch {
+      state.reportRanges = [];
+    }
+    return true;
   };
 
   const saveReportRanges = () => {
@@ -2002,9 +2020,19 @@ import { getLegacyApp } from '../core/app-context';
             <div class="analysis-report-title">检测范围管理</div>
             <div class="analysis-report-subtitle">按型号维护报告中的检验项目、单位和检测范围</div>
           </div>
-          <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭检测范围管理" data-range-close>
-            <i class="ti ti-x" aria-hidden="true"></i>
-          </button>
+          <div class="analysis-report-actions analysis-range-head-actions">
+            <button class="analysis-range-refresh-btn" type="button" aria-label="刷新检测范围数据" title="刷新检测范围数据" data-range-refresh>
+              <svg class="analysis-range-refresh-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M7.05 7.05A7 7 0 0 1 18.2 8.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M18.2 5.3v3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M16.95 16.95A7 7 0 0 1 5.8 15.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M5.8 18.7v-3.6h3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+            <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭检测范围管理" data-range-close>
+              <i class="ti ti-x" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
         <div class="analysis-range-body">
           ${missingModels.length ? `
@@ -2089,6 +2117,26 @@ import { getLegacyApp } from '../core/app-context';
     bindRangeManagerEvents(missingItems);
   };
 
+  const refreshRangeManagerData = async (missingItems = []) => {
+    const currentModel = state.rangeManagerSelectedModel;
+    const refreshedFromCloud = await loadReportRangesFromCloud();
+
+    const models = getRangeCandidateModels();
+    if (currentModel && models.includes(currentModel)) {
+      state.rangeManagerSelectedModel = currentModel;
+    } else {
+      state.rangeManagerSelectedModel = missingItems[0]?.model || models[0] || '';
+    }
+
+    updateRangeModelList();
+    updateRangeEditorPanel();
+    notify(
+      refreshedFromCloud ? '检测范围数据已从云端刷新' : '未读取到云端检测范围数据，已保留本机数据',
+      refreshedFromCloud ? 'success' : 'warn',
+      'property-range-refresh',
+    );
+  };
+
   const bindRangeManagerEvents = (missingItems = []) => {
     const dialog = document.querySelector('.analysis-range-dialog');
     if (!dialog) return;
@@ -2104,6 +2152,20 @@ import { getLegacyApp } from '../core/app-context';
         if (!refs.rangeWordInput) return;
         refs.rangeWordInput.value = '';
         refs.rangeWordInput.click();
+        return;
+      }
+      if (target.closest('[data-range-refresh]')) {
+        const refreshButton = target.closest('[data-range-refresh]');
+        refreshButton.classList.remove('is-spinning');
+        void refreshButton.offsetWidth;
+        refreshButton.classList.add('is-spinning');
+        refreshButton.addEventListener('animationend', () => {
+          refreshButton.classList.remove('is-spinning');
+        }, { once: true });
+        refreshRangeManagerData(missingItems).catch((error) => {
+          console.error('[property-analysis] Failed to refresh range data:', error);
+          notify('检测范围数据刷新失败，请稍后重试', 'error', 'property-range-refresh-failed');
+        });
         return;
       }
       if (target.closest('[data-range-clear-model]')) {

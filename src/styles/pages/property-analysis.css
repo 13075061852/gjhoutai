@@ -41,14 +41,14 @@
       display:flex;
       align-items:center;
       gap:12px;
-      min-width:220px;
+      min-width:180px;
       border:1px solid #dbe5f0;
       border-radius:8px;
       background-color:#fff;
       color:#7b8ba3;
     }
     .analysis-search-lg{
-      flex:1 1 640px;
+      flex:1 1 360px;
       height:44px;
       padding:0 12px;
       position:relative;
@@ -746,6 +746,50 @@
       gap:8px;
       flex-wrap:wrap;
       justify-content:flex-end;
+    }
+    .analysis-range-head-actions{
+      flex-wrap:nowrap;
+    }
+    .analysis-range-refresh-btn{
+      width:34px;
+      height:34px;
+      flex:0 0 auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font:inherit;
+      font-size:18px;
+      line-height:1;
+      cursor:pointer;
+      transition:border-color .18s ease, background .18s ease, color .18s ease;
+    }
+    .analysis-range-refresh-btn:hover,
+    .analysis-range-refresh-btn:focus-visible,
+    .analysis-range-refresh-btn.is-spinning{
+      outline:none;
+      border-color:var(--accent);
+      background:#f4f8ff;
+      color:var(--accent);
+    }
+    .analysis-range-refresh-icon{
+      width:18px;
+      height:18px;
+      display:block;
+      transform-box:fill-box;
+      transform-origin:50% 50%;
+      backface-visibility:hidden;
+      will-change:transform;
+    }
+    .analysis-range-refresh-btn.is-spinning .analysis-range-refresh-icon{
+      animation:analysis-range-refresh-spin .6s linear;
+    }
+    @keyframes analysis-range-refresh-spin{
+      0%{transform:rotate(0deg)}
+      100%{transform:rotate(360deg)}
     }
     .analysis-report-export-scope{
       height:34px;

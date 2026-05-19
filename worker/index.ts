@@ -7,7 +7,7 @@ export interface Env {
 }
 
 type Role = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
-type Permission = 'state:read' | 'state:write' | 'blob:read' | 'blob:write' | 'users:manage';
+type Permission = 'state:read' | 'state:write' | 'blob:read' | 'blob:write' | 'config:read' | 'config:write' | 'users:manage';
 
 interface UserRow {
   id: string;
@@ -32,9 +32,13 @@ const SESSION_COOKIE = 'gjh_session';
 const SESSION_DAYS = 7;
 const PASSWORD_ITERATIONS = 100_000;
 const CONFIG_ALGORITHM = 'AES-GCM';
+const LOGIN_FAILURE_LIMIT = 5;
+const LOGIN_LOCK_SECONDS = 15 * 60;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
+const SAFE_BLOB_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'users:manage'],
+  system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
   sales_manager: ['state:read', 'state:write', 'blob:read'],
   lab_engineer: ['state:read', 'state:write', 'blob:read', 'blob:write'],
   warehouse_manager: ['state:read', 'state:write', 'blob:read'],
@@ -51,7 +55,17 @@ const notFound = () => json({ error: 'not_found' }, { status: 404 });
 const unauthorized = () => json({ error: 'unauthorized' }, { status: 401 });
 const forbidden = () => json({ error: 'forbidden' }, { status: 403 });
 const badRequest = (error: string) => json({ error }, { status: 400 });
+const tooManyRequests = () => json({ error: 'too_many_login_attempts' }, { status: 429 });
 const getBlobKey = (namespace: string, key: string) => `${namespace}/${key}`;
+const normalizeContentType = (contentType: string) => contentType.split(';')[0].trim().toLowerCase();
+const getSafeBlobContentType = (contentType: string | undefined | null) => {
+  const normalized = normalizeContentType(contentType || '');
+  return SAFE_BLOB_CONTENT_TYPES.has(normalized) ? normalized : 'application/octet-stream';
+};
+const getAttachmentFileName = (key: string) => {
+  const fileName = key.split('/').filter(Boolean).pop() || 'download';
+  return fileName.replace(/[\\\r\n"]/g, '_');
+};
 const USER_SCOPED_STATE_KEYS = new Set([
   'openrouter-ai-chat-v1',
   'openrouter-ai-chat-sessions-v1',
@@ -188,6 +202,44 @@ const audit = async (env: Env, actorUserId: string | null, action: string, targe
 };
 const can = (user: SessionUser, permission: Permission) => ROLE_PERMISSIONS[user.role]?.includes(permission);
 const validatePassword = (password: string) => password.length >= 10 && password.length <= 128;
+const getClientIp = (request: Request) => request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+const getLoginRateLimitKeys = (request: Request, username: string) => [
+  `user:${username.trim().toLowerCase()}`,
+  `ip:${getClientIp(request)}`,
+];
+const isLoginRateLimited = async (env: Env, keys: string[]) => {
+  if (!keys.length) return false;
+  const placeholders = keys.map((_, index) => `?${index + 1}`).join(',');
+  const result = await env.DB.prepare(`
+    SELECT locked_until FROM login_attempts
+    WHERE identifier IN (${placeholders}) AND locked_until > ?${keys.length + 1}
+  `).bind(...keys, nowIso()).all<{ locked_until: string }>();
+  return Boolean(result.results?.length);
+};
+const recordLoginFailure = async (env: Env, keys: string[]) => {
+  const updatedAt = nowIso();
+  const windowStartedAt = new Date(Date.now() - LOGIN_WINDOW_SECONDS * 1000).toISOString();
+  const lockedUntil = new Date(Date.now() + LOGIN_LOCK_SECONDS * 1000).toISOString();
+  await Promise.all(keys.map(async (key) => {
+    const current = await env.DB.prepare(
+      'SELECT failures, updated_at FROM login_attempts WHERE identifier = ?1',
+    ).bind(key).first<{ failures: number; updated_at: string }>();
+    const failures = current && current.updated_at > windowStartedAt ? current.failures + 1 : 1;
+    await env.DB.prepare(`
+      INSERT INTO login_attempts (identifier, failures, locked_until, updated_at)
+      VALUES (?1, ?2, ?3, ?4)
+      ON CONFLICT(identifier) DO UPDATE SET
+        failures = excluded.failures,
+        locked_until = excluded.locked_until,
+        updated_at = excluded.updated_at
+    `).bind(key, failures, failures >= LOGIN_FAILURE_LIMIT ? lockedUntil : null, updatedAt).run();
+  }));
+};
+const clearLoginFailures = async (env: Env, keys: string[]) => {
+  if (!keys.length) return;
+  const placeholders = keys.map((_, index) => `?${index + 1}`).join(',');
+  await env.DB.prepare(`DELETE FROM login_attempts WHERE identifier IN (${placeholders})`).bind(...keys).run();
+};
 
 const getSessionUser = async (request: Request, env: Env): Promise<SessionUser | null> => {
   const token = parseCookies(request)[SESSION_COOKIE];
@@ -237,10 +289,19 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
   if (url.pathname === '/api/auth/login' && request.method === 'POST') {
     const payload = await request.json<{ username?: string; password?: string }>();
     if (!payload.username || !payload.password) return badRequest('missing_credentials');
+    const rateLimitKeys = getLoginRateLimitKeys(request, payload.username);
+    if (await isLoginRateLimited(env, rateLimitKeys)) return tooManyRequests();
     const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?1').bind(payload.username).first<UserRow>();
-    if (!user || !user.is_active) return unauthorized();
+    if (!user || !user.is_active) {
+      await recordLoginFailure(env, rateLimitKeys);
+      return unauthorized();
+    }
     const candidate = await hashPassword(payload.password, user.password_salt);
-    if (!constantTimeEqual(candidate.hash, user.password_hash)) return unauthorized();
+    if (!constantTimeEqual(candidate.hash, user.password_hash)) {
+      await recordLoginFailure(env, rateLimitKeys);
+      return unauthorized();
+    }
+    await clearLoginFailures(env, rateLimitKeys);
     const rawToken = randomHex(32);
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString();
     await env.DB.prepare(`
@@ -380,6 +441,7 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   if (user.mustChangePassword) return forbidden();
 
   if (request.method === 'GET') {
+    if (!can(user, 'config:read')) return forbidden();
     const row = await env.DB.prepare(
       'SELECT ciphertext, iv FROM shared_config WHERE id = 1',
     ).first<{ ciphertext: string; iv: string }>();
@@ -392,6 +454,7 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   }
 
   if (request.method === 'PUT') {
+    if (!can(user, 'config:write')) return forbidden();
     const payload = await request.json<{ value?: unknown }>();
     if (!Object.prototype.hasOwnProperty.call(payload, 'value')) return badRequest('invalid_config_payload');
     const encrypted = await encryptConfig(env, payload.value);
@@ -408,6 +471,7 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   }
 
   if (request.method === 'DELETE') {
+    if (!can(user, 'config:write')) return forbidden();
     await env.DB.prepare('DELETE FROM shared_config WHERE id = 1').run();
     await audit(env, user.id, 'config.delete', 'shared_config', 'global');
     return json({ ok: true });
@@ -471,17 +535,24 @@ export default {
         if (!can(user, 'blob:read')) return withCors(request, env, forbidden());
         const object = await env.FILES.get(objectKey);
         if (!object) return withCors(request, env, new Response(null, { status: 204 }));
+        const contentType = getSafeBlobContentType(object.httpMetadata?.contentType);
+        const headers: Record<string, string> = {
+          'content-type': contentType,
+          etag: object.httpEtag,
+        };
+        if (contentType === 'application/octet-stream') {
+          headers['content-disposition'] = `attachment; filename="${getAttachmentFileName(key)}"`;
+        }
         return withCors(request, env, new Response(object.body, {
-          headers: {
-            'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
-            etag: object.httpEtag,
-          },
+          headers,
         }));
       }
       if (request.method === 'PUT') {
         if (!can(user, 'blob:write')) return withCors(request, env, forbidden());
+        const contentType = normalizeContentType(request.headers.get('content-type') || '');
+        if (!SAFE_BLOB_CONTENT_TYPES.has(contentType)) return withCors(request, env, badRequest('invalid_blob_type'));
         await env.FILES.put(objectKey, request.body, {
-          httpMetadata: { contentType: request.headers.get('content-type') || 'application/octet-stream' },
+          httpMetadata: { contentType },
         });
         await audit(env, user.id, 'blob.write', 'blob', objectKey);
         return withCors(request, env, json({ ok: true }));

@@ -6,10 +6,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          motion: ['motion', 'motion/mini'],
-          icons: ['@icon-park/svg'],
+        manualChunks(id: string) {
+          const moduleId = id.replace(/\\/g, '/');
+          if (moduleId.includes('/node_modules/react/') || moduleId.includes('/node_modules/react-dom/')) return 'react';
+          if (moduleId.includes('/node_modules/motion/')) return 'motion';
+          if (moduleId.includes('/node_modules/@icon-park/svg/')) return 'icons';
+          return undefined;
         },
       },
     },

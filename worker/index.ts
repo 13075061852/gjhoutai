@@ -6,14 +6,16 @@ export interface Env {
   CONFIG_ENCRYPTION_KEY?: string;
 }
 
-type Role = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
+type LegacyRole = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
+type Department = '系统管理员' | '研发部' | '测试部' | '销售部' | '生产部' | '生产部主管';
 type Permission = 'state:read' | 'state:write' | 'blob:read' | 'blob:write' | 'config:read' | 'config:write' | 'users:manage';
 
 interface UserRow {
   id: string;
   username: string;
   display_name: string;
-  role: Role;
+  role?: LegacyRole;
+  department?: Department;
   password_hash: string;
   password_salt: string;
   must_change_password: number;
@@ -24,7 +26,7 @@ interface SessionUser {
   id: string;
   username: string;
   displayName: string;
-  role: Role;
+  department: Department;
   mustChangePassword: boolean;
 }
 
@@ -38,11 +40,27 @@ const LOGIN_LOCK_SECONDS = 15 * 60;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const SAFE_BLOB_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
-const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
-  sales_manager: ['state:read', 'state:write', 'blob:read'],
-  lab_engineer: ['state:read', 'state:write', 'blob:read', 'blob:write'],
-  warehouse_manager: ['state:read', 'state:write', 'blob:read'],
+const LEGACY_ROLE_DEPARTMENTS: Record<LegacyRole, Department> = {
+  system_admin: '系统管理员',
+  sales_manager: '销售部',
+  lab_engineer: '测试部',
+  warehouse_manager: '生产部主管',
+};
+const DEPARTMENT_LEGACY_ROLES: Record<Department, LegacyRole> = {
+  系统管理员: 'system_admin',
+  研发部: 'system_admin',
+  测试部: 'lab_engineer',
+  销售部: 'sales_manager',
+  生产部: 'warehouse_manager',
+  生产部主管: 'warehouse_manager',
+};
+const DEPARTMENT_PERMISSIONS: Record<Department, Permission[]> = {
+  系统管理员: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
+  研发部: ['state:read', 'state:write', 'blob:read', 'blob:write'],
+  测试部: ['state:read', 'state:write', 'blob:read', 'blob:write'],
+  销售部: ['state:read', 'state:write', 'blob:read'],
+  生产部: ['state:read', 'state:write', 'blob:read'],
+  生产部主管: ['state:read', 'state:write', 'blob:read'],
 };
 
 const json = (value: unknown, init: ResponseInit = {}) => {
@@ -88,7 +106,7 @@ const mergeAiCallLogs = (currentValue: unknown, nextValue: unknown, user: Sessio
     actorUserId: (item as any).actorUserId || user.id,
     actorUsername: (item as any).actorUsername || user.username,
     actorDisplayName: (item as any).actorDisplayName || user.displayName,
-    actorRole: (item as any).actorRole || user.role,
+    actorDepartment: (item as any).actorDepartment || user.department,
   } : item) : [];
   const merged = [...nextLogs, ...currentLogs].filter((item) => item && typeof item === 'object');
   const seen = new Set<string>();
@@ -217,7 +235,14 @@ const audit = async (env: Env, actorUserId: string | null, action: string, targe
     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
   `).bind(randomId(), actorUserId, action, targetType || null, targetId || null, metadata ? JSON.stringify(metadata) : null).run();
 };
-const can = (user: SessionUser, permission: Permission) => ROLE_PERMISSIONS[user.role]?.includes(permission);
+const normalizeDepartment = (department: unknown, legacyRole?: unknown): Department => {
+  const value = String(department || '').trim();
+  if (value in DEPARTMENT_PERMISSIONS) return value as Department;
+  const role = String(legacyRole || '') as LegacyRole;
+  return LEGACY_ROLE_DEPARTMENTS[role] || '研发部';
+};
+const getLegacyRoleForDepartment = (department: Department): LegacyRole => DEPARTMENT_LEGACY_ROLES[department] || 'system_admin';
+const can = (user: SessionUser, permission: Permission) => DEPARTMENT_PERMISSIONS[user.department]?.includes(permission);
 const validatePassword = (password: string) => password.length >= 10 && password.length <= 128;
 const getClientIp = (request: Request) => request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 const getLoginRateLimitKeys = (request: Request, username: string) => [
@@ -263,7 +288,7 @@ const getSessionUser = async (request: Request, env: Env): Promise<SessionUser |
   if (!token) return null;
   const tokenHash = await sha256(token);
   const row = await env.DB.prepare(`
-    SELECT u.id, u.username, u.display_name, u.role, u.must_change_password, u.is_active
+    SELECT u.id, u.username, u.display_name, u.role, u.department, u.must_change_password, u.is_active
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ?1 AND s.expires_at > ?2
@@ -271,7 +296,8 @@ const getSessionUser = async (request: Request, env: Env): Promise<SessionUser |
     id: string;
     username: string;
     display_name: string;
-    role: Role;
+    role?: LegacyRole;
+    department?: Department;
     must_change_password: number;
     is_active: number;
   }>();
@@ -281,7 +307,7 @@ const getSessionUser = async (request: Request, env: Env): Promise<SessionUser |
     id: row.id,
     username: row.username,
     displayName: row.display_name,
-    role: row.role,
+    department: normalizeDepartment(row.department, row.role),
     mustChangePassword: Boolean(row.must_change_password),
   };
 };
@@ -297,8 +323,8 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
     const password = await hashPassword(payload.password);
     const id = randomId();
     await env.DB.prepare(`
-      INSERT INTO users (id, username, display_name, role, password_hash, password_salt, must_change_password)
-      VALUES (?1, ?2, ?3, 'system_admin', ?4, ?5, 0)
+      INSERT INTO users (id, username, display_name, role, department, password_hash, password_salt, must_change_password)
+      VALUES (?1, ?2, ?3, 'system_admin', '系统管理员', ?4, ?5, 0)
     `).bind(id, payload.username, payload.displayName, password.hash, password.salt).run();
     await audit(env, id, 'auth.bootstrap_admin', 'user', id);
     return json({ ok: true });
@@ -329,7 +355,8 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
     await audit(env, user.id, 'auth.login', 'user', user.id);
     const headers = new Headers();
     appendSessionCookie(request, headers, rawToken, SESSION_DAYS * 24 * 60 * 60);
-    return json({ user: { id: user.id, username: user.username, displayName: user.display_name, role: user.role, mustChangePassword: Boolean(user.must_change_password) } }, { headers });
+    const department = normalizeDepartment(user.department, user.role);
+    return json({ user: { id: user.id, username: user.username, displayName: user.display_name, department, mustChangePassword: Boolean(user.must_change_password) } }, { headers });
   }
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
     const token = parseCookies(request)[SESSION_COOKIE];
@@ -375,41 +402,55 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
   if (!can(user, 'users:manage')) return forbidden();
   if (url.pathname === '/api/users' && request.method === 'GET') {
     const rows = await env.DB.prepare(`
-      SELECT id, username, display_name, role, must_change_password, is_active, created_at, last_login_at
+      SELECT id, username, display_name, role, department, must_change_password, is_active, created_at, last_login_at
       FROM users ORDER BY created_at DESC
     `).all();
-    return json({ users: rows.results || [] });
+    return json({
+      users: (rows.results || []).map((row: any) => ({
+        ...row,
+        department: normalizeDepartment(row.department, row.role),
+      })),
+    });
   }
   if (url.pathname === '/api/users' && request.method === 'POST') {
-    const payload = await request.json<{ username?: string; displayName?: string; role?: Role; password?: string }>();
-    if (!payload.username || !payload.displayName || !payload.role || !payload.password) return badRequest('invalid_user_payload');
-    if (!(payload.role in ROLE_PERMISSIONS) || !validatePassword(payload.password)) return badRequest('invalid_user_payload');
+    const payload = await request.json<{ username?: string; displayName?: string; department?: Department; role?: LegacyRole; password?: string }>();
+    const department = normalizeDepartment(payload.department, payload.role);
+    if (!payload.username || !payload.displayName || !payload.password) return badRequest('invalid_user_payload');
+    if (!(department in DEPARTMENT_PERMISSIONS) || !validatePassword(payload.password)) return badRequest('invalid_user_payload');
     const password = await hashPassword(payload.password);
     const id = randomId();
     await env.DB.prepare(`
-      INSERT INTO users (id, username, display_name, role, password_hash, password_salt)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-    `).bind(id, payload.username, payload.displayName, payload.role, password.hash, password.salt).run();
-    await audit(env, user.id, 'users.create', 'user', id, { role: payload.role });
+      INSERT INTO users (id, username, display_name, role, department, password_hash, password_salt)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    `).bind(id, payload.username, payload.displayName, getLegacyRoleForDepartment(department), department, password.hash, password.salt).run();
+    await audit(env, user.id, 'users.create', 'user', id, { department });
     return json({ ok: true, id }, { status: 201 });
   }
   if (url.pathname.startsWith('/api/users/') && request.method === 'PUT') {
     const targetUserId = decodeURIComponent(url.pathname.slice('/api/users/'.length));
-    const payload = await request.json<{ displayName?: string; role?: Role; password?: string }>();
-    if (!targetUserId || !payload.role || !(payload.role in ROLE_PERMISSIONS)) return badRequest('invalid_user_payload');
+    const payload = await request.json<{ username?: string; displayName?: string; department?: Department; role?: LegacyRole; password?: string }>();
+    const department = normalizeDepartment(payload.department, payload.role);
+    if (!targetUserId || !(department in DEPARTMENT_PERMISSIONS)) return badRequest('invalid_user_payload');
+    const username = payload.username?.trim();
     if (payload.password && !validatePassword(payload.password)) return badRequest('invalid_password_payload');
     const password = payload.password ? await hashPassword(payload.password) : null;
     await env.DB.prepare(`
       UPDATE users
-      SET display_name = COALESCE(?1, display_name),
-          role = ?2,
-          password_hash = COALESCE(?3, password_hash),
-          password_salt = COALESCE(?4, password_salt),
-          must_change_password = CASE WHEN ?3 IS NULL THEN must_change_password ELSE 1 END,
+      SET username = COALESCE(?1, username),
+          display_name = COALESCE(?2, display_name),
+          role = ?3,
+          department = ?4,
+          password_hash = COALESCE(?5, password_hash),
+          password_salt = COALESCE(?6, password_salt),
+          must_change_password = CASE
+            WHEN ?5 IS NULL THEN must_change_password
+            WHEN id = ?7 THEN 0
+            ELSE 1
+          END,
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?5
-    `).bind(payload.displayName || null, payload.role, password?.hash || null, password?.salt || null, targetUserId).run();
-    await audit(env, user.id, 'users.update', 'user', targetUserId, { role: payload.role, passwordReset: Boolean(password) });
+      WHERE id = ?7
+    `).bind(username || null, payload.displayName || null, getLegacyRoleForDepartment(department), department, password?.hash || null, password?.salt || null, targetUserId).run();
+    await audit(env, user.id, 'users.update', 'user', targetUserId, { username: username || undefined, department, passwordReset: Boolean(password) });
     return json({ ok: true });
   }
   return notFound();

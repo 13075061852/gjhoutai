@@ -1,17 +1,17 @@
-export type AppRole = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
+export type AppDepartment = '系统管理员' | '研发部' | '测试部' | '销售部' | '生产部' | '生产部主管';
 
 export interface AppUser {
   id: string;
   username: string;
   displayName: string;
-  role: AppRole;
+  department: AppDepartment;
   mustChangePassword: boolean;
 }
 
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 const buildUrl = (path: string) => `${API_BASE}${path}`;
-const currentRole = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.role || ''));
-const canManageUsers = () => currentRole() === 'system_admin';
+const currentDepartment = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.department || ''));
+const canManageUsers = () => currentDepartment() === '系统管理员';
 const SESSION_MARKER_COOKIE = 'gjh_session_present';
 const SESSION_MARKER_STORAGE_KEY = 'gjh-auth-session-present';
 const isSameOriginApi = () => {
@@ -102,7 +102,7 @@ export const authClient = {
     });
     return response.ok;
   },
-  async createUser(input: { username: string; displayName: string; role: AppRole; password: string }): Promise<boolean> {
+  async createUser(input: { username: string; displayName: string; department: AppDepartment; password: string }): Promise<boolean> {
     const response = await fetch(buildUrl('/api/users'), {
       method: 'POST',
       credentials: 'include',
@@ -111,12 +111,12 @@ export const authClient = {
     });
     return response.ok;
   },
-  async listUsers(): Promise<Array<{ id: string; username: string; display_name: string; role: AppRole }>> {
+  async listUsers(): Promise<Array<{ id: string; username: string; display_name: string; department: AppDepartment }>> {
     if (!canManageUsers()) return [];
-    const payload = await request<{ users: Array<{ id: string; username: string; display_name: string; role: AppRole }> }>('/api/users');
+    const payload = await request<{ users: Array<{ id: string; username: string; display_name: string; department: AppDepartment }> }>('/api/users');
     return payload?.users ?? [];
   },
-  async updateUser(id: string, input: { displayName: string; role: AppRole; password?: string }): Promise<boolean> {
+  async updateUser(id: string, input: { username?: string; displayName: string; department: AppDepartment; password?: string }): Promise<boolean> {
     const response = await fetch(buildUrl(`/api/users/${encodeURIComponent(id)}`), {
       method: 'PUT',
       credentials: 'include',

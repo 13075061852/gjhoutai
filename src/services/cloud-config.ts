@@ -1,10 +1,10 @@
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 
 const buildUrl = (path: string) => `${API_BASE}${path}`;
-const currentRole = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.role || ''));
+const currentDepartment = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.department || ''));
 const shouldSkipAdminConfigRequest = () => {
-  const role = currentRole();
-  return Boolean(role && role !== 'system_admin');
+  const department = currentDepartment();
+  return Boolean(department && department !== '系统管理员');
 };
 
 async function parseJson<T>(response: Response): Promise<T | null> {

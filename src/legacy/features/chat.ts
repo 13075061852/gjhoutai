@@ -11,6 +11,9 @@ import { getLegacyApp } from '../core/app-context';
   const NEW_CONVERSATION_TITLE = '新建对话';
   const SKILL_SYNTHESIS_TIMEOUT_MS = 90000;
   const SKILL_SYNTHESIS_CONTEXT_LIMIT = 12000;
+  const PROJECT_AGENT_LOOP_TIMEOUT_MS = 20000;
+  const PROJECT_AGENT_MAX_MODEL_CALLS = 6;
+  const PROJECT_AGENT_MAX_SKILL_CALLS = 8;
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
   let streamRenderTimer = 0;
@@ -1096,7 +1099,7 @@ import { getLegacyApp } from '../core/app-context';
   const shouldUseProjectContext = (prompt) => {
     const text = String(prompt || '').trim();
     if (!text) return false;
-    return /(?:项目|网站|站点|本站|应用|平台|后台|系统|页面|打开|进入|切换|查看|订单|库存|商品|产品|成品|生产|物性|图谱|抠图|配方|客户|供应商|人员|员工|账号|账户|用户|部门|权限|审计|调用分析|当前页|当前页面|选中|筛选|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰分|dsc|tga|图谱库|图片库|几个|多少|数量|总数|最低|最少|最小|最高|最多|最大|详细|说明|展开|继续|具体|多说|讲讲|介绍|梳理|总结)/i.test(text);
+    return /(?:项目|网站|站点|本站|应用|平台|后台|系统|页面|打开|进入|切换|查看|订单|库存|商品|产品|成品|生产|物性|图谱|抠图|配方|客户|供应商|人员|员工|账号|账户|用户|部门|权限|调用分析|当前页|当前页面|选中|筛选|批次|型号|熔指|拉伸|弯曲|冲击|阻燃|灰分|dsc|tga|图谱库|图片库|几个|多少|数量|总数|最低|最少|最小|最高|最多|最大|详细|说明|展开|继续|具体|多说|讲讲|介绍|梳理|总结)/i.test(text);
   };
 
   const getProjectContext = () => {
@@ -1855,6 +1858,217 @@ import { getLegacyApp } from '../core/app-context';
     return lines.join('\n').trim() || content;
   };
 
+  const parseProjectAgentJson = (content = '') => {
+    const text = String(content || '').trim();
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+    const raw = fenced || text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+    if (!raw || !raw.startsWith('{')) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const formatProjectAgentTrace = (items = [], finalAnswer = '') => {
+    const trace = items.length
+      ? [
+          '### 调度轨迹',
+          ...items.map((item, index) => `${index + 1}. ${item}`),
+        ].join('\n')
+      : '';
+    return [trace, finalAnswer].filter(Boolean).join('\n\n').trim();
+  };
+
+  const compactObservation = (execution) => {
+    const result = execution?.result || {};
+    const data = result.data && typeof result.data === 'object' ? result.data : {};
+    const compactData = Array.isArray(data.data)
+      ? data.data.slice(0, 30)
+      : Object.fromEntries(Object.entries(data).map(([key, value]) => {
+          if (key === 'images' && Array.isArray(value)) return [key, `${value.length} 张图片，已在 Observation 中省略原始数据`];
+          if (typeof value === 'string' && value.length > 8000) return [key, `${value.slice(0, 8000)}\n...（Observation 已压缩）`];
+          return [key, value];
+        }));
+    return {
+      skillId: execution?.skill?.id || data.skillId || '',
+      title: execution?.skill?.title || '',
+      ok: result.ok !== false,
+      message: result.message || '',
+      details: result.details || [],
+      pageId: data.pageId || '',
+      intent: data.intent || '',
+      rowCount: data.rowCount ?? data.data?.length ?? 0,
+      summary: data.summary || '',
+      data: compactData,
+    };
+  };
+
+  const buildProjectAgentPlannerMessages = ({ config, prompt, manifest, observations, traceItems, forceFinal = false }) => [
+    { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+    {
+      role: 'system',
+      content: [
+        '你是广俊塑料科技后台的项目级 Agent 调度器。',
+        '你必须先理解用户问题，再按需调用本地项目技能获取必要数据，不要让用户重复提供项目背景。',
+        '你可以多轮调用技能，但每次只调用一个最有价值的技能；数据够用时必须 final。',
+        '默认采用意图裁剪：数量问题只取 count，列举才取 list，最高/最低取 extrema，筛选取 filter，详情取 detail，聚合取 aggregate。',
+        '不要为了回答数据问题调用 assistant.openPage；只有用户明确要求打开/进入/切换页面时才调用 assistant.openPage。',
+        '如果已经有足够数据，输出 final。不要输出 Markdown，必须只输出 JSON。',
+        forceFinal ? '现在必须基于已有 Observation 给出最终答案；如果数据不足，说明缺口。' : '',
+        '',
+        '允许输出：',
+        '{"action":"callSkill","thoughtSummary":"...","skillId":"business.queryPageData","input":{...}}',
+        '{"action":"final","thoughtSummary":"...","answer":"...","usedPages":["..."],"confidence":"high|medium|low"}',
+      ].filter(Boolean).join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        '【用户问题】',
+        prompt,
+        '',
+        '【项目能力地图，不含业务明细】',
+        JSON.stringify(manifest || {}, null, 2),
+        '',
+        '【已执行 Observation】',
+        observations.length ? JSON.stringify(observations, null, 2) : '[]',
+        '',
+        '【已展示调度轨迹】',
+        traceItems.length ? traceItems.join('\n') : '理解问题',
+      ].join('\n'),
+    },
+  ];
+
+  const callProjectAgentPlanner = async ({ config, model, prompt, manifest, observations, traceItems, signal, forceFinal = false }) => {
+    const messages = buildProjectAgentPlannerMessages({ config, prompt, manifest, observations, traceItems, forceFinal });
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: Math.min(Number(config.temperature) || 0.2, 0.3),
+        max_tokens: Math.min(Math.max(Number(config.maxTokens) || 0, 1200), 2400),
+        stream: false,
+      }),
+    });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+    }
+    const data = await response.json();
+    return {
+      decision: parseProjectAgentJson(data?.choices?.[0]?.message?.content || ''),
+      usage: data?.usage || null,
+      messages,
+      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
+    };
+  };
+
+  const runProjectAgentLoop = async ({ config, model, prompt, pendingIndex, signal = null }) => {
+    const timer = createAbortTimer('项目级 Agent 调度', PROJECT_AGENT_LOOP_TIMEOUT_MS, signal);
+    const traceItems = ['理解问题：正在读取项目能力地图'];
+    const observations = [];
+    let modelCalls = 0;
+    let skillCalls = 0;
+    let apiUsage = null;
+    let apiMessages = [];
+    let finishReason = '';
+
+    try {
+      const manifestExecution = await App.projectSkills.executeSkill('project.getManifest', { includeFields: true }, {
+        source: 'agent-loop',
+        prompt,
+      });
+      observations.push(compactObservation(manifestExecution));
+      traceItems.push('读取项目页面说明书：已获取页面、字段、技能和页面关系');
+      flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在规划需要调用哪些页面数据...'), {
+        pending: true,
+        pendingStatus: '项目 Agent 调度中',
+      });
+
+      while (modelCalls < PROJECT_AGENT_MAX_MODEL_CALLS && skillCalls < PROJECT_AGENT_MAX_SKILL_CALLS) {
+        modelCalls += 1;
+        const planner = await callProjectAgentPlanner({
+          config,
+          model,
+          prompt,
+          manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
+          observations,
+          traceItems,
+          signal: timer.signal,
+        });
+        apiUsage = planner.usage || apiUsage;
+        apiMessages = planner.messages || apiMessages;
+        finishReason = planner.finishReason || finishReason;
+        const decision = planner.decision;
+        if (!decision?.action) throw new Error('Agent Planner 没有返回可执行 JSON。');
+
+        if (decision.action === 'final') {
+          traceItems.push(`复盘：${decision.thoughtSummary || '数据足够，生成答案'}`);
+          return {
+            content: formatProjectAgentTrace(traceItems, String(decision.answer || '').trim() || '我已经完成分析，但没有生成有效答案。'),
+            usage: apiUsage,
+            messages: apiMessages,
+            finishReason,
+          };
+        }
+
+        if (decision.action !== 'callSkill' || !decision.skillId) {
+          throw new Error(`Agent Planner 返回了未知动作：${decision.action}`);
+        }
+
+        const skillId = String(decision.skillId);
+        const input = decision.input && typeof decision.input === 'object' ? decision.input : {};
+        traceItems.push(`计划调用：${skillId}${input.pageId ? ` / ${input.pageId}` : ''}${decision.thoughtSummary ? `；${decision.thoughtSummary}` : ''}`);
+        flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在执行本地技能取数...'), {
+          pending: true,
+          pendingStatus: '正在执行项目技能',
+        });
+
+        const execution = await App.projectSkills.executeSkill(skillId, input, {
+          source: 'agent-loop',
+          prompt,
+        });
+        skillCalls += 1;
+        const observation = compactObservation(execution);
+        observations.push(observation);
+        traceItems.push(`取数结果：${observation.summary || observation.message || `${observation.rowCount} 条`}`);
+        flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在复盘数据是否足够...'), {
+          pending: true,
+          pendingStatus: '正在复盘',
+        });
+      }
+
+      const finalPlanner = await callProjectAgentPlanner({
+        config,
+        model,
+        prompt,
+        manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
+        observations,
+        traceItems,
+        signal: timer.signal,
+        forceFinal: true,
+      });
+      apiUsage = finalPlanner.usage || apiUsage;
+      apiMessages = finalPlanner.messages || apiMessages;
+      finishReason = finalPlanner.finishReason || finishReason;
+      const answer = finalPlanner.decision?.answer || '已达到 Agent 调度上限，我基于已取回的数据给出当前结论，但仍缺少可进一步确认的信息。';
+      traceItems.push('复盘：达到调度上限，基于已有数据生成答案');
+      return {
+        content: formatProjectAgentTrace(traceItems, answer),
+        usage: apiUsage,
+        messages: apiMessages,
+        finishReason,
+      };
+    } finally {
+      timer.clear();
+    }
+  };
+
   const synthesizeCompositeAgentResults = async ({
     config,
     model,
@@ -2431,18 +2645,6 @@ import { getLegacyApp } from '../core/app-context';
       return;
     }
 
-    const deterministicQuestion = buildDeterministicProjectQuestion(prompt);
-    const deterministicProjectAnswer = projectContextEnabled
-      ? App.agentButler?.answerQuestion?.(deterministicQuestion, { activePageId: getActivePageId(), originalQuestion: prompt })
-      : '';
-    if (deterministicProjectAnswer) {
-      pushChatMessage('user', prompt);
-      if (refs.chatInput) refs.chatInput.value = '';
-      pendingDraftImages = [];
-      pushChatMessage('assistant', deterministicProjectAnswer);
-      return;
-    }
-
     const localPlan = projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
     if (localPlan?.skillId === 'assistant.openPage' || Array.isArray(localPlan?.steps)) {
       await runLocalSkillPlan(prompt, localPlan);
@@ -2593,6 +2795,23 @@ import { getLegacyApp } from '../core/app-context';
       }
 
       wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+
+      if (!skipAiRequest && projectContextEnabled && !needsWebSearch && !attachedDataFile && !attachedImages.length && !wantsImages) {
+        const loopResult = await runProjectAgentLoop({
+          config,
+          model,
+          prompt,
+          pendingIndex,
+          signal: activeChatAbortController?.signal,
+        });
+        streamedContent = loopResult.content;
+        apiUsage = loopResult.usage || apiUsage;
+        finishReason = loopResult.finishReason || finishReason;
+        apiMessages = loopResult.messages || apiMessages;
+        usedStream = false;
+        skipAiRequest = true;
+        flushStreamRender(pendingIndex, streamedContent);
+      }
 
       if (!skipAiRequest) {
       if (localPlan?.skillId === 'analysis.buildJointPackage') {

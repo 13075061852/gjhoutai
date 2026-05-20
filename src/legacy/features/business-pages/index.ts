@@ -13,8 +13,6 @@ import {
   normalizeInventoryRows,
 } from './inventory';
 import {
-  ORDER_FALLBACK_CUSTOMERS,
-  ORDER_FALLBACK_FORMULAS,
   ORDER_LOG_KEY,
   ORDER_STORAGE_KEY,
   createNormalizeOrder,
@@ -35,6 +33,7 @@ import {
   procurementPageSizeOptions,
   procurementStatusOptions,
 } from './procurement';
+import { parseAgentNumber, queryAgentRows } from './agent-query';
 import { createBusinessPageShared } from './shared';
 
 (function () {
@@ -64,14 +63,14 @@ import { createBusinessPageShared } from './shared';
       const defaults = archiveConfigs['customer']?.defaults;
       if (defaults?.length) return defaults.map((r) => r.name).filter(Boolean);
     } catch (_) { /* archives not yet initialized */ }
-    return ORDER_FALLBACK_CUSTOMERS;
+    return [];
   };
   const getOrderFormulaOptions = () => {
     try {
       const names = formulaRecipes?.map((r) => r.name).filter(Boolean);
       if (names?.length) return names;
     } catch (_) { /* recipes not yet initialized */ }
-    return ORDER_FALLBACK_FORMULAS;
+    return [];
   };
   const normalizeOrder = createNormalizeOrder({
     getCustomerOptions: getOrderCustomerOptions,
@@ -90,7 +89,7 @@ import { createBusinessPageShared } from './shared';
   let procurementSearchQuery = '';
   let procurementEditingId = '';
   let procurementModalOpen = false;
-  let procurementDraftNote = '原料采购记录自动保存到本地';
+  let procurementDraftNote = '原料采购记录自动保存到云端';
   let procurementListPage = 1;
   let procurementPageSize = 10;
   const persistLogs = () => { utils.writeJson(ORDER_LOG_KEY, orderLogs); };
@@ -107,7 +106,7 @@ import { createBusinessPageShared } from './shared';
   let orderEditingId = '';
   let orderDetailId = '';
   let customerDetailCode = '';
-  let orderDraftNote = '订单数据自动保存到本地';
+  let orderDraftNote = '订单数据自动保存到云端';
   let invoiceSelectedOrderId = orderRows.find((order) => order.status === '待处理')?.id || '';
   let invoiceLineFilter = '全部';
   let invoiceScheduleDate = getOrderFallbackDate();
@@ -1567,12 +1566,12 @@ import { createBusinessPageShared } from './shared';
   let inventoryEditingMaterialName = '';
   let inventoryEditingCategory = '';
   let inventorySearchQuery = '';
-  let inventoryDraftNote = '库存数据自动保存到本地';
+  let inventoryDraftNote = '库存数据自动保存到云端';
   let inventoryCategoryModalOpen = false;
   let inventoryMaterialModalOpen = false;
   let inventoryListPage = 1;
   let inventoryPageSize = 10;
-  let activeFormulaId = 'FM-ABS-FR-760';
+  let activeFormulaId = '';
   let formulaMaterialCategory = '全部';
   let formulaDraftNote = '草稿自动保存';
   let formulaSearchQuery = '';
@@ -1590,18 +1589,7 @@ import { createBusinessPageShared } from './shared';
   const SUPPLIER_STORAGE_KEY = 'gjh-suppliers-v1';
   const supplierCategoryOptions = ['基础树脂', '改性添加剂', '销售成品', '增强填料', '稳定助剂', '色母助剂', '物流服务'];
   const supplierStatusOptions = ['正常合作', '样品评估', '暂停合作'];
-  const defaultSupplierRows = [
-    { code: 'S001', name: '南通星辰合成材料', contact: '张经理', phone: '0513-88881234', email: 'zhang@ntxc.com', category: '基础树脂', status: '正常合作', address: '江苏省南通市经济技术开发区', note: '主供 ABS、PC 基础树脂，月度对账稳定。' },
-    { code: 'S002', name: '中石化仪征化纤', contact: '李工', phone: '0514-87654321', email: 'li@yizheng.com', category: '基础树脂', status: '正常合作', address: '江苏省扬州市仪征市胥浦工业区', note: 'PP、PET 原料长期供应，需提前锁定排产计划。' },
-    { code: 'S003', name: '巴斯夫中国', contact: '王经理', phone: '021-23456789', email: 'wang@basf.com', category: '基础树脂', status: '样品评估', address: '上海市浦东新区江心沙路 300 号', note: '高性能树脂与助剂样品跟进中。' },
-    { code: 'S004', name: '中石油独山子石化', contact: '赵工', phone: '0992-3888001', email: 'zhao@dsn.com', category: '基础树脂', status: '正常合作', address: '新疆克拉玛依市独山子区大庆东路', note: 'PP、PE 类原料，铁路到货周期需预留。' },
-    { code: 'S005', name: '巨石集团', contact: '陈经理', phone: '0573-88112233', email: 'chen@jushi.com', category: '改性添加剂', status: '正常合作', address: '浙江省嘉兴市桐乡经济开发区文华南路', note: '玻纤增强材料主供，关注批次含水率。' },
-    { code: 'S006', name: '以色列化工集团(ICL)', contact: 'David', phone: '+972-2-1234567', email: 'david@icl-group.com', category: '改性添加剂', status: '正常合作', address: 'Millennium Tower, Tel Aviv, Israel', note: '阻燃剂进口供应，年度资质文件待补齐。' },
-    { code: 'S007', name: '巴斯夫添加剂', contact: '孙经理', phone: '021-34567890', email: 'sun@basf-ada.com', category: '改性添加剂', status: '正常合作', address: '上海市浦东新区江心沙路 300 号', note: '抗氧剂、光稳定剂合作供应。' },
-    { code: 'S008', name: '陶氏化学', contact: '周经理', phone: '021-56789012', email: 'zhou@dow.com', category: '改性添加剂', status: '样品评估', address: '上海市浦东新区张江高科技园区', note: '相容剂、增韧剂样品测试中。' },
-    { code: 'S009', name: '科莱恩化工', contact: '吴经理', phone: '021-67890123', email: 'wu@clariant.com', category: '改性添加剂', status: '正常合作', address: '上海市闵行区申长路 988 号', note: '色母与功能助剂，交期需提前确认。' },
-    { code: 'S010', name: '南京曙光化工', contact: '钱工', phone: '025-84567890', email: 'qian@sgchem.com', category: '销售成品', status: '正常合作', address: '江苏省南京市六合区化工园区', note: '成品材料协同销售与区域渠道支持。' },
-  ];
+  const defaultSupplierRows = [];
 
   const normalizeSupplier = (supplier = {}, index = 0) => {
     const source = Array.isArray(supplier)
@@ -1633,14 +1621,14 @@ import { createBusinessPageShared } from './shared';
     const rows = Array.isArray(value)
       ? value.map(normalizeSupplier).filter((supplier) => supplier.code && supplier.name)
       : [];
-    return rows.length ? rows : defaultSupplierRows.map(normalizeSupplier);
+    return rows;
   };
   const supplierRows = normalizeSuppliers(utils.readJson(SUPPLIER_STORAGE_KEY, null));
   let supplierCategoryFilter = '全部';
   let supplierSearchQuery = '';
   let supplierEditingCode = '';
   let supplierModalOpen = false;
-  let supplierDraftNote = '供应商档案自动保存到本地';
+  let supplierDraftNote = '供应商档案自动保存到云端';
   let supplierListPage = 1;
   let supplierPageSize = 10;
   const normalizeArchiveRecord = (config, record = {}, index = 0) => {
@@ -1670,23 +1658,25 @@ import { createBusinessPageShared } from './shared';
       note: String(source.note || '').trim(),
     };
   };
-  const personnelDepartments = ['研发部', '测试部', '销售部', '生产部', '生产部主管'];
+  const personnelDepartments = ['系统管理员', '研发部', '测试部', '销售部', '生产部', '生产部主管'];
   const personnelDepartmentAliases = {
     实验室: '测试部',
-    系统管理: '研发部',
+    系统管理: '系统管理员',
     仓储部: '生产部',
   };
-  const personnelPermissions = [
-    { label: '系统管理员', role: 'system_admin' },
-    { label: '销售主管', role: 'sales_manager' },
-    { label: '实验室工程师', role: 'lab_engineer' },
-    { label: '生产部主管', role: 'warehouse_manager' },
-  ];
-  const roleApiPermissions = {
-    system_admin: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
-    sales_manager: ['state:read', 'state:write', 'blob:read'],
-    lab_engineer: ['state:read', 'state:write', 'blob:read', 'blob:write'],
-    warehouse_manager: ['state:read', 'state:write', 'blob:read'],
+  const legacyRoleDepartments = {
+    system_admin: '系统管理员',
+    sales_manager: '销售部',
+    lab_engineer: '测试部',
+    warehouse_manager: '生产部主管',
+  };
+  const departmentApiPermissions = {
+    系统管理员: ['state:read', 'state:write', 'blob:read', 'blob:write', 'config:read', 'config:write', 'users:manage'],
+    研发部: ['state:read', 'state:write', 'blob:read', 'blob:write'],
+    测试部: ['state:read', 'state:write', 'blob:read', 'blob:write'],
+    销售部: ['state:read', 'state:write', 'blob:read'],
+    生产部: ['state:read', 'state:write', 'blob:read'],
+    生产部主管: ['state:read', 'state:write', 'blob:read'],
   };
   const rolePermissionLabels = {
     'state:read': '数据查看',
@@ -1697,57 +1687,42 @@ import { createBusinessPageShared } from './shared';
     'config:write': '配置维护',
     'users:manage': '账号管理',
   };
-  const rolePageAccess = {
-    system_admin: null,
-    sales_manager: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'sales-stock', 'customer-archive', 'customer-detail']),
-    lab_engineer: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'image-cutout', 'inventory-management']),
-    warehouse_manager: new Set(['dashboard', 'sales-stock', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
+  const departmentPageAccess = {
+    系统管理员: null,
+    研发部: new Set(['dashboard', 'project-skills', 'apimart-media', 'ai-call-analysis', 'theme-settings']),
+    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'image-cutout', 'inventory-management']),
+    销售部: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'customer-archive', 'customer-detail']),
+    生产部: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
+    生产部主管: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
   };
   const pageEditAccess = {
     dashboard: [],
-    'order-detail': ['sales_manager', 'system_admin'],
-    'supplier-detail': ['warehouse_manager', 'system_admin'],
-    'customer-detail': ['sales_manager', 'system_admin'],
-    'order-management': ['sales_manager', 'system_admin'],
-    'invoice-print': ['sales_manager', 'warehouse_manager', 'system_admin'],
-    'sales-stock': ['sales_manager', 'warehouse_manager', 'system_admin'],
-    'formula-management': ['lab_engineer', 'system_admin'],
-    'production-plan': ['warehouse_manager', 'system_admin'],
-    'inventory-management': ['warehouse_manager', 'lab_engineer', 'system_admin'],
-    'supplier-archive': ['warehouse_manager', 'system_admin'],
-    'raw-material-procurement': ['warehouse_manager', 'system_admin'],
-    'customer-archive': ['sales_manager', 'system_admin'],
-    'personnel-archive': ['system_admin'],
-    'property-analysis': ['lab_engineer', 'system_admin'],
-    'spectrum-analysis': ['lab_engineer', 'system_admin'],
-    'image-cutout': ['lab_engineer', 'system_admin'],
-    'project-skills': ['system_admin'],
-    'apimart-media': ['system_admin'],
-    'ai-call-analysis': ['system_admin'],
-    'permission-management': ['system_admin'],
-    'audit-log': ['system_admin'],
-    'theme-settings': ['system_admin'],
-    'ai-config': ['system_admin'],
+    'order-detail': ['销售部', '系统管理员'],
+    'supplier-detail': ['生产部', '生产部主管', '系统管理员'],
+    'customer-detail': ['销售部', '系统管理员'],
+    'order-management': ['销售部', '系统管理员'],
+    'invoice-print': ['销售部', '生产部', '生产部主管', '系统管理员'],
+    'formula-management': ['测试部', '系统管理员'],
+    'production-plan': ['生产部', '生产部主管', '系统管理员'],
+    'inventory-management': ['生产部', '生产部主管', '测试部', '系统管理员'],
+    'supplier-archive': ['生产部', '生产部主管', '系统管理员'],
+    'raw-material-procurement': ['生产部', '生产部主管', '系统管理员'],
+    'customer-archive': ['销售部', '系统管理员'],
+    'personnel-archive': ['系统管理员'],
+    'property-analysis': ['测试部', '系统管理员'],
+    'spectrum-analysis': ['测试部', '系统管理员'],
+    'image-cutout': ['测试部', '系统管理员'],
+    'project-skills': ['研发部', '系统管理员'],
+    'apimart-media': ['研发部', '系统管理员'],
+    'ai-call-analysis': ['研发部', '系统管理员'],
+    'permission-management': ['系统管理员'],
+    'theme-settings': ['研发部', '系统管理员'],
+    'ai-config': ['系统管理员'],
   };
   let permissionActiveDepartment = personnelDepartments[0];
   const ROLE_PAGE_PERMISSION_STORAGE_KEY = 'gjh-role-page-permissions-v1';
   let rolePagePermissionOverrides = utils.readJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, {});
-  const permissionToRole = (permission) => personnelPermissions.find((item) => item.label === permission)?.role || '';
-  const roleToPermission = (role) => personnelPermissions.find((item) => item.role === role)?.label || personnelPermissions[0].label;
-  const departmentToRole = (department) => ({
-    [personnelDepartments[0]]: 'system_admin',
-    [personnelDepartments[1]]: 'lab_engineer',
-    [personnelDepartments[2]]: 'sales_manager',
-    [personnelDepartments[3]]: 'warehouse_manager',
-    [personnelDepartments[4]]: 'warehouse_manager',
-  }[normalizePersonnelDepartment(department)] || 'system_admin');
-  const rolePermissionDepartments = {
-    system_admin: personnelDepartments[0],
-    lab_engineer: personnelDepartments[1],
-    sales_manager: personnelDepartments[2],
-    warehouse_manager: personnelDepartments[4],
-  };
-  const getPersonnelRecordRole = (record) => departmentToRole(record?.category) || permissionToRole(record?.contact);
+  const getUserDepartment = (user = {}) => normalizePersonnelDepartment(user.department || legacyRoleDepartments[user.role] || '');
   const normalizePersonnelDepartment = (department) => {
     const value = String(department || '').trim();
     return personnelDepartments.includes(value) ? value : personnelDepartmentAliases[value] || personnelDepartments[0];
@@ -2141,92 +2116,7 @@ import { createBusinessPageShared } from './shared';
     || [name, '库存材料', '未分类', '未关联供应商', '--', '待确认'];
 
   const FORMULA_STORAGE_KEY = 'gjh-formula-recipes-v1';
-  const defaultFormulaRecipes = [
-    {
-      id: 'FM-ABS-FR-760',
-      code: 'ABS-FR-760',
-      name: '阻燃 ABS 高冲击配方',
-      product: 'GJ-ABS-FR-760',
-      version: 'V3.2',
-      status: '实验',
-      line: 'B',
-      owner: '陈工',
-      updated: '2026-04-30',
-      target: '冲击强度提升，阻燃等级保持 V0',
-      batchSize: '500 kg',
-      materials: [
-        { name: 'ABS 757K', port: 1, ratio: 58, tolerance: '±0.6%', role: '主体树脂', stage: '主喂料' },
-        { name: '阻燃剂 FR-530', port: 3, ratio: 18, tolerance: '±0.3%', role: '阻燃体系', stage: '侧喂料' },
-        { name: '增韧剂 IM-88', port: 3, ratio: 13, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
-        { name: '玻纤 GF-30', port: 3, ratio: 8, tolerance: '±0.2%', role: '尺寸稳定', stage: '侧喂料' },
-        { name: '黑色母 B-204', port: 5, ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
-      ],
-      process: [
-        ['称量', '按 500 kg 批量生成领料单，色母单独复核'],
-        ['干燥', 'ABS 80C 3h，增韧剂密封回温'],
-        ['预混', '树脂、增韧剂、色母低速 8 分钟'],
-        ['挤出', '一区 190C，六区 225C，主机 420rpm'],
-        ['质检', '熔指、冲击、阻燃、色差同步留样'],
-      ],
-      checks: ['配比合计 100%', '阻燃剂库存紧急', '供应商来源完整', '需补做 85C 老化'],
-    },
-    {
-      id: 'FM-PP-GF30',
-      code: 'PP-GF30',
-      name: '增强 PP 低翘曲配方',
-      product: 'GJ-PP-GF30',
-      version: 'V2.4',
-      status: '正常',
-      line: 'A',
-      owner: '李娜',
-      updated: '2026-04-28',
-      target: '弯曲模量稳定，降低成型翘曲',
-      batchSize: '800 kg',
-      materials: [
-        { name: 'PP K8003', port: 1, ratio: 63, tolerance: '±0.8%', role: '主体树脂', stage: '主喂料' },
-        { name: '玻纤 GF-30', port: 2, ratio: 30, tolerance: '±0.4%', role: '增强填料', stage: '侧喂料' },
-        { name: '抗氧剂 AO-1010', port: 3, ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
-        { name: '润滑剂 EBS-16', port: 3, ratio: 2, tolerance: '±0.1%', role: '加工流动', stage: '预混' },
-        { name: '黑色母 B-204', port: 5, ratio: 3, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
-      ],
-      process: [
-        ['称量', '玻纤独立扫码，助剂小料包复称'],
-        ['预混', 'PP 与助剂混合 6 分钟'],
-        ['挤出', '玻纤侧喂，机筒 185-215C'],
-        ['切粒', '水温 35C，筛粉后入库'],
-        ['质检', '灰份、弯曲模量、外观黑点'],
-      ],
-      checks: ['配比合计 100%', '润滑剂库存预警', '供应商来源完整', '当前版本可排产'],
-    },
-    {
-      id: 'FM-PCABS-901',
-      code: 'PCABS-901',
-      name: 'PC/ABS 耐热合金配方',
-      product: 'GJ-PCABS-901',
-      version: 'V1.8',
-      status: '正常',
-      line: 'B',
-      owner: '王敏',
-      updated: '2026-04-26',
-      target: '提高耐热与尺寸稳定性',
-      batchSize: '300 kg',
-      materials: [
-        { name: 'PC/ABS 基料 901', port: 1, ratio: 78, tolerance: '±0.7%', role: '主体基料', stage: '主喂料' },
-        { name: '相容剂 MAH-42', port: 3, ratio: 8, tolerance: '±0.2%', role: '界面改性', stage: '主喂料' },
-        { name: '增韧剂 IM-88', port: 3, ratio: 7, tolerance: '±0.2%', role: '抗冲改性', stage: '主喂料' },
-        { name: '抗氧剂 AO-1010', port: 3, ratio: 2, tolerance: '±0.1%', role: '热稳定', stage: '预混' },
-        { name: '黑色母 B-204', port: 5, ratio: 5, tolerance: '±0.1%', role: '颜色体系', stage: '预混' },
-      ],
-      process: [
-        ['称量', '基料与相容剂按批次绑定'],
-        ['干燥', 'PC/ABS 90C 4h，水分小于 0.06%'],
-        ['预混', '小料包先混，基料后混'],
-        ['挤出', '机筒 220-245C，真空排气开启'],
-        ['质检', '热变形、缺口冲击、色差、银丝'],
-      ],
-      checks: ['配比合计 100%', '成品待检不可放量', '供应商来源完整', '需审核耐热数据'],
-    },
-  ];
+  const defaultFormulaRecipes = [];
 
   const cloneFormulaData = (value) => JSON.parse(JSON.stringify(value));
   const formulaStatusOptions = ['正常', '实验'];
@@ -2337,10 +2227,10 @@ import { createBusinessPageShared } from './shared';
   };
 
   const normalizeFormulaRecipes = (value) => {
-    if (!Array.isArray(value) || !value.length) return cloneFormulaData(defaultFormulaRecipes);
+    if (!Array.isArray(value) || !value.length) return [];
 
     return value.map((recipe, index) => {
-      const fallback = defaultFormulaRecipes[index] || defaultFormulaRecipes[0];
+      const fallback = defaultFormulaRecipes[index] || {};
       const materials = Array.isArray(recipe.materials) && recipe.materials.length
         ? recipe.materials.map((item, materialIndex) => ({
           name: String(item.name || ''),
@@ -2350,12 +2240,12 @@ import { createBusinessPageShared } from './shared';
           role: String(item.role || '配方材料'),
           stage: String(item.stage || '待设定'),
         })).filter((item) => item.name)
-        : cloneFormulaData(fallback.materials || []);
+        : [];
       const process = Array.isArray(recipe.process) && recipe.process.length
         ? recipe.process.map((item) => Array.isArray(item)
           ? [String(item[0] || ''), String(item[1] || '')]
           : [String(item.step || ''), String(item.detail || '')])
-        : cloneFormulaData(fallback.process || []);
+        : [];
       const normalizedRecipe = {
         ...fallback,
         ...recipe,
@@ -2373,7 +2263,7 @@ import { createBusinessPageShared } from './shared';
         batchSize: String(recipe.batchSize || fallback.batchSize),
         materials,
         process,
-        checks: Array.isArray(recipe.checks) ? recipe.checks : cloneFormulaData(fallback.checks || []),
+        checks: Array.isArray(recipe.checks) ? recipe.checks : [],
       };
       const versions = Array.isArray(recipe.versions) && recipe.versions.length
         ? recipe.versions.map((versionItem) => ({
@@ -2689,11 +2579,11 @@ import { createBusinessPageShared } from './shared';
 
   const resetFormulaRecipes = () => {
     formulaRecipes = cloneFormulaData(defaultFormulaRecipes);
-    activeFormulaId = formulaRecipes[0]?.id || activeFormulaId;
+    activeFormulaId = formulaRecipes[0]?.id || '';
     formulaMaterialCategory = '全部';
     activeFormulaMaterialIndex = null;
     clearFormulaEditorDraft();
-    persistFormulaRecipes('已恢复默认配方');
+    persistFormulaRecipes('已清空配方数据');
   };
 
   const createFormulaRecipe = () => {
@@ -2816,11 +2706,6 @@ import { createBusinessPageShared } from './shared';
   };
 
   const deleteFormulaRecipe = async (recipeId) => {
-    if (formulaRecipes.length <= 1) {
-      formulaDraftNote = '至少保留 1 个配方';
-      notifyAction(formulaDraftNote, 'warn', 'formula-delete-last');
-      return;
-    }
     const index = formulaRecipes.findIndex((recipe) => recipe.id === recipeId);
     if (index < 0) return;
     const recipe = formulaRecipes[index];
@@ -2831,7 +2716,7 @@ import { createBusinessPageShared } from './shared';
     if (!confirmed) return false;
     formulaRecipes.splice(index, 1);
     if (activeFormulaId === recipeId) {
-      activeFormulaId = formulaRecipes[Math.min(index, formulaRecipes.length - 1)]?.id || formulaRecipes[0]?.id;
+      activeFormulaId = formulaRecipes[Math.min(index, formulaRecipes.length - 1)]?.id || formulaRecipes[0]?.id || '';
       activeFormulaMaterialIndex = null;
     }
     persistFormulaRecipes('已删除配方');
@@ -2856,7 +2741,7 @@ import { createBusinessPageShared } from './shared';
     <option value="${port}" ${port === normalizeFeederPort(value) ? 'selected' : ''}>${esc(currentLine)}${port}</option>
   `).join('');
 
-  const getFormulaRows = (recipe) => recipe.materials.map((item) => {
+  const getFormulaRows = (recipe) => (recipe?.materials || []).map((item) => {
     const [name, type, category, supplier, quantity, state] = getInventoryMaterial(item.name);
     return { ...item, port: normalizeFeederPort(item.port), name, type, category, supplier, quantity, state };
   });
@@ -2884,7 +2769,18 @@ import { createBusinessPageShared } from './shared';
     const familyText = String(order?.formula || '').toUpperCase();
     return formulaRecipes.find((recipe) => familyText.includes(getFormulaCategory(recipe).toUpperCase()))
       || formulaRecipes[0]
-      || defaultFormulaRecipes[0];
+      || {
+        id: '',
+        code: '',
+        name: String(order?.formula || ''),
+        product: String(order?.formula || ''),
+        version: '',
+        status: '',
+        line: 'A',
+        materials: [],
+        process: [],
+        checks: [],
+      };
   };
 
   const getOrderProductionDate = (order) => String(order?.productionDate || order?.deliveryDate || getTodayCode()).trim();
@@ -3078,19 +2974,11 @@ import { createBusinessPageShared } from './shared';
     if (/预警|待检/.test(state)) return 'is-warn';
     return 'is-ok';
   };
-  const materialPrices = {
-    'ABS 757K': 12.8,
-    'PP K8003': 8.2,
-    '玻纤 GF-30': 7.6,
-    '阻燃剂 FR-530': 31.5,
-    '增韧剂 IM-88': 24.8,
-    '黑色母 B-204': 16.5,
-    '抗氧剂 AO-1010': 28.6,
-    '润滑剂 EBS-16': 18.2,
-    'PC/ABS 基料 901': 19.8,
-    '相容剂 MAH-42': 26.4,
+  const getMaterialUnitPrice = (name) => {
+    const row = getInventoryMaterial(name);
+    const price = Number.parseFloat(String(row?.[8] || ''));
+    return Number.isFinite(price) ? price : 0;
   };
-  const getMaterialUnitPrice = (name) => materialPrices[name] || 12;
   const formatCurrency = (value) => (Number.isFinite(value) ? `¥${value.toFixed(2)}` : '--');
   const getFormulaCost = (recipe) => {
     const cost = (recipe?.materials || []).reduce((sum, material) => (
@@ -3176,7 +3064,11 @@ import { createBusinessPageShared } from './shared';
     const stableProgress = Math.round((stableFormulaCount / Math.max(formulaRecipes.length, 1)) * 100);
     const healthyFormulaCount = Math.max(0, formulaRecipes.length - riskFormulaCount);
     const healthyProgress = Math.round((healthyFormulaCount / Math.max(formulaRecipes.length, 1)) * 100);
-    const pendingOrderCount = 4;
+    const pendingOrders = orderRows.filter((order) => ['待处理', '已安排', '生产中'].includes(order.status));
+    const pendingOrderCount = pendingOrders.length;
+    const pendingOrderNote = pendingOrderCount
+      ? `待处理 ${pendingOrders.filter((order) => order.status === '待处理').length} / 排产中 ${pendingOrders.filter((order) => ['已安排', '生产中'].includes(order.status)).length}`
+      : '暂无待处理订单';
     const latestUpdated = formulaRecipes
       .map((recipe) => recipe.updated || '')
       .filter(Boolean)
@@ -3187,7 +3079,7 @@ import { createBusinessPageShared } from './shared';
       <section class="biz-formula-page biz-formula-list-page">
         ${renderFormulaMiniStats([
           ['配方总数', `${formulaRecipes.length} 个`, `命中 ${visibleFormulaRecipes.length} 个`, 'ti ti-clipboard-list', 'is-blue', '当前筛选范围', filterProgress],
-          ['待处理订单', `${pendingOrderCount} 单`, '点击查看订单', 'ti ti-shopping-cart', 'is-cyan', '待补全 2 / 审核 2', 'order-management'],
+          ['待处理订单', `${pendingOrderCount} 单`, pendingOrderCount ? '点击查看订单' : '订单列表为空', 'ti ti-shopping-cart', 'is-cyan', pendingOrderNote, 'order-management'],
           ['实验版本', `${experimentCount} 个`, `${stableFormulaCount} 个可排产`, 'ti ti-test-pipe', 'is-amber', '实验配方需确认', stableProgress],
           ['库存风险', `${riskFormulaCount} 个`, `更新 ${latestUpdated}`, riskFormulaCount ? 'ti ti-alert-triangle' : 'ti ti-shield-check', riskFormulaCount ? 'is-red' : 'is-green', healthyFormulaCount ? `${healthyFormulaCount} 个状态正常` : '全部待处理', healthyProgress],
         ], 'biz-formula-mini-stats--list')}
@@ -3766,8 +3658,10 @@ import { createBusinessPageShared } from './shared';
 
   const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
   const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
+  const PERSONNEL_DELETED_AUTH_USERS_KEY = 'gjh-personnel-deleted-auth-users-v1';
   let authUsers = [];
   let personnelArchiveCloudLoaded = false;
+  let deletedPersonnelAuthUsers = [];
   const archiveConfigs = {
     customer: {
       pageId: 'customer-archive',
@@ -3790,13 +3684,7 @@ import { createBusinessPageShared } from './shared';
       categories: ['重点客户', '活跃客户', '潜在客户', '账期复核', '样品跟进'],
       statuses: ['正常服务', '样品跟进', '账期复核', '暂停服务'],
       columns: ['编号', '客户名称', '联系人', '电话', '邮箱', '客户等级', '状态', '操作'],
-      defaults: [
-        { code: 'C001', name: '宁波辰光电器', contact: '王总', phone: '0574-88223311', email: 'wang@cg-electric.com', category: '重点客户', status: '正常服务', address: '浙江省宁波市鄞州区启明路', note: '阻燃 ABS 长期客户，本月样品确认后转量产。' },
-        { code: 'C002', name: '杭州启明科技', contact: '周经理', phone: '0571-88990012', email: 'zhou@qm-tech.com', category: '活跃客户', status: '正常服务', address: '浙江省杭州市滨江区江南大道', note: 'PC/ABS 报价已更新，关注交期承诺。' },
-        { code: 'C003', name: '苏州瑞嘉材料', contact: '李娜', phone: '0512-67881234', email: 'lina@ruijia.com', category: '重点客户', status: '账期复核', address: '江苏省苏州市工业园区星湖街', note: '增强 PP 订单稳定，账期额度待财务复核。' },
-        { code: 'C004', name: '昆山明拓模塑', contact: '陈工', phone: '0512-55112233', email: 'chen@mt-mold.com', category: '样品跟进', status: '样品跟进', address: '江苏省昆山市开发区前进东路', note: '高光 ABS 试样中，需补充色差报告。' },
-        { code: 'C005', name: '常州宏远电装', contact: '赵经理', phone: '0519-86667788', email: 'zhao@hy-wire.com', category: '活跃客户', status: '正常服务', address: '江苏省常州市武进区湖塘镇', note: '线束材料季度需求稳定，发货前同步质检报告。' },
-      ],
+      defaults: [],
     },
     personnel: {
       pageId: 'personnel-archive',
@@ -3835,7 +3723,7 @@ import { createBusinessPageShared } from './shared';
     statusFilter: '全部',
     editingCode: '',
     modalOpen: false,
-    draftNote: config.storageKey === PERSONNEL_STORAGE_KEY ? `${config.entityName}档案从云端读取` : `${config.entityName}档案自动保存到本地`,
+    draftNote: `${config.entityName}档案从云端读取`,
     page: 1,
     pageSize: 10,
   }]));
@@ -3849,11 +3737,39 @@ import { createBusinessPageShared } from './shared';
     user.display_name === record?.name
     || String(record?.note || '').includes(user.username)
   ));
-  const authRolePersonnelMeta = {
-    system_admin: { category: personnelDepartments[0], contact: '系统管理员' },
-    sales_manager: { category: '销售部', contact: '销售主管' },
-    lab_engineer: { category: '测试部', contact: '实验室工程师' },
-    warehouse_manager: { category: '生产部主管', contact: '生产部主管' },
+  const getAuthUserDeletionKeys = (user = {}) => [
+    String(user.id || '').trim(),
+    String(user.username || '').trim(),
+  ].filter(Boolean);
+  const isAuthUserDeletedFromPersonnel = (user) => {
+    const deleted = new Set(deletedPersonnelAuthUsers);
+    return getAuthUserDeletionKeys(user).some((key) => deleted.has(key));
+  };
+  const persistDeletedPersonnelAuthUsers = async () => cloudStorage.putJson(
+    PERSONNEL_DELETED_AUTH_USERS_KEY,
+    [...new Set(deletedPersonnelAuthUsers)].filter(Boolean),
+  );
+  const markAuthUserDeletedFromPersonnel = async (user) => {
+    const keys = getAuthUserDeletionKeys(user);
+    if (!keys.length) return true;
+    deletedPersonnelAuthUsers = [...new Set([...deletedPersonnelAuthUsers, ...keys])];
+    return persistDeletedPersonnelAuthUsers();
+  };
+  const restoreAuthUserToPersonnel = async (user) => {
+    const keys = new Set(getAuthUserDeletionKeys(user));
+    if (!keys.size) return true;
+    const nextDeleted = deletedPersonnelAuthUsers.filter((key) => !keys.has(key));
+    if (nextDeleted.length === deletedPersonnelAuthUsers.length) return true;
+    deletedPersonnelAuthUsers = nextDeleted;
+    return persistDeletedPersonnelAuthUsers();
+  };
+  const authDepartmentPersonnelMeta = {
+    系统管理员: { category: '系统管理员', contact: '系统管理员' },
+    研发部: { category: '研发部', contact: '研发部' },
+    测试部: { category: '测试部', contact: '测试部' },
+    销售部: { category: '销售部', contact: '销售部' },
+    生产部: { category: '生产部', contact: '生产部' },
+    生产部主管: { category: '生产部主管', contact: '生产部主管' },
   };
 
   const getArchiveStatusClass = (status) => {
@@ -3905,7 +3821,7 @@ import { createBusinessPageShared } from './shared';
   const hasUnreadableText = (value) => /(?:\?{2,}|�)/.test(String(value || ''));
   const getPersonnelDisplayName = (user) => {
     const displayName = String(user.display_name || user.username || '').trim();
-    if (user.role === 'system_admin' && hasUnreadableText(displayName)) {
+    if (getUserDepartment(user) === '系统管理员' && hasUnreadableText(displayName)) {
       return user.username && user.username !== 'admin' ? `${user.username} 管理员` : '系统管理员';
     }
     return displayName;
@@ -3918,6 +3834,7 @@ import { createBusinessPageShared } from './shared';
     if (!config || !state || !authUsers.length) return;
     let changed = false;
     authUsers.forEach((user) => {
+      if (isAuthUserDeletedFromPersonnel(user)) return;
       const rawDisplayName = String(user.display_name || user.username || '').trim();
       const displayName = getPersonnelDisplayName(user);
       if (!displayName) return;
@@ -3928,12 +3845,12 @@ import { createBusinessPageShared } from './shared';
         || getAuthUserForRecord(record)?.id === user.id
         || String(record.note || '').includes(user.username)
       ));
-      const roleMeta = authRolePersonnelMeta[user.role] || authRolePersonnelMeta.system_admin;
+      const departmentMeta = authDepartmentPersonnelMeta[getUserDepartment(user)] || authDepartmentPersonnelMeta.系统管理员;
       if (existingRecord) {
         if (existingRecord.name !== displayName || hasUnreadableText(existingRecord.name)) {
           existingRecord.name = displayName;
-          existingRecord.contact = existingRecord.contact || roleMeta.contact;
-          existingRecord.category = existingRecord.category || roleMeta.category;
+          existingRecord.contact = existingRecord.contact || departmentMeta.contact;
+          existingRecord.category = existingRecord.category || departmentMeta.category;
           existingRecord.status = existingRecord.status || '在岗';
           existingRecord.note = linkedAccountNote;
           changed = true;
@@ -3943,10 +3860,10 @@ import { createBusinessPageShared } from './shared';
       state.rows.push(normalizeArchiveRecord(config, {
         code: getNextArchiveCode('personnel'),
         name: displayName,
-        contact: roleMeta.contact,
+        contact: departmentMeta.contact,
         phone: '',
         email: '',
-        category: roleMeta.category,
+        category: departmentMeta.category,
         status: '在岗',
         note: linkedAccountNote,
       }));
@@ -3965,6 +3882,8 @@ import { createBusinessPageShared } from './shared';
     const state = archiveStates['personnel'];
     if (!config || !state) return;
     const cloudRows = await cloudStorage.getJson(config.storageKey);
+    const deletedAuthUsers = await cloudStorage.getJson(PERSONNEL_DELETED_AUTH_USERS_KEY);
+    deletedPersonnelAuthUsers = Array.isArray(deletedAuthUsers) ? deletedAuthUsers.map((item) => String(item || '').trim()).filter(Boolean) : [];
     state.rows = normalizeArchiveRows(config, Array.isArray(cloudRows) ? cloudRows : []);
     personnelArchiveCloudLoaded = true;
     state.draftNote = `${config.entityName}档案已从云端加载`;
@@ -3991,7 +3910,7 @@ import { createBusinessPageShared } from './shared';
       record: normalizeArchiveRecord(config, {
       code: read('code'),
       name: read('name'),
-      contact: kind === 'personnel' ? roleToPermission(departmentToRole(read('category'))) : read('contact'),
+      contact: kind === 'personnel' ? normalizePersonnelDepartment(read('category')) : read('contact'),
       phone: read('phone'),
       email: read('email'),
       category: read('category'),
@@ -4002,7 +3921,7 @@ import { createBusinessPageShared } from './shared';
       account: kind === 'personnel' ? {
         username: read('username'),
         password: read('password'),
-        role: departmentToRole(read('category')),
+        department: normalizePersonnelDepartment(read('category')),
       } : null,
     };
   };
@@ -4040,15 +3959,15 @@ import { createBusinessPageShared } from './shared';
         notifyAction(state.draftNote, 'warn', `${kind}-password-invalid`);
         return false;
       }
-      if (!account.role) {
-        state.draftNote = '请选择成员角色';
+      if (!account.department) {
+        state.draftNote = '请选择成员部门';
         notifyAction(state.draftNote, 'warn', `${kind}-role-required`);
         return false;
       }
       const created = await authClient.createUser({
         username: account.username,
         displayName: record.name,
-        role: account.role,
+        department: account.department,
         password: account.password,
       });
       if (!created) {
@@ -4057,24 +3976,27 @@ import { createBusinessPageShared } from './shared';
         return false;
       }
       await refreshAuthUsers();
+      const createdUser = authUsers.find((user) => user.username === account.username);
+      if (createdUser) await restoreAuthUserToPersonnel(createdUser);
       notifyAuthUsersChanged();
     }
     if (kind === 'personnel' && currentIndex >= 0 && account?.username) {
-      const existingUser = authUsers.find((user) => user.username === account.username) || getAuthUserForRecord(state.rows[currentIndex]);
+      const existingUser = getAuthUserForRecord(state.rows[currentIndex]) || authUsers.find((user) => user.username === account.username);
       if (existingUser) {
         if (account.password && account.password.length < 10) {
           state.draftNote = '密码至少需要 10 位';
           notifyAction(state.draftNote, 'warn', `${kind}-password-invalid`);
           return false;
         }
-        if (!account.role) {
-          state.draftNote = '请选择成员角色';
+        if (!account.department) {
+          state.draftNote = '请选择成员部门';
           notifyAction(state.draftNote, 'warn', `${kind}-role-required`);
           return false;
         }
         const updated = await authClient.updateUser(existingUser.id, {
+          username: account.username,
           displayName: record.name,
-          role: account.role,
+          department: account.department,
           ...(account.password ? { password: account.password } : {}),
         });
         if (!updated) {
@@ -4083,6 +4005,7 @@ import { createBusinessPageShared } from './shared';
           return false;
         }
         await refreshAuthUsers();
+        await restoreAuthUserToPersonnel(existingUser);
         notifyAuthUsersChanged();
       }
     }
@@ -4125,6 +4048,15 @@ import { createBusinessPageShared } from './shared';
       message: `确认删除${config.entityName}「${record.name}」？删除后无法恢复。`,
     });
     if (!confirmed) return false;
+    const linkedAuthUser = kind === 'personnel' ? getAuthUserForRecord(record) : null;
+    if (linkedAuthUser) {
+      const marked = await markAuthUserDeletedFromPersonnel(linkedAuthUser);
+      if (!marked) {
+        state.draftNote = '删除标记同步云端失败';
+        notifyAction(state.draftNote, 'warn', `${kind}-delete-marker-failed:${code}`);
+        return false;
+      }
+    }
     state.rows.splice(index, 1);
     if (state.editingCode === code) state.editingCode = '';
     const saved = await persistArchive(kind, `已删除${config.entityName} ${record.name} · ${getTimeCode()}`);
@@ -4614,7 +4546,7 @@ import { createBusinessPageShared } from './shared';
       </aside>
       <article class="business-panel biz-permission-matrix">
         <div class="business-panel-head"><h2>权限矩阵</h2><span>菜单 / 数据 / 动作</span></div>
-        ${['订单管理', '客户档案', '销售库存', '配方管理', '审计日志'].map((module, index) => `
+        ${['订单管理', '客户档案', '配方管理'].map((module, index) => `
           <div class="biz-permission-row"><strong>${esc(module)}</strong><span class="on">查看</span><span class="${index < 3 ? 'on' : ''}">编辑</span><span class="${index === 0 ? 'on' : ''}">导出</span></div>
         `).join('')}
       </article>
@@ -4631,18 +4563,18 @@ import { createBusinessPageShared } from './shared';
     ]),
   ];
   const getPermissionDepartmentKey = (department) => `department:${normalizePersonnelDepartment(department)}`;
-  const getPermissionKeyRole = (permissionKey) => (
+  const getPermissionKeyDepartment = (permissionKey) => (
     String(permissionKey || '').startsWith('department:')
-      ? departmentToRole(String(permissionKey).slice('department:'.length))
+      ? normalizePersonnelDepartment(String(permissionKey).slice('department:'.length))
       : permissionKey
   );
   const getDefaultRoleCanViewPage = (permissionKey, pageId) => {
-    const role = getPermissionKeyRole(permissionKey);
-    return !rolePageAccess[role] || rolePageAccess[role].has(pageId);
+    const department = getPermissionKeyDepartment(permissionKey);
+    return !departmentPageAccess[department] || departmentPageAccess[department].has(pageId);
   };
   const getDefaultRoleCanEditPage = (permissionKey, pageId) => {
-    const role = getPermissionKeyRole(permissionKey);
-    return role === 'system_admin' || (pageEditAccess[pageId] || []).includes(role);
+    const department = getPermissionKeyDepartment(permissionKey);
+    return department === '系统管理员' || (pageEditAccess[pageId] || []).includes(department);
   };
   const getRolePageOverride = (permissionKey, pageId) => {
     const keys = [permissionKey];
@@ -4656,7 +4588,7 @@ import { createBusinessPageShared } from './shared';
     return override && typeof override === 'object' ? override : {};
   };
   const isLockedPermissionPage = (permissionKey, pageId) => (
-    getPermissionKeyRole(permissionKey) === 'system_admin' && pageId === 'ai-config'
+    getPermissionKeyDepartment(permissionKey) === '系统管理员' && pageId === 'ai-config'
   );
   const canRoleViewPage = (permissionKey, pageId) => {
     if (isLockedPermissionPage(permissionKey, pageId)) return true;
@@ -4696,9 +4628,8 @@ import { createBusinessPageShared } from './shared';
     }
   };
   const getPermissionKeyForUser = (user = App.currentUser) => {
-    const role = String(user?.role || '');
-    const roleDepartment = rolePermissionDepartments[role];
-    if (roleDepartment) return getPermissionDepartmentKey(roleDepartment);
+    const userDepartment = getUserDepartment(user);
+    if (userDepartment) return getPermissionDepartmentKey(userDepartment);
     const username = String(user?.username || '').trim();
     const displayName = String(user?.displayName || user?.display_name || username).trim();
     const personnelRows = archiveStates['personnel']?.rows || [];
@@ -4707,8 +4638,7 @@ import { createBusinessPageShared } from './shared';
       || (username && String(item.note || '').includes(username))
     ));
     if (record?.category) return getPermissionDepartmentKey(record.category);
-    const department = personnelDepartments.find((item) => departmentToRole(item) === role);
-    return department ? getPermissionDepartmentKey(department) : role;
+    return getPermissionDepartmentKey(personnelDepartments[0]);
   };
   const canUserViewPage = (pageId, user = App.currentUser) => {
     if (!pageId) return true;
@@ -4722,9 +4652,9 @@ import { createBusinessPageShared } from './shared';
     `<button class="biz-permission-toggle on" type="button" data-permission-toggle="${esc(field)}" data-permission-page="${esc(pageId)}" data-permission-enabled="true" aria-pressed="true" disabled aria-disabled="true">${esc(label)}</button>`
   );
   const getPermissionScope = (permissionKey, pageId) => {
-    const role = getPermissionKeyRole(permissionKey);
+    const department = getPermissionKeyDepartment(permissionKey);
     if (!canRoleViewPage(permissionKey, pageId)) return '不可见';
-    if (role === 'system_admin') return '全项目';
+    if (department === '系统管理员') return '全项目';
     if (/detail|archive|management|plan|procurement|stock|invoice/.test(pageId)) return '本角色业务域';
     return '当前页面数据';
   };
@@ -4755,32 +4685,30 @@ import { createBusinessPageShared } from './shared';
       const normalizedDepartment = normalizePersonnelDepartment(department);
       return personnelRows.filter((record) => normalizePersonnelDepartment(record.category) === normalizedDepartment).length;
     }
-    const role = departmentToRole(department);
-    return authUsers.filter((user) => user.role === role).length;
+    const normalizedDepartment = normalizePersonnelDepartment(department);
+    return authUsers.filter((user) => getUserDepartment(user) === normalizedDepartment).length;
   };
   const renderPermission = () => {
     const pages = getPermissionPages();
     const departments = getPermissionDepartments();
     if (!departments.includes(permissionActiveDepartment)) permissionActiveDepartment = departments[0] || personnelDepartments[0];
     const activePermissionKey = getPermissionDepartmentKey(permissionActiveDepartment);
-    const activeRole = departmentToRole(permissionActiveDepartment);
     const activeRoleUserCount = getPermissionDepartmentMemberCount(permissionActiveDepartment);
     const visiblePageCount = pages.filter((page) => canRoleViewPage(activePermissionKey, page.id)).length;
     const editablePageCount = pages.filter((page) => canRoleEditPage(activePermissionKey, page.id)).length;
-    const apiPermissions = roleApiPermissions[activeRole] || [];
+    const apiPermissions = departmentApiPermissions[normalizePersonnelDepartment(permissionActiveDepartment)] || [];
     return `
       <section class="biz-permission-layout">
         <aside class="business-panel biz-role-list">
           <div class="business-panel-head"><h2>部门</h2><span>${departments.length} 个</span></div>
           ${departments.map((department) => {
-            const role = departmentToRole(department);
             const count = getPermissionDepartmentMemberCount(department);
             const isActive = department === permissionActiveDepartment;
             return `
               <button class="biz-role-card ${isActive ? 'is-active' : ''}" type="button" data-permission-department="${esc(department)}">
                 <span>
                   <strong>${esc(department)}</strong>
-                  <em>${esc(role)}</em>
+                  <em>按部门授权</em>
                 </span>
                 <b>${count}</b>
               </button>
@@ -4845,7 +4773,6 @@ import { createBusinessPageShared } from './shared';
       'order-management': renderOrders,
       'order-detail': renderOrderDetail,
       'invoice-print': renderInvoice,
-      'sales-stock': renderStock,
       'formula-management': renderFormula,
       'production-plan': renderProduction,
       'inventory-management': renderInventory,
@@ -4856,7 +4783,6 @@ import { createBusinessPageShared } from './shared';
       'personnel-archive': () => renderArchive('personnel'),
       'raw-material-procurement': renderRawMaterialProcurement,
       'permission-management': renderPermission,
-      'audit-log': renderAudit,
     };
     return (renderers[pageId] || renderDashboard)();
   };
@@ -6128,7 +6054,7 @@ import { createBusinessPageShared } from './shared';
     const add = (...pageIds) => pageIds.forEach((pageId) => hints.add(pageId));
     if (/账号|账户|用户|人员|员工|部门|权限|角色|登录|在线/.test(text)) add('personnel-archive', 'permission-management');
     if (/订单|交付|交期|客户订单|销售单/.test(text)) add('order-management');
-    if (/库存|商品|产品|材料|原料|成品|仓库|可售|锁库/.test(text)) add('inventory-management', 'sales-stock');
+    if (/库存|商品|产品|材料|原料|成品|仓库|可售|锁库/.test(text)) add('inventory-management');
     if (/供应商|采购|供货|原料采购|进货/.test(text)) add('supplier-archive', 'raw-material-procurement');
     if (/客户|客群|联系人|交易|信用/.test(text)) add('customer-archive');
     if (/配方|工艺|组分|比例|版本/.test(text)) add('formula-management');
@@ -6144,7 +6070,7 @@ import { createBusinessPageShared } from './shared';
         code: `账号${index + 1}`,
         name: user.display_name || user.displayName || user.username,
         username: user.username,
-        role: user.role,
+        department: getUserDepartment(user),
         status: user.disabled ? '停用' : '启用',
       }));
       return [
@@ -6154,7 +6080,7 @@ import { createBusinessPageShared } from './shared';
         rows.length ? '人员档案：' : '',
         ...formatAgentRecords(rows, [['编号', 'code'], ['姓名', 'name'], ['部门', 'category'], ['电话', 'phone'], ['邮箱', 'email'], ['状态', 'status']]),
         accountRows.length ? '登录账号：' : '',
-        ...formatAgentRecords(accountRows, [['编号', 'code'], ['姓名', 'name'], ['账号', 'username'], ['角色', 'role'], ['状态', 'status']]),
+        ...formatAgentRecords(accountRows, [['编号', 'code'], ['姓名', 'name'], ['账号', 'username'], ['部门', 'department'], ['状态', 'status']]),
       ].filter(Boolean).join('\n');
     }
     if (pageId === 'permission-management') {
@@ -6162,10 +6088,10 @@ import { createBusinessPageShared } from './shared';
       const pages = getPermissionPages();
       return [
         '【权限管理】',
-        `部门/角色数：${departments.length}`,
+        `部门数：${departments.length}`,
         `可配置页面数：${pages.length}`,
         '部门与成员数：',
-        ...departments.map((department, index) => `${index + 1}. ${department}；角色=${departmentToRole(department)}；成员数=${getPermissionDepartmentMemberCount(department)}`),
+        ...departments.map((department, index) => `${index + 1}. ${department}；成员数=${getPermissionDepartmentMemberCount(department)}`),
       ].join('\n');
     }
     if (pageId === 'order-management') {
@@ -6177,7 +6103,7 @@ import { createBusinessPageShared } from './shared';
         ...formatAgentRecords(orderRows, [['订单号', 'id'], ['客户', 'customer'], ['配方', 'formula'], ['数量KG', 'quantity'], ['状态', 'status'], ['交货日期', 'deliveryDate']]),
       ].join('\n');
     }
-    if (pageId === 'inventory-management' || pageId === 'sales-stock') {
+    if (pageId === 'inventory-management') {
       return [
         '【库存管理】',
         `库存物料数：${inventoryRows.length}`,
@@ -6287,7 +6213,7 @@ import { createBusinessPageShared } from './shared';
     `账号${index + 1}`,
     user.display_name || user.displayName || user.username || '--',
     user.username || '--',
-    user.role || '--',
+    getUserDepartment(user) || '--',
     user.disabled ? '停用' : '启用',
   ]);
 
@@ -6299,6 +6225,183 @@ import { createBusinessPageShared } from './shared';
     record.email || '--',
     record.status || '--',
   ]);
+
+  const getFormulaAgentObjects = () => formulaRecipes.map((recipe) => {
+    const summary = getFormulaSummary(recipe);
+    return {
+      code: recipe.code || String(recipe.id || '').replace(/^FM-/, ''),
+      name: recipe.name || '--',
+      updated: recipe.updated || getTodayCode(),
+      category: summary.category || '--',
+      line: `${recipe.line || 'A'}线`,
+      cost: summary.cost || '--',
+      costValue: parseAgentNumber(summary.cost),
+      inventoryStatus: summary.riskCount ? `${summary.riskCount} 项风险` : '可排产',
+      riskCount: summary.riskCount || 0,
+      version: recipe.version || '--',
+      status: summary.status || '--',
+    };
+  });
+
+  const getInventoryAgentObjects = () => inventoryRows.map((row) => {
+    const stockText = String(row[4] || '--');
+    const unitMatch = stockText.match(/[\u4e00-\u9fa5A-Za-z/%]+$/);
+    return {
+      name: row[0] || '--',
+      type: row[1] || '--',
+      category: row[2] || '--',
+      supplier: row[3] || '--',
+      stock: stockText,
+      stockQuantity: parseAgentNumber(stockText),
+      stockUnit: unitMatch ? unitMatch[0] : '',
+      status: row[5] || '--',
+      note: row[6] || '',
+      isFinishedGoods: isFinishedInventoryRow(row),
+    };
+  });
+
+  const getBusinessAgentDatasets = () => ({
+    'formula-management': {
+      entity: 'formula',
+      rows: getFormulaAgentObjects(),
+      defaultFields: ['code', 'name', 'updated', 'category', 'line', 'cost', 'inventoryStatus', 'version', 'status'],
+      fieldAliases: {
+        id: 'code',
+        title: 'name',
+        date: 'updated',
+        productLine: 'line',
+      },
+    },
+    'inventory-management': {
+      entity: 'inventoryItem',
+      rows: getInventoryAgentObjects(),
+      defaultFields: ['name', 'type', 'category', 'supplier', 'stock', 'stockQuantity', 'stockUnit', 'status'],
+      fieldAliases: {
+        material: 'name',
+        itemName: 'name',
+        quantity: 'stockQuantity',
+        stockValue: 'stockQuantity',
+        unit: 'stockUnit',
+      },
+    },
+    'order-management': {
+      entity: 'order',
+      rows: orderRows.map((order) => ({ ...order })),
+      defaultFields: ['id', 'customer', 'formula', 'quantity', 'status', 'deliveryDate'],
+    },
+    'production-plan': {
+      entity: 'productionOrder',
+      rows: getProductionOrders().map((order) => ({ ...order })),
+      defaultFields: ['id', 'customer', 'formula', 'status', 'productionDate', 'productionNo'],
+    },
+    'supplier-archive': {
+      entity: 'supplier',
+      rows: supplierRows.map((supplier) => ({ ...supplier })),
+      defaultFields: ['code', 'name', 'contact', 'category', 'status'],
+    },
+    'raw-material-procurement': {
+      entity: 'procurement',
+      rows: procurementRows.map((record) => ({ ...record })),
+      defaultFields: ['id', 'supplier', 'material', 'quantity', 'unitPrice', 'purchaseDate', 'status'],
+    },
+    'customer-archive': {
+      entity: 'customer',
+      rows: (archiveStates['customer']?.rows || []).map((record) => ({ ...record })),
+      defaultFields: ['code', 'name', 'contact', 'category', 'status'],
+    },
+    'personnel-archive': {
+      entity: 'personnel',
+      rows: (archiveStates['personnel']?.rows || []).map((record) => ({ ...record })),
+      defaultFields: ['code', 'name', 'category', 'phone', 'email', 'status'],
+    },
+    'permission-management': {
+      entity: 'permissionRole',
+      rows: getPermissionDepartments().map((department) => ({
+        department,
+        memberCount: getPermissionDepartmentMemberCount(department),
+      })),
+      defaultFields: ['department', 'memberCount'],
+    },
+  });
+
+  const getBusinessAgentManifestPages = () => {
+    const datasets = getBusinessAgentDatasets();
+    return Object.entries(datasets).map(([pageId, dataset]) => ({
+      pageId,
+      title: App.constants?.PAGE_DEFS?.[pageId]?.title || pageId,
+      desc: App.constants?.PAGE_DEFS?.[pageId]?.desc || '',
+      entity: dataset.entity,
+      fields: dataset.defaultFields,
+      skills: ['business.queryPageData', 'project.inspectPage'],
+      rowCount: dataset.rows.length,
+    }));
+  };
+
+  const inspectAgentPage = (pageId = '') => {
+    const datasets = getBusinessAgentDatasets();
+    const dataset = datasets[pageId];
+    if (!dataset) return null;
+    return {
+      ok: true,
+      pageId,
+      title: App.constants?.PAGE_DEFS?.[pageId]?.title || pageId,
+      entity: dataset.entity,
+      fields: dataset.defaultFields,
+      rowCount: dataset.rows.length,
+      sampleShape: dataset.rows[0] ? Object.fromEntries(dataset.defaultFields.map((field) => [field, dataset.rows[0]?.[field] ?? ''])) : {},
+      summary: `页面 ${pageId} 可查询实体 ${dataset.entity}，当前 ${dataset.rows.length} 条记录。`,
+    };
+  };
+
+  const normalizeBusinessQueryRequest = (request = {}) => {
+    const text = String(request.question || request.query || request.originalQuestion || '').trim();
+    const input = { ...request };
+    if (!input.pageId) {
+      const hints = getBusinessPageHints(text, input.activePageId || '');
+      input.pageId = hints[0] || input.activePageId || 'dashboard';
+    }
+    if (!input.intent) {
+      if (/几个|多少|数量|总数/.test(text)) input.intent = 'count';
+      else if (/最低|最少|最小/.test(text)) input.intent = 'extrema';
+      else if (/最高|最多|最大/.test(text)) input.intent = 'extrema';
+      else if (/有哪些|哪几个|列表|明细|查看|列举|列出|展示|罗列/.test(text)) input.intent = 'list';
+      else input.intent = 'filter';
+    }
+    if (!Array.isArray(input.filters)) input.filters = [];
+    if (/商品|产品|成品/.test(text) && /inventory|stock/.test(input.pageId)) {
+      input.filters.push({ field: 'isFinishedGoods', op: 'eq', value: true });
+    }
+    if (input.intent === 'extrema' && !Array.isArray(input.sort)) {
+      input.sort = [{ field: /库存|商品|产品|成品|物料|材料/.test(text) ? 'stockQuantity' : 'count', direction: /最高|最多|最大/.test(text) ? 'desc' : 'asc' }];
+    }
+    if (input.intent === 'extrema' && !input.limit) input.limit = 1;
+    return input;
+  };
+
+  const queryAgentData = (request = {}) => {
+    const input = normalizeBusinessQueryRequest(request);
+    const datasets = getBusinessAgentDatasets();
+    const dataset = datasets[input.pageId];
+    if (!dataset) {
+      return {
+        ok: false,
+        skillId: 'business.queryPageData',
+        pageId: input.pageId,
+        intent: input.intent || 'list',
+        data: [],
+        rowCount: 0,
+        summary: `页面 ${input.pageId || '-'} 暂未接入结构化取数。`,
+      };
+    }
+    return queryAgentRows({
+      pageId: input.pageId,
+      entity: input.entity || dataset.entity,
+      rows: dataset.rows,
+      request: input,
+      defaultFields: dataset.defaultFields,
+      fieldAliases: dataset.fieldAliases || {},
+    });
+  };
 
   const parseInventoryQuantity = (value) => {
     const match = String(value || '').match(/-?\d+(?:\.\d+)?/);
@@ -6422,7 +6525,15 @@ import { createBusinessPageShared } from './shared';
     return '';
   };
 
-  App.businessPages = { render, createFormulaByAgent, getAgentContext, answerQuestion };
+  App.businessPages = {
+    render,
+    createFormulaByAgent,
+    getAgentContext,
+    answerQuestion,
+    queryAgentData,
+    inspectAgentPage,
+    getAgentManifestPages: getBusinessAgentManifestPages,
+  };
   App.permissions = {
     canCurrentUserViewPage: canUserViewPage,
     canCurrentUserEditPage: canUserEditPage,

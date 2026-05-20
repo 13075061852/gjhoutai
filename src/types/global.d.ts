@@ -11,7 +11,7 @@ declare global {
       id: string;
       username: string;
       displayName: string;
-      role: string;
+      department: string;
       mustChangePassword: boolean;
     };
     aiCallAnalysis?: LegacyLifecycleModule;

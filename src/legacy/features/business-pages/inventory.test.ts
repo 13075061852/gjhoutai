@@ -24,9 +24,9 @@ describe('inventory normalization', () => {
     ]);
   });
 
-  it('uses default rows when stored data is empty', () => {
-    expect(normalizeInventoryRows([])).toHaveLength(13);
-    expect(normalizeInventoryRows(null)).toHaveLength(13);
+  it('keeps empty cloud state empty instead of injecting sample rows', () => {
+    expect(normalizeInventoryRows([])).toEqual([]);
+    expect(normalizeInventoryRows(null)).toEqual([]);
   });
 
   it('merges stored categories with categories from material rows', () => {

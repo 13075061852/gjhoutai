@@ -37,7 +37,6 @@ import { getLegacyApp } from '../core/app-context';
     订单: 'order-management',
     开单打印: 'invoice-print',
     开单: 'invoice-print',
-    销售库存: 'sales-stock',
     库存管理: 'inventory-management',
     库存: 'inventory-management',
     原材料库存: 'inventory-management',
@@ -54,9 +53,7 @@ import { getLegacyApp } from '../core/app-context';
     人员: 'personnel-archive',
     权限管理: 'permission-management',
     权限: 'permission-management',
-    审计日志: 'audit-log',
-    审计: 'audit-log',
-    日志: 'audit-log',
+    日志: 'ai-call-analysis',
   };
 
   const nowText = () => new Date().toLocaleString('zh-CN', { hour12: false });
@@ -322,7 +319,7 @@ import { getLegacyApp } from '../core/app-context';
   const hasOpenPageIntent = (prompt) => {
     const text = String(prompt || '');
     if (/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|统计|当前|现在)/.test(text)) return false;
-    return /(?:打开|进入|切换到|跳转到|转到|去).*(?:页面|面板|中心|档案|管理|计划|库存|日志|仪表盘|助手|分析|配置|主题|技能|调用|费用|订单|客户|供应商|人员|权限|审计|数据源|生产|配方|销售|开单|抠图|图谱|物性)/.test(text)
+    return /(?:打开|进入|切换到|跳转到|转到|去).*(?:页面|面板|中心|档案|管理|计划|库存|日志|仪表盘|助手|分析|配置|主题|技能|调用|费用|订单|客户|供应商|人员|权限|数据源|生产|配方|销售|开单|抠图|图谱|物性)/.test(text)
       || /查看.*(?:页面|面板|中心|档案|管理页|计划页|库存页|日志页|仪表盘|配置页)/.test(text);
   };
 
@@ -391,7 +388,205 @@ import { getLegacyApp } from '../core/app-context';
     return String(normalized || '');
   };
 
+  const buildProjectManifest = () => {
+    const pages = Object.entries(constants.PAGE_DEFS || {}).map(([pageId, def]) => ({
+      pageId,
+      title: def?.title || pageId,
+      desc: def?.desc || '',
+      entity: '',
+      fields: [],
+      skills: ['project.inspectPage'],
+    }));
+    const businessPages = App.businessPages?.getAgentManifestPages?.() || [];
+    const byId = new Map(pages.map((page) => [page.pageId, page]));
+    businessPages.forEach((page) => {
+      byId.set(page.pageId, {
+        ...(byId.get(page.pageId) || {}),
+        ...page,
+      });
+    });
+    return {
+      ok: true,
+      systemName: '广俊塑料科技后台管理系统',
+      strategy: '先读取页面能力地图，再按用户问题选择必要页面、字段、筛选和技能；不要默认读取全量数据。',
+      pages: [...byId.values()],
+      relations: [
+        { from: 'formula-management', to: 'inventory-management', desc: '配方组分来自库存材料，库存状态影响配方可排产风险。' },
+        { from: 'order-management', to: 'production-plan', desc: '订单交期和状态驱动生产计划。' },
+        { from: 'inventory-management', to: 'supplier-archive', desc: '库存材料关联供应商来源。' },
+        { from: 'raw-material-procurement', to: 'supplier-archive', desc: '采购记录关联供应商档案。' },
+        { from: 'property-analysis', to: 'spectrum-analysis', desc: '物性数据和图谱图片可按型号/批次联合分析。' },
+      ],
+      skills: [
+        'project.getManifest',
+        'project.inspectPage',
+        'project.finalAnswerCheck',
+        'business.queryPageData',
+        'property.searchRows',
+        'spectrum.manageImages',
+        'analysis.buildJointPackage',
+        'formula.createRecipe',
+        'assistant.openPage',
+      ],
+    };
+  };
+
   const createSkillRegistry = () => [
+    {
+      id: 'project.getManifest',
+      title: '读取项目能力地图',
+      module: '项目管家',
+      icon: 'ti-map',
+      level: '查询型',
+      summary: '返回系统页面、页面用途、可查实体、字段、技能和跨页面关系；不返回业务明细数据。',
+      inputSpec: '{ "includeFields": true }',
+      outputSpec: '{ "ok": true, "pages": [{ "pageId": "...", "title": "...", "fields": [] }], "relations": [] }',
+      paramDocs: [
+        ['includeFields', '是否包含页面可查字段。默认 true', '可选'],
+      ],
+      resultDocs: [
+        ['pages', '项目页面能力地图'],
+        ['relations', '页面之间的数据关系'],
+        ['skills', '可调用项目技能列表'],
+      ],
+      examples: ['读取项目说明书', '这个系统有哪些页面能力'],
+      infer(prompt) {
+        if (/(?:项目|系统|网站|页面|功能|说明书|能力地图|有哪些模块|做什么)/.test(String(prompt || ''))) {
+          return { skillId: this.id, confidence: 0.5, input: { includeFields: true } };
+        }
+        return null;
+      },
+      async handler() {
+        const manifest = buildProjectManifest();
+        return {
+          ok: true,
+          message: '已读取项目能力地图。',
+          details: [`页面数：${manifest.pages.length}`, `关系数：${manifest.relations.length}`],
+          data: manifest,
+        };
+      },
+    },
+    {
+      id: 'project.inspectPage',
+      title: '查看页面数据结构',
+      module: '项目管家',
+      icon: 'ti-schema',
+      level: '查询型',
+      summary: '返回指定页面的数据实体、字段、记录数和字段样例，不返回全量业务数据。',
+      inputSpec: '{ "pageId": "inventory-management" }',
+      outputSpec: '{ "ok": true, "pageId": "...", "entity": "...", "fields": [], "rowCount": 0 }',
+      paramDocs: [
+        ['pageId', '目标页面 ID', '必填'],
+      ],
+      resultDocs: [
+        ['entity', '页面核心数据实体'],
+        ['fields', '可查询字段'],
+        ['rowCount', '当前记录数'],
+      ],
+      examples: ['查看库存管理的数据结构', '检查配方管理有哪些字段'],
+      infer() {
+        return null;
+      },
+      async handler(input = {}) {
+        const pageId = String(input.pageId || '').trim();
+        const inspected = App.businessPages?.inspectAgentPage?.(pageId);
+        if (inspected) {
+          return {
+            ok: true,
+            message: inspected.summary || `已读取 ${pageId} 页面结构。`,
+            data: inspected,
+          };
+        }
+        const def = constants.PAGE_DEFS?.[pageId];
+        if (!def) return { ok: false, message: `没有找到页面：${pageId}` };
+        return {
+          ok: true,
+          message: `页面 ${def.title || pageId} 目前只有说明书信息，暂无结构化数据接口。`,
+          data: { pageId, title: def.title || pageId, desc: def.desc || '', fields: [], rowCount: 0 },
+        };
+      },
+    },
+    {
+      id: 'project.finalAnswerCheck',
+      title: '复盘答案充分性',
+      module: '项目管家',
+      icon: 'ti-checkup-list',
+      level: '上下文型',
+      summary: 'Agent Loop 内部复盘步骤：检查已取数据是否足够回答用户问题，不直接读取业务明细。',
+      inputSpec: '{ "question": "用户问题", "observations": [] }',
+      outputSpec: '{ "ok": true, "enough": true, "message": "..." }',
+      paramDocs: [
+        ['question', '用户原始问题', '必填'],
+        ['observations', '已取回的结构化 Observation', '可选'],
+      ],
+      resultDocs: [
+        ['enough', '是否足够生成最终答案'],
+        ['message', '复盘结论'],
+      ],
+      examples: ['复盘当前取数是否足够回答'],
+      infer() {
+        return null;
+      },
+      async handler(input = {}) {
+        const observations = Array.isArray(input.observations) ? input.observations : [];
+        return {
+          ok: true,
+          message: observations.length ? '已有 Observation，可由 Agent Planner 判断是否输出最终答案。' : '尚无 Observation，通常需要先读取项目能力地图或页面数据。',
+          data: {
+            enough: observations.some((item) => item?.rowCount || item?.data),
+            observationCount: observations.length,
+          },
+        };
+      },
+    },
+    {
+      id: 'business.queryPageData',
+      title: '查询业务页面数据',
+      module: '业务数据',
+      icon: 'ti-table-search',
+      level: '查询型',
+      summary: '按页面、实体、意图、筛选、排序、字段和范围查询业务数据；只返回回答问题所需的裁剪数据。',
+      inputSpec: '{ "pageId": "inventory-management", "intent": "count | list | filter | extrema | compare | detail | aggregate", "entity": "inventoryItem", "filters": [{ "field": "type", "op": "contains", "value": "成品" }], "sort": [{ "field": "stockQuantity", "direction": "asc" }], "limit": 1, "fields": ["name", "stockQuantity", "status"], "scope": "allData" }',
+      outputSpec: '{ "ok": true, "pageId": "...", "intent": "extrema", "rowCount": 1, "data": [], "summary": "..." }',
+      paramDocs: [
+        ['pageId', '目标页面 ID，例如 inventory-management、formula-management', '必填'],
+        ['intent', '查询意图：count/list/filter/extrema/detail/aggregate 等', '必填'],
+        ['filters', '字段筛选条件，支持 contains/eq/in/gt/gte/lt/lte', '可选'],
+        ['sort', '排序规则，extrema 通常按比较字段升序或降序', '可选'],
+        ['fields', '返回字段白名单，只取回答需要的字段', '可选'],
+        ['limit', '返回行数上限，extrema 默认 1', '可选'],
+      ],
+      resultDocs: [
+        ['rowCount', '命中数据行数或返回数据行数'],
+        ['data', '裁剪后的结构化数据'],
+        ['summary', '取数范围和处理说明'],
+      ],
+      examples: ['查询库存最低的成品商品', '列出当前系统配方', '统计系统有几个供应商'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        if (!/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|当前|现在|查看|列举|列出|展示|罗列|最低|最少|最小|最高|最多|最大|库存|配方|订单|供应商|客户|人员|账号)/.test(text)) return null;
+        return { skillId: this.id, confidence: 0.66, input: { question: text } };
+      },
+      async handler(input = {}, meta = {}) {
+        if (!App.businessPages?.queryAgentData) {
+          return { ok: false, message: '业务页面尚未接入结构化取数接口。' };
+        }
+        const data = App.businessPages.queryAgentData({
+          question: meta.prompt || input.question || input.query || '',
+          ...input,
+        });
+        return {
+          ok: data.ok !== false,
+          message: data.summary || '业务页面数据已返回。',
+          details: [
+            `页面：${data.pageId || input.pageId || '-'}`,
+            `意图：${data.intent || input.intent || '-'}`,
+            `命中：${data.rowCount ?? 0} 条`,
+          ],
+          data,
+        };
+      },
+    },
     {
       id: 'spectrum.manageImages',
       title: '管理图谱数据',
@@ -1259,6 +1454,7 @@ import { getLegacyApp } from '../core/app-context';
     init,
     render,
     getSkillRegistry,
+    getProjectManifest: buildProjectManifest,
     getAiProtocolContext,
     routePrompt,
     executePrompt,

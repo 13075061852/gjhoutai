@@ -76,11 +76,6 @@ import { ensureLegacyApp } from './app-context';
         eyebrow: '单据中心',
         desc: '面向出库、对账和随货资料的开单打印工作台，支持模板、批量和异常提示。',
       },
-      'sales-stock': {
-        title: '销售库存',
-        eyebrow: '库存协同',
-        desc: '连接销售订单与可用库存，提前暴露缺货、锁库和周转压力。',
-      },
       'formula-management': {
         title: '配方管理',
         eyebrow: '工艺资产',
@@ -160,11 +155,6 @@ import { ensureLegacyApp } from './app-context';
         title: '权限管理',
         eyebrow: '系统安全',
         desc: '围绕角色、菜单、数据范围和审批动作建立可追踪的权限体系。',
-      },
-      'audit-log': {
-        title: '审计日志',
-        eyebrow: '操作追踪',
-        desc: '记录关键操作、配置变更、登录访问和异常事件，方便追溯。',
       },
       'theme-settings': {
         title: '主题设置',

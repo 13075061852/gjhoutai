@@ -133,7 +133,7 @@
 .ti-category,.ti-tags{--ip-icon:var(--ip-tag)}
 .ti-chart-bar,.ti-chart-dots,.ti-chart-dots-3{--ip-icon:var(--ip-bar-chart)}
 .ti-chart-bar-off,.ti-database-off{--ip-icon:var(--ip-database)}
-.ti-check,.ti-checks,.ti-checklist,.ti-square-check{--ip-icon:var(--ip-check)}
+.ti-check,.ti-checks,.ti-checklist,.ti-checkup-list,.ti-square-check{--ip-icon:var(--ip-check)}
 .ti-chevron-down{--ip-icon:var(--ip-chevron-down)}
 .ti-chevron-left{--ip-icon:var(--ip-arrow-left)}
 .ti-chevron-right{--ip-icon:var(--ip-arrow-right)}
@@ -153,7 +153,7 @@
 .ti-file-description,.ti-file-text,.ti-file-type-docx{--ip-icon:var(--ip-file)}
 .ti-file-plus{--ip-icon:var(--ip-add)}
 .ti-file-search,.ti-photo-search{--ip-icon:var(--ip-search)}
-.ti-file-spreadsheet,.ti-table,.ti-table-options{--ip-icon:var(--ip-table)}
+.ti-file-spreadsheet,.ti-table,.ti-table-options,.ti-table-search{--ip-icon:var(--ip-table)}
 .ti-flask-2,.ti-test-pipe{--ip-icon:var(--ip-flask)}
 .ti-globe,.ti-world{--ip-icon:var(--ip-globe)}
 .ti-history,.ti-restore,.ti-refresh,.ti-loader-2{--ip-icon:var(--ip-refresh)}
@@ -163,6 +163,7 @@
 .ti-layout-sidebar-right-collapse{--ip-icon:var(--ip-arrow-right)}
 .ti-layout-sidebar-right-expand{--ip-icon:var(--ip-arrow-left)}
 .ti-lock{--ip-icon:var(--ip-lock)}
+.ti-map{--ip-icon:var(--ip-globe)}
 .ti-maximize{--ip-icon:var(--ip-maximize)}
 .ti-medal,.ti-medal-2{--ip-icon:var(--ip-medal)}
 .ti-message-2-cog{--ip-icon:var(--ip-ai)}
@@ -182,6 +183,7 @@
 .ti-route{--ip-icon:var(--ip-route)}
 .ti-scale{--ip-icon:var(--ip-scale)}
 .ti-search{--ip-icon:var(--ip-search)}
+.ti-schema{--ip-icon:var(--ip-code-tree)}
 .ti-send-2,.ti-share,.ti-upload{--ip-icon:var(--ip-send)}
 .ti-shield-check{--ip-icon:var(--ip-shield)}
 .ti-shopping-cart{--ip-icon:var(--ip-cart)}

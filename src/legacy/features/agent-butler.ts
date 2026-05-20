@@ -14,6 +14,29 @@ import { getLegacyApp } from '../core/app-context';
   const getPageCatalog = () => Object.entries(App.constants?.PAGE_DEFS || {})
     .map(([pageId, def]) => `${def?.title || pageId}（${pageId}）：${def?.desc || '待补充说明'}`)
     .join('\n');
+  const getProjectManifest = () => {
+    const pages = Object.entries(App.constants?.PAGE_DEFS || {}).map(([pageId, def]) => ({
+      pageId,
+      title: def?.title || pageId,
+      desc: def?.desc || '',
+      entity: '',
+      fields: [],
+      skills: ['project.inspectPage'],
+    }));
+    const businessPages = App.businessPages?.getAgentManifestPages?.() || [];
+    const byId = new Map(pages.map((page) => [page.pageId, page]));
+    businessPages.forEach((page) => byId.set(page.pageId, { ...(byId.get(page.pageId) || {}), ...page }));
+    return {
+      systemName: '广俊塑料科技后台管理系统',
+      pages: [...byId.values()],
+      relations: [
+        { from: 'formula-management', to: 'inventory-management', desc: '配方组分和库存材料联动。' },
+        { from: 'order-management', to: 'production-plan', desc: '订单驱动生产计划。' },
+        { from: 'inventory-management', to: 'supplier-archive', desc: '库存材料关联供应商。' },
+        { from: 'property-analysis', to: 'spectrum-analysis', desc: '物性与图谱可按型号/批次联合分析。' },
+      ],
+    };
+  };
   const isPageGuideQuestion = (question = '') => {
     const text = String(question || '').trim();
     if (!text) return false;
@@ -27,7 +50,7 @@ import { getLegacyApp } from '../core/app-context';
   const PAGE_RESOURCE_RULES = [
     { pageIds: ['personnel-archive', 'permission-management'], label: '账号/人员/权限', patterns: [/账号|账户|用户|登录|人员|员工|部门|角色|权限|在线|在岗/] },
     { pageIds: ['formula-management'], label: '配方/工艺', patterns: [/配方|工艺|组分|比例|版本|实验版本|成本/] },
-    { pageIds: ['order-management', 'invoice-print', 'sales-stock'], label: '销售/订单/库存履约', patterns: [/订单|交付|交期|销售|开单|锁库|可售/] },
+    { pageIds: ['order-management', 'invoice-print'], label: '销售/订单履约', patterns: [/订单|交付|交期|销售|开单/] },
     { pageIds: ['inventory-management', 'supplier-archive', 'raw-material-procurement'], label: '库存/供应商/采购', patterns: [/库存|商品|产品|材料|原料|成品|仓库|供应商|采购|供货|进货/] },
     { pageIds: ['customer-archive'], label: '客户经营', patterns: [/客户|联系人|交易|信用|客群|需求/] },
     { pageIds: ['production-plan'], label: '生产排程', patterns: [/生产|排产|产线|批次|质检|待排|已完成/] },
@@ -36,7 +59,7 @@ import { getLegacyApp } from '../core/app-context';
     { pageIds: ['image-cutout'], label: '抠图处理', patterns: [/抠图|去背|透明|裁剪|背景/] },
     { pageIds: ['project-skills', 'ai-call-analysis', 'ai-config'], label: 'AI 配置/技能/成本', patterns: [/ai|模型|技能|调用|token|费用|配置|openrouter|lm studio|apimart/] },
     { pageIds: ['dashboard'], label: '经营总览', patterns: [/仪表盘|首页|总览|风险|趋势|待办|概览/] },
-    { pageIds: ['theme-settings', 'audit-log'], label: '系统体验/审计', patterns: [/主题|皮肤|审计|日志|操作记录/] },
+    { pageIds: ['theme-settings'], label: '系统体验', patterns: [/主题|皮肤/] },
   ];
 
   const getResourceRoutingContext = (question = '', activePageId = '') => {
@@ -143,7 +166,7 @@ import { getLegacyApp } from '../core/app-context';
       id: 'project',
       label: '项目管家',
       pages: [],
-      patterns: [/项目|网站|站点|本站|应用|平台|后台|系统|功能|页面|菜单|配置|主题|技能|调用|执行|怎么用|能做什么|管家|agent|助手|打开|进入|切换|跳转|档案|客户|供应商|人员|员工|账号|账户|用户|部门|订单|库存|生产|配方|计划|权限|审计|数据源|仪表盘|几个|多少|数量|总数|详细|说明|展开|继续|具体|多说|讲讲|介绍|梳理|总结/],
+      patterns: [/项目|网站|站点|本站|应用|平台|后台|系统|功能|页面|菜单|配置|主题|技能|调用|执行|怎么用|能做什么|管家|agent|助手|打开|进入|切换|跳转|档案|客户|供应商|人员|员工|账号|账户|用户|部门|订单|库存|生产|配方|计划|权限|数据源|仪表盘|几个|多少|数量|总数|详细|说明|展开|继续|具体|多说|讲讲|介绍|梳理|总结/],
     },
   ];
 
@@ -405,6 +428,7 @@ import { getLegacyApp } from '../core/app-context';
     compressContext,
     buildContext,
     buildAgentPrompt,
+    getProjectManifest,
     answerQuestion: (question = '', options = {}) => App.businessPages?.answerQuestion?.(question, options) || '',
     getImages,
   };

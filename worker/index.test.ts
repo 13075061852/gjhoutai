@@ -48,6 +48,7 @@ class FakeD1Database {
   usersByUsername = new Map<string, any>();
   sessions = new Map<string, any>();
   loginAttempts = new Map<string, any>();
+  appState = new Map<string, string>();
   sharedConfig: any = null;
 
   prepare(sql: string) {
@@ -80,6 +81,7 @@ class FakeD1Database {
         username: user.username,
         display_name: user.display_name,
         role: user.role,
+        department: user.department,
         must_change_password: user.must_change_password,
         is_active: user.is_active,
       } as T;
@@ -89,6 +91,10 @@ class FakeD1Database {
     }
     if (sql.includes('SELECT ciphertext, iv FROM shared_config')) {
       return this.sharedConfig as T | null;
+    }
+    if (sql.includes('SELECT value FROM app_state WHERE key')) {
+      const value = this.appState.get(String(values[0]));
+      return (value == null ? null : { value }) as T | null;
     }
     return null;
   }
@@ -121,6 +127,9 @@ class FakeD1Database {
     }
     if (sql.includes('INSERT INTO shared_config')) {
       this.sharedConfig = { ciphertext: String(values[0]), iv: String(values[1]) };
+    }
+    if (sql.includes('INSERT INTO app_state')) {
+      this.appState.set(String(values[0]), String(values[1]));
     }
   }
 }
@@ -170,6 +179,7 @@ describe('worker security controls', () => {
       username: 'sales',
       display_name: 'Sales',
       role: 'sales_manager',
+      department: '销售部',
       password_hash: 'unused',
       password_salt: 'unused',
       must_change_password: 0,
@@ -195,6 +205,7 @@ describe('worker security controls', () => {
       username: 'admin',
       display_name: 'Admin',
       role: 'system_admin',
+      department: '系统管理员',
       password_hash: 'unused',
       password_salt: 'unused',
       must_change_password: 0,
@@ -219,6 +230,7 @@ describe('worker security controls', () => {
       username: 'lab',
       display_name: 'Lab',
       role: 'lab_engineer',
+      department: '测试部',
       password_hash: 'unused',
       password_salt: 'unused',
       must_change_password: 0,
@@ -243,6 +255,7 @@ describe('worker security controls', () => {
       username: 'lab',
       display_name: 'Lab',
       role: 'lab_engineer',
+      department: '测试部',
       password_hash: 'unused',
       password_salt: 'unused',
       must_change_password: 0,
@@ -260,6 +273,48 @@ describe('worker security controls', () => {
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="payload.html"');
   });
 
+  it('keeps production and formula state shared across users', async () => {
+    const env = createEnv();
+    env.DB.addUser({
+      id: 'prod-1',
+      username: 'prod',
+      display_name: 'Production',
+      role: 'warehouse_manager',
+      department: '生产部',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    env.DB.addUser({
+      id: 'admin-1',
+      username: 'admin',
+      display_name: 'Admin',
+      role: 'system_admin',
+      department: '系统管理员',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    await env.DB.addSession('prod-1', 'prod-token');
+    await env.DB.addSession('admin-1', 'admin-token');
+
+    const writeResponse = await worker.fetch(authedRequest('/api/state/gjh-formula-recipes-v1', 'prod-token', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: JSON.stringify([{ id: 'FM-REAL', name: '真实配方' }]) }),
+    }), env as any);
+    expect(writeResponse.status).toBe(200);
+
+    const readResponse = await worker.fetch(authedRequest('/api/state/gjh-formula-recipes-v1', 'admin-token'), env as any);
+    expect(readResponse.status).toBe(200);
+    await expect(readResponse.json()).resolves.toEqual({
+      value: JSON.stringify([{ id: 'FM-REAL', name: '真实配方' }]),
+    });
+    expect([...env.DB.appState.keys()]).toEqual(['gjh-formula-recipes-v1']);
+  });
+
   it('locks login attempts after repeated failures', async () => {
     const env = createEnv();
     const salt = 'test-salt';
@@ -268,6 +323,7 @@ describe('worker security controls', () => {
       username: 'operator',
       display_name: 'Operator',
       role: 'warehouse_manager',
+      department: '生产部主管',
       password_hash: await hashPassword('correct-password', salt),
       password_salt: salt,
       must_change_password: 0,

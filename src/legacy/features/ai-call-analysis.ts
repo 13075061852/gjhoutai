@@ -206,15 +206,9 @@ import { getLegacyApp } from '../core/app-context';
     const parts = value.split('/').map((item) => item.trim()).filter(Boolean);
     return parts.length > 1 ? parts[parts.length - 1] : (value || '未选择模型');
   };
-  const ACTOR_ROLE_LABELS = {
-    system_admin: '系统管理员',
-    sales_manager: '销售主管',
-    lab_engineer: '实验室工程师',
-    warehouse_manager: '生产部主管',
-  };
   const getActorLabel = (item) => item?.actorUsername || item?.actorDisplayName || '历史记录';
-  const getActorSubLabel = (item) => ACTOR_ROLE_LABELS[item?.actorRole]
-    || (item?.actorUsername ? '未标注角色' : '未记录用户');
+  const getActorSubLabel = (item) => item?.actorDepartment || item?.actorRole
+    || (item?.actorUsername ? '未标注部门' : '未记录用户');
   const getSourceLabel = (source) => ({
     chat: '右侧聊天',
     'config-test': '配置测试',
@@ -242,7 +236,7 @@ import { getLegacyApp } from '../core/app-context';
       actorUserId: String(entry.actorUserId || currentUser.id || ''),
       actorUsername: String(entry.actorUsername || currentUser.username || ''),
       actorDisplayName: String(entry.actorDisplayName || currentUser.displayName || ''),
-      actorRole: String(entry.actorRole || currentUser.role || ''),
+      actorDepartment: String(entry.actorDepartment || currentUser.department || ''),
       at: entry.at || endedAt,
       startedAt: entry.startedAt || entry.at || endedAt,
       endedAt,

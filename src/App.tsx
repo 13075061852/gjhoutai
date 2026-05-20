@@ -4,11 +4,13 @@ import { authClient, type AppUser } from './services/auth';
 import { hydrateCloudBackedLocalStorage, installCloudBackedLocalStorageSync } from './services/cloud-sync';
 import { mountIconParkAdapter } from './utils/iconParkAdapter';
 
-const ROLE_LABELS: Record<AppUser['role'], string> = {
-  system_admin: '系统管理员',
-  sales_manager: '销售主管',
-  lab_engineer: '实验室工程师',
-  warehouse_manager: '生产部主管',
+const DEPARTMENT_LABELS: Record<AppUser['department'], string> = {
+  系统管理员: '系统管理员',
+  研发部: '研发部',
+  测试部: '测试部',
+  销售部: '销售部',
+  生产部: '生产部',
+  生产部主管: '生产部主管',
 };
 
 type AuthParticle = {
@@ -310,7 +312,7 @@ function App() {
         menu.innerHTML = `
           <div class="top-auth-meta">
             <strong>${user.username}</strong>
-            <span>${ROLE_LABELS[user.role]}</span>
+            <span>${DEPARTMENT_LABELS[user.department]}</span>
           </div>
         `;
         const avatarInput = document.createElement('input');

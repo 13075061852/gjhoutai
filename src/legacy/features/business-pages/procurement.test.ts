@@ -34,10 +34,10 @@ describe('procurement normalization', () => {
     expect(normalized.purchaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('uses default rows when stored data is empty', () => {
+  it('keeps empty cloud state empty instead of injecting sample rows', () => {
     const normalizeProcurements = createNormalizeProcurements(normalizeProcurement);
 
-    expect(normalizeProcurements([])).toHaveLength(10);
-    expect(normalizeProcurements(null)).toHaveLength(10);
+    expect(normalizeProcurements([])).toEqual([]);
+    expect(normalizeProcurements(null)).toEqual([]);
   });
 });

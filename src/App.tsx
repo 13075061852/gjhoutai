@@ -251,8 +251,11 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
 function App() {
   const [user, setUser] = useState<AppUser | null | undefined>(undefined);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [hasSessionOnLoad] = useState(() => authClient.hasSessionMarker());
   useEffect(() => {
-    void authClient.me().then(setUser).catch(() => setUser(null));
+    void authClient.me().then(setUser).catch(() => {
+      if (!authClient.hasSessionMarker()) setUser(null);
+    });
   }, []);
 
   useEffect(() => {
@@ -360,7 +363,6 @@ function App() {
           await authClient.logout();
           setUser(null);
           setAvatarUrl(null);
-          window.location.reload();
         });
         menu.append(avatarButton, resetAvatarButton, logoutButton, avatarInput);
         accountButton.addEventListener('click', () => {
@@ -389,6 +391,7 @@ function App() {
     };
   }, [user, avatarUrl]);
 
+  if (user === undefined && hasSessionOnLoad) return <LegacyShell booting={false} />;
   if (user === undefined) return (
     <main className="auth-shell">
       <section className="auth-brand-panel" aria-hidden="true">

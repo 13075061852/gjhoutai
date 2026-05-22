@@ -1690,7 +1690,7 @@ import { createBusinessPageShared } from './shared';
   const departmentPageAccess = {
     系统管理员: null,
     研发部: new Set(['dashboard', 'project-skills', 'apimart-media', 'ai-call-analysis', 'theme-settings']),
-    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'image-cutout', 'inventory-management']),
+    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'data-recognition', 'image-cutout', 'inventory-management']),
     销售部: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'customer-archive', 'customer-detail']),
     生产部: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
     生产部主管: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
@@ -1711,6 +1711,7 @@ import { createBusinessPageShared } from './shared';
     'personnel-archive': ['系统管理员'],
     'property-analysis': ['测试部', '系统管理员'],
     'spectrum-analysis': ['测试部', '系统管理员'],
+    'data-recognition': ['测试部', '系统管理员'],
     'image-cutout': ['测试部', '系统管理员'],
     'project-skills': ['研发部', '系统管理员'],
     'apimart-media': ['研发部', '系统管理员'],

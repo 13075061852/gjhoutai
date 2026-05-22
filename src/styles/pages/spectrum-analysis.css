@@ -925,6 +925,67 @@
       border-radius:6px;
       background:#fff;
     }
+    .spectrum-card-image.is-image-pending,
+    .spectrum-detail-image.is-image-pending,
+    .spectrum-compact-detail-image.is-image-pending,
+    .spectrum-preview-thumb.is-image-pending,
+    .spectrum-preview-image-frame.is-image-pending{
+      position:relative;
+      overflow:hidden;
+      background:#f3f7fb;
+    }
+    .spectrum-card-image.is-image-pending > img,
+    .spectrum-detail-image.is-image-pending > img,
+    .spectrum-compact-detail-image.is-image-pending > img,
+    .spectrum-preview-thumb.is-image-pending > img,
+    .spectrum-preview-image-frame.is-image-pending > img{
+      opacity:0;
+    }
+    .spectrum-card-image.is-image-pending::before,
+    .spectrum-detail-image.is-image-pending::before,
+    .spectrum-compact-detail-image.is-image-pending::before,
+    .spectrum-preview-thumb.is-image-pending::before,
+    .spectrum-preview-image-frame.is-image-pending::before{
+      content:"";
+      position:absolute;
+      inset:8px;
+      z-index:1;
+      border-radius:6px;
+      background:
+        linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent) -120% 0/60% 100% no-repeat,
+        linear-gradient(#dbe5f0 0 0) 14px 16px/42% 8px no-repeat,
+        linear-gradient(#e8eef6 0 0) 14px 34px/68% 8px no-repeat,
+        linear-gradient(#e8eef6 0 0) 14px 52px/54% 8px no-repeat,
+        #fff;
+      animation:spectrum-image-pending 1.35s ease-in-out infinite;
+      pointer-events:none;
+    }
+    .spectrum-card-image.is-image-pending::after,
+    .spectrum-detail-image.is-image-pending::after,
+    .spectrum-compact-detail-image.is-image-pending::after,
+    .spectrum-preview-thumb.is-image-pending::after,
+    .spectrum-preview-image-frame.is-image-pending::after{
+      content:"图片加载中";
+      position:absolute;
+      left:50%;
+      bottom:14px;
+      z-index:2;
+      max-width:calc(100% - 24px);
+      color:#64748b;
+      font-size:12px;
+      font-weight:850;
+      line-height:1.2;
+      text-align:center;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      transform:translateX(-50%);
+      pointer-events:none;
+    }
+    @keyframes spectrum-image-pending{
+      0%{background-position:-120% 0,14px 16px,14px 34px,14px 52px,0 0}
+      100%{background-position:220% 0,14px 16px,14px 34px,14px 52px,0 0}
+    }
     .spectrum-card-image.is-image-missing,
     .spectrum-detail-image.is-image-missing,
     .spectrum-compact-detail-image.is-image-missing,

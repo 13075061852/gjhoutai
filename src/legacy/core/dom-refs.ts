@@ -22,6 +22,7 @@ import { ensureLegacyApp } from './app-context';
     aiPageSection: qs('[data-page-section="ai-config"]'),
     propertyAnalysisPageSection: qs('[data-page-section="property-analysis"]'),
     spectrumAnalysisPageSection: qs('[data-page-section="spectrum-analysis"]'),
+    dataRecognitionPageSection: qs('[data-page-section="data-recognition"]'),
     imageCutoutPageSection: qs('[data-page-section="image-cutout"]'),
     themeSettingsPageSection: qs('[data-page-section="theme-settings"]'),
     projectSkillPageSection: qs('[data-page-section="project-skills"]'),

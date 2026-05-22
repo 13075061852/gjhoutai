@@ -153,7 +153,7 @@
 .ti-file-description,.ti-file-text,.ti-file-type-docx{--ip-icon:var(--ip-file)}
 .ti-file-plus{--ip-icon:var(--ip-add)}
 .ti-file-search,.ti-photo-search{--ip-icon:var(--ip-search)}
-.ti-file-spreadsheet,.ti-table,.ti-table-options,.ti-table-search{--ip-icon:var(--ip-table)}
+.ti-file-spreadsheet,.ti-table,.ti-table-import,.ti-table-options,.ti-table-search{--ip-icon:var(--ip-table)}
 .ti-flask-2,.ti-test-pipe{--ip-icon:var(--ip-flask)}
 .ti-globe,.ti-world{--ip-icon:var(--ip-globe)}
 .ti-history,.ti-restore,.ti-refresh,.ti-loader-2{--ip-icon:var(--ip-refresh)}

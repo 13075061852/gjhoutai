@@ -297,6 +297,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       item.image = image;
       document.querySelectorAll(`[data-spectrum-image-id="${CSS.escape(id)}"]`).forEach((node) => {
         if (node instanceof HTMLImageElement) {
+          setSpectrumImagePending(node, false);
           setSpectrumImageMissing(node, false);
           node.src = image;
         }
@@ -317,13 +318,28 @@ import { cloudStorage } from '../../services/cloud-storage';
   ].join(','));
 
   const setSpectrumImageMissing = (image, missing) => {
+    if (missing) image.classList.remove('is-image-pending');
     image.classList.toggle('is-image-missing', missing);
-    getSpectrumImageFrame(image)?.classList.toggle('is-image-missing', missing);
+    const frame = getSpectrumImageFrame(image);
+    frame?.classList.toggle('is-image-missing', missing);
+    if (missing) frame?.classList.remove('is-image-pending');
+  };
+
+  const setSpectrumImagePending = (image, pending) => {
+    if (pending) image.classList.remove('is-image-missing');
+    image.classList.toggle('is-image-pending', pending);
+    const frame = getSpectrumImageFrame(image);
+    frame?.classList.toggle('is-image-pending', pending);
+    if (pending) frame?.classList.remove('is-image-missing');
   };
 
   const syncSpectrumImageState = (image) => {
     const id = image.getAttribute('data-spectrum-image-id') || '';
     const item = id ? state.items.find((entry) => entry.id === id) : null;
+    if (item?.imageStored && !item.image && image.getAttribute('src') === EMPTY_IMAGE_SRC) {
+      setSpectrumImagePending(image, true);
+      return;
+    }
     if (image.complete && image.naturalWidth === 0) {
       setSpectrumImageMissing(image, true);
       return;
@@ -337,8 +353,20 @@ import { cloudStorage } from '../../services/cloud-storage';
     root.querySelectorAll?.('img[data-spectrum-image-id]').forEach((image) => {
       if (!image.dataset.spectrumFallbackBound) {
         image.dataset.spectrumFallbackBound = 'true';
-        image.addEventListener('load', () => setSpectrumImageMissing(image, false));
-        image.addEventListener('error', () => setSpectrumImageMissing(image, true));
+        image.addEventListener('load', () => {
+          setSpectrumImagePending(image, false);
+          setSpectrumImageMissing(image, false);
+        });
+        image.addEventListener('error', () => {
+          const id = image.getAttribute('data-spectrum-image-id') || '';
+          const item = id ? state.items.find((entry) => entry.id === id) : null;
+          if (item?.imageStored && !item.image && image.getAttribute('src') === EMPTY_IMAGE_SRC) {
+            setSpectrumImagePending(image, true);
+            return;
+          }
+          setSpectrumImagePending(image, false);
+          setSpectrumImageMissing(image, true);
+        });
       }
       syncSpectrumImageState(image);
     });

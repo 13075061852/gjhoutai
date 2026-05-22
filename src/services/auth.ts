@@ -35,6 +35,17 @@ const clearSessionMarker = () => {
   if (typeof window !== 'undefined') localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
 };
 
+async function requestAuthMe(): Promise<AppUser | null> {
+  const response = await fetch(buildUrl('/api/auth/me'), {
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+  });
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) throw new Error(`auth_me_failed_${response.status}`);
+  const payload = await response.json() as { user?: AppUser };
+  return payload.user ?? null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
   const response = await fetch(buildUrl(path), {
     credentials: 'include',
@@ -49,10 +60,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
 }
 
 export const authClient = {
+  hasSessionMarker,
   async me(): Promise<AppUser | null> {
     if (!hasSessionMarker()) return null;
-    const payload = await request<{ user: AppUser }>('/api/auth/me');
-    const user = payload?.user ?? null;
+    const user = await requestAuthMe();
     if (!user) clearSessionMarker();
     return user;
   },

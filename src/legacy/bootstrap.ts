@@ -22,6 +22,7 @@ async function loadLegacyFeatures(): Promise<void> {
     import('./shell/navigation'),
     import('./features/property-analysis'),
     import('./features/spectrum-analysis'),
+    import('./features/data-recognition'),
     import('./features/image-cutout'),
     import('./features/theme-settings'),
     import('./features/config'),
@@ -46,6 +47,7 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
     App?.themeSettings?.init?.();
     App?.propertyAnalysis?.init?.();
     App?.spectrumAnalysis?.init?.();
+    App?.dataRecognition?.init?.();
     App?.imageCutout?.init?.();
     await App?.config?.init?.();
     App?.apimartMedia?.init?.();

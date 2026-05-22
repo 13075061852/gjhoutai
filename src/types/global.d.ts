@@ -19,6 +19,7 @@ declare global {
     animations?: LegacyLifecycleModule;
     chat?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;
+    dataRecognition?: LegacyLifecycleModule;
     imageCutout?: LegacyLifecycleModule;
     motionEffects?: LegacyLifecycleModule;
     navigation?: LegacyLifecycleModule;

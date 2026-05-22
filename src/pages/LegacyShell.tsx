@@ -6,6 +6,7 @@ const DIRECT_PAGE_SECTIONS = new Set([
   'ai-config',
   'property-analysis',
   'spectrum-analysis',
+  'data-recognition',
   'image-cutout',
   'theme-settings',
   'project-skills',
@@ -20,23 +21,26 @@ function getInitialPageId() {
   }
 }
 
-function getInitialLegacyMarkup() {
+function getInitialLegacyMarkup(booting = true) {
   const pageId = getInitialPageId();
   const sectionId = DIRECT_PAGE_SECTIONS.has(pageId) ? pageId : 'placeholder';
   const sectionPattern = new RegExp(`(<section class="[^"]*\\bpage-section)([^"]*" data-page-section="${sectionId}")`);
 
   let markup = legacyMarkup
     .replace(/\bpage-section active\b/g, 'page-section')
-    .replace('class="shell"', 'class="shell legacy-shell-booting"')
+    .replace('class="shell"', booting ? 'class="shell legacy-shell-booting"' : 'class="shell"')
     .replace(sectionPattern, '$1 active$2');
 
   if (pageId !== DEFAULT_PAGE_ID) {
-    markup = markup.replace('class="shell legacy-shell-booting"', 'class="shell legacy-shell-booting page-other"');
+    markup = markup.replace(
+      booting ? 'class="shell legacy-shell-booting"' : 'class="shell"',
+      booting ? 'class="shell legacy-shell-booting page-other"' : 'class="shell page-other"',
+    );
   }
 
   return markup;
 }
 
-export function LegacyShell() {
-  return <div dangerouslySetInnerHTML={{ __html: getInitialLegacyMarkup() }} />;
+export function LegacyShell({ booting = true }: { booting?: boolean }) {
+  return <div dangerouslySetInnerHTML={{ __html: getInitialLegacyMarkup(booting) }} />;
 }

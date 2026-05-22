@@ -233,6 +233,7 @@ const iconMap: Record<string, IconRenderer> = {
   'ti-square-check': Check,
   'ti-star': Star,
   'ti-table': Table,
+  'ti-table-import': Table,
   'ti-table-options': Table,
   'ti-table-search': Table,
   'ti-tags': Tag,

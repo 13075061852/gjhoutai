@@ -605,6 +605,32 @@
     body[data-theme="dark"] .spectrum-upload-progress-body span{
       color:var(--muted);
     }
+    body[data-theme="dark"] .spectrum-card-image.is-image-pending,
+    body[data-theme="dark"] .spectrum-detail-image.is-image-pending,
+    body[data-theme="dark"] .spectrum-compact-detail-image.is-image-pending,
+    body[data-theme="dark"] .spectrum-preview-thumb.is-image-pending,
+    body[data-theme="dark"] .spectrum-preview-image-frame.is-image-pending{
+      background:var(--surface-2);
+    }
+    body[data-theme="dark"] .spectrum-card-image.is-image-pending::before,
+    body[data-theme="dark"] .spectrum-detail-image.is-image-pending::before,
+    body[data-theme="dark"] .spectrum-compact-detail-image.is-image-pending::before,
+    body[data-theme="dark"] .spectrum-preview-thumb.is-image-pending::before,
+    body[data-theme="dark"] .spectrum-preview-image-frame.is-image-pending::before{
+      background:
+        linear-gradient(90deg, transparent, rgba(148,163,184,.18), transparent) -120% 0/60% 100% no-repeat,
+        linear-gradient(rgba(148,163,184,.24) 0 0) 14px 16px/42% 8px no-repeat,
+        linear-gradient(rgba(148,163,184,.16) 0 0) 14px 34px/68% 8px no-repeat,
+        linear-gradient(rgba(148,163,184,.16) 0 0) 14px 52px/54% 8px no-repeat,
+        var(--surface);
+    }
+    body[data-theme="dark"] .spectrum-card-image.is-image-pending::after,
+    body[data-theme="dark"] .spectrum-detail-image.is-image-pending::after,
+    body[data-theme="dark"] .spectrum-compact-detail-image.is-image-pending::after,
+    body[data-theme="dark"] .spectrum-preview-thumb.is-image-pending::after,
+    body[data-theme="dark"] .spectrum-preview-image-frame.is-image-pending::after{
+      color:var(--muted);
+    }
     body[data-theme="dark"] .spectrum-card-image.is-image-missing,
     body[data-theme="dark"] .spectrum-detail-image.is-image-missing,
     body[data-theme="dark"] .spectrum-compact-detail-image.is-image-missing,

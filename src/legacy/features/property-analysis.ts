@@ -65,6 +65,9 @@ import { cloudStorage } from '../../services/cloud-storage';
     '弯曲强度[Mpa]',
     '弯曲模量[Mpa]',
     '冲击强度[Mpa]',
+    '灼热丝',
+    '灼热丝[1.6mm]',
+    '灼热丝[0.8mm]',
     '灰份',
   ];
   const REPORT_METRICS = [
@@ -74,9 +77,11 @@ import { cloudStorage } from '../../services/cloud-storage';
     { key: '弯曲强度[Mpa]', item: '弯曲强度', unit: 'MPa' },
     { key: '弯曲模量[Mpa]', item: '弯曲模量', unit: 'MPa' },
     { key: '冲击强度[Mpa]', item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
+    { key: '灼热丝', item: '灼热丝', unit: '℃', required: false },
   ];
   const REPORT_METRIC_ALIASES = {
     灰份: ['灰份', '灰分', '灰份(%)', '灰分(%)', '灰份[%]', '灰分[%]', '灰份（%）', '灰分（%）'],
+    灼热丝: ['灼热丝', '灼热丝[1.6mm]', '灼热丝[0.8mm]', '灼热丝（1.6mm）', '灼热丝（0.8mm）'],
   };
   const normalizeMetricHeaderIdentity = (value) => String(value ?? '')
     .replace(/\s+/g, '')
@@ -93,6 +98,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (!identity) return '';
     if (REPORT_METRIC_ALIAS_MAP.has(identity)) return REPORT_METRIC_ALIAS_MAP.get(identity);
     if (identity.includes('灰份') || identity.includes('灰分')) return '灰份';
+    if (identity.includes('灼热丝')) return '灼热丝';
     return '';
   };
   const MELT_INDEX_METRIC_KEY = '熔指';
@@ -862,6 +868,8 @@ import { cloudStorage } from '../../services/cloud-storage';
     }
   );
 
+  const isRequiredReportMetric = (metricKey) => getReportMetricConfig(metricKey).required !== false;
+
   const getMeltIndexTemperature = (item = '') => {
     const text = normalizeReportText(item);
     return MELT_INDEX_TEMPERATURES.find((temperature) => text.includes(temperature)) || '260℃';
@@ -882,6 +890,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const text = normalizeDocxText(item).toLowerCase();
     if (!text) return null;
     if (text.includes('灰') && (text.includes('分') || text.includes('份'))) return getReportMetricConfig('灰份');
+    if (text.includes('灼热丝')) return getReportMetricConfig('灼热丝');
     if (text.includes('熔') && (text.includes('指') || text.includes('融'))) return getReportMetricConfig(MELT_INDEX_METRIC_KEY);
     if (text.includes('拉伸')) return getReportMetricConfig('拉伸强度[Mpa]');
     if (text.includes('弯曲') && text.includes('强度')) return getReportMetricConfig('弯曲强度[Mpa]');
@@ -1069,6 +1078,8 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getReportMetricValidation = (metric = {}) => {
     const value = parseNumericValue(metric.value);
+    const isRequired = isRequiredReportMetric(metric.key);
+    if (!isRequired && (!normalizeReportText(metric.range) || value == null)) return { status: 'pass', text: '选填' };
     if (!normalizeReportText(metric.range)) return { status: 'missing', text: '未设置范围' };
     if (value == null) return { status: 'missing', text: '检验值无效' };
     const bounds = parseReportRangeBounds(metric.range);
@@ -1082,9 +1093,12 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getReportDraftValidation = (draft = {}) => {
     const metrics = draft.metrics || [];
-    const results = metrics.map(getReportMetricValidation);
+    const results = metrics.map((metric) => ({
+      ...getReportMetricValidation(metric),
+      required: isRequiredReportMetric(metric.key),
+    }));
     if (results.some((item) => item.status === 'fail')) return { status: 'fail', text: '存在异常' };
-    if (results.some((item) => item.status === 'missing')) return { status: 'missing', text: '待完善' };
+    if (results.some((item) => item.required && item.status === 'missing')) return { status: 'missing', text: '待完善' };
     return { status: 'pass', text: '检验通过' };
   };
 
@@ -1124,7 +1138,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       const model = getRowModel(row);
       getReportMetricsForRow(row).forEach((metricKey) => {
         const key = `${model}::${metricKey}`;
-        if (!model || seen.has(key) || getReportRange(model, metricKey)) return;
+        if (!model || !isRequiredReportMetric(metricKey) || seen.has(key) || getReportRange(model, metricKey)) return;
         seen.add(key);
         missing.push({
           model,
@@ -1927,8 +1941,9 @@ import { cloudStorage } from '../../services/cloud-storage';
   `).join('');
 
   const getRangeSetStatus = (model) => {
-    const filled = getRangesForModel(model).filter((item) => item.range);
-    if (filled.length >= REPORT_METRICS.length) return 'complete';
+    const requiredRanges = getRangesForModel(model).filter((item) => isRequiredReportMetric(item.metricKey));
+    const filled = requiredRanges.filter((item) => item.range);
+    if (filled.length >= requiredRanges.length) return 'complete';
     if (filled.length > 0) return 'partial';
     return 'empty';
   };
@@ -2628,8 +2643,100 @@ import { cloudStorage } from '../../services/cloud-storage';
     return valueToText(value) || '--';
   };
 
+  const getCompareAverageColumns = (rows, columns) => {
+    return columns.filter((column) => (
+      METRIC_COLUMNS.includes(column)
+      && rows.some((row) => getMetricValue(row, column) != null)
+    ));
+  };
+
+  const COMPARE_CHART_COLORS = [
+    '#2563eb',
+    '#f97316',
+    '#16a34a',
+    '#dc2626',
+    '#7c3aed',
+    '#0891b2',
+    '#ca8a04',
+    '#db2777',
+  ];
+
+  const getCompareSeriesColor = (index) => COMPARE_CHART_COLORS[index % COMPARE_CHART_COLORS.length];
+
+  const getCompareRowLabel = (row, index) => {
+    const model = valueToText(row?.型号).trim();
+    const batch = valueToText(row?.批次).trim();
+    return [model, batch].filter(Boolean).join(' / ') || `样本 ${index + 1}`;
+  };
+
+  const formatCompareAverageValue = (value) => {
+    if (value == null) return '--';
+    return Number(value).toFixed(2).replace(/\.?0+$/, '');
+  };
+
+  const buildCompareAverageChartHtml = (rows, columns) => {
+    const averageColumns = getCompareAverageColumns(rows, columns);
+    if (!averageColumns.length) return '';
+    const chartMinWidth = Math.max(680, averageColumns.length * Math.max(150, rows.length * 34 + 44));
+    const series = rows.map((row, index) => ({
+      label: getCompareRowLabel(row, index),
+      color: getCompareSeriesColor(index),
+    }));
+
+    return `
+      <section class="analysis-compare-section analysis-compare-chart-section" aria-label="平均数柱状图对比">
+        <div class="analysis-compare-section-title">
+          <i class="ti ti-chart-bar" aria-hidden="true"></i>
+          <span>平均数柱状图对比</span>
+        </div>
+        <div class="analysis-compare-chart-legend">
+          ${series.map((item) => `
+            <span class="analysis-compare-chart-legend-item" title="${escapeHtml(item.label)}">
+              <span class="analysis-compare-chart-swatch" style="background:${escapeHtml(item.color)}"></span>
+              <span>${escapeHtml(item.label)}</span>
+            </span>
+          `).join('')}
+        </div>
+        <div class="analysis-compare-chart-wrap">
+          <div class="analysis-compare-chart-plot" style="min-width:${chartMinWidth}px">
+          ${averageColumns.map((column) => {
+            const points = rows.map((row, index) => ({
+              label: getCompareRowLabel(row, index),
+              value: getMetricValue(row, column),
+              color: getCompareSeriesColor(index),
+            }));
+            const numericValues = points.map((point) => point.value).filter((value) => value != null);
+            const maxValue = Math.max(...numericValues, 0);
+
+            return `
+              <div class="analysis-compare-metric-group">
+                <div class="analysis-compare-metric-bars">
+                  ${points.map((point) => {
+                    const percent = point.value == null || maxValue <= 0 ? 0 : Math.max(4, (point.value / maxValue) * 100);
+                    return `
+                      <div
+                        class="analysis-compare-bar-column"
+                        style="--bar-height:${percent}%;--compare-bar-color:${escapeHtml(point.color)}"
+                        title="${escapeHtml(`${point.label} ${formatHeader(column)}平均数 ${formatCompareAverageValue(point.value)}`)}">
+                        <span class="analysis-compare-bar-column-value">${escapeHtml(formatCompareAverageValue(point.value))}</span>
+                        <span class="analysis-compare-bar-column-fill"></span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+                <div class="analysis-compare-metric-label" title="${escapeHtml(formatHeader(column))}">${escapeHtml(formatHeader(column))}</div>
+              </div>
+            `;
+          }).join('')}
+          </div>
+        </div>
+      </section>
+    `;
+  };
+
   const createCompareImageBlob = async (rows) => {
     const columns = getCompareColumns(rows);
+    const averageColumns = getCompareAverageColumns(rows, columns);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -2645,6 +2752,11 @@ import { cloudStorage } from '../../services/cloud-storage';
     const titleHeight = 58;
     const rowHeight = 46;
     const headerHeight = 48;
+    const chartTitleHeight = averageColumns.length ? 34 : 0;
+    const chartLegendHeight = averageColumns.length ? Math.ceil(rows.length / 3) * 24 + 8 : 0;
+    const chartPlotHeight = averageColumns.length ? 220 : 0;
+    const chartLabelHeight = averageColumns.length ? 38 : 0;
+    const chartHeight = averageColumns.length ? chartTitleHeight + chartLegendHeight + chartPlotHeight + chartLabelHeight + 22 : 0;
     const minColumnWidth = 92;
     const maxColumnWidth = 280;
 
@@ -2664,8 +2776,9 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
 
     const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-    const imageWidth = tableWidth + 2;
-    const imageHeight = titleHeight + headerHeight + rows.length * rowHeight + 2;
+    const chartMinWidth = averageColumns.length ? averageColumns.length * Math.max(150, rows.length * 34 + 44) + 32 : 0;
+    const imageWidth = Math.max(tableWidth + 2, averageColumns.length ? Math.max(760, chartMinWidth) : 0);
+    const imageHeight = titleHeight + chartHeight + headerHeight + rows.length * rowHeight + 2;
 
     canvas.width = Math.ceil(imageWidth * dpr);
     canvas.height = Math.ceil(imageHeight * dpr);
@@ -2696,6 +2809,19 @@ import { cloudStorage } from '../../services/cloud-storage';
       context.fillText(displayText, textX, y + height / 2);
     };
 
+    const drawClippedText = (text, x, y, maxWidth, activeFont, color = '#0f2748', align = 'left') => {
+      context.font = activeFont;
+      context.fillStyle = color;
+      context.textBaseline = 'middle';
+      context.textAlign = align;
+
+      let displayText = String(text || '--');
+      while (measureTextWidth(displayText, activeFont) > maxWidth && displayText.length > 1) {
+        displayText = `${displayText.slice(0, -2)}...`;
+      }
+      context.fillText(displayText, x, y);
+    };
+
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, imageWidth, imageHeight);
     context.fillStyle = '#0f2748';
@@ -2706,6 +2832,78 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     let x = 1;
     let y = titleHeight;
+    if (averageColumns.length) {
+      const chartX = 16;
+      const chartWidth = imageWidth - chartX * 2;
+      const plotTopPadding = 24;
+      context.fillStyle = '#12376b';
+      context.font = `900 15px ${fontFamily}`;
+      context.textAlign = 'left';
+      context.textBaseline = 'middle';
+      context.fillText('平均数柱状图对比', chartX, y + chartTitleHeight / 2);
+      y += chartTitleHeight;
+
+      let legendX = chartX;
+      let legendY = y + 10;
+      rows.forEach((row, index) => {
+        const label = getCompareRowLabel(row, index);
+        const color = getCompareSeriesColor(index);
+        const labelWidth = Math.min(210, measureTextWidth(label, font) + 28);
+        if (legendX + labelWidth > chartX + chartWidth) {
+          legendX = chartX;
+          legendY += 24;
+        }
+        context.fillStyle = color;
+        context.fillRect(legendX, legendY - 5, 12, 12);
+        drawClippedText(label, legendX + 18, legendY + 1, labelWidth - 24, font, '#526174');
+        legendX += labelWidth + 14;
+      });
+      y += chartLegendHeight;
+
+      const plotTop = y;
+      const plotHeight = chartPlotHeight;
+      const groupWidth = chartWidth / averageColumns.length;
+      context.strokeStyle = '#e7edf5';
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(chartX, plotTop + plotHeight + .5);
+      context.lineTo(chartX + chartWidth, plotTop + plotHeight + .5);
+      context.stroke();
+
+      averageColumns.forEach((column) => {
+        const points = rows.map((row, index) => ({
+          label: getCompareRowLabel(row, index),
+          value: getMetricValue(row, column),
+          color: getCompareSeriesColor(index),
+        }));
+        const numericValues = points.map((point) => point.value).filter((value) => value != null);
+        const maxValue = Math.max(...numericValues, 0);
+        const groupX = chartX + averageColumns.indexOf(column) * groupWidth;
+        const availableBarWidth = Math.max(16, groupWidth - 34);
+        const barGap = rows.length > 1 ? 6 : 0;
+        const barWidth = Math.max(12, Math.min(28, (availableBarWidth - barGap * (rows.length - 1)) / rows.length));
+        const barsWidth = barWidth * rows.length + barGap * (rows.length - 1);
+        const barsStartX = groupX + (groupWidth - barsWidth) / 2;
+
+        points.forEach((point, index) => {
+          const percent = point.value == null || maxValue <= 0 ? 0 : Math.max(5, (point.value / maxValue) * 100);
+          const barHeight = (plotHeight - plotTopPadding) * (percent / 100);
+          const barX = barsStartX + index * (barWidth + barGap);
+          const barY = plotTop + plotHeight - barHeight;
+          drawClippedText(formatCompareAverageValue(point.value), barX + barWidth / 2, barY - 8, Math.max(44, barWidth + 18), font, '#0b356b', 'center');
+          if (point.value != null && barHeight > 0) {
+            context.fillStyle = point.color;
+            context.beginPath();
+            context.roundRect(barX, barY, barWidth, barHeight, 4);
+            context.fill();
+          }
+        });
+
+        drawClippedText(formatHeader(column), groupX + groupWidth / 2, plotTop + plotHeight + 22, groupWidth - 12, font, '#1f3150', 'center');
+      });
+      y += chartPlotHeight + chartLabelHeight + 22;
+    }
+
     columns.forEach((column, index) => {
       drawCell({
         x,
@@ -2776,6 +2974,7 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const buildCompareDialogHtml = (rows) => {
     const columns = getCompareColumns(rows);
+    const averageChartHtml = buildCompareAverageChartHtml(rows, columns);
 
     return `
       <div class="analysis-compare-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="物性数据对比">
@@ -2793,6 +2992,7 @@ import { cloudStorage } from '../../services/cloud-storage';
             </div>
           </div>
           <div class="analysis-compare-body">
+            ${averageChartHtml}
             <section class="analysis-compare-section">
               <div class="analysis-compare-table-wrap">
                 <table class="analysis-compare-table">

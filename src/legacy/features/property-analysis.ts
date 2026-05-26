@@ -2634,13 +2634,24 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const getCompareCellText = (row, column) => {
+    const cell = getCompareCellParts(row, column);
+    return `${cell.main}${cell.average}`;
+  };
+
+  const getCompareCellParts = (row, column) => {
     const value = row?.[column];
     if (Array.isArray(value)) {
       const main = value.map((item) => `[${valueToText(item)}]`).join(' ');
       const averageText = getAverageText(value);
-      return `${main}${averageText ? ` (${averageText})` : ''}`;
+      return {
+        main,
+        average: averageText ? ` (${averageText})` : '',
+      };
     }
-    return valueToText(value) || '--';
+    return {
+      main: valueToText(value) || '--',
+      average: '',
+    };
   };
 
   const getCompareAverageColumns = (rows, columns) => {
@@ -2734,10 +2745,11 @@ import { cloudStorage } from '../../services/cloud-storage';
     `;
   };
 
-  const createCompareImageBlob = async (rows) => {
+  const createCompareImageBlob = async (rows, options = {}) => {
+    const includeChart = options.includeChart !== false;
     const columns = getCompareColumns(rows);
-    const averageColumns = getCompareAverageColumns(rows, columns);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const averageColumns = includeChart ? getCompareAverageColumns(rows, columns) : [];
+    const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (!context) throw new Error('当前浏览器无法创建图片画布。');
@@ -2766,6 +2778,37 @@ import { cloudStorage } from '../../services/cloud-storage';
       return Math.ceil(context.measureText(String(text || '')).width);
     };
 
+    const clipTextToWidth = (text, maxWidth, activeFont = font) => {
+      const safeText = String(text || '--');
+      const availableWidth = Number(maxWidth);
+      if (!Number.isFinite(availableWidth) || availableWidth <= 0) return '';
+      if (measureTextWidth(safeText, activeFont) <= availableWidth) return safeText;
+
+      const ellipsis = '...';
+      if (measureTextWidth(ellipsis, activeFont) > availableWidth) {
+        let fallback = '';
+        for (const char of ellipsis) {
+          const next = fallback + char;
+          if (measureTextWidth(next, activeFont) > availableWidth) break;
+          fallback = next;
+        }
+        return fallback;
+      }
+
+      let low = 0;
+      let high = safeText.length;
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        const candidate = `${safeText.slice(0, mid)}${ellipsis}`;
+        if (measureTextWidth(candidate, activeFont) <= availableWidth) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return low > 0 ? `${safeText.slice(0, low)}${ellipsis}` : ellipsis;
+    };
+
     const columnWidths = columns.map((column) => {
       const headerWidth = measureTextWidth(formatHeader(column), headerFont);
       const cellWidth = Math.max(...rows.map((row) => measureTextWidth(getCompareCellText(row, column), font)), 0);
@@ -2779,6 +2822,8 @@ import { cloudStorage } from '../../services/cloud-storage';
     const chartMinWidth = averageColumns.length ? averageColumns.length * Math.max(150, rows.length * 34 + 44) + 32 : 0;
     const imageWidth = Math.max(tableWidth + 2, averageColumns.length ? Math.max(760, chartMinWidth) : 0);
     const imageHeight = titleHeight + chartHeight + headerHeight + rows.length * rowHeight + 2;
+    const maxCanvasPixels = 24000000;
+    const dpr = Math.min(baseDpr, Math.sqrt(maxCanvasPixels / Math.max(1, imageWidth * imageHeight)));
 
     canvas.width = Math.ceil(imageWidth * dpr);
     canvas.height = Math.ceil(imageHeight * dpr);
@@ -2800,13 +2845,50 @@ import { cloudStorage } from '../../services/cloud-storage';
 
       const safeText = String(text || '--');
       const maxTextWidth = Math.max(20, width - horizontalPadding * 2);
-      let displayText = safeText;
-      while (measureTextWidth(displayText, activeFont) > maxTextWidth && displayText.length > 1) {
-        displayText = `${displayText.slice(0, -2)}...`;
-      }
+      const displayText = clipTextToWidth(safeText, maxTextWidth, activeFont);
 
       const textX = align === 'left' ? x + horizontalPadding : x + width / 2;
       context.fillText(displayText, textX, y + height / 2);
+    };
+
+    const drawCompareBodyCell = ({ x, y, width, height, row, column }) => {
+      context.fillStyle = '#ffffff';
+      context.fillRect(x, y, width, height);
+      context.strokeStyle = '#e7edf5';
+      context.lineWidth = 1;
+      context.strokeRect(x + .5, y + .5, width, height);
+
+      const { main, average } = getCompareCellParts(row, column);
+      const maxTextWidth = Math.max(20, width - horizontalPadding * 2);
+      context.font = font;
+      context.textBaseline = 'middle';
+      context.textAlign = 'left';
+
+      if (!average) {
+        const displayText = clipTextToWidth(main, maxTextWidth, font);
+        const textWidth = measureTextWidth(displayText, font);
+        context.fillStyle = '#0b356b';
+        context.fillText(displayText, x + (width - textWidth) / 2, y + height / 2);
+        return;
+      }
+
+      const averageColor = '#dc2626';
+      const averageWidth = measureTextWidth(average, font);
+      if (averageWidth >= maxTextWidth) {
+        const displayAverage = clipTextToWidth(average, maxTextWidth, font);
+        const textWidth = measureTextWidth(displayAverage, font);
+        context.fillStyle = averageColor;
+        context.fillText(displayAverage, x + (width - textWidth) / 2, y + height / 2);
+        return;
+      }
+
+      const mainText = clipTextToWidth(main, maxTextWidth - averageWidth, font);
+      const mainWidth = measureTextWidth(mainText, font);
+      const startX = x + (width - mainWidth - averageWidth) / 2;
+      context.fillStyle = '#0b356b';
+      context.fillText(mainText, startX, y + height / 2);
+      context.fillStyle = averageColor;
+      context.fillText(average, startX + mainWidth, y + height / 2);
     };
 
     const drawClippedText = (text, x, y, maxWidth, activeFont, color = '#0f2748', align = 'left') => {
@@ -2815,10 +2897,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       context.textBaseline = 'middle';
       context.textAlign = align;
 
-      let displayText = String(text || '--');
-      while (measureTextWidth(displayText, activeFont) > maxWidth && displayText.length > 1) {
-        displayText = `${displayText.slice(0, -2)}...`;
-      }
+      const displayText = clipTextToWidth(text, maxWidth, activeFont);
       context.fillText(displayText, x, y);
     };
 
@@ -2922,15 +3001,13 @@ import { cloudStorage } from '../../services/cloud-storage';
     rows.forEach((row) => {
       x = 1;
       columns.forEach((column, index) => {
-        drawCell({
+        drawCompareBodyCell({
           x,
           y,
           width: columnWidths[index],
           height: rowHeight,
-          text: getCompareCellText(row, column),
-          fill: '#ffffff',
-          color: '#0b356b',
-          activeFont: font,
+          row,
+          column,
         });
         x += columnWidths[index];
       });
@@ -2945,7 +3022,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
   };
 
-  const copyCompareImage = async (button) => {
+  const copyCompareImage = async (button, options = {}) => {
     const rows = getSelectedRowsForAllSheets();
     if (rows.length < 2) return;
     if (!navigator.clipboard?.write || !window.ClipboardItem) {
@@ -2958,7 +3035,7 @@ import { cloudStorage } from '../../services/cloud-storage';
         button.disabled = true;
         button.querySelector('span').textContent = '复制中';
       }
-      const blob = await createCompareImageBlob(rows);
+      const blob = await createCompareImageBlob(rows, options);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       App.notify?.success?.('对比图片已复制到剪贴板');
     } catch (error) {
@@ -2982,6 +3059,10 @@ import { cloudStorage } from '../../services/cloud-storage';
           <div class="analysis-compare-head">
             <div class="analysis-compare-title">广俊数据对比</div>
             <div class="analysis-compare-actions">
+              <label class="analysis-compare-chart-toggle">
+                <input type="checkbox" data-analysis-compare-include-chart checked />
+                <span>包含柱状图</span>
+              </label>
               <button class="analysis-compare-copy" type="button" data-analysis-compare-copy>
                 <i class="ti ti-clipboard-copy" aria-hidden="true"></i>
                 <span>复制图片</span>
@@ -3041,7 +3122,8 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (!(target instanceof Element)) return;
       const copyButton = target.closest('[data-analysis-compare-copy]');
       if (copyButton) {
-        copyCompareImage(copyButton);
+        const includeChart = dialog.querySelector('[data-analysis-compare-include-chart]')?.checked !== false;
+        copyCompareImage(copyButton, { includeChart });
         return;
       }
       if (target.closest('[data-analysis-compare-close]') || target === dialog) closeCompareDialog();

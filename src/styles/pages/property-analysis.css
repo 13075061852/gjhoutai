@@ -473,6 +473,44 @@
     .analysis-table td:last-child{
       border-right:none;
     }
+    .analysis-table th:nth-child(1),
+    .analysis-table td:nth-child(1){
+      position:sticky;
+      left:0;
+      z-index:3;
+      width:92px;
+      min-width:92px;
+      max-width:92px;
+    }
+    .analysis-table th:nth-child(2),
+    .analysis-table td:nth-child(2){
+      position:sticky;
+      left:92px;
+      z-index:3;
+      width:104px;
+      min-width:104px;
+      max-width:104px;
+      box-shadow:2px 0 0 rgba(15,23,42,.08);
+    }
+    .analysis-table thead th:nth-child(1),
+    .analysis-table thead th:nth-child(2){
+      z-index:5;
+      background:#f8fbff;
+    }
+    .analysis-table tbody td:nth-child(1),
+    .analysis-table tbody td:nth-child(2){
+      background:#fff;
+    }
+    .analysis-table tbody tr.is-selected td:nth-child(1),
+    .analysis-table tbody tr.is-selected td:nth-child(2){
+      background:#eef6ff;
+    }
+    .analysis-table tbody tr.is-selected td:nth-child(1){
+      box-shadow:inset 3px 0 0 var(--accent), inset 0 1px 0 rgba(37,99,235,.08), inset 0 -1px 0 rgba(37,99,235,.08);
+    }
+    .analysis-table tbody tr.is-selected td:nth-child(2){
+      box-shadow:2px 0 0 rgba(15,23,42,.08), inset 0 1px 0 rgba(37,99,235,.08), inset 0 -1px 0 rgba(37,99,235,.08);
+    }
     .analysis-cell{
       display:inline-flex;
       align-items:center;
@@ -588,6 +626,29 @@
       align-items:center;
       gap:8px;
       flex:0 0 auto;
+    }
+    .analysis-compare-chart-toggle{
+      height:34px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:0 8px;
+      border:1px solid #dbe5f0;
+      border-radius:8px;
+      background:#fff;
+      color:#526174;
+      font-size:12px;
+      font-weight:850;
+      white-space:nowrap;
+      cursor:pointer;
+      user-select:none;
+    }
+    .analysis-compare-chart-toggle input{
+      width:14px;
+      height:14px;
+      margin:0;
+      accent-color:var(--accent);
+      cursor:pointer;
     }
     .analysis-compare-copy{
       height:34px;

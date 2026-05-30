@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
   'use strict';
@@ -39,6 +40,11 @@ import { getLegacyApp } from '../core/app-context';
     running: false,
     model: '',
     edited: false,
+    history: [],
+    historyLoading: false,
+    activeHistoryId: '',
+    historySyncTimer: null,
+    historySearch: '',
     imageView: {
       scale: 1,
       x: 0,
@@ -68,6 +74,10 @@ import { getLegacyApp } from '../core/app-context';
     refs.tableWrap = document.getElementById('dataRecognitionTableWrap');
     refs.tableMeta = document.getElementById('dataRecognitionTableMeta');
     refs.copyTableBtn = document.getElementById('dataRecognitionCopyTableBtn');
+    refs.historyList = document.getElementById('dataRecognitionHistoryList');
+    refs.historyMeta = document.getElementById('dataRecognitionHistoryMeta');
+    refs.historySearchInput = document.getElementById('dataRecognitionHistorySearchInput');
+    refs.refreshHistoryBtn = document.getElementById('dataRecognitionRefreshHistoryBtn');
   };
 
   const installPageDefinition = () => {
@@ -127,6 +137,22 @@ import { getLegacyApp } from '../core/app-context';
             </div>
           </div>
           <pre class="data-recognition-json"><code id="dataRecognitionJson">{}</code></pre>
+        </section>
+
+        <section class="data-recognition-history-panel">
+          <div class="data-recognition-panel-head">
+            <div>
+              <h2>历史图谱</h2>
+              <span id="dataRecognitionHistoryMeta">识别成功后自动保存</span>
+            </div>
+            <input class="data-recognition-history-search" id="dataRecognitionHistorySearchInput" type="search" placeholder="搜索" aria-label="搜索历史图谱" />
+            <button class="analysis-toolbar-btn data-recognition-history-refresh" id="dataRecognitionRefreshHistoryBtn" type="button" title="刷新历史">
+              <i class="ti ti-refresh" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="data-recognition-history-list" id="dataRecognitionHistoryList">
+            <div class="data-recognition-history-empty">暂无历史记录</div>
+          </div>
         </section>
       </div>
 
@@ -245,6 +271,192 @@ import { getLegacyApp } from '../core/app-context';
     renderJson();
     renderTable();
     setBusy(false);
+  };
+
+  const formatHistoryTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const getHistoryTitle = (item) => {
+    const model = String(item?.model_code || '').trim();
+    const batch = String(item?.batch_code || '').trim();
+    if (model && batch) return `${model} / ${batch}`;
+    return model || batch || item?.file_name || '未命名图片';
+  };
+
+  const renderHistoryTitle = (item) => getHistoryTitle(item)
+    .split('、')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<span>${utils.escapeHtml(line)}</span>`)
+    .join('');
+
+  const getResultSummary = () => {
+    const rows = state.result?.rows || [];
+    const pairs = [];
+    const seenPairs = new Set();
+    rows.forEach((row) => {
+      if (!row || typeof row !== 'object') return;
+      const model = normalizeCell(row[MODEL_KEY] || '');
+      const batch = normalizeCell(row[FIELD_KEYS[1]] || '');
+      const pair = [model, batch].filter(Boolean).join(' / ');
+      if (!pair || seenPairs.has(pair)) return;
+      seenPairs.add(pair);
+      pairs.push(pair);
+    });
+    if (pairs.length) return { modelCode: pairs.join('、'), batchCode: '' };
+    const models = [...new Set(rows.map((row) => normalizeCell(row?.[MODEL_KEY] || '')).filter(Boolean))];
+    const batches = [...new Set(rows.map((row) => normalizeCell(row?.[FIELD_KEYS[1]] || '')).filter(Boolean))];
+    return { modelCode: models.join('、'), batchCode: batches.join('、') };
+  };
+
+  const renderHistory = () => {
+    if (!refs.historyList) return;
+    const keyword = state.historySearch.trim().toLowerCase();
+    const allItems = state.history || [];
+    const items = keyword
+      ? allItems.filter((item) => [
+        getHistoryTitle(item),
+        item?.file_name,
+        item?.model,
+        formatHistoryTime(item?.created_at),
+      ].some((value) => String(value || '').toLowerCase().includes(keyword)))
+      : allItems;
+    if (refs.historyMeta) {
+      refs.historyMeta.textContent = state.historyLoading
+        ? '正在加载历史'
+        : (keyword ? `匹配 ${items.length} / ${allItems.length} 条` : (items.length ? `共 ${items.length} 条历史` : '识别成功后自动保存'));
+    }
+    if (state.historyLoading) {
+      refs.historyList.innerHTML = '<div class="data-recognition-history-empty">正在加载历史记录</div>';
+      return;
+    }
+    if (!items.length) {
+      refs.historyList.innerHTML = `<div class="data-recognition-history-empty">${keyword ? '没有匹配历史记录' : '暂无历史记录'}</div>`;
+      return;
+    }
+    refs.historyList.innerHTML = items.map((item) => `
+      <article class="data-recognition-history-item ${item.id === state.activeHistoryId ? 'is-active' : ''}" data-history-id="${utils.escapeHtml(item.id)}">
+        <button class="data-recognition-history-main" type="button" data-history-open="${utils.escapeHtml(item.id)}">
+          <strong>${renderHistoryTitle(item)}</strong>
+          <span>${utils.escapeHtml(formatHistoryTime(item.created_at))}</span>
+        </button>
+        <button class="data-recognition-history-delete" type="button" data-history-delete="${utils.escapeHtml(item.id)}" title="删除历史">
+          <i class="ti ti-trash" aria-hidden="true"></i>
+        </button>
+      </article>
+    `).join('');
+  };
+
+  const refreshHistory = async () => {
+    const showLoading = !state.history.length;
+    if (showLoading) {
+      state.historyLoading = true;
+      renderHistory();
+    }
+    const items = await cloudStorage.listDataRecognitionHistory(60);
+    state.history = Array.isArray(items) ? items : [];
+    state.historyLoading = false;
+    renderHistory();
+  };
+
+  const removeHistoryItemWithAnimation = (id) => {
+    const item = refs.historyList?.querySelector(`[data-history-id="${CSS.escape(id)}"]`);
+    if (!item) {
+      renderHistory();
+      return;
+    }
+    item.classList.add('is-removing');
+    window.setTimeout(() => {
+      item.remove();
+      if (!state.history.length) renderHistory();
+      if (refs.historyMeta) refs.historyMeta.textContent = state.history.length ? `共 ${state.history.length} 条历史` : '识别成功后自动保存';
+    }, 240);
+  };
+
+  const saveHistoryRecord = async () => {
+    if (!state.imageDataUrl || !state.result?.rows?.length) return;
+    const summary = getResultSummary();
+    const created = await cloudStorage.createDataRecognitionHistory({
+      fileName: state.fileName || '未命名图片',
+      imageDataUrl: state.imageDataUrl,
+      model: state.model || '',
+      rowCount: state.result.rows.length,
+      modelCode: summary.modelCode,
+      batchCode: summary.batchCode,
+      result: state.result,
+      rawText: state.streamText || '',
+    });
+    if (!created?.id) {
+      App.notify?.warn?.('识别结果已完成，但历史记录保存失败。', { key: 'data-recognition-history-save-failed' });
+      return;
+    }
+    state.activeHistoryId = created.id;
+    await refreshHistory();
+  };
+
+  const updateActiveHistoryRecord = async () => {
+    if (!state.activeHistoryId || !state.result?.rows?.length) return;
+    const summary = getResultSummary();
+    const ok = await cloudStorage.updateDataRecognitionHistory(state.activeHistoryId, {
+      rowCount: state.result.rows.length,
+      modelCode: summary.modelCode,
+      batchCode: summary.batchCode,
+      result: state.result,
+      rawText: JSON.stringify(rowsToGroupedPayload(state.result.rows || []), null, 2),
+    });
+    if (ok) await refreshHistory();
+  };
+
+  const scheduleActiveHistorySync = () => {
+    if (!state.activeHistoryId) return;
+    window.clearTimeout(state.historySyncTimer);
+    state.historySyncTimer = window.setTimeout(updateActiveHistoryRecord, 500);
+  };
+
+  const openHistoryRecord = async (id) => {
+    if (!id || state.running) return;
+    const item = await cloudStorage.getDataRecognitionHistory(id);
+    if (!item?.result) {
+      App.notify?.warn?.('历史记录读取失败。', { key: 'data-recognition-history-open-failed' });
+      return;
+    }
+    state.activeHistoryId = id;
+    state.fileName = String(item.file_name || '历史图片');
+    state.imageDataUrl = String(item.imageDataUrl || '');
+    state.streamText = String(item.raw_text || JSON.stringify(item.result, null, 2));
+    state.result = item.result && typeof item.result === 'object' ? item.result : null;
+    state.model = String(item.model || '');
+    state.edited = false;
+    if (state.imageDataUrl && refs.preview) {
+      refs.preview.src = state.imageDataUrl;
+      refs.preview.hidden = false;
+      if (refs.empty) refs.empty.hidden = true;
+      if (refs.imageMeta) refs.imageMeta.textContent = state.fileName;
+      resetImageView();
+    }
+    renderJson();
+    renderTable();
+    saveSession();
+    setStatus(`已载入历史记录：${state.result?.rows?.length || 0} 行`, 'success');
+    renderHistory();
+    setBusy(false);
+  };
+
+  const deleteHistoryRecord = async (id) => {
+    if (!id || state.running) return;
+    if (!window.confirm('确定删除这条历史识别记录？')) return;
+    const ok = await cloudStorage.deleteDataRecognitionHistory(id);
+    if (!ok) {
+      App.notify?.warn?.('历史记录删除失败。', { key: 'data-recognition-history-delete-failed' });
+      return;
+    }
+    if (state.activeHistoryId === id) state.activeHistoryId = '';
+    state.history = state.history.filter((item) => item.id !== id);
+    removeHistoryItemWithAnimation(id);
   };
 
   const parseSSEChunk = (chunk) => {
@@ -495,6 +707,7 @@ import { getLegacyApp } from '../core/app-context';
     state.edited = true;
     renderJson();
     saveSession();
+    scheduleActiveHistorySync();
     if (refs.tableMeta) refs.tableMeta.textContent = `已识别 ${state.result?.rows?.length || 0} 行 · 已编辑`;
   };
 
@@ -696,6 +909,7 @@ import { getLegacyApp } from '../core/app-context';
       renderTable();
       setStatus(`识别完成：${state.result.rows.length} 行`, 'success');
       saveSession();
+      await saveHistoryRecord();
       App.aiCallAnalysis?.record?.({
         id: `data-recognition-${Date.now()}`,
         source: 'data-recognition',
@@ -762,6 +976,20 @@ import { getLegacyApp } from '../core/app-context';
     refs.uploadBtn?.addEventListener('click', () => refs.input?.click());
     refs.runBtn?.addEventListener('click', runRecognition);
     refs.copyTableBtn?.addEventListener('click', copyTableToClipboard);
+    refs.refreshHistoryBtn?.addEventListener('click', refreshHistory);
+    refs.historySearchInput?.addEventListener('input', () => {
+      state.historySearch = refs.historySearchInput.value || '';
+      renderHistory();
+    });
+    refs.historyList?.addEventListener('click', (event) => {
+      const deleteButton = event.target.closest('[data-history-delete]');
+      if (deleteButton) {
+        deleteHistoryRecord(deleteButton.dataset.historyDelete || '');
+        return;
+      }
+      const openButton = event.target.closest('[data-history-open]');
+      if (openButton) openHistoryRecord(openButton.dataset.historyOpen || '');
+    });
     refs.dropzone?.addEventListener('wheel', (event) => {
       if (!hasPreviewImage()) return;
       event.preventDefault();
@@ -843,6 +1071,7 @@ import { getLegacyApp } from '../core/app-context';
     if (!refs.page) return;
     bindEvents();
     restoreSession();
+    refreshHistory();
   };
 
   installPageDefinition();

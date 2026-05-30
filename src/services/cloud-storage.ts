@@ -76,4 +76,96 @@ export const cloudStorage = {
       return false;
     }
   },
+
+  async listDataRecognitionHistory(limit = 40): Promise<any[] | null> {
+    try {
+      const response = await fetch(buildUrl(`/api/data-recognition/history?limit=${encodeURIComponent(String(limit))}`), {
+        credentials: 'include',
+      });
+      const payload = await parseJson<{ items: any[] }>(response);
+      return Array.isArray(payload?.items) ? payload.items : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async createDataRecognitionHistory(payload: {
+    fileName: string;
+    imageDataUrl: string;
+    model: string;
+    rowCount: number;
+    modelCode?: string;
+    batchCode?: string;
+    result: unknown;
+    rawText: string;
+  }): Promise<{ id: string } | null> {
+    try {
+      const response = await fetch(buildUrl('/api/data-recognition/history'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return await parseJson<{ id: string }>(response);
+    } catch {
+      return null;
+    }
+  },
+
+  async getDataRecognitionHistory(id: string): Promise<any | null> {
+    try {
+      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+        credentials: 'include',
+      });
+      const payload = await parseJson<{ item: any }>(response);
+      if (!payload?.item) return null;
+      const imageResponse = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}/image`), {
+        credentials: 'include',
+      });
+      if (imageResponse.ok && imageResponse.status !== 204) {
+        const blob = await imageResponse.blob();
+        payload.item.imageDataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.addEventListener('load', () => resolve(typeof reader.result === 'string' ? reader.result : ''));
+          reader.addEventListener('error', () => resolve(''));
+          reader.readAsDataURL(blob);
+        });
+      }
+      return payload.item;
+    } catch {
+      return null;
+    }
+  },
+
+  async updateDataRecognitionHistory(id: string, payload: {
+    rowCount: number;
+    modelCode?: string;
+    batchCode?: string;
+    result: unknown;
+    rawText: string;
+  }): Promise<boolean> {
+    try {
+      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async deleteDataRecognitionHistory(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
 };

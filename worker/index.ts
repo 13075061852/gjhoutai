@@ -39,6 +39,8 @@ const LOGIN_FAILURE_LIMIT = 5;
 const LOGIN_LOCK_SECONDS = 15 * 60;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const SAFE_BLOB_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const DATA_RECOGNITION_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const DATA_RECOGNITION_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const LEGACY_ROLE_DEPARTMENTS: Record<LegacyRole, Department> = {
   system_admin: '系统管理员',
@@ -85,6 +87,50 @@ const getAttachmentFileName = (key: string) => {
   const fileName = key.split('/').filter(Boolean).pop() || 'download';
   return fileName.replace(/[\\\r\n"]/g, '_');
 };
+const getImageExtension = (contentType: string) => ({
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+}[contentType] || 'bin');
+const parseDataUrlImage = (dataUrl: unknown) => {
+  const text = String(dataUrl || '');
+  const match = text.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=\r\n]+)$/i);
+  if (!match) return null;
+  const contentType = normalizeContentType(match[1]);
+  if (!DATA_RECOGNITION_IMAGE_TYPES.has(contentType)) return null;
+  const bytes = base64ToBytes(match[2].replace(/\s+/g, ''));
+  if (!bytes.byteLength || bytes.byteLength > DATA_RECOGNITION_MAX_IMAGE_BYTES) return null;
+  return { contentType, bytes };
+};
+const getRecognitionRows = (result: unknown) => {
+  if (!result || typeof result !== 'object') return [];
+  const rows = Array.isArray((result as any).rows) ? (result as any).rows : [];
+  return rows.filter((row: unknown) => row && typeof row === 'object');
+};
+const getRecognitionSummary = (resultJson: string) => {
+  try {
+    const rows = getRecognitionRows(JSON.parse(resultJson));
+    const pairs: string[] = [];
+    const seen = new Set<string>();
+    rows.forEach((row: any) => {
+      const modelCode = String(row?.型号 || '').trim();
+      const batchCode = String(row?.批次 || '').trim();
+      const pair = [modelCode, batchCode].filter(Boolean).join(' / ');
+      if (!pair || seen.has(pair)) return;
+      seen.add(pair);
+      pairs.push(pair);
+    });
+    const modelCodes = [...new Set(rows.map((row: any) => String(row?.型号 || '').trim()).filter(Boolean))];
+    const batchCodes = [...new Set(rows.map((row: any) => String(row?.批次 || '').trim()).filter(Boolean))];
+    return {
+      modelCode: pairs.join('、') || modelCodes.join('、'),
+      batchCode: pairs.length ? '' : batchCodes.join('、'),
+    };
+  } catch {
+    return { modelCode: '', batchCode: '' };
+  }
+};
+const normalizeSummaryText = (value: unknown) => String(value || '').trim().slice(0, 500);
 const USER_SCOPED_STATE_KEYS = new Set([
   'sidebar-active-page',
   'sidebar-recent-pages',
@@ -538,6 +584,184 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   return notFound();
 }
 
+async function handleDataRecognitionHistory(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/data-recognition/history')) return null;
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
+
+  const prefix = '/api/data-recognition/history';
+  const suffix = url.pathname.slice(prefix.length).replace(/^\/+/, '');
+  const parts = suffix ? suffix.split('/').map((part) => decodeURIComponent(part)) : [];
+  const id = parts[0] || '';
+  const isImageRoute = parts[1] === 'image';
+
+  if (!id && request.method === 'GET') {
+    if (!can(user, 'state:read')) return forbidden();
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 40), 1), 100);
+    const rows = await env.DB.prepare(`
+      SELECT id, file_name, image_content_type, model, model_code, batch_code, row_count, result_json, created_at
+      FROM data_recognition_records
+      WHERE created_by = ?1
+      ORDER BY created_at DESC
+      LIMIT ?2
+    `).bind(user.id, limit).all();
+    return json({
+      items: (rows.results || []).map((row: any) => {
+        const summary = getRecognitionSummary(String(row.result_json || ''));
+        const { result_json: _resultJson, ...item } = row;
+        return {
+          ...item,
+          model_code: summary.modelCode || row.model_code || '',
+          batch_code: summary.modelCode ? summary.batchCode : (summary.batchCode || row.batch_code || ''),
+        };
+      }),
+    });
+  }
+
+  if (!id && request.method === 'POST') {
+    if (!can(user, 'state:write') || !can(user, 'blob:write')) return forbidden();
+    const payload = await request.json<{
+      fileName?: string;
+      imageDataUrl?: string;
+      model?: string;
+      rowCount?: number;
+      result?: unknown;
+      rawText?: string;
+      modelCode?: string;
+      batchCode?: string;
+    }>();
+    const image = parseDataUrlImage(payload.imageDataUrl);
+    if (!image) return badRequest('invalid_image');
+    if (!payload.result || typeof payload.result !== 'object') return badRequest('invalid_result');
+
+    const id = randomId();
+    const fileName = String(payload.fileName || '识别图片').slice(0, 180);
+    const rowCount = Math.max(0, Math.min(Number(payload.rowCount || 0), 100000));
+    const summary = getRecognitionSummary(JSON.stringify(payload.result));
+    const modelCode = normalizeSummaryText(payload.modelCode) || summary.modelCode;
+    const batchCode = normalizeSummaryText(payload.batchCode) || summary.batchCode;
+    const imageKey = `data-recognition/${user.id}/${id}.${getImageExtension(image.contentType)}`;
+    await env.FILES.put(imageKey, image.bytes, { httpMetadata: { contentType: image.contentType } });
+    await env.DB.prepare(`
+      INSERT INTO data_recognition_records (
+        id, created_by, file_name, image_key, image_content_type, model, model_code, batch_code, row_count, result_json, raw_text
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+    `).bind(
+      id,
+      user.id,
+      fileName,
+      imageKey,
+      image.contentType,
+      String(payload.model || '').slice(0, 200) || null,
+      modelCode || null,
+      batchCode || null,
+      rowCount,
+      JSON.stringify(payload.result),
+      String(payload.rawText || '').slice(0, 200000) || null,
+    ).run();
+    await audit(env, user.id, 'data_recognition.create', 'data_recognition_record', id, { fileName, rowCount, modelCode, batchCode });
+    return json({ ok: true, id }, { status: 201 });
+  }
+
+  if (!id) return notFound();
+
+  const row = await env.DB.prepare(`
+    SELECT id, created_by, file_name, image_key, image_content_type, model, model_code, batch_code, row_count, result_json, raw_text, created_at
+    FROM data_recognition_records
+    WHERE id = ?1 AND created_by = ?2
+  `).bind(id, user.id).first<{
+    id: string;
+    file_name: string;
+    image_key: string;
+    image_content_type: string;
+    model?: string | null;
+    model_code?: string | null;
+    batch_code?: string | null;
+    row_count: number;
+    result_json: string;
+    raw_text?: string | null;
+    created_at: string;
+  }>();
+  if (!row) return notFound();
+
+  if (request.method === 'GET' && isImageRoute) {
+    if (!can(user, 'blob:read')) return forbidden();
+    const object = await env.FILES.get(row.image_key);
+    if (!object) return new Response(null, { status: 204 });
+    return new Response(object.body, {
+      headers: {
+        'content-type': getSafeBlobContentType(object.httpMetadata?.contentType || row.image_content_type),
+        etag: object.httpEtag,
+      },
+    });
+  }
+
+  if (request.method === 'GET') {
+    if (!can(user, 'state:read')) return forbidden();
+    return json({
+      item: {
+        id: row.id,
+        file_name: row.file_name,
+        image_content_type: row.image_content_type,
+        model: row.model,
+        model_code: row.model_code || getRecognitionSummary(row.result_json).modelCode,
+        batch_code: getRecognitionSummary(row.result_json).modelCode ? getRecognitionSummary(row.result_json).batchCode : (row.batch_code || getRecognitionSummary(row.result_json).batchCode),
+        row_count: row.row_count,
+        result: JSON.parse(row.result_json),
+        raw_text: row.raw_text || '',
+        created_at: row.created_at,
+      },
+    });
+  }
+
+  if (request.method === 'PUT') {
+    if (!can(user, 'state:write')) return forbidden();
+    const payload = await request.json<{
+      result?: unknown;
+      rawText?: string;
+      rowCount?: number;
+      modelCode?: string;
+      batchCode?: string;
+    }>();
+    if (!payload.result || typeof payload.result !== 'object') return badRequest('invalid_result');
+    const resultJson = JSON.stringify(payload.result);
+    const summary = getRecognitionSummary(resultJson);
+    const modelCode = normalizeSummaryText(payload.modelCode) || summary.modelCode;
+    const batchCode = normalizeSummaryText(payload.batchCode) || summary.batchCode;
+    const rowCount = Math.max(0, Math.min(Number(payload.rowCount || 0), 100000));
+    await env.DB.prepare(`
+      UPDATE data_recognition_records
+      SET model_code = ?1,
+          batch_code = ?2,
+          row_count = ?3,
+          result_json = ?4,
+          raw_text = ?5
+      WHERE id = ?6 AND created_by = ?7
+    `).bind(
+      modelCode || null,
+      batchCode || null,
+      rowCount,
+      resultJson,
+      String(payload.rawText || '').slice(0, 200000) || null,
+      id,
+      user.id,
+    ).run();
+    await audit(env, user.id, 'data_recognition.update', 'data_recognition_record', id, { rowCount, modelCode, batchCode });
+    return json({ ok: true });
+  }
+
+  if (request.method === 'DELETE') {
+    if (!can(user, 'state:write') || !can(user, 'blob:write')) return forbidden();
+    await env.FILES.delete(row.image_key);
+    await env.DB.prepare('DELETE FROM data_recognition_records WHERE id = ?1 AND created_by = ?2').bind(id, user.id).run();
+    await audit(env, user.id, 'data_recognition.delete', 'data_recognition_record', id);
+    return json({ ok: true });
+  }
+
+  return notFound();
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -551,6 +775,8 @@ export default {
     if (profileResponse) return withCors(request, env, profileResponse);
     const configResponse = await handleConfig(request, env, url);
     if (configResponse) return withCors(request, env, configResponse);
+    const dataRecognitionHistoryResponse = await handleDataRecognitionHistory(request, env, url);
+    if (dataRecognitionHistoryResponse) return withCors(request, env, dataRecognitionHistoryResponse);
 
     const user = await getSessionUser(request, env);
     if (!user) return withCors(request, env, unauthorized());

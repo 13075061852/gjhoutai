@@ -49,6 +49,7 @@ class FakeD1Database {
   sessions = new Map<string, any>();
   loginAttempts = new Map<string, any>();
   appState = new Map<string, string>();
+  dataRecognitionRecords = new Map<string, any>();
   sharedConfig: any = null;
 
   prepare(sql: string) {
@@ -96,6 +97,11 @@ class FakeD1Database {
       const value = this.appState.get(String(values[0]));
       return (value == null ? null : { value }) as T | null;
     }
+    if (sql.includes('FROM data_recognition_records') && sql.includes('WHERE id =')) {
+      const record = this.dataRecognitionRecords.get(String(values[0]));
+      if (!record || record.created_by !== String(values[1])) return null;
+      return record as T;
+    }
     return null;
   }
 
@@ -105,6 +111,12 @@ class FakeD1Database {
       return values.slice(0, -1)
         .map((key) => this.loginAttempts.get(String(key)))
         .filter((attempt) => attempt?.locked_until && attempt.locked_until > now) as T[];
+    }
+    if (sql.includes('FROM data_recognition_records')) {
+      return [...this.dataRecognitionRecords.values()]
+        .filter((record) => record.created_by === String(values[0]))
+        .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)))
+        .slice(0, Number(values[1]) || 40) as T[];
     }
     return [];
   }
@@ -130,6 +142,36 @@ class FakeD1Database {
     }
     if (sql.includes('INSERT INTO app_state')) {
       this.appState.set(String(values[0]), String(values[1]));
+    }
+    if (sql.includes('INSERT INTO data_recognition_records')) {
+      this.dataRecognitionRecords.set(String(values[0]), {
+        id: String(values[0]),
+        created_by: String(values[1]),
+        file_name: String(values[2]),
+        image_key: String(values[3]),
+        image_content_type: String(values[4]),
+        model: values[5] == null ? null : String(values[5]),
+        model_code: values[6] == null ? null : String(values[6]),
+        batch_code: values[7] == null ? null : String(values[7]),
+        row_count: Number(values[8]),
+        result_json: String(values[9]),
+        raw_text: values[10] == null ? null : String(values[10]),
+        created_at: new Date().toISOString(),
+      });
+    }
+    if (sql.includes('DELETE FROM data_recognition_records')) {
+      const record = this.dataRecognitionRecords.get(String(values[0]));
+      if (record?.created_by === String(values[1])) this.dataRecognitionRecords.delete(String(values[0]));
+    }
+    if (sql.includes('UPDATE data_recognition_records')) {
+      const record = this.dataRecognitionRecords.get(String(values[5]));
+      if (record?.created_by === String(values[6])) {
+        record.model_code = values[0] == null ? null : String(values[0]);
+        record.batch_code = values[1] == null ? null : String(values[1]);
+        record.row_count = Number(values[2]);
+        record.result_json = String(values[3]);
+        record.raw_text = values[4] == null ? null : String(values[4]);
+      }
     }
   }
 }
@@ -347,4 +389,97 @@ describe('worker security controls', () => {
 
     expect(lockedResponse.status).toBe(429);
   });
+
+  it('stores data recognition history in D1 and the image in R2', async () => {
+    const env = createEnv();
+    env.DB.addUser({
+      id: 'lab-1',
+      username: 'lab',
+      display_name: 'Lab',
+      role: 'lab_engineer',
+      department: '测试部',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    await env.DB.addSession('lab-1', 'lab-token');
+
+    const createResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'sample.png',
+        imageDataUrl: 'data:image/png;base64,aGVsbG8=',
+        model: 'vision-model',
+        rowCount: 1,
+        modelCode: '320G6',
+        batchCode: 'B605204',
+        result: { fields: ['型号', '批次'], rows: [{ 型号: '320G6', 批次: 'B605204' }] },
+        rawText: '[{"型号":"320G6","批次":"B605204"}]',
+      }),
+    }), env as any);
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { id: string };
+    expect(env.DB.dataRecognitionRecords.size).toBe(1);
+    expect(env.FILES.objects.size).toBe(1);
+
+    const listResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token'), env as any);
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toMatchObject({
+      items: [{
+        file_name: 'sample.png',
+        model_code: '320G6 / B605204',
+        batch_code: '',
+        row_count: 1,
+      }],
+    });
+
+    const detailResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}`, 'lab-token'), env as any);
+    expect(detailResponse.status).toBe(200);
+    await expect(detailResponse.json()).resolves.toMatchObject({
+      item: {
+        id: created.id,
+        file_name: 'sample.png',
+        model: 'vision-model',
+        model_code: '320G6',
+        batch_code: '',
+        row_count: 1,
+        result: { fields: ['型号', '批次'], rows: [{ 型号: '320G6', 批次: 'B605204' }] },
+      },
+    });
+
+    const updateResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}`, 'lab-token', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rowCount: 2,
+        result: {
+          fields: ['型号', '批次'],
+          rows: [
+            { 型号: '320G6', 批次: 'B605204' },
+            { 型号: '330G6', 批次: 'A605213' },
+          ],
+        },
+        rawText: 'updated',
+      }),
+    }), env as any);
+    expect(updateResponse.status).toBe(200);
+
+    const updatedListResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token'), env as any);
+    expect(updatedListResponse.status).toBe(200);
+    await expect(updatedListResponse.json()).resolves.toMatchObject({
+      items: [{
+        model_code: '320G6 / B605204、330G6 / A605213',
+        batch_code: '',
+        row_count: 2,
+      }],
+    });
+
+    const imageResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}/image`, 'lab-token'), env as any);
+    expect(imageResponse.status).toBe(200);
+    expect(imageResponse.headers.get('content-type')).toBe('image/png');
+  });
+
 });

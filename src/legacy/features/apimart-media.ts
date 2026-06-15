@@ -117,6 +117,72 @@ import { getLegacyApp } from '../core/app-context';
       icon: 'ti-cpu-2',
       prompt: '未来科幻操作界面场景，透明全息屏幕，精密数据图层，冷色环境光，金属与玻璃材质，人物手部交互自然，空间有纵深，硬科幻电影美术风格',
     },
+    {
+      id: 'street-photography',
+      label: '街拍纪实',
+      icon: 'ti-building',
+      prompt: '城市街头纪实摄影，徕卡 M 系列镜头质感，35mm 焦段，自然光与霓虹混合，雨后湿润路面反光，行人动态模糊，城市纵深透视，胶片颗粒感，人文故事性构图',
+    },
+    {
+      id: 'nature-landscape',
+      label: '自然风光',
+      icon: 'ti-sun',
+      prompt: '壮阔自然风光摄影，16mm 超广角，黄金时段低角度光线，前景花海或岩石引导线，中景湖泊倒影，远景雪山层叠，天空云层戏剧化，HDR 宽动态范围，国家地理级画面',
+    },
+    {
+      id: 'automotive',
+      label: '汽车大片',
+      icon: 'ti-car',
+      prompt: '高端汽车广告摄影，车辆 45 度角经典构图，清晨公路或城市天际线背景，车身漆面高光反射环境，轮毂细节锐利，运动模糊路面，暗调高级氛围，汽车杂志封面级',
+    },
+    {
+      id: 'jewelry-luxury',
+      label: '珠宝奢品',
+      icon: 'ti-diamond',
+      prompt: '高端珠宝广告摄影，微距镜头捕捉切面火彩，黑色丝绒背景，精准点光源制造星芒，金属表面无指纹，钻石折射彩虹光谱，极浅景深突出主体，奢侈品画册质感',
+    },
+    {
+      id: 'travel-editorial',
+      label: '旅行大片',
+      icon: 'ti-plane',
+      prompt: '旅行杂志编辑级摄影，异域风情场景，当地人文元素自然融入，清晨或黄昏柔和光线，航拍视角与地面视角结合，色彩饱和但不失真，画面有呼吸感和叙事性',
+    },
+    {
+      id: 'interior-design',
+      label: '室内设计',
+      icon: 'ti-armchair',
+      prompt: '高端室内设计摄影，北欧极简或日式侘寂风格，自然光从大落地窗倾泻，家具材质纹理清晰，空间比例协调，绿植点缀生机，Architectural Digest 级构图与调色',
+    },
+    {
+      id: 'tech-product',
+      label: '科技产品',
+      icon: 'ti-device-mobile',
+      prompt: '科技产品广告摄影，悬浮或斜角展示，屏幕内容清晰可见，金属与玻璃材质高光精致，深色渐变背景突出产品，界面 UI 可读，苹果风格极简产品摄影',
+    },
+    {
+      id: 'sneaker-streetwear',
+      label: '潮牌运动',
+      icon: 'ti-shoe',
+      prompt: '运动鞋/潮牌产品摄影，动态悬浮姿态，鞋底纹理与材质细节锐利，城市街头或工业风背景，烟雾或水花特效增强动感，侧光勾勒轮廓，潮流杂志级视觉冲击力',
+    },
+    {
+      id: 'perfume-beauty',
+      label: '美妆香氛',
+      icon: 'ti-flask',
+      prompt: '高端香水/美妆广告摄影，瓶身玻璃质感通透，液体流动瞬间捕捉，花瓣或水珠环绕，柔焦梦幻背景，逆光轮廓光勾勒，低饱和高级色调，Vogue 美妆大片质感',
+    },
+    {
+      id: 'night-cityscape',
+      label: '城市夜景',
+      icon: 'ti-moon-stars',
+      prompt: '城市夜景长曝光摄影，车流光轨如河流穿梭，摩天大楼灯火通明，天空呈现深蓝到紫的渐变，水面倒影对称构图，三脚架稳定画质锐利，8K 超高清城市全景',
+    },
+    {
+      id: 'underwater',
+      label: '水下世界',
+      icon: 'ti-seeding',
+      prompt: '水下摄影，珊瑚礁生态场景，热带鱼群穿梭，阳光穿透水面形成丁达尔光束，色彩鲜艳但不饱和失真，水下能见度高，海洋生物细节清晰，国家海洋地理级画面',
+    },
   ];
   const DEFAULT_UI_STATE = {
     type: 'image',
@@ -197,6 +263,13 @@ import { getLegacyApp } from '../core/app-context';
     return data?.task_id || data?.id || payload?.task_id || payload?.id || '';
   };
 
+  const normalizeAllTaskIds = (payload) => {
+    const data = payload?.data;
+    if (Array.isArray(data)) return data.map((item) => item?.task_id || item?.id || '').filter(Boolean);
+    const single = data?.task_id || data?.id || payload?.task_id || payload?.id || '';
+    return single ? [single] : [];
+  };
+
   const extractResultUrls = (task) => {
     const result = task?.result || {};
     const collectOne = (value) => {
@@ -239,7 +312,25 @@ import { getLegacyApp } from '../core/app-context';
   const updateTask = (id, patch = {}) => {
     tasks = tasks.map((task) => (task.id === id ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task));
     writeTasks();
-    render();
+    scheduleRender();
+  };
+
+  const deleteTask = (id) => {
+    const timer = pollTimers.get(id);
+    if (timer) { window.clearTimeout(timer); pollTimers.delete(id); }
+    tasks = tasks.filter((task) => task.id !== id);
+    writeTasks();
+    if (uiState.activeTaskId === id) uiState.activeTaskId = tasks[0]?.id || '';
+    scheduleRender();
+  };
+
+  let renderTimer = null;
+  const scheduleRender = () => {
+    if (renderTimer) return;
+    renderTimer = window.setTimeout(() => {
+      renderTimer = null;
+      render();
+    }, 100);
   };
 
   const pollTask = async (id, immediate = false) => {
@@ -455,6 +546,74 @@ import { getLegacyApp } from '../core/app-context';
     uiState.prompt = input.value;
     updatePromptCounter();
     input.focus();
+  };
+
+  const optimizePrompt = async () => {
+    const panel = refs.apimartMediaPanel;
+    const input = panel?.querySelector('#apimartPrompt');
+    const btn = panel?.querySelector('#apimartPromptOptimize');
+    if (!input || !btn) return;
+    const currentPrompt = (input.value || '').trim();
+    if (!currentPrompt) {
+      App.notify?.warn?.('请先输入提示词再进行 AI 优化', { key: 'apimart-optimize-empty' });
+      return;
+    }
+    const config = App.config?.getFormConfig?.() || App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG;
+    const apiKey = String(config.apiKey || '').trim();
+    const baseUrl = String(config.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    if (!apiKey) {
+      App.notify?.warn?.('请先在配置中心填写 OpenRouter API 密钥', { key: 'apimart-optimize-no-key' });
+      return;
+    }
+    const type = uiState.type || 'image';
+    const sceneHint = type === 'video' ? '视频' : '图片';
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="apimart-ai-optimize-spinner"></span><span>优化中...</span>';
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config?.getRequestHeaders?.(config) || { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: config.modelChoice || 'xiaomi/mimo-v2.5',
+          messages: [
+            {
+              role: 'system',
+              content: `你是一位专业的 AI ${sceneHint}生成提示词优化专家。用户会给你一段简单的${sceneHint}描述，你需要将其优化为一段高质量、详细、专业的${sceneHint}生成提示词。
+
+规则：
+1. 保持用户原始意图不变
+2. 补充画面细节：光影、构图、色调、材质、氛围
+3. 使用专业摄影/美术术语
+4. 控制在 500 字以内
+5. 只输出优化后的提示词，不要解释、不要前缀
+6. 中文输出`,
+            },
+            {
+              role: 'user',
+              content: currentPrompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 600,
+          stream: false,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}${errorText ? `: ${errorText.slice(0, 120)}` : ''}`);
+      }
+      const payload = await response.json();
+      const optimized = (payload?.choices?.[0]?.message?.content || '').trim();
+      if (!optimized) throw new Error('AI 未返回优化结果');
+      applyPrompt(optimized);
+      App.notify?.success?.('提示词已优化', { key: 'apimart-optimize-done' });
+    } catch (error) {
+      App.notify?.warn?.(`优化失败：${error?.message || '未知错误'}`, { key: 'apimart-optimize-error' });
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    }
   };
 
   const formatGenerationDuration = (task) => {
@@ -884,17 +1043,6 @@ import { getLegacyApp } from '../core/app-context';
         <div class="apimart-result-frame">
           ${media}
         </div>
-        <div class="apimart-result-pagination" aria-label="生成结果分页">
-          <button class="apimart-page-btn" type="button" data-apimart-result-page="prev" ${activeIndex <= 0 ? 'disabled' : ''}>
-            <i class="ti ti-chevron-left" aria-hidden="true"></i>
-            <span>上一张</span>
-          </button>
-          <span class="apimart-page-indicator">${esc(activeIndex + 1)} / ${esc(items.length)}</span>
-          <button class="apimart-page-btn" type="button" data-apimart-result-page="next" ${activeIndex >= items.length - 1 ? 'disabled' : ''}>
-            <span>下一张</span>
-            <i class="ti ti-chevron-right" aria-hidden="true"></i>
-          </button>
-        </div>
       </div>
     `;
   };
@@ -973,6 +1121,7 @@ import { getLegacyApp } from '../core/app-context';
         <div class="apimart-history-actions">
           ${primaryStillUrl ? `<button type="button" data-apimart-add-reference="${esc(primaryStillUrl)}" aria-label="设为参考图" title="设为参考图"><i class="ti ti-photo-up" aria-hidden="true"></i></button>` : ''}
           ${urls.length ? `<button type="button" data-apimart-copy="${esc(urls.join('\n'))}" aria-label="复制链接"><i class="ti ti-copy" aria-hidden="true"></i></button>` : ''}
+          <button type="button" data-apimart-delete-task="${esc(task.id)}" aria-label="删除记录" title="删除记录" class="apimart-delete-btn"><i class="ti ti-trash" aria-hidden="true"></i></button>
         </div>
       </article>
     `;
@@ -1053,31 +1202,37 @@ import { getLegacyApp } from '../core/app-context';
       if (status) status.textContent = '正在提交到 APIMart...';
       const { type, payload } = collectFormPayload();
       const { taskId, response } = await submitGeneration(type, payload);
-      const task = {
-        id: taskId,
-        type,
-        model: payload.model,
-        prompt: payload.prompt,
-        size: payload.size || payload.aspect_ratio || uiState.size,
-        resolution: payload.resolution || uiState.resolution,
-        cost: Number(response?.data?.cost || response?.cost || 0),
-        status: 'submitted',
-        progress: 0,
-        images: [],
-        videos: [],
-        thumbnail: '',
-        error: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        raw: response,
-      };
-      tasks = [task, ...tasks.filter((item) => item.id !== taskId)].slice(0, MAX_TASKS);
+      const allIds = normalizeAllTaskIds(response);
+      const createdIds = [];
+      for (const id of allIds) {
+        if (tasks.some((t) => t.id === id)) continue;
+        const task = {
+          id,
+          type,
+          model: payload.model,
+          prompt: payload.prompt,
+          size: payload.size || payload.aspect_ratio || uiState.size,
+          resolution: payload.resolution || uiState.resolution,
+          cost: Number(response?.data?.cost || response?.cost || 0) / (allIds.length || 1),
+          status: 'submitted',
+          progress: 0,
+          images: [],
+          videos: [],
+          thumbnail: '',
+          error: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          raw: response,
+        };
+        tasks = [task, ...tasks.filter((item) => item.id !== id)].slice(0, MAX_TASKS);
+        createdIds.push(id);
+      }
       uiState.resultPage = 0;
       uiState.resultCleared = false;
       writeTasks();
       render();
-      pollTask(taskId, true);
-      App.notify?.success?.(`APIMart 任务已提交：${taskId}`, { key: `apimart-submit-${taskId}` });
+      createdIds.forEach((id) => pollTask(id, true));
+      App.notify?.success?.(`已提交 ${createdIds.length} 个任务`, { key: `apimart-submit-${taskId}` });
     } catch (error) {
       if (status) status.textContent = error?.message || '提交失败';
       App.notify?.warn?.(error?.message || 'APIMart 提交失败', { key: 'apimart-submit-failed' });
@@ -1124,7 +1279,7 @@ import { getLegacyApp } from '../core/app-context';
 
             <section class="apimart-panel-block">
               <div class="apimart-field-row">
-                <label class="apimart-field-label" for="apimartPrompt">提示词 <span>Prompt</span></label>
+                <label class="apimart-field-label" for="apimartPrompt">提示词</label>
                 <button class="apimart-link-btn" id="apimartPromptClear" type="button">清空</button>
               </div>
               <div class="apimart-prompt-box">
@@ -1133,6 +1288,10 @@ import { getLegacyApp } from '../core/app-context';
                   <button type="button" id="apimartPromptRandom">
                     <i class="ti ti-refresh" aria-hidden="true"></i>
                     <span>随机提示词</span>
+                  </button>
+                  <button class="apimart-ai-optimize-btn" id="apimartPromptOptimize" type="button">
+                    <i class="ti ti-sparkles" aria-hidden="true"></i>
+                    <span>AI优化</span>
                   </button>
                   <span id="apimartPromptCounter">${esc(String(uiState.prompt || '').length)} / 1000</span>
                 </div>
@@ -1225,6 +1384,9 @@ import { getLegacyApp } from '../core/app-context';
       hasApiKey: Boolean(config.apiKey),
       latestStatus: tasks[0] ? getTaskStatusLabel(tasks[0].status) : '',
       onPromptSelect: applyPrompt,
+    });
+    window.requestAnimationFrame?.(() => {
+      App.customSelects?.enhanceAll?.(panel);
     });
     updatePromptCounter();
     window.requestAnimationFrame?.(refreshLoadedImageSizes);
@@ -1338,6 +1500,10 @@ import { getLegacyApp } from '../core/app-context';
         applyPrompt(item.prompt);
         return;
       }
+      if (target.closest('#apimartPromptOptimize')) {
+        optimizePrompt();
+        return;
+      }
       const removeReference = target.closest('[data-apimart-remove-reference]');
       if (removeReference) {
         event.preventDefault();
@@ -1397,6 +1563,18 @@ import { getLegacyApp } from '../core/app-context';
       if (copy) {
         const copied = await utils.copyText(copy.getAttribute('data-apimart-copy') || '');
         App.notify?.[copied ? 'success' : 'warn']?.(copied ? '结果链接已复制' : '当前环境不支持复制', { key: 'apimart-copy' });
+        return;
+      }
+      const deleteBtn = target.closest('[data-apimart-delete-task]');
+      if (deleteBtn) {
+        const taskId = deleteBtn.getAttribute('data-apimart-delete-task');
+        if (taskId) {
+          const confirmed = await App.confirmDialog?.confirmDelete?.({
+            title: '删除生成记录',
+            message: '确定要删除这条生成记录吗？该操作不可恢复。',
+          });
+          if (confirmed) deleteTask(taskId);
+        }
         return;
       }
       const preview = target.closest('[data-apimart-preview-url]');

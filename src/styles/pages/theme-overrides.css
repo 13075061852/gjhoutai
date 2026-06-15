@@ -768,6 +768,16 @@
       background:var(--accent);
       color:#fff;
     }
+    body[data-theme="dark"] .biz-role-card.is-active{
+      background:var(--accent-soft);
+      border-color:color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+    body[data-theme="dark"] .biz-permission-table{
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .biz-permission-row:hover{
+      background:rgba(37,99,235,.06);
+    }
     body[data-theme="dark"] .biz-ingredient div{
       background:var(--surface-3);
     }

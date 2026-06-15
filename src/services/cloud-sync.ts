@@ -22,6 +22,7 @@ const CLOUD_LOCAL_STORAGE_KEYS = [
   'gjh-role-page-permissions-v1',
   'gjh-spectrum-filter-state-v1',
   'gjh-spectrum-preview-ai-results-v1',
+  'apimart-media-tasks-v1',
 ] as const;
 
 const CLOUD_LOCAL_STORAGE_KEY_SET = new Set<string>(CLOUD_LOCAL_STORAGE_KEYS);

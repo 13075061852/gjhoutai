@@ -63,11 +63,12 @@ function ModelPicker({
   selectedModel,
   selectedModelIsCustom,
   modelHint,
-}: Pick<MountOptions, 'models' | 'selectedModel' | 'selectedModelIsCustom' | 'modelHint'>) {
+  mode,
+}: Pick<MountOptions, 'models' | 'selectedModel' | 'selectedModelIsCustom' | 'modelHint' | 'mode'>) {
   return (
-    <SpotlightCard className="apimart-rb-model-card" spotlightColor="rgba(59, 130, 246, 0.16)">
+    <div className="apimart-rb-model-card">
       <span className="apimart-rb-model-cover" aria-hidden="true">
-        <i className="ti ti-sparkles" aria-hidden="true" />
+        <i className={`ti ti-${mode === 'video' ? 'video' : 'photo'}`} aria-hidden="true" />
       </span>
       <div className="apimart-rb-model-main">
         <select
@@ -82,9 +83,7 @@ function ModelPicker({
           ))}
           <option value="custom">自定义模型</option>
         </select>
-        <span>{modelHint}</span>
       </div>
-      <i className="ti ti-chevron-down" aria-hidden="true" />
       <input
         id="apimartModelCustom"
         className="apimart-rb-custom-model"
@@ -94,7 +93,7 @@ function ModelPicker({
         autoComplete="off"
         hidden={!selectedModelIsCustom}
       />
-    </SpotlightCard>
+    </div>
   );
 }
 
@@ -154,6 +153,7 @@ export function mountApimartReactBitsShowcase(options: MountOptions) {
         selectedModel={options.selectedModel}
         selectedModelIsCustom={options.selectedModelIsCustom}
         modelHint={options.modelHint}
+        mode={options.mode}
       />,
     );
   }

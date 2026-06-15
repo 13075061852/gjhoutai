@@ -20,7 +20,7 @@
   min-height:0;
   display:grid;
   grid-template-columns:minmax(390px, 38%) minmax(0, 1fr);
-  gap:12px;
+  gap:14px;
 }
 
 .apimart-creator-panel,
@@ -28,9 +28,16 @@
 .apimart-history-panel{
   min-width:0;
   border:1px solid var(--border);
-  border-radius:8px;
+  border-radius:12px;
   background:var(--surface);
-  box-shadow:0 10px 32px rgba(15,23,42,.04);
+  box-shadow:0 1px 3px rgba(15,23,42,.04);
+  transition:border-color .2s ease;
+}
+
+.apimart-creator-panel:hover,
+.apimart-result-panel:hover,
+.apimart-history-panel:hover{
+  border-color:var(--border-2);
 }
 
 .apimart-creator-panel{
@@ -46,11 +53,11 @@
   flex:0 0 auto;
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:8px;
-  min-height:58px;
-  padding:8px;
-  border-bottom:1px solid rgba(203,213,225,.72);
-  background:rgba(248,251,255,.86);
+  gap:6px;
+  min-height:54px;
+  padding:6px;
+  border-bottom:1px solid var(--border);
+  background:var(--surface-2);
 }
 
 .apimart-type-row label{
@@ -61,11 +68,11 @@
   gap:8px;
   border:1px solid transparent;
   border-radius:8px;
-  color:#334155;
-  font-size:14px;
-  font-weight:850;
+  color:#4b5563;
+  font-size:13px;
+  font-weight:800;
   cursor:pointer;
-  transition:color .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+  transition:all .2s ease;
 }
 
 .apimart-type-row label::after{
@@ -74,9 +81,9 @@
 
 .apimart-type-row label.is-active{
   color:var(--accent, #0057ff);
-  border-color:rgba(37,99,235,.24);
-  background:#fff;
-  box-shadow:0 8px 22px rgba(37,99,235,.10);
+  border-color:rgba(37,99,235,.2);
+  background:var(--surface);
+  box-shadow:0 1px 4px rgba(37,99,235,.1);
 }
 
 .apimart-type-row label.is-active::after{
@@ -157,17 +164,16 @@
   align-items:center;
   gap:12px;
   padding:10px 12px;
-  border:1px solid rgba(203,213,225,.82);
-  border-radius:8px;
-  background:#fff;
-  box-shadow:0 8px 20px rgba(15,23,42,.04);
-  transition:border-color .18s ease, box-shadow .18s ease;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--surface);
+  transition:border-color .2s ease, box-shadow .2s ease;
 }
 
 .apimart-model-card:focus-within,
 .apimart-model-card:hover{
-  border-color:rgba(37,99,235,.28);
-  box-shadow:0 10px 26px rgba(15,23,42,.07);
+  border-color:rgba(37,99,235,.25);
+  box-shadow:0 2px 8px rgba(37,99,235,.08);
 }
 
 .apimart-model-cover{
@@ -217,12 +223,12 @@
   min-width:0;
   border:1px solid var(--border);
   border-radius:8px;
-  background:#fff;
+  background:var(--surface);
   color:var(--text);
   font:inherit;
   font-size:13px;
   outline:none;
-  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  transition:border-color .2s ease, box-shadow .2s ease;
 }
 
 .apimart-custom-model,
@@ -232,10 +238,15 @@
   padding:0 12px;
 }
 
+.apimart-field .custom-select,
+.apimart-field .custom-select-trigger{
+  height:40px;
+  min-height:40px;
+}
+
 .apimart-custom-model:focus,
 .apimart-field select:focus,
-.apimart-field input:focus,
-.apimart-prompt-box:focus-within{
+.apimart-field input:focus{
   border-color:var(--accent);
   box-shadow:0 0 0 3px var(--accent-soft);
 }
@@ -248,17 +259,27 @@
   font-size:12px;
   font-weight:800;
   cursor:pointer;
+  transition:opacity .18s ease;
+}
+
+.apimart-link-btn:disabled{
+  opacity:.5;
+  cursor:not-allowed;
 }
 
 .apimart-prompt-box{
   min-height:188px;
   display:flex;
   flex-direction:column;
-  border:1px solid rgba(203,213,225,.86);
-  border-radius:8px;
-  background:#fff;
-  box-shadow:0 8px 22px rgba(15,23,42,.04);
-  transition:border-color .18s ease, box-shadow .18s ease;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--surface);
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+
+.apimart-prompt-box:focus-within{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft);
 }
 
 .apimart-prompt-box textarea{
@@ -277,40 +298,76 @@
 }
 
 .apimart-prompt-box textarea::placeholder{
-  color:#8b97aa;
+  color:var(--muted);
 }
 
 .apimart-prompt-tools{
   display:flex;
   align-items:center;
   gap:8px;
-  padding:9px 10px 10px;
-  border-top:1px solid rgba(226,232,240,.72);
-  background:linear-gradient(180deg,rgba(248,250,252,.22),rgba(248,250,252,.78));
+  padding:8px 10px 10px;
+  border-top:1px solid var(--border);
+  background:var(--surface-2);
 }
 
 .apimart-prompt-tools button{
-  height:34px;
+  height:32px;
   display:inline-flex;
   align-items:center;
-  gap:7px;
-  padding:0 11px;
-  border:1px solid rgba(203,213,225,.9);
-  border-radius:7px;
-  background:#fff;
-  color:#273244;
+  gap:6px;
+  padding:0 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text-2);
   font:inherit;
   font-size:12px;
   font-weight:700;
   cursor:pointer;
+  transition:all .18s ease;
+}
+
+.apimart-prompt-tools button:hover{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:var(--accent-soft);
+}
+
+.apimart-ai-optimize-btn{
+  border-color:var(--accent);
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+
+.apimart-ai-optimize-btn:hover:not(:disabled){
+  background:var(--accent);
+  color:#fff;
+}
+
+.apimart-ai-optimize-btn .ti{
+  font-size:14px;
+}
+
+.apimart-ai-optimize-spinner{
+  display:inline-block;
+  width:12px;
+  height:12px;
+  border:2px solid currentColor;
+  border-top-color:transparent;
+  border-radius:50%;
+  animation:apimart-ai-optimize-spin .6s linear infinite;
+}
+
+@keyframes apimart-ai-optimize-spin{
+  to{transform:rotate(360deg)}
 }
 
 .apimart-prompt-tools button:hover,
 .apimart-ghost-btn:hover,
 .apimart-save-btn:hover{
-  border-color:#b9c9e5;
-  color:var(--accent, #0057ff);
-  background:#f8fbff;
+  border-color:var(--accent);
+  color:var(--accent);
+  background:var(--accent-soft);
 }
 
 .apimart-prompt-tools > span{
@@ -333,13 +390,19 @@
   align-items:center;
   justify-content:center;
   gap:6px;
-  border:1px solid rgba(203,213,225,.9);
+  border:1px solid var(--border);
   border-radius:8px;
-  background:#fff;
-  color:#334155;
+  background:var(--surface);
+  color:#4b5563;
   font-size:12px;
   font-weight:800;
   cursor:pointer;
+  transition:all .18s ease;
+}
+
+.apimart-ratio-option:hover{
+  border-color:var(--accent);
+  color:var(--accent);
 }
 
 .apimart-ratio-option input{
@@ -353,7 +416,7 @@
   border-color:var(--accent, #0057ff);
   color:var(--accent, #0057ff);
   background:var(--accent-soft, #eef5ff);
-  box-shadow:0 0 0 2px var(--accent-alpha, rgba(0,87,255,.08));
+  box-shadow:0 0 0 2px rgba(0,87,255,.08);
 }
 
 .apimart-ratio-glyph{
@@ -372,24 +435,25 @@
 .apimart-params-grid{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:14px;
+  gap:12px;
   margin-top:4px;
 }
 
 .apimart-field{
   min-width:0;
   display:grid;
-  gap:8px;
+  gap:6px;
 }
 
 .apimart-stepper{
   height:40px;
+  min-height:40px;
   display:grid;
   grid-template-columns:40px minmax(0,1fr) 40px;
-  border:1px solid rgba(203,213,225,.9);
+  border:1px solid var(--border);
   border-radius:8px;
   overflow:hidden;
-  background:#fff;
+  background:var(--surface);
 }
 
 .apimart-stepper button,
@@ -428,31 +492,31 @@
   grid-template-columns:auto minmax(0,1fr);
   align-items:start;
   gap:12px;
-  padding:13px 14px;
-  border:1px dashed #c9d6ec;
-  border-radius:8px;
-  background:#f8fbff;
+  padding:14px;
+  border:1px dashed var(--border);
+  border-radius:10px;
+  background:var(--surface-2);
   text-align:left;
   cursor:pointer;
-  transition:border-color .18s ease, background .18s ease, box-shadow .18s ease;
+  transition:all .2s ease;
 }
 
 .apimart-reference-box:hover,
 .apimart-reference-box.is-drag-over{
-  border-color:var(--accent, #0057ff);
-  background:#f3f8ff;
-  box-shadow:0 0 0 3px var(--accent-soft, rgba(0,87,255,.08));
+  border-color:var(--accent);
+  background:var(--accent-soft);
+  box-shadow:0 0 0 3px rgba(0,87,255,.08);
 }
 
 .apimart-reference-icon{
-  width:42px;
-  height:42px;
+  width:40px;
+  height:40px;
   display:grid;
   place-items:center;
-  border-radius:8px;
-  background:#eef5ff;
+  border-radius:10px;
+  background:var(--accent-soft);
   color:var(--accent, #0057ff);
-  font-size:19px;
+  font-size:18px;
 }
 
 .apimart-reference-main{
@@ -572,18 +636,23 @@
   justify-content:space-between;
   border:0;
   background:transparent;
-  color:#1f2937;
+  color:var(--text-2);
   padding:0;
   font:inherit;
   font-size:13px;
-  font-weight:800;
+  font-weight:700;
   cursor:pointer;
+  transition:color .18s ease;
+}
+
+.apimart-advanced-toggle:hover{
+  color:var(--accent);
 }
 
 .apimart-advanced-toggle span{
   display:inline-flex;
   align-items:center;
-  gap:8px;
+  gap:6px;
 }
 
 .apimart-advanced-toggle > .ti{
@@ -615,28 +684,34 @@
   align-items:center;
   gap:12px;
   padding:14px 18px 16px;
-  border-top:1px solid rgba(203,213,225,.72);
-  background:rgba(255,255,255,.94);
-  box-shadow:0 -10px 24px rgba(15,23,42,.04);
+  border-top:1px solid var(--border);
+  background:var(--surface);
+  border-radius:0 0 12px 12px;
 }
 
 .apimart-submit-btn{
-  height:48px;
+  height:44px;
   min-width:0;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:9px;
+  gap:8px;
   border:0;
-  border-radius:8px;
-  background:linear-gradient(135deg,var(--accent, #0057ff),#2563eb);
+  border-radius:10px;
+  background:linear-gradient(135deg,var(--accent, #0057ff),#1d4ed8);
   color:#fff;
   font:inherit;
-  font-size:15px;
+  font-size:14px;
   line-height:1;
   font-weight:800;
   cursor:pointer;
-  box-shadow:0 12px 24px var(--accent-shadow, rgba(0,87,255,.18));
+  box-shadow:0 4px 14px rgba(0,87,255,.2);
+  transition:all .2s ease;
+}
+
+.apimart-submit-btn:hover:not(:disabled){
+  transform:translateY(-1px);
+  box-shadow:0 6px 20px rgba(0,87,255,.28);
 }
 
 .apimart-submit-btn:disabled{
@@ -660,11 +735,17 @@
   transition:border-color .18s ease, color .18s ease, background .18s ease;
 }
 
-.apimart-save-btn{
-  width:48px;
-  height:48px;
-  font-size:18px;
-}
+    .apimart-save-btn{
+      width:48px;
+      height:48px;
+      font-size:18px;
+    }
+
+    .apimart-delete-btn:hover{
+      border-color:#ef4444;
+      color:#ef4444;
+      background:#fef2f2;
+    }
 
 .apimart-preview-column{
   min-width:0;
@@ -677,7 +758,7 @@
 
 .apimart-result-panel,
 .apimart-history-panel{
-  padding:12px 14px 14px;
+  padding:14px 16px 16px;
 }
 
 .apimart-result-panel{
@@ -688,8 +769,8 @@
 }
 
 .apimart-section-head{
-  min-height:38px;
-  margin-bottom:10px;
+  min-height:36px;
+  margin-bottom:12px;
 }
 
 .apimart-section-head h2{
@@ -698,19 +779,20 @@
   gap:8px;
   margin:0;
   color:var(--text);
-  font-size:18px;
+  font-size:16px;
   line-height:1.3;
   font-weight:900;
-  letter-spacing:0;
+  letter-spacing:-.01em;
 }
 
 .apimart-ghost-btn{
-  height:36px;
-  gap:7px;
-  padding:0 13px;
+  height:32px;
+  gap:6px;
+  padding:0 12px;
   font:inherit;
-  font-size:13px;
-  font-weight:800;
+  font-size:12px;
+  font-weight:700;
+  border-radius:8px;
 }
 
 .apimart-ghost-btn:disabled{
@@ -725,9 +807,9 @@
   align-items:center;
   justify-content:center;
   overflow:hidden;
-  border:0;
-  border-radius:0;
-  background:transparent;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--surface-2);
 }
 
 .apimart-result-pager{
@@ -737,8 +819,7 @@
   min-height:0;
   padding:0;
   display:grid;
-  grid-template-rows:minmax(0,1fr) auto;
-  gap:12px;
+  grid-template-rows:minmax(0,1fr);
 }
 
 .apimart-result-frame{
@@ -756,8 +837,8 @@
   min-height:180px;
   display:block;
   overflow:hidden;
-  border:1px solid rgba(15,23,42,.12);
-  border-radius:8px;
+  border:1px solid var(--border);
+  border-radius:10px;
   background:#101828;
   padding:0;
   color:inherit;
@@ -783,12 +864,13 @@
 }
 
 .apimart-page-btn{
-  height:36px;
-  gap:7px;
-  padding:0 12px;
+  height:32px;
+  gap:5px;
+  padding:0 10px;
   font:inherit;
-  font-size:13px;
-  font-weight:800;
+  font-size:12px;
+  font-weight:700;
+  border-radius:8px;
 }
 
 .apimart-page-btn:disabled{
@@ -817,21 +899,27 @@
   top:12px;
   right:12px;
   z-index:2;
-  height:34px;
+  height:32px;
   display:inline-flex;
   align-items:center;
-  gap:6px;
-  padding:0 11px;
-  border:1px solid rgba(255,255,255,.32);
+  gap:5px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.2);
   border-radius:8px;
-  background:rgba(15,23,42,.68);
+  background:rgba(15,23,42,.6);
   color:#fff;
   font:inherit;
-  font-size:12px;
-  font-weight:800;
+  font-size:11px;
+  font-weight:700;
   cursor:pointer;
-  backdrop-filter:blur(10px);
-  transition:background .18s ease, border-color .18s ease, transform .18s ease;
+  backdrop-filter:blur(8px);
+  transition:all .18s ease;
+}
+
+.apimart-add-reference-btn:hover{
+  background:rgba(15,23,42,.8);
+  border-color:rgba(255,255,255,.4);
+  transform:translateY(-1px);
 }
 
 .apimart-add-reference-btn:hover{
@@ -938,7 +1026,7 @@ video.apimart-result-media{
   display:grid;
   grid-auto-flow:column;
   grid-auto-columns:minmax(188px, 220px);
-  gap:14px;
+  gap:12px;
   overflow-x:auto;
   overflow-y:hidden;
   scrollbar-width:thin;
@@ -955,9 +1043,15 @@ video.apimart-result-media{
   position:relative;
   min-width:0;
   overflow:hidden;
-  border-radius:8px;
+  border-radius:10px;
   background:#101828;
   color:#fff;
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+
+.apimart-history-item:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,.2);
 }
 
 .apimart-history-thumb{
@@ -1123,8 +1217,8 @@ button.apimart-history-thumb:focus-visible{
   align-items:center;
   justify-content:center;
   padding:28px;
-  background:rgba(15,23,42,.76);
-  backdrop-filter:blur(10px);
+  background:rgba(15,23,42,.78);
+  backdrop-filter:blur(12px);
 }
 
 .apimart-image-preview-dialog{
@@ -1133,10 +1227,10 @@ button.apimart-history-thumb:focus-visible{
   display:grid;
   grid-template-rows:auto minmax(0,1fr);
   overflow:hidden;
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:10px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;
   background:#0b1220;
-  box-shadow:0 24px 70px rgba(0,0,0,.36);
+  box-shadow:0 24px 80px rgba(0,0,0,.4);
 }
 
 .apimart-image-preview-head{

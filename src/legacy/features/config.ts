@@ -150,12 +150,16 @@ import { cloudConfig } from '../../services/cloud-config';
     if (!normalized) {
       select.value = '';
       if (custom) custom.value = '';
-    } else if (Array.from(select.options).some((option) => option.value === normalized)) {
+    } else if (!Array.from(select.options).some((option) => option.value === normalized)) {
+      const opt = document.createElement('option');
+      opt.value = normalized;
+      opt.textContent = normalized;
+      select.insertBefore(opt, select.querySelector('[value="custom"]'));
       select.value = normalized;
       if (custom) custom.value = '';
     } else {
-      select.value = 'custom';
-      if (custom) custom.value = normalized;
+      select.value = normalized;
+      if (custom) custom.value = '';
     }
     if (custom) custom.hidden = select.value !== 'custom';
   };
@@ -358,7 +362,7 @@ import { cloudConfig } from '../../services/cloud-config';
             <span class="model-dropdown-arrow" aria-hidden="true"></span>
           </button>
           <div class="model-dropdown-panel" id="agentDataModelPanel" role="listbox" aria-label="数据分析模型选择列表"></div>
-          <select id="agentDataModelSelect" name="agentDataModelSelect" hidden></select>
+           <select id="agentDataModelSelect" name="agentDataModelSelect" hidden class="js-no-custom-select"></select>
         </div>
         <input id="agentDataModelCustom" name="agentDataModelCustom" type="text" placeholder="输入自定义模型 ID，例如 deepseek/deepseek-chat" autocomplete="off" hidden />
       </div>
@@ -375,7 +379,7 @@ import { cloudConfig } from '../../services/cloud-config';
             <span class="model-dropdown-arrow" aria-hidden="true"></span>
           </button>
           <div class="model-dropdown-panel" id="agentSpectrumModelPanel" role="listbox" aria-label="图谱分析模型选择列表"></div>
-          <select id="agentSpectrumModelSelect" name="agentSpectrumModelSelect" hidden></select>
+          <select id="agentSpectrumModelSelect" name="agentSpectrumModelSelect" hidden class="js-no-custom-select"></select>
         </div>
         <input id="agentSpectrumModelCustom" name="agentSpectrumModelCustom" type="text" placeholder="输入自定义模型 ID，例如 qwen/qwen-vl-plus" autocomplete="off" hidden />
       </div>
@@ -2147,6 +2151,7 @@ import { cloudConfig } from '../../services/cloud-config';
     mountAgentRoutingConfigSection();
     mountOssHelpLink();
     mountConfigContentPanel();
+    App.customSelects?.enhanceAll?.();
     syncConfigBindings();
 
     const savedConfig = await loadSavedConfig();

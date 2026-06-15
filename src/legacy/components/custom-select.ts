@@ -28,11 +28,46 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     if (openInstance === instance) openInstance = null;
   };
 
+  const positionMenu = (instance) => {
+    const rect = instance.trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const menuHeight = Math.min(240, instance.menu.scrollHeight || 240);
+    const opensUp = spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow;
+
+    instance.menu.style.position = 'fixed';
+    instance.menu.style.minWidth = `${rect.width}px`;
+    instance.menu.style.visibility = 'hidden';
+    instance.menu.hidden = false;
+
+    const menuWidth = instance.menu.offsetWidth;
+    const spaceRight = window.innerWidth - rect.left;
+    let left = rect.left;
+    if (menuWidth > spaceRight) {
+      left = Math.max(8, window.innerWidth - menuWidth - 8);
+    }
+
+    instance.menu.style.left = `${left}px`;
+    instance.menu.style.visibility = '';
+
+    if (opensUp) {
+      instance.menu.style.top = 'auto';
+      instance.menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+      instance.menu.style.transformOrigin = 'bottom';
+    } else {
+      instance.menu.style.top = `${rect.bottom + 6}px`;
+      instance.menu.style.bottom = 'auto';
+      instance.menu.style.transformOrigin = 'top';
+    }
+  };
+
   const openSelect = (instance) => {
     if (openInstance && openInstance !== instance) closeInstance(openInstance);
+
     PublicApp?.animations?.addClass?.(instance.root, 'is-open') ?? instance.root.classList.add('is-open');
     instance.trigger.setAttribute('aria-expanded', 'true');
     instance.menu.hidden = false;
+    positionMenu(instance);
     openInstance = instance;
 
     const active = instance.menu.querySelector('.custom-select-option.is-active');
@@ -81,13 +116,10 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
   };
 
   const enhanceSelect = (select) => {
-    if (enhancedSelects.has(select) || select.hidden || select.closest('.model-dropdown')) return;
+    if (enhancedSelects.has(select) || select.hidden || select.classList.contains('js-no-custom-select') || select.closest('.model-dropdown')) return;
 
-    const computedWidth = Number.parseFloat(window.getComputedStyle(select).width);
-    const selectWidth = computedWidth || select.offsetWidth || 120;
     const root = document.createElement('span');
     root.className = 'custom-select';
-    root.style.setProperty('--custom-select-width', `${selectWidth}px`);
 
     const label = select.getAttribute('aria-label') || select.name || '下拉选择';
     root.innerHTML = `

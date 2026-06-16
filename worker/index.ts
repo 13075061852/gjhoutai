@@ -41,6 +41,7 @@ const LOGIN_WINDOW_SECONDS = 15 * 60;
 const SAFE_BLOB_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const DATA_RECOGNITION_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const DATA_RECOGNITION_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const INSPECTION_REPORT_MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 const LEGACY_ROLE_DEPARTMENTS: Record<LegacyRole, Department> = {
   system_admin: '系统管理员',
@@ -86,6 +87,10 @@ const getSafeBlobContentType = (contentType: string | undefined | null) => {
 const getAttachmentFileName = (key: string) => {
   const fileName = key.split('/').filter(Boolean).pop() || 'download';
   return fileName.replace(/[\\\r\n"]/g, '_');
+};
+const getSafeFileName = (value: unknown, fallback = 'download') => {
+  const fileName = String(value || fallback).trim() || fallback;
+  return fileName.replace(/[\\/\r\n"]/g, '_').slice(0, 180);
 };
 const getImageExtension = (contentType: string) => ({
   'image/png': 'png',
@@ -762,6 +767,103 @@ async function handleDataRecognitionHistory(request: Request, env: Env, url: URL
   return notFound();
 }
 
+async function handleInspectionReports(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/inspection-reports')) return null;
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
+
+  const prefix = '/api/inspection-reports';
+  const suffix = url.pathname.slice(prefix.length).replace(/^\/+/, '');
+  const parts = suffix ? suffix.split('/').map((part) => decodeURIComponent(part)) : [];
+  const id = parts[0] || '';
+  const isFileRoute = parts[1] === 'file';
+
+  if (!id && request.method === 'GET') {
+    if (!can(user, 'state:read')) return forbidden();
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100), 1), 200);
+    const rows = await env.DB.prepare(`
+      SELECT r.id, r.file_name, r.file_size, r.title, r.category, r.notes, r.created_at,
+             u.display_name AS created_by_name
+      FROM inspection_reports r
+      LEFT JOIN users u ON u.id = r.created_by
+      ORDER BY r.created_at DESC
+      LIMIT ?1
+    `).bind(limit).all();
+    return json({ items: rows.results || [] });
+  }
+
+  if (!id && request.method === 'POST') {
+    if (!can(user, 'state:write') || !can(user, 'blob:write')) return forbidden();
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) return badRequest('missing_pdf');
+    const contentType = normalizeContentType(file.type || 'application/pdf');
+    if (contentType !== 'application/pdf' && !String(file.name || '').toLowerCase().endsWith('.pdf')) {
+      return badRequest('invalid_pdf_type');
+    }
+    if (file.size <= 0 || file.size > INSPECTION_REPORT_MAX_PDF_BYTES) return badRequest('invalid_pdf_size');
+
+    const id = randomId();
+    const fileName = getSafeFileName(file.name || '检测报告.pdf', '检测报告.pdf');
+    const title = normalizeSummaryText(form.get('title')) || fileName.replace(/\.pdf$/i, '');
+    const category = normalizeSummaryText(form.get('category'));
+    const notes = normalizeSummaryText(form.get('notes'));
+    const fileKey = `inspection-reports/${id}.pdf`;
+    await env.FILES.put(fileKey, await file.arrayBuffer(), {
+      httpMetadata: { contentType: 'application/pdf' },
+    });
+    await env.DB.prepare(`
+      INSERT INTO inspection_reports (id, created_by, file_name, file_key, file_size, title, category, notes)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+    `).bind(id, user.id, fileName, fileKey, file.size, title, category || null, notes || null).run();
+    await audit(env, user.id, 'inspection_report.create', 'inspection_report', id, { fileName, title, category });
+    return json({ ok: true, id }, { status: 201 });
+  }
+
+  if (!id) return notFound();
+
+  const row = await env.DB.prepare(`
+    SELECT id, created_by, file_name, file_key, file_size, title, category, notes, created_at
+    FROM inspection_reports
+    WHERE id = ?1
+  `).bind(id).first<{
+    id: string;
+    created_by: string;
+    file_name: string;
+    file_key: string;
+    file_size: number;
+    title: string;
+    category?: string | null;
+    notes?: string | null;
+    created_at: string;
+  }>();
+  if (!row) return notFound();
+
+  if (request.method === 'GET' && isFileRoute) {
+    if (!can(user, 'blob:read')) return forbidden();
+    const object = await env.FILES.get(row.file_key);
+    if (!object) return new Response(null, { status: 204 });
+    return new Response(object.body, {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `inline; filename="${getSafeFileName(row.file_name, 'report.pdf')}"`,
+        etag: object.httpEtag,
+      },
+    });
+  }
+
+  if (request.method === 'DELETE') {
+    if (!can(user, 'state:write') || !can(user, 'blob:write')) return forbidden();
+    await env.FILES.delete(row.file_key);
+    await env.DB.prepare('DELETE FROM inspection_reports WHERE id = ?1').bind(id).run();
+    await audit(env, user.id, 'inspection_report.delete', 'inspection_report', id, { fileName: row.file_name });
+    return json({ ok: true });
+  }
+
+  return notFound();
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -777,6 +879,8 @@ export default {
     if (configResponse) return withCors(request, env, configResponse);
     const dataRecognitionHistoryResponse = await handleDataRecognitionHistory(request, env, url);
     if (dataRecognitionHistoryResponse) return withCors(request, env, dataRecognitionHistoryResponse);
+    const inspectionReportsResponse = await handleInspectionReports(request, env, url);
+    if (inspectionReportsResponse) return withCors(request, env, inspectionReportsResponse);
 
     const user = await getSessionUser(request, env);
     if (!user) return withCors(request, env, unauthorized());

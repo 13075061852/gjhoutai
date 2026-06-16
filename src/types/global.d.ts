@@ -21,6 +21,7 @@ declare global {
     config?: LegacyLifecycleModule;
     dataRecognition?: LegacyLifecycleModule;
     imageCutout?: LegacyLifecycleModule;
+    inspectionReports?: LegacyLifecycleModule;
     motionEffects?: LegacyLifecycleModule;
     navigation?: LegacyLifecycleModule;
     projectSkills?: LegacyLifecycleModule;

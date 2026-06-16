@@ -131,6 +131,11 @@ import { ensureLegacyApp } from './app-context';
         eyebrow: '当前可用',
         desc: '图谱分析页面用于管理图谱图片、分类标签、图谱查看、多图对比，并可把图片上下文发送到右侧 Gjun AI。',
       },
+      'inspection-reports': {
+        title: '检测报告',
+        eyebrow: '当前可用',
+        desc: '集中存放数据检测报告 PDF 文件，文件保存在 Cloudflare 云端，支持上传、检索、打开和删除。',
+      },
       'image-cutout': {
         title: '抠图助手',
         eyebrow: '当前可用',

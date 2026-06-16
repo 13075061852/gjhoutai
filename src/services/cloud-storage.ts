@@ -168,4 +168,55 @@ export const cloudStorage = {
       return false;
     }
   },
+
+  async listInspectionReports(limit = 100): Promise<any[] | null> {
+    try {
+      const response = await fetch(buildUrl(`/api/inspection-reports?limit=${encodeURIComponent(String(limit))}`), {
+        credentials: 'include',
+      });
+      const payload = await parseJson<{ items: any[] }>(response);
+      return Array.isArray(payload?.items) ? payload.items : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async createInspectionReport(payload: {
+    file: File;
+    title?: string;
+    category?: string;
+    notes?: string;
+  }): Promise<{ id: string } | null> {
+    try {
+      const form = new FormData();
+      form.append('file', payload.file);
+      form.append('title', payload.title || '');
+      form.append('category', payload.category || '');
+      form.append('notes', payload.notes || '');
+      const response = await fetch(buildUrl('/api/inspection-reports'), {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      });
+      return await parseJson<{ id: string }>(response);
+    } catch {
+      return null;
+    }
+  },
+
+  getInspectionReportFileUrl(id: string): string {
+    return buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}/file`);
+  },
+
+  async deleteInspectionReport(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
 };

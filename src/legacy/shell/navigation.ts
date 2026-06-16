@@ -709,6 +709,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     const isAnalysisPage = pageId === 'property-analysis';
     const isSpectrumPage = pageId === 'spectrum-analysis';
     const isDataRecognitionPage = pageId === 'data-recognition';
+    const isInspectionReportsPage = pageId === 'inspection-reports';
     const isImageCutoutPage = pageId === 'image-cutout';
     const isThemeSettingsPage = pageId === 'theme-settings';
     const isProjectSkillPage = pageId === 'project-skills';
@@ -722,16 +723,17 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
     refs.spectrumAnalysisPageSection?.classList.toggle('active', isSpectrumPage);
     refs.dataRecognitionPageSection?.classList.toggle('active', isDataRecognitionPage);
+    refs.inspectionReportsPageSection?.classList.toggle('active', isInspectionReportsPage);
     refs.imageCutoutPageSection?.classList.toggle('active', isImageCutoutPage);
     refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
     refs.projectSkillPageSection?.classList.toggle('active', isProjectSkillPage);
     refs.apimartMediaPageSection?.classList.toggle('active', isApimartMediaPage);
     refs.aiCallAnalysisPageSection?.classList.toggle('active', isAiCallAnalysisPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage);
+    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage);
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage) {
+    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage) {
       App.businessPages?.render?.(pageId, def);
     }
     if (isApimartMediaPage) {

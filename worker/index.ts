@@ -150,15 +150,27 @@ const MAX_AI_CALL_LOGS = 500;
 const getStateStorageKey = (user: SessionUser, key: string) => USER_SCOPED_STATE_KEYS.has(key)
   ? `users/${user.id}/${key}`
   : key;
+const normalizeAiCallLogValue = (value: unknown) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 const mergeAiCallLogs = (currentValue: unknown, nextValue: unknown, user: SessionUser) => {
-  const currentLogs = Array.isArray(currentValue) ? currentValue : [];
-  const nextLogs = Array.isArray(nextValue) ? nextValue.map((item) => item && typeof item === 'object' ? {
+  const currentLogs = normalizeAiCallLogValue(currentValue);
+  const nextLogs = normalizeAiCallLogValue(nextValue).map((item) => item && typeof item === 'object' ? {
     ...item,
     actorUserId: (item as any).actorUserId || user.id,
     actorUsername: (item as any).actorUsername || user.username,
     actorDisplayName: (item as any).actorDisplayName || user.displayName,
     actorDepartment: (item as any).actorDepartment || user.department,
-  } : item) : [];
+  } : item);
   const merged = [...nextLogs, ...currentLogs].filter((item) => item && typeof item === 'object');
   const seen = new Set<string>();
   return merged.filter((item: any) => {
@@ -909,6 +921,12 @@ export default {
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
         `).bind(storageKey, JSON.stringify(nextValue)).run();
         await audit(env, user.id, 'state.write', 'state', storageKey);
+        return withCors(request, env, json({ ok: true }));
+      }
+      if (request.method === 'DELETE') {
+        if (!can(user, 'state:write')) return withCors(request, env, forbidden());
+        await env.DB.prepare('DELETE FROM app_state WHERE key = ?1').bind(storageKey).run();
+        await audit(env, user.id, 'state.delete', 'state', storageKey);
         return withCors(request, env, json({ ok: true }));
       }
     }

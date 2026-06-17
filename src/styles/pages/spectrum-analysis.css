@@ -213,7 +213,6 @@
       grid-template-columns:clamp(170px,14vw,240px) minmax(0,1fr) clamp(6px,.8vw,14px) clamp(250px,18vw,360px);
       grid-template-rows:minmax(0,1fr);
       gap:0;
-      overflow:hidden;
       transition:grid-template-columns .52s var(--ease);
       will-change:grid-template-columns;
     }
@@ -320,7 +319,7 @@
       margin:0;
     }
     .spectrum-sort-field{
-      height:32px;
+      height:34px;
       box-sizing:border-box;
       flex:0 0 auto;
       min-width:0;
@@ -338,7 +337,7 @@
     }
     .spectrum-sort-field select{
       width:auto;
-      height:32px;
+      height:34px;
       padding:0 10px;
       border:1px solid var(--border);
       border-radius:8px;
@@ -365,7 +364,7 @@
     .spectrum-sort-field .custom-select-trigger{
       width:max-content;
       min-width:108px;
-      height:32px;
+      height:34px;
       padding:0 10px;
       border-radius:8px;
       font-size:12px;
@@ -384,7 +383,7 @@
       white-space:nowrap;
     }
     .spectrum-detail-toggle{
-      height:32px;
+      height:34px;
       margin-left:8px;
       padding:0 12px;
       border:1px solid var(--border);
@@ -452,7 +451,7 @@
       gap:12px;
       min-height:0;
       min-width:0;
-      padding:0 clamp(10px,1.4vw,14px) clamp(10px,1.4vw,14px);
+      padding:14px clamp(10px,1.4vw,14px) clamp(10px,1.4vw,14px);
       overflow:auto;
       scrollbar-width:none;
     }
@@ -843,7 +842,7 @@
       flex:1 1 0;
       min-height:0;
       height:0;
-      padding:0 clamp(10px,1.4vw,14px) clamp(10px,1.4vw,14px);
+      padding:14px clamp(10px,1.4vw,14px) clamp(10px,1.4vw,14px);
       overflow-x:hidden;
       overflow-y:auto;
       scrollbar-color:var(--scrollbar-thumb-color) transparent;

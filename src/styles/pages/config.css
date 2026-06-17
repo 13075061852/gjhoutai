@@ -1037,6 +1037,55 @@
     .action-note.warn{
       color:#92400e;
     }
+    .balance-note{
+      color:var(--text-2);
+      white-space:nowrap;
+    }
+    #readBalanceBtn{
+      min-width:168px;
+      height:auto;
+      min-height:38px;
+      padding:6px 12px;
+      gap:8px;
+      justify-content:flex-start;
+      color:var(--text-2);
+    }
+    #readBalanceBtn .ti{
+      color:currentColor;
+    }
+    .balance-button-main{
+      flex:0 0 auto;
+    }
+    .balance-button-status{
+      max-width:260px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:700;
+      color:currentColor;
+      opacity:.92;
+    }
+    #readBalanceBtn.is-balance-idle{
+      border-color:var(--border);
+      background:var(--surface);
+      color:var(--text-2);
+    }
+    #readBalanceBtn.is-balance-loading{
+      border-color:#2563eb;
+      background:#eff6ff;
+      color:#1d4ed8;
+    }
+    #readBalanceBtn.is-balance-success{
+      border-color:#16a34a;
+      background:#f0fdf4;
+      color:#15803d;
+    }
+    #readBalanceBtn.is-balance-warn{
+      border-color:#d97706;
+      background:#fffbeb;
+      color:#92400e;
+    }
     .success-note{
       display:inline-flex;
       align-items:center;
@@ -1104,6 +1153,14 @@
     .save-btn:active,
     .accent-btn:active{
       transform:translateY(0);
+    }
+    .ghost-btn:disabled,
+    .save-btn:disabled,
+    .accent-btn:disabled{
+      cursor:not-allowed;
+      opacity:.62;
+      transform:none;
+      box-shadow:none;
     }
     .summary-stack{
       display:flex;

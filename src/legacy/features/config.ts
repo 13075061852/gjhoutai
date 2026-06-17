@@ -12,6 +12,15 @@ import { cloudConfig } from '../../services/cloud-config';
   let usdToCny = 6.838833;
   const PROVIDER_OPENROUTER = 'openrouter';
   const PROVIDER_LM_STUDIO = 'lmstudio';
+  const PROVIDER_DEEPSEEK = 'deepseek';
+  const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+  const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+  const DEEPSEEK_MODEL_OPTIONS = [
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', context_length: 128000 },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: 128000 },
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', context_length: 128000 },
+    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', context_length: 128000 },
+  ];
   const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
   let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
   const providerDrafts = {};
@@ -302,11 +311,18 @@ import { cloudConfig } from '../../services/cloud-config';
     `;
   };
 
-  const syncAgentModelSelects = () => {
+  const syncAgentModelSelects = (options = {}) => {
     const agentRefs = getAgentModelRefs();
-    const current = {
-      data: getAgentModelValue('data'),
-      spectrum: getAgentModelValue('spectrum'),
+    const preserveCurrent = options.preserveCurrent !== false;
+    const current = normalizeAgentModels(options.nextValues || (preserveCurrent
+      ? {
+          data: getAgentModelValue('data'),
+          spectrum: getAgentModelValue('spectrum'),
+        }
+      : {}));
+    const currentSelectValue = {
+      data: agentRefs.data?.value || '',
+      spectrum: agentRefs.spectrum?.value || '',
     };
     const sourceOptions = Array.from(refs.modelSelect?.options || [])
       .filter((option) => option.value)
@@ -315,6 +331,13 @@ import { cloudConfig } from '../../services/cloud-config';
         label: option.textContent || option.value,
         category: option.dataset.category || '',
       }));
+    const sourceValues = new Set(sourceOptions.map((item) => item.value));
+    const resolveCurrentValue = (role) => {
+      const value = current[role];
+      if (!value) return '';
+      if (sourceValues.has(value)) return value;
+      return preserveCurrent && currentSelectValue[role] === 'custom' ? value : '';
+    };
     const fillSelect = (select) => {
       if (!select) return;
       select.innerHTML = '';
@@ -335,8 +358,8 @@ import { cloudConfig } from '../../services/cloud-config';
     };
     fillSelect(agentRefs.data);
     fillSelect(agentRefs.spectrum);
-    setAgentModelValue('data', current.data);
-    setAgentModelValue('spectrum', current.spectrum);
+    setAgentModelValue('data', resolveCurrentValue('data'));
+    setAgentModelValue('spectrum', resolveCurrentValue('spectrum'));
     renderAgentModelDropdown('data');
     renderAgentModelDropdown('spectrum');
   };
@@ -638,27 +661,41 @@ import { cloudConfig } from '../../services/cloud-config';
   };
 
   const isLmStudioProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_LM_STUDIO;
+  const isDeepSeekProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_DEEPSEEK;
 
-  const normalizeProvider = (provider) => (
-    isLmStudioProvider(provider) ? PROVIDER_LM_STUDIO : PROVIDER_OPENROUTER
-  );
+  const normalizeProvider = (provider) => {
+    const raw = String(provider || '').toLowerCase();
+    if (raw === PROVIDER_DEEPSEEK) return PROVIDER_DEEPSEEK;
+    return isLmStudioProvider(raw) ? PROVIDER_LM_STUDIO : PROVIDER_OPENROUTER;
+  };
 
   const getAiProvider = () => {
-    const checked = Array.from(refs.aiProviderInputs || []).find((input) => input.checked);
+    const checked = Array.from(document.querySelectorAll('input[name="aiProvider"]')).find((input) => input.checked);
     return normalizeProvider(checked?.value || activeProvider || constants.DEFAULT_CONFIG.aiProvider);
   };
 
-  const getProviderDefaults = (provider = getAiProvider()) => (isLmStudioProvider(provider)
-    ? {
+  const getProviderDefaults = (provider = getAiProvider()) => {
+    const normalizedProvider = normalizeProvider(provider);
+    if (isLmStudioProvider(normalizedProvider)) {
+      return {
         baseUrl: constants.DEFAULT_LM_STUDIO_BASE_URL,
         appTitle: 'LM Studio',
         modelChoice: '',
-      }
-    : {
-        baseUrl: constants.DEFAULT_BASE_URL,
-        appTitle: 'OpenRouter',
-        modelChoice: constants.DEFAULT_CONFIG.modelChoice,
-      });
+      };
+    }
+    if (isDeepSeekProvider(normalizedProvider)) {
+      return {
+        baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
+        appTitle: 'DeepSeek',
+        modelChoice: DEFAULT_DEEPSEEK_MODEL,
+      };
+    }
+    return {
+      baseUrl: constants.DEFAULT_BASE_URL,
+      appTitle: 'OpenRouter',
+      modelChoice: constants.DEFAULT_CONFIG.modelChoice,
+    };
+  };
 
   const normalizeLmStudioBaseUrl = (value) => {
     const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_LM_STUDIO_BASE_URL);
@@ -669,12 +706,22 @@ import { cloudConfig } from '../../services/cloud-config';
 
   const normalizeOpenRouterBaseUrl = (value) => {
     const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL);
+    if (/api\.deepseek\.com/i.test(normalized)) return constants.DEFAULT_BASE_URL;
     return isLocalBaseUrl(normalized) ? constants.DEFAULT_BASE_URL : normalized;
   };
 
-  const normalizeProviderBaseUrl = (provider, value) => (
-    isLmStudioProvider(provider) ? normalizeLmStudioBaseUrl(value) : normalizeOpenRouterBaseUrl(value)
-  );
+  const normalizeDeepSeekBaseUrl = (value) => {
+    const normalized = utils.normalizeBaseUrl(value || DEFAULT_DEEPSEEK_BASE_URL);
+    if (/openrouter\.ai/i.test(normalized)) return DEFAULT_DEEPSEEK_BASE_URL;
+    return isLocalBaseUrl(normalized) ? DEFAULT_DEEPSEEK_BASE_URL : normalized.replace(/\/v1$/i, '');
+  };
+
+  const normalizeProviderBaseUrl = (provider, value) => {
+    const normalizedProvider = normalizeProvider(provider);
+    if (isLmStudioProvider(normalizedProvider)) return normalizeLmStudioBaseUrl(value);
+    if (isDeepSeekProvider(normalizedProvider)) return normalizeDeepSeekBaseUrl(value);
+    return normalizeOpenRouterBaseUrl(value);
+  };
 
   const makeProviderDraft = (provider, config = {}) => {
     const normalizedProvider = normalizeProvider(provider);
@@ -685,6 +732,7 @@ import { cloudConfig } from '../../services/cloud-config';
       baseUrl: normalizeProviderBaseUrl(normalizedProvider, baseUrl),
       appTitle: String(config.appTitle || defaults.appTitle || '').trim(),
       modelChoice: String(config.modelChoice || config.model || defaults.modelChoice || '').trim(),
+      agentModels: normalizeAgentModels(config.agentModels || {}),
     };
   };
 
@@ -692,6 +740,10 @@ import { cloudConfig } from '../../services/cloud-config';
     providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(
       PROVIDER_OPENROUTER,
       providerDrafts[PROVIDER_OPENROUTER] || {}
+    );
+    providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(
+      PROVIDER_DEEPSEEK,
+      providerDrafts[PROVIDER_DEEPSEEK] || {}
     );
     providerDrafts[PROVIDER_LM_STUDIO] = {
       ...makeProviderDraft(PROVIDER_LM_STUDIO, providerDrafts[PROVIDER_LM_STUDIO] || {}),
@@ -704,6 +756,8 @@ import { cloudConfig } from '../../services/cloud-config';
     if (config.aiProvider) return normalizeProvider(config.aiProvider);
     return isLocalBaseUrl(config.baseUrl)
       ? PROVIDER_LM_STUDIO
+      : String(config.baseUrl || '').includes('api.deepseek.com')
+        ? PROVIDER_DEEPSEEK
       : PROVIDER_OPENROUTER;
   };
 
@@ -716,8 +770,14 @@ import { cloudConfig } from '../../services/cloud-config';
       baseUrl: normalizeProviderBaseUrl(normalizedProvider, rawBaseUrl),
       appTitle: isLmStudioProvider(normalizedProvider)
         ? 'LM Studio'
+        : isDeepSeekProvider(normalizedProvider)
+          ? 'DeepSeek'
         : (refs.appTitle?.value || defaults.appTitle || '').trim(),
       modelChoice: refs.modelSelect?.value || providerDrafts[normalizedProvider]?.modelChoice || defaults.modelChoice,
+      agentModels: normalizeAgentModels({
+        data: getAgentModelValue('data'),
+        spectrum: getAgentModelValue('spectrum'),
+      }),
     };
   };
 
@@ -731,8 +791,12 @@ import { cloudConfig } from '../../services/cloud-config';
 
   const setProviderRadio = (provider) => {
     const normalizedProvider = normalizeProvider(provider);
-    if (refs.aiProviderOpenRouter) refs.aiProviderOpenRouter.checked = normalizedProvider === PROVIDER_OPENROUTER;
-    if (refs.aiProviderLmStudio) refs.aiProviderLmStudio.checked = normalizedProvider === PROVIDER_LM_STUDIO;
+    const openRouterInput = refs.aiProviderOpenRouter || document.getElementById('aiProviderOpenRouter');
+    const deepSeekInput = document.getElementById('aiProviderDeepSeek');
+    const lmStudioInput = refs.aiProviderLmStudio || document.getElementById('aiProviderLmStudio');
+    if (openRouterInput) openRouterInput.checked = normalizedProvider === PROVIDER_OPENROUTER;
+    if (deepSeekInput) deepSeekInput.checked = normalizedProvider === PROVIDER_DEEPSEEK;
+    if (lmStudioInput) lmStudioInput.checked = normalizedProvider === PROVIDER_LM_STUDIO;
   };
 
   const ensureModelOption = (modelChoice, label = '') => {
@@ -759,6 +823,8 @@ import { cloudConfig } from '../../services/cloud-config';
     if (refs.modelSelect) {
       if (isLmStudioProvider(activeProvider) && !draft.modelChoice) {
         setLmStudioModelPlaceholder();
+      } else if (isDeepSeekProvider(activeProvider)) {
+        setDeepSeekModelOptions(draft.modelChoice || getProviderDefaults(activeProvider).modelChoice);
       } else {
         ensureModelOption(draft.modelChoice);
         refs.modelSelect.value = draft.modelChoice || getProviderDefaults(activeProvider).modelChoice;
@@ -766,7 +832,7 @@ import { cloudConfig } from '../../services/cloud-config';
     }
     syncProviderUi();
     syncModelState();
-    syncAgentModelSelects();
+    syncAgentModelSelects({ preserveCurrent: false, nextValues: draft.agentModels });
     syncPreview();
   };
 
@@ -782,11 +848,9 @@ import { cloudConfig } from '../../services/cloud-config';
       appTitle: activeDraft.appTitle,
       httpReferer: (refs.httpReferer?.value || '').trim(),
       modelChoice: activeDraft.modelChoice,
-      agentModels: normalizeAgentModels({
-        data: getAgentModelValue('data'),
-        spectrum: getAgentModelValue('spectrum'),
-      }),
+      agentModels: normalizeAgentModels(activeDraft.agentModels || {}),
       openrouterConfig: { ...providerDrafts[PROVIDER_OPENROUTER] },
+      deepseekConfig: { ...providerDrafts[PROVIDER_DEEPSEEK], appTitle: 'DeepSeek' },
       lmStudioConfig: { ...providerDrafts[PROVIDER_LM_STUDIO], apiKey: '', appTitle: 'LM Studio' },
       systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
       temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
@@ -828,6 +892,10 @@ import { cloudConfig } from '../../services/cloud-config';
       next.openrouterConfig = { ...next.openrouterConfig };
       if (isRedactedValue(next.openrouterConfig.apiKey)) next.openrouterConfig.apiKey = '';
     }
+    if (next.deepseekConfig && typeof next.deepseekConfig === 'object') {
+      next.deepseekConfig = { ...next.deepseekConfig };
+      if (isRedactedValue(next.deepseekConfig.apiKey)) next.deepseekConfig.apiKey = '';
+    }
     if (next.lmStudioConfig && typeof next.lmStudioConfig === 'object') {
       next.lmStudioConfig = { ...next.lmStudioConfig, apiKey: '' };
     }
@@ -846,6 +914,7 @@ import { cloudConfig } from '../../services/cloud-config';
     redact(next, 'searchApiKey');
     redact(next, 'apimartApiKey');
     redact(next.openrouterConfig, 'apiKey');
+    redact(next.deepseekConfig, 'apiKey');
     redact(next.lmStudioConfig, 'apiKey');
     return next;
   };
@@ -854,9 +923,13 @@ import { cloudConfig } from '../../services/cloud-config';
     const next = { ...constants.DEFAULT_CONFIG, ...dropRedactedSecrets(config) };
     const provider = inferProviderFromConfig(next);
     providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next.openrouterConfig || {});
+    providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next.deepseekConfig || {});
     providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next.lmStudioConfig || {});
-    if (!next.openrouterConfig && !isLmStudioProvider(provider)) {
+    if (!next.openrouterConfig && provider === PROVIDER_OPENROUTER) {
       providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next);
+    }
+    if (!next.deepseekConfig && isDeepSeekProvider(provider)) {
+      providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next);
     }
     if (!next.lmStudioConfig && isLmStudioProvider(provider)) {
       providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next);
@@ -864,6 +937,10 @@ import { cloudConfig } from '../../services/cloud-config';
     activeProvider = provider;
     setProviderRadio(activeProvider);
     const activeDraft = providerDrafts[activeProvider];
+    const legacyAgentModels = normalizeAgentModels(next.agentModels || constants.DEFAULT_CONFIG.agentModels || {});
+    if ((legacyAgentModels.data || legacyAgentModels.spectrum) && !activeDraft.agentModels?.data && !activeDraft.agentModels?.spectrum) {
+      activeDraft.agentModels = legacyAgentModels;
+    }
     if (refs.openrouterApiKey) {
       refs.openrouterApiKey.value = isLmStudioProvider(activeProvider)
         ? providerDrafts[PROVIDER_OPENROUTER]?.apiKey || ''
@@ -874,8 +951,12 @@ import { cloudConfig } from '../../services/cloud-config';
     if (refs.httpReferer) refs.httpReferer.value = next.httpReferer || '';
     if (refs.modelSelect) {
       const modelChoice = activeDraft.modelChoice;
-      ensureModelOption(modelChoice);
-      refs.modelSelect.value = modelChoice;
+      if (isDeepSeekProvider(activeProvider)) {
+        setDeepSeekModelOptions(modelChoice || getProviderDefaults(activeProvider).modelChoice);
+      } else {
+        ensureModelOption(modelChoice);
+        refs.modelSelect.value = modelChoice;
+      }
     }
     syncProviderUi();
     if (refs.systemPrompt) refs.systemPrompt.value = next.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
@@ -895,10 +976,7 @@ import { cloudConfig } from '../../services/cloud-config';
     if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = next.apimartBaseUrl || constants.DEFAULT_APIMART_BASE_URL;
     setApimartModelValue('image', next.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel);
     setApimartModelValue('video', next.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel);
-    const agentModels = normalizeAgentModels(next.agentModels || constants.DEFAULT_CONFIG.agentModels || {});
-    syncAgentModelSelects();
-    setAgentModelValue('data', agentModels.data);
-    setAgentModelValue('spectrum', agentModels.spectrum);
+    syncAgentModelSelects({ preserveCurrent: false, nextValues: activeDraft.agentModels });
     if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
     if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
     if (refs.ossObjectKey) refs.ossObjectKey.value = next.ossObjectKey || '';
@@ -907,7 +985,6 @@ import { cloudConfig } from '../../services/cloud-config';
     if (refs.ossExcelBackupPrefix) refs.ossExcelBackupPrefix.value = next.ossExcelBackupPrefix || '';
     syncModelProviderField();
     syncModelState();
-    syncAgentModelSelects();
     syncTemperatureLabel();
     syncPreview();
   };
@@ -937,40 +1014,87 @@ import { cloudConfig } from '../../services/cloud-config';
 
   const syncModelProviderField = () => {
     if (!refs.appTitle) return;
-    if (isLmStudioProvider(getAiProvider())) {
+    const provider = getAiProvider();
+    if (isLmStudioProvider(provider)) {
       refs.appTitle.value = 'LM Studio';
+      return;
+    }
+    if (isDeepSeekProvider(provider)) {
+      refs.appTitle.value = 'DeepSeek';
       return;
     }
     refs.appTitle.value = getModelProviderLabel(getResolvedModel());
   };
 
+  const mountDeepSeekProviderOption = () => {
+    if (document.getElementById('aiProviderDeepSeek')) return;
+    const segment = document.querySelector('.provider-segment');
+    if (!segment) return;
+    const option = document.createElement('label');
+    option.className = 'provider-option';
+    option.innerHTML = `
+      <input id="aiProviderDeepSeek" name="aiProvider" type="radio" value="deepseek" />
+      <span>DeepSeek</span>
+    `;
+    const lmStudioOption = document.getElementById('aiProviderLmStudio')?.closest('.provider-option');
+    segment.insertBefore(option, lmStudioOption || null);
+  };
+
+  const mountBalanceControl = () => {
+    const actionBar = document.querySelector('.config-actions-panel');
+    const actionButtons = actionBar?.querySelector('.action-buttons');
+    if (!actionBar || !actionButtons) return;
+    if (!document.getElementById('readBalanceBtn')) {
+      const button = document.createElement('button');
+      button.className = 'ghost-btn outline-btn';
+      button.id = 'readBalanceBtn';
+      button.type = 'button';
+      button.innerHTML = `
+        <i class="ti ti-coins" aria-hidden="true"></i>
+        <span class="balance-button-main">读取余额</span>
+        <span class="balance-button-status" id="aiBalanceStatus">余额：未查询</span>
+      `;
+      actionButtons.appendChild(button);
+    }
+    actionBar.querySelector(':scope > #aiBalanceStatus')?.remove();
+  };
+
   const syncProviderUi = () => {
     const provider = getAiProvider();
     const isLocal = isLmStudioProvider(provider);
+    const isDeepSeek = isDeepSeekProvider(provider);
     const defaults = getProviderDefaults(provider);
 
     if (refs.apiKeyLabelText) {
-      refs.apiKeyLabelText.textContent = isLocal ? 'LM Studio API 密钥（可选）' : 'OpenRouter API 密钥';
+      refs.apiKeyLabelText.textContent = isLocal ? 'LM Studio API 密钥（可选）' : isDeepSeek ? 'DeepSeek API 密钥' : 'OpenRouter API 密钥';
     }
     if (refs.apiKeyNoteText) {
       refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '仅保存在本机浏览器';
     }
     if (refs.openrouterApiKey) {
-      refs.openrouterApiKey.placeholder = isLocal ? '可留空' : 'sk-or-...';
+      refs.openrouterApiKey.placeholder = isLocal ? '可留空' : isDeepSeek ? 'sk-...' : 'sk-or-...';
     }
     if (refs.apiKeyField) {
       refs.apiKeyField.hidden = isLocal;
     }
     if (refs.aiProviderHelp) {
       refs.aiProviderHelp.hidden = isLocal;
+      refs.aiProviderHelp.href = isDeepSeek
+        ? 'https://api-docs.deepseek.com/'
+        : 'https://openrouter.ai/docs/api/api-reference/models/get-models';
     }
     if (refs.openrouterBaseUrl && !refs.openrouterBaseUrl.value.trim()) {
       refs.openrouterBaseUrl.value = defaults.baseUrl;
     }
-    if (refs.appTitle && isLocal) {
+    if (refs.appTitle && (isLocal || isDeepSeek)) {
       refs.appTitle.value = defaults.appTitle;
     } else if (refs.appTitle && !refs.appTitle.value.trim()) {
       refs.appTitle.value = defaults.appTitle;
+    }
+    if (isLocal) {
+      setBalanceStatus('余额：本地模型无需查询');
+    } else {
+      setBalanceStatus('余额：未查询');
     }
   };
 
@@ -985,6 +1109,75 @@ import { cloudConfig } from '../../services/cloud-config';
   };
 
   const maskKey = (key) => utils.maskKey(key);
+
+  const getBalanceRefs = () => ({
+    button: document.getElementById('readBalanceBtn'),
+    status: document.getElementById('aiBalanceStatus'),
+  });
+
+  const setBalanceStatus = (message, tone = 'success') => {
+    const { button, status } = getBalanceRefs();
+    if (!status) return;
+    status.textContent = message;
+    status.classList.remove('success', 'warn');
+    status.classList.add(tone === 'warn' ? 'warn' : 'success');
+    button?.classList.remove('is-balance-idle', 'is-balance-loading', 'is-balance-success', 'is-balance-warn');
+    const text = String(message || '');
+    const stateClass = tone === 'warn'
+      ? 'is-balance-warn'
+      : text.includes('正在')
+        ? 'is-balance-loading'
+        : text.includes('本地') || text.includes('未查')
+          ? 'is-balance-idle'
+          : 'is-balance-success';
+    button?.classList.add(stateClass);
+  };
+
+  const formatBalanceAmount = (value, currency = 'USD') => {
+    const amount = Number.parseFloat(value);
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    const normalizedCurrency = String(currency || 'USD').toUpperCase();
+    const symbol = normalizedCurrency === 'CNY' ? '¥' : normalizedCurrency === 'USD' ? '$' : `${normalizedCurrency} `;
+    return `${symbol}${safeAmount.toFixed(2)}`;
+  };
+
+  const formatDeepSeekBalance = (payload = {}) => {
+    const balances = Array.isArray(payload.balance_infos)
+      ? payload.balance_infos
+      : Array.isArray(payload.data?.balance_infos)
+        ? payload.data.balance_infos
+        : [];
+    const preferred = balances.find((item) => item.currency === 'CNY')
+      || balances.find((item) => item.currency === 'USD')
+      || balances[0];
+    if (!preferred) throw new Error('未返回余额信息');
+    const currency = preferred.currency || 'USD';
+    const total = formatBalanceAmount(preferred.total_balance, currency);
+    const topped = formatBalanceAmount(preferred.topped_up_balance, currency);
+    const granted = formatBalanceAmount(preferred.granted_balance, currency);
+    const available = payload.is_available ?? payload.data?.is_available;
+    return `余额：DeepSeek ${total}（充值 ${topped} / 赠送 ${granted}）${available === false ? '，当前不可用' : ''}`;
+  };
+
+  const formatOpenRouterCredits = (payload = {}) => {
+    const data = payload.data || payload;
+    const total = Number.parseFloat(data.total_credits);
+    const usage = Number.parseFloat(data.total_usage);
+    if (Number.isFinite(total) && Number.isFinite(usage)) {
+      const remaining = Math.max(0, total - usage);
+      return `余额：OpenRouter ${formatBalanceAmount(remaining)}（总额 ${formatBalanceAmount(total)} / 已用 ${formatBalanceAmount(usage)}）`;
+    }
+    const limit = Number.parseFloat(data.limit);
+    const used = Number.parseFloat(data.usage ?? data.used);
+    const remaining = Number.parseFloat(data.limit_remaining ?? data.remaining);
+    if (Number.isFinite(remaining)) {
+      return `余额：OpenRouter ${formatBalanceAmount(remaining)}`;
+    }
+    if (Number.isFinite(limit) && Number.isFinite(used)) {
+      return `余额：OpenRouter ${formatBalanceAmount(Math.max(0, limit - used))}（限额 ${formatBalanceAmount(limit)} / 已用 ${formatBalanceAmount(used)}）`;
+    }
+    throw new Error('未返回余额信息');
+  };
 
   const syncPreview = () => {
     const config = getFormConfig();
@@ -1547,6 +1740,19 @@ import { cloudConfig } from '../../services/cloud-config';
     syncModelDropdown();
   };
 
+  const setDeepSeekModelOptions = (preferredModel = DEFAULT_DEEPSEEK_MODEL) => {
+    buildModelSelect(DEEPSEEK_MODEL_OPTIONS);
+    if (!refs.modelSelect) return;
+    const preferred = String(preferredModel || DEFAULT_DEEPSEEK_MODEL).trim();
+    if ([...refs.modelSelect.options].some((option) => option.value === preferred)) {
+      refs.modelSelect.value = preferred;
+    } else {
+      refs.modelSelect.value = DEFAULT_DEEPSEEK_MODEL;
+    }
+    syncModelState();
+    syncPreview();
+  };
+
   const setLmStudioModelPlaceholder = () => {
     if (!refs.modelSelect) return;
     refs.modelSelect.innerHTML = '';
@@ -1563,6 +1769,7 @@ import { cloudConfig } from '../../services/cloud-config';
   const fetchModels = async () => {
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
+    const isDeepSeek = isDeepSeekProvider(config.aiProvider);
     const requestedProvider = config.aiProvider;
     const isStaleProviderRequest = () => getAiProvider() !== requestedProvider;
     if (isLocal && refs.openrouterBaseUrl) {
@@ -1573,8 +1780,8 @@ import { cloudConfig } from '../../services/cloud-config';
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      setStatus(isLocal ? '正在加载 LM Studio 本地模型列表…' : '正在加载 OpenRouter 官方模型列表…', 'success');
-      const modelsUrl = isLocal ? `${config.baseUrl}/models` : `${config.baseUrl}/models?output_modalities=text,image`;
+      setStatus(isLocal ? '正在加载 LM Studio 本地模型列表…' : isDeepSeek ? '正在加载 DeepSeek 模型列表…' : '正在加载 OpenRouter 官方模型列表…', 'success');
+      const modelsUrl = isLocal || isDeepSeek ? `${config.baseUrl}/models` : `${config.baseUrl}/models?output_modalities=text,image`;
       const response = await fetch(modelsUrl, {
         method: 'GET',
         headers: getRequestHeaders(config),
@@ -1591,6 +1798,19 @@ import { cloudConfig } from '../../services/cloud-config';
         ? rawModels
           .filter((item) => !isInvalidLmStudioChatModel(item))
           .sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))
+        : isDeepSeek
+          ? rawModels
+            .filter((item) => item.id && !item.id.includes('/'))
+            .sort((a, b) => {
+              const rank = (id) => {
+                if (id === DEFAULT_DEEPSEEK_MODEL) return 0;
+                if (id === 'deepseek-v4-pro') return 1;
+                if (id === 'deepseek-chat') return 2;
+                if (id === 'deepseek-reasoner') return 3;
+                return 10;
+              };
+              return rank(a.id) - rank(b.id) || String(a.id || '').localeCompare(String(b.id || ''));
+            })
         : rawModels
           .filter((item) => item.id.includes('/'))
           .filter((item) => !isSlowOrFreeModelLike(item))
@@ -1607,7 +1827,7 @@ import { cloudConfig } from '../../services/cloud-config';
       if (refs.modelSelect && !isLocal && isSlowOrFreeModelLike(savedModelChoice) && models.length) {
         refs.modelSelect.value = models[0].id;
       }
-      buildModelSelect(models);
+      buildModelSelect(isDeepSeek && !models.length ? DEEPSEEK_MODEL_OPTIONS : models);
       if (isLocal && refs.modelSelect && models.length) {
         const hasSavedLocalModel = models.some((item) => item.id === savedModelChoice);
         refs.modelSelect.value = hasSavedLocalModel ? savedModelChoice : models[0].id;
@@ -1620,8 +1840,9 @@ import { cloudConfig } from '../../services/cloud-config';
       } else if (isLocal && refs.modelSelect && !models.length) {
         setLmStudioModelPlaceholder();
       } else if (!isLocal && refs.modelSelect) {
-        providerDrafts[PROVIDER_OPENROUTER] = {
-          ...providerDrafts[PROVIDER_OPENROUTER],
+        const providerKey = isDeepSeek ? PROVIDER_DEEPSEEK : PROVIDER_OPENROUTER;
+        providerDrafts[providerKey] = {
+          ...providerDrafts[providerKey],
           modelChoice: refs.modelSelect.value,
         };
       }
@@ -1630,18 +1851,75 @@ import { cloudConfig } from '../../services/cloud-config';
       }
       setStatus(isLocal
         ? `已加载 LM Studio 本地模型列表：${models.length || 0} 项`
+        : isDeepSeek
+          ? `已加载 DeepSeek 模型列表：${models.length || 0} 项`
         : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
       return true;
     } catch (error) {
       if (isStaleProviderRequest()) return;
       if (isLocal) setLmStudioModelPlaceholder();
+      if (isDeepSeek) setDeepSeekModelOptions(providerDrafts[PROVIDER_DEEPSEEK]?.modelChoice || DEFAULT_DEEPSEEK_MODEL);
       setStatus(isLocal
         ? `本地模型加载失败：请确认 LM Studio 已启动并加载模型（${error?.message || '未知错误'}）`
+        : isDeepSeek
+          ? `DeepSeek 模型加载失败：已保留内置模型选项（${error?.message || '未知错误'}）`
         : `模型加载失败：${error?.message || '未知错误'}`, 'warn');
       return false;
     } finally {
       clearTimeout(timeout);
+    }
+  };
+
+  const fetchBalanceJson = async (url, config, signal) => {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getRequestHeaders(config),
+      cache: 'no-store',
+      signal,
+    });
+    if (!response.ok) throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
+    return response.json();
+  };
+
+  const readBalance = async () => {
+    const config = getFormConfig();
+    const isLocal = isLmStudioProvider(config.aiProvider);
+    const isDeepSeek = isDeepSeekProvider(config.aiProvider);
+    const balanceRefs = getBalanceRefs();
+    if (isLocal) {
+      setBalanceStatus('余额：本地模型无需查询');
+      return;
+    }
+    if (!config.apiKey) {
+      setBalanceStatus('余额：请先填写 API Key', 'warn');
+      return;
+    }
+
+    const baseUrl = utils.normalizeBaseUrl(config.baseUrl);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    if (balanceRefs.button) balanceRefs.button.disabled = true;
+    setBalanceStatus('余额：正在查询...');
+
+    try {
+      if (isDeepSeek) {
+        const payload = await fetchBalanceJson(`${baseUrl}/user/balance`, config, controller.signal);
+        setBalanceStatus(formatDeepSeekBalance(payload));
+      } else {
+        try {
+          const payload = await fetchBalanceJson(`${baseUrl}/credits`, config, controller.signal);
+          setBalanceStatus(formatOpenRouterCredits(payload));
+        } catch (creditsError) {
+          const payload = await fetchBalanceJson(`${baseUrl}/key`, config, controller.signal);
+          setBalanceStatus(formatOpenRouterCredits(payload));
+        }
+      }
+    } catch (error) {
+      setBalanceStatus(`余额：读取失败（${error?.message || '未知错误'}）`, 'warn');
+    } finally {
+      clearTimeout(timeout);
+      if (balanceRefs.button) balanceRefs.button.disabled = false;
     }
   };
 
@@ -1813,7 +2091,7 @@ import { cloudConfig } from '../../services/cloud-config';
       });
     });
 
-    Array.from(refs.aiProviderInputs || []).forEach((input) => {
+    Array.from(document.querySelectorAll('input[name="aiProvider"]')).forEach((input) => {
       input.addEventListener('change', () => {
         clearOpenRouterModelRefreshTimer();
         const nextProvider = normalizeProvider(input.value);
@@ -1824,6 +2102,9 @@ import { cloudConfig } from '../../services/cloud-config';
         storeActiveProviderDraft();
         applyProviderDraft(nextProvider);
         fetchModels();
+        if (!isLmStudioProvider(nextProvider) && providerDrafts[nextProvider]?.apiKey) {
+          readBalance();
+        }
       });
     });
 
@@ -1899,6 +2180,7 @@ import { cloudConfig } from '../../services/cloud-config';
         if (agentRefs.spectrumCustom) agentRefs.spectrumCustom.hidden = agentRefs.spectrum?.value !== 'custom';
         renderAgentModelDropdown('data');
         renderAgentModelDropdown('spectrum');
+        storeActiveProviderDraft();
         syncPreview();
       }));
 
@@ -2110,6 +2392,7 @@ import { cloudConfig } from '../../services/cloud-config';
     refs.importConfigBtn?.addEventListener('click', importConfig);
     refs.exportConfigBtn?.addEventListener('click', exportConfig);
     refs.testConfigBtn?.addEventListener('click', testConfig);
+    getBalanceRefs().button?.addEventListener('click', readBalance);
     refs.clearConfigBtn?.addEventListener('click', clearConfig);
     refs.copyConfigBtn?.addEventListener('click', copyConfig);
     refs.syncPreviewBtn?.addEventListener('click', syncPreview);
@@ -2149,6 +2432,8 @@ import { cloudConfig } from '../../services/cloud-config';
     mountSearchConfigSection();
     mountApimartConfigSection();
     mountAgentRoutingConfigSection();
+    mountDeepSeekProviderOption();
+    mountBalanceControl();
     mountOssHelpLink();
     mountConfigContentPanel();
     App.customSelects?.enhanceAll?.();

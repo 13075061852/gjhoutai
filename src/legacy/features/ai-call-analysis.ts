@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
   'use strict';
@@ -11,14 +12,59 @@ import { getLegacyApp } from '../core/app-context';
   const MAX_LOGS = 500;
   let bound = false;
   let activePeriodKey = 'week';
+  let cachedLogs = null;
 
   const nowIso = () => new Date().toISOString();
   const esc = (value) => utils.escapeHtml(value);
-  const readLogs = () => {
-    const logs = utils.readJson(constants.AI_CALL_LOG_KEY, []);
-    return Array.isArray(logs) ? logs : [];
+  const normalizeStoredLogs = (value) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
   };
-  const writeLogs = (logs) => utils.writeJson(constants.AI_CALL_LOG_KEY, logs.slice(0, MAX_LOGS));
+  const sortLogs = (logs) => [...logs]
+    .filter((item) => item && typeof item === 'object')
+    .sort((left, right) => String(right?.at || right?.endedAt || '').localeCompare(String(left?.at || left?.endedAt || '')))
+    .slice(0, MAX_LOGS);
+  const mergeLogs = (...sources) => {
+    const seen = new Set();
+    return sortLogs(sources.flatMap(normalizeStoredLogs).filter((item) => {
+      const id = String(item?.id || '');
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }));
+  };
+  const readLocalLogs = () => {
+    const logs = utils.readJson(constants.AI_CALL_LOG_KEY, []);
+    return normalizeStoredLogs(logs);
+  };
+  const readLogs = () => {
+    if (!cachedLogs) cachedLogs = sortLogs(readLocalLogs());
+    return cachedLogs;
+  };
+  const writeLogs = (logs, options = {}) => {
+    const normalized = sortLogs(logs);
+    cachedLogs = normalized;
+    utils.writeJson(constants.AI_CALL_LOG_KEY, normalized);
+    if (options.cloud !== false) {
+      void cloudStorage.putJson(constants.AI_CALL_LOG_KEY, normalized);
+    }
+    return normalized;
+  };
+  const refreshCloudLogs = async () => {
+    const cloudLogs = await cloudStorage.getJson(constants.AI_CALL_LOG_KEY);
+    const merged = mergeLogs(readLocalLogs(), cloudLogs);
+    writeLogs(merged);
+    render();
+    return merged;
+  };
   const truncate = (value, max = 220) => {
     const text = String(value || '').replace(/\s+/g, ' ').trim();
     return text.length > max ? `${text.slice(0, max)}...` : text;
@@ -869,7 +915,9 @@ import { getLegacyApp } from '../core/app-context';
       confirmText: '确认清空',
     });
     if (!confirmed) return;
-    writeLogs([]);
+    cachedLogs = [];
+    utils.writeJson(constants.AI_CALL_LOG_KEY, []);
+    await cloudStorage.deleteJson(constants.AI_CALL_LOG_KEY);
     render();
     App.notify?.warn?.('已清空 AI 调用记录', { key: 'ai-call-clear-logs' });
   };
@@ -998,6 +1046,7 @@ import { getLegacyApp } from '../core/app-context';
   const init = () => {
     bind();
     render();
+    void refreshCloudLogs();
   };
 
   App.aiCallAnalysis = {

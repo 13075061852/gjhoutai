@@ -32,6 +32,18 @@ export const cloudStorage = {
     }
   },
 
+  async deleteJson(key: string): Promise<boolean> {
+    try {
+      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async getDataUrl(namespace: string, key: string): Promise<string | null> {
     try {
       const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), { credentials: 'include' });

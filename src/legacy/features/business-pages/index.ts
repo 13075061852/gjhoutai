@@ -4768,9 +4768,18 @@ import { createBusinessPageShared } from './shared';
     </section>
   `;
 
+  const renderDashboardWithState = () => renderDashboard({
+    orders: orderRows,
+    orderLogs,
+    inventoryRows,
+    procurements: procurementRows,
+    suppliers: supplierRows,
+    customers: archiveStates['customer']?.rows || [],
+  });
+
   const renderBody = (pageId) => {
     const renderers = {
-      dashboard: renderDashboard,
+      dashboard: renderDashboardWithState,
       'order-management': renderOrders,
       'order-detail': renderOrderDetail,
       'invoice-print': renderInvoice,
@@ -4785,7 +4794,7 @@ import { createBusinessPageShared } from './shared';
       'raw-material-procurement': renderRawMaterialProcurement,
       'permission-management': renderPermission,
     };
-    return (renderers[pageId] || renderDashboard)();
+    return (renderers[pageId] || renderDashboardWithState)();
   };
 
   const render = (pageId, def = {}) => {

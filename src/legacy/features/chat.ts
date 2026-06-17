@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { createAgentPlan } from './agent-runtime/router';
 
 (function () {
   'use strict';
@@ -11,9 +12,7 @@ import { getLegacyApp } from '../core/app-context';
   const NEW_CONVERSATION_TITLE = '新建对话';
   const SKILL_SYNTHESIS_TIMEOUT_MS = 90000;
   const SKILL_SYNTHESIS_CONTEXT_LIMIT = 12000;
-  const PROJECT_AGENT_LOOP_TIMEOUT_MS = 20000;
-  const PROJECT_AGENT_MAX_MODEL_CALLS = 6;
-  const PROJECT_AGENT_MAX_SKILL_CALLS = 8;
+  const PROJECT_AGENT_LOOP_TIMEOUT_MS = 90000;
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
   let streamRenderTimer = 0;
@@ -457,16 +456,27 @@ import { getLegacyApp } from '../core/app-context';
     return { sessions: [session], activeId: session.id };
   };
 
+  const getChatScrollElement = () => {
+    const messages = refs.chatMessages;
+    if (!messages) return null;
+    if (messages.scrollHeight > messages.clientHeight + 1) return messages;
+    const body = messages.closest?.('.assistant-body');
+    if (body && body.scrollHeight > body.clientHeight + 1) return body;
+    return messages;
+  };
+
   const isChatNearBottom = () => {
-    if (!refs.chatMessages) return true;
-    const distance = refs.chatMessages.scrollHeight - refs.chatMessages.scrollTop - refs.chatMessages.clientHeight;
+    const scrollElement = getChatScrollElement();
+    if (!scrollElement) return true;
+    const distance = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
     return distance < 96;
   };
 
   const scrollChatToBottom = () => {
-    if (!refs.chatMessages) return;
+    const scrollElement = getChatScrollElement();
+    if (!scrollElement) return;
     requestAnimationFrame(() => {
-      refs.chatMessages.scrollTop = refs.chatMessages.scrollHeight;
+      scrollElement.scrollTop = scrollElement.scrollHeight;
     });
   };
 
@@ -627,7 +637,7 @@ import { getLegacyApp } from '../core/app-context';
     `;
   };
 
-  const PENDING_STATUS_RE = /(?:正在思考|正在获取匹配数据表|正在获取项目数据|正在分析|正在执行项目技能|项目技能已执行，正在整理结果|等待上传授权|准备上传图片|正在分析图谱图片)(?:[.。…]*)?$/;
+  const PENDING_STATUS_RE = /(?:正在思考|正在理解问题|正在规划|正在选择需要读取的项目数据|正在读取项目数据|正在整理回答|正在获取匹配数据表|正在获取项目数据|正在分析|正在执行项目技能|项目技能已执行，正在整理结果|等待上传授权|准备上传图片|正在分析图谱图片)(?:[.。…]*)?$/;
 
   const getPendingStatus = (item) => {
     const explicitStatus = String(item?.pendingStatus || '').trim();
@@ -640,8 +650,12 @@ import { getLegacyApp } from '../core/app-context';
   const stripPendingStatus = (content = '', status = '') => {
     let text = String(content || '').trim();
     const statusText = String(status || '').trim();
-    if (statusText && text.endsWith(statusText)) {
-      text = text.slice(0, -statusText.length).trim();
+    if (statusText) {
+      const normalizedText = text.replace(/[.。…\s]+$/g, '');
+      if (normalizedText === statusText) return '';
+      if (normalizedText.endsWith(statusText)) {
+        text = normalizedText.slice(0, -statusText.length).trim();
+      }
     }
     return text.replace(PENDING_STATUS_RE, '').trim();
   };
@@ -1568,9 +1582,64 @@ import { getLegacyApp } from '../core/app-context';
 
   const recordAiCall = (entry = {}) => {
     try {
-      App.aiCallAnalysis?.record?.(entry);
+      const recorded = App.aiCallAnalysis?.record?.(entry);
+      if (recorded) return recorded;
+      return recordAiCallFallback(entry);
     } catch (error) {
       console.warn('[chat] Failed to record AI call analysis:', error);
+      return recordAiCallFallback(entry, { compact: true });
+    }
+  };
+
+  const truncateAiCallLogText = (value, max = 1200) => {
+    const text = String(value || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+  };
+
+  const recordAiCallFallback = (entry = {}, options = {}) => {
+    try {
+      const key = constants.AI_CALL_LOG_KEY;
+      const current = utils.readJson(key, []);
+      const logs = Array.isArray(current) ? current : [];
+      const now = nowIso();
+      const model = String(entry.model || entry.tokenUsage?.model || App.config?.getResolvedModel?.() || '').trim();
+      const log = {
+        id: String(entry.id || `ai-call-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+        at: entry.at || entry.endedAt || now,
+        startedAt: entry.startedAt || entry.at || now,
+        endedAt: entry.endedAt || now,
+        durationMs: Number(entry.durationMs || 0),
+        provider: String(entry.provider || App.config?.getFormConfig?.()?.aiProvider || '').trim(),
+        model: model || '未选择模型',
+        endpoint: truncateAiCallLogText(entry.endpoint, 500),
+        source: String(entry.source || 'chat'),
+        pageId: String(entry.pageId || getActivePageId?.() || ''),
+        sessionId: String(entry.sessionId || state.chatSessionId || ''),
+        status: entry.status === 'failed' ? 'failed' : 'success',
+        statusText: String(entry.statusText || ''),
+        error: truncateAiCallLogText(entry.error, 800),
+        prompt: truncateAiCallLogText(entry.prompt, options.compact ? 800 : 1600),
+        responsePreview: truncateAiCallLogText(entry.responsePreview || entry.completionText, options.compact ? 1000 : 2400),
+        requestMeta: entry.requestMeta && typeof entry.requestMeta === 'object' ? {
+          messages: Number(entry.requestMeta.messages || 0),
+          images: Number(entry.requestMeta.images || 0),
+          files: Number(entry.requestMeta.files || 0),
+          attachedData: Boolean(entry.requestMeta.attachedData),
+          stream: Boolean(entry.requestMeta.stream),
+        } : {},
+        tokenUsage: entry.tokenUsage || App.aiCallAnalysis?.buildUsageMeta?.({
+          apiUsage: entry.apiUsage,
+          requestMessages: entry.requestMessages,
+          completionText: entry.completionText || entry.responsePreview,
+          model,
+        }) || null,
+      };
+      utils.writeJson(key, [log, ...logs.filter((item) => item?.id !== log.id)].slice(0, 500));
+      App.aiCallAnalysis?.render?.();
+      return log;
+    } catch (fallbackError) {
+      console.warn('[chat] Failed to write fallback AI call log:', fallbackError);
+      return null;
     }
   };
 
@@ -1872,13 +1941,7 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const formatProjectAgentTrace = (items = [], finalAnswer = '') => {
-    const trace = items.length
-      ? [
-          '### 调度轨迹',
-          ...items.map((item, index) => `${index + 1}. ${item}`),
-        ].join('\n')
-      : '';
-    return [trace, finalAnswer].filter(Boolean).join('\n\n').trim();
+    return String(finalAnswer || '').trim();
   };
 
   const compactObservation = (execution) => {
@@ -1905,7 +1968,7 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
-  const buildProjectAgentPlannerMessages = ({ config, prompt, manifest, observations, traceItems, forceFinal = false }) => [
+  const buildProjectAgentPlannerMessages = ({ config, prompt, manifest, observations, traceItems, recommendedPlan = null, forceFinal = false }) => [
     { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
     {
       role: 'system',
@@ -1914,6 +1977,7 @@ import { getLegacyApp } from '../core/app-context';
         '你必须先理解用户问题，再按需调用本地项目技能获取必要数据，不要让用户重复提供项目背景。',
         '你可以多轮调用技能，但每次只调用一个最有价值的技能；数据够用时必须 final。',
         '默认采用意图裁剪：数量问题只取 count，列举才取 list，最高/最低取 extrema，筛选取 filter，详情取 detail，聚合取 aggregate。',
+        '如果【系统推荐工具】不为 null，说明前端已经识别到当前页面、已选数据或专用数据源；除非用户只是闲聊，否则应优先输出 callSkill 读取事实数据，再基于 Observation final。',
         '不要为了回答数据问题调用 assistant.openPage；只有用户明确要求打开/进入/切换页面时才调用 assistant.openPage。',
         '如果已经有足够数据，输出 final。不要输出 Markdown，必须只输出 JSON。',
         forceFinal ? '现在必须基于已有 Observation 给出最终答案；如果数据不足，说明缺口。' : '',
@@ -1932,6 +1996,9 @@ import { getLegacyApp } from '../core/app-context';
         '【项目能力地图，不含业务明细】',
         JSON.stringify(manifest || {}, null, 2),
         '',
+        '【系统推荐工具，不是最终答案】',
+        recommendedPlan ? JSON.stringify(recommendedPlan, null, 2) : 'null',
+        '',
         '【已执行 Observation】',
         observations.length ? JSON.stringify(observations, null, 2) : '[]',
         '',
@@ -1941,8 +2008,8 @@ import { getLegacyApp } from '../core/app-context';
     },
   ];
 
-  const callProjectAgentPlanner = async ({ config, model, prompt, manifest, observations, traceItems, signal, forceFinal = false }) => {
-    const messages = buildProjectAgentPlannerMessages({ config, prompt, manifest, observations, traceItems, forceFinal });
+  const callProjectAgentPlanner = async ({ config, model, prompt, manifest, observations, traceItems, recommendedPlan = null, signal, forceFinal = false }) => {
+    const messages = buildProjectAgentPlannerMessages({ config, prompt, manifest, observations, traceItems, recommendedPlan, forceFinal });
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
@@ -1968,102 +2035,145 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
-  const runProjectAgentLoop = async ({ config, model, prompt, pendingIndex, signal = null }) => {
+  const runProjectAgentLoop = async ({ config, model, prompt, pendingIndex, localPlan = null, signal = null }) => {
     const timer = createAbortTimer('项目级 Agent 调度', PROJECT_AGENT_LOOP_TIMEOUT_MS, signal);
-    const traceItems = ['理解问题：正在读取项目能力地图'];
+    const traceItems = ['理解问题'];
     const observations = [];
-    let modelCalls = 0;
-    let skillCalls = 0;
     let apiUsage = null;
     let apiMessages = [];
     let finishReason = '';
 
     try {
+      flushStreamRender(pendingIndex, '正在理解问题并读取项目能力...', {
+        pending: true,
+        pendingStatus: '正在理解问题',
+      });
+
       const manifestExecution = await App.projectSkills.executeSkill('project.getManifest', { includeFields: true }, {
         source: 'agent-loop',
         prompt,
       });
       observations.push(compactObservation(manifestExecution));
-      traceItems.push('读取项目页面说明书：已获取页面、字段、技能和页面关系');
-      flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在规划需要调用哪些页面数据...'), {
+      traceItems.push('读取项目页面说明书');
+
+      const recommendedPlan = localPlan || App.projectSkills?.routePrompt?.(prompt) || null;
+      flushStreamRender(pendingIndex, '正在选择需要读取的项目数据...', {
         pending: true,
-        pendingStatus: '项目 Agent 调度中',
+        pendingStatus: '正在规划',
       });
 
-      while (modelCalls < PROJECT_AGENT_MAX_MODEL_CALLS && skillCalls < PROJECT_AGENT_MAX_SKILL_CALLS) {
-        modelCalls += 1;
-        const planner = await callProjectAgentPlanner({
+      let planner = null;
+      try {
+        planner = await callProjectAgentPlanner({
           config,
           model,
           prompt,
           manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
           observations,
           traceItems,
+          recommendedPlan,
           signal: timer.signal,
         });
-        apiUsage = planner.usage || apiUsage;
-        apiMessages = planner.messages || apiMessages;
-        finishReason = planner.finishReason || finishReason;
-        const decision = planner.decision;
-        if (!decision?.action) throw new Error('Agent Planner 没有返回可执行 JSON。');
-
-        if (decision.action === 'final') {
-          traceItems.push(`复盘：${decision.thoughtSummary || '数据足够，生成答案'}`);
-          return {
-            content: formatProjectAgentTrace(traceItems, String(decision.answer || '').trim() || '我已经完成分析，但没有生成有效答案。'),
-            usage: apiUsage,
-            messages: apiMessages,
-            finishReason,
-          };
-        }
-
-        if (decision.action !== 'callSkill' || !decision.skillId) {
-          throw new Error(`Agent Planner 返回了未知动作：${decision.action}`);
-        }
-
-        const skillId = String(decision.skillId);
-        const input = decision.input && typeof decision.input === 'object' ? decision.input : {};
-        traceItems.push(`计划调用：${skillId}${input.pageId ? ` / ${input.pageId}` : ''}${decision.thoughtSummary ? `；${decision.thoughtSummary}` : ''}`);
-        flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在执行本地技能取数...'), {
-          pending: true,
-          pendingStatus: '正在执行项目技能',
-        });
-
-        const execution = await App.projectSkills.executeSkill(skillId, input, {
-          source: 'agent-loop',
-          prompt,
-        });
-        skillCalls += 1;
-        const observation = compactObservation(execution);
-        observations.push(observation);
-        traceItems.push(`取数结果：${observation.summary || observation.message || `${observation.rowCount} 条`}`);
-        flushStreamRender(pendingIndex, formatProjectAgentTrace(traceItems, '正在复盘数据是否足够...'), {
-          pending: true,
-          pendingStatus: '正在复盘',
-        });
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        planner = null;
       }
 
-      const finalPlanner = await callProjectAgentPlanner({
-        config,
-        model,
-        prompt,
-        manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
-        observations,
-        traceItems,
-        signal: timer.signal,
-        forceFinal: true,
+      apiUsage = planner?.usage || apiUsage;
+      apiMessages = planner?.messages || apiMessages;
+      finishReason = planner?.finishReason || finishReason;
+
+      const decision = planner?.decision || null;
+      const fallbackPlan = recommendedPlan && recommendedPlan.skillId ? recommendedPlan : null;
+      if (!fallbackPlan && decision?.action === 'final' && String(decision.answer || '').trim()) {
+        return {
+          content: String(decision.answer || '').trim(),
+          usage: apiUsage,
+          messages: apiMessages,
+          finishReason,
+        };
+      }
+
+      const skillId = decision?.action === 'callSkill' && decision.skillId
+        ? String(decision.skillId)
+        : String(fallbackPlan?.skillId || '');
+      const input = decision?.action === 'callSkill' && decision.input && typeof decision.input === 'object'
+        ? decision.input
+        : (fallbackPlan?.input && typeof fallbackPlan.input === 'object' ? fallbackPlan.input : {});
+
+      if (!skillId) {
+        const finalPlanner = await callProjectAgentPlanner({
+          config,
+          model,
+          prompt,
+          manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
+          observations,
+          traceItems,
+          recommendedPlan,
+          signal: timer.signal,
+          forceFinal: true,
+        });
+        apiUsage = finalPlanner.usage || apiUsage;
+        apiMessages = finalPlanner.messages || apiMessages;
+        finishReason = finalPlanner.finishReason || finishReason;
+        return {
+          content: String(finalPlanner.decision?.answer || '').trim() || '我已经读取项目能力，但没有找到需要调用的项目数据。请把要查询的对象或范围说得更具体一些。',
+          usage: apiUsage,
+          messages: apiMessages,
+          finishReason,
+        };
+      }
+
+      traceItems.push(`调用项目技能：${skillId}`);
+      flushStreamRender(pendingIndex, '正在读取项目数据...', {
+        pending: true,
+        pendingStatus: '正在读取项目数据',
       });
-      apiUsage = finalPlanner.usage || apiUsage;
-      apiMessages = finalPlanner.messages || apiMessages;
-      finishReason = finalPlanner.finishReason || finishReason;
-      const answer = finalPlanner.decision?.answer || '已达到 Agent 调度上限，我基于已取回的数据给出当前结论，但仍缺少可进一步确认的信息。';
-      traceItems.push('复盘：达到调度上限，基于已有数据生成答案');
-      return {
-        content: formatProjectAgentTrace(traceItems, answer),
-        usage: apiUsage,
-        messages: apiMessages,
-        finishReason,
-      };
+
+      const execution = await App.projectSkills.executeSkill(skillId, input, {
+        source: planner?.decision ? 'agent-planner' : 'agent-planner-fallback',
+        prompt,
+      });
+      const observation = compactObservation(execution);
+      observations.push(observation);
+
+      flushStreamRender(pendingIndex, '正在整理回答...', {
+        pending: true,
+        pendingStatus: '正在整理回答',
+      });
+
+      try {
+        const synthesized = await synthesizeSkillResult({
+          config,
+          model,
+          prompt,
+          execution,
+          pendingIndex,
+          displayPrefix: '',
+          signal: timer.signal,
+          images: [],
+        });
+        return {
+          content: synthesized.content || App.projectSkills.formatSkillMessage(execution),
+          usage: synthesized.usage || apiUsage,
+          messages: synthesized.messages || apiMessages,
+          finishReason: synthesized.finishReason || finishReason,
+          usedStream: Boolean(synthesized.usedStream),
+        };
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        const resultText = App.projectSkills.formatSkillMessage(execution);
+        return {
+          content: [
+            resultText,
+            '',
+            `【提示】AI 已完成规划和项目取数，但最终语言总结失败：${error?.message || '未知错误'}`,
+          ].join('\n'),
+          usage: apiUsage,
+          messages: apiMessages,
+          finishReason: finishReason || 'synthesis_failed',
+        };
+      }
     } finally {
       timer.clear();
     }
@@ -2320,6 +2430,14 @@ import { getLegacyApp } from '../core/app-context';
         refs.chatInput.focus();
       }
     }
+  };
+
+  const shouldRunLocalPlanDirectly = (plan) => {
+    const skillId = String(plan?.skillId || '');
+    return Boolean(
+      skillId === 'assistant.openPage'
+      || skillId === 'media.generateImage'
+    );
   };
 
   const runChatSkillAction = async (messageIndex, actionIndex) => {
@@ -2637,7 +2755,14 @@ import { getLegacyApp } from '../core/app-context';
     if (!prompt) return;
 
     const projectAccessEnabled = isProjectAccessEnabled();
-    const projectContextEnabled = projectAccessEnabled && shouldUseProjectContext(prompt);
+    const activePageId = getActivePageId();
+    const agentPlan = createAgentPlan({
+      prompt,
+      activePageId,
+      projectAccessEnabled,
+      webSearchEnabled,
+    });
+    const projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
     if (shouldAnswerCurrentDateLocally(prompt)) {
       pushChatMessage('user', prompt);
       if (refs.chatInput) refs.chatInput.value = '';
@@ -2645,8 +2770,8 @@ import { getLegacyApp } from '../core/app-context';
       return;
     }
 
-    const localPlan = projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null;
-    if (localPlan?.skillId === 'assistant.openPage' || Array.isArray(localPlan?.steps)) {
+    const localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
+    if (shouldRunLocalPlanDirectly(localPlan)) {
       await runLocalSkillPlan(prompt, localPlan);
       return;
     }
@@ -2714,16 +2839,20 @@ import { getLegacyApp } from '../core/app-context';
       attachedDataContext = projectContextEnabled ? getAttachedDataContext(prompt) : '';
       if (webSearchEnabled) {
         flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
-        try {
-          searchDecision = await decideSearchWithAi(config, model, prompt, {
-            signal: activeChatAbortController?.signal,
-          });
-        } catch (error) {
-          if (isAbortError(error)) throw error;
-          searchDecision = null;
-          console.warn('[chat] Search decision failed, fallback to local rules:', error);
+        if (agentPlan.useProjectContext && !agentPlan.needsWebSearch) {
+          searchDecision = { needsSearch: false, reason: agentPlan.reason || '项目本地数据优先' };
+        } else {
+          try {
+            searchDecision = await decideSearchWithAi(config, model, prompt, {
+              signal: activeChatAbortController?.signal,
+            });
+          } catch (error) {
+            if (isAbortError(error)) throw error;
+            searchDecision = null;
+            console.warn('[chat] Search decision failed, fallback to local rules:', error);
+          }
         }
-        const localSearchRequired = promptRequiresWebSearch(prompt);
+        const localSearchRequired = agentPlan.needsWebSearch || (!agentPlan.useProjectContext && promptRequiresWebSearch(prompt));
         needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
       } else {
         searchDecision = { needsSearch: false, reason: 'Web search disabled by chat toggle' };
@@ -2794,14 +2923,24 @@ import { getLegacyApp } from '../core/app-context';
         }
       }
 
-      wantsImages = supportsImageOutput && !attachedImages.length && /(?:生成图片|出图|画一张|画图|插图|图片|图像|壁纸|海报|封面)/.test(prompt);
+      wantsImages = supportsImageOutput && !attachedImages.length && agentPlan.wantsImageGeneration;
 
-      if (!skipAiRequest && projectContextEnabled && !needsWebSearch && !attachedDataFile && !attachedImages.length && !wantsImages) {
+      if (
+        !skipAiRequest
+        && projectContextEnabled
+        && !needsWebSearch
+        && !attachedDataFile
+        && !attachedImages.length
+        && !wantsImages
+        && agentPlan.kind !== 'image-analysis'
+        && localPlan?.skillId !== 'analysis.buildJointPackage'
+      ) {
         const loopResult = await runProjectAgentLoop({
           config,
           model,
           prompt,
           pendingIndex,
+          localPlan,
           signal: activeChatAbortController?.signal,
         });
         streamedContent = loopResult.content;

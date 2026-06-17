@@ -3436,6 +3436,34 @@ import { cloudStorage } from '../../services/cloud-storage';
     '灰份',
   ].map((key) => summarizeMetric(rows, key)).filter(Boolean);
 
+  const wantsFullCurrentPropertyTable = (question = '') => {
+    const text = String(question || '');
+    const asksCurrentTable = /(?:当前|现在|本页|筛选|表格|物性表|物性数据)/.test(text);
+    const asksFullRange = /(?:全部|所有|完整|全量|一共|总共|有哪些|哪些|列举|汇总|统计|清单)/.test(text);
+    const asksModels = /(?:型号|牌号|材料)/.test(text);
+    const specifiesSmallLimit = /\d{1,3}\s*(?:条|行|个|款|型号|记录|数据)/.test(text)
+      && !/(?:全部|所有|完整|全量)/.test(text);
+    return !specifiesSmallLimit && asksCurrentTable && (asksFullRange || asksModels);
+  };
+
+  const getUniqueColumnValues = (rows, keys = []) => {
+    const seen = new Set();
+    const values = [];
+    rows.forEach((row) => {
+      keys.forEach((key) => {
+        const raw = row?.[key];
+        const items = Array.isArray(raw) ? raw : [raw];
+        items.forEach((item) => {
+          const value = valueToText(item).trim();
+          if (!value || seen.has(value)) return;
+          seen.add(value);
+          values.push(value);
+        });
+      });
+    });
+    return values;
+  };
+
   const getAgentContext = (question = '', options = {}) => {
     if (!state.data) {
       return {
@@ -3455,6 +3483,52 @@ import { cloudStorage } from '../../services/cloud-storage';
     const exactOnly = Boolean(options.exactOnly);
     const rowWindow = extractAgentRowWindow(question);
     const requestedRowLimit = rowWindow.limit;
+    const selectedOnly = Boolean(options.selectedOnly || options.mode === 'selected' || /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(String(question || '')));
+    const fullCurrentTable = Boolean(options.fullCurrentTable || wantsFullCurrentPropertyTable(question));
+
+    if (selectedOnly && selectedRows.length) {
+      const selectedColumns = getAgentDetailColumns(getColumns(selectedRows));
+      const selectedRowWindow = rowWindow.limit == null ? { limit: null, mode: 'all' } : rowWindow;
+      const selectedForUpload = sliceAgentRowsByWindow(selectedRows, selectedRowWindow);
+      const metrics = getMetricSummaryForAgent(selectedForUpload);
+      const displayTable = formatRowsMarkdownTableForAi(selectedForUpload, selectedColumns, null);
+      const csvTable = formatRowsCsvForAi(selectedForUpload, selectedColumns);
+      const content = [
+        '【物性分析已选数据】',
+        '以下数据来自物性分析页面当前高亮/选中的表格行。用户询问“选中、已选、选择的、这些数据”时，必须优先基于这些行回答，不要要求用户重新提供数据，也不要改用全表检索结果。',
+        `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
+        terms.length ? `用户问题关键词：${terms.join('、')}` : '',
+        getAgentRowWindowDescription(rowWindow),
+        '【用于分析的已选数据表】',
+        '```csv',
+        csvTable,
+        '```',
+        metrics.length ? '表格之后再输出的分析摘要：' : '',
+        ...metrics.map((item) => `- ${item}`),
+      ].filter(Boolean).join('\n');
+
+      return {
+        title: '物性分析',
+        reason: `使用当前已选物性数据 ${selectedRows.length} 行`,
+        content,
+        score: options.forceCurrentPage ? 10 : 9,
+        stats: {
+          exactMatches: 0,
+          strongMatches: selectedRows.length,
+          similarMatches: 0,
+          selectedRows: selectedRows.length,
+          filteredRows: visible.filteredRows.length,
+          requestedRowLimit,
+          rowWindowMode: rowWindow.mode,
+          uploadedRows: selectedForUpload.length,
+          selectedOnly: true,
+          contextChars: content.length,
+        },
+        displayTable: displayTable ? `### 当前已选数据（${selectedForUpload.length} / ${selectedRows.length} 行）\n${displayTable}` : '',
+        fullContext: requestedRowLimit == null,
+      };
+    }
+
     const exactMatches = [];
     const scoredRows = [];
 
@@ -3477,20 +3551,23 @@ import { cloudStorage } from '../../services/cloud-storage';
     const fallbackRows = selectedRows.length
       ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
       : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
+    const fallbackRowLimit = fullCurrentTable ? requestedRowLimit : (requestedRowLimit ?? AGENT_CONTEXT_ROW_LIMIT);
     const rowsForSummary = strongMatches.length
       ? sliceAgentRowsByWindow(strongMatches.map((item) => item.row), rowWindow)
       : selectedRows.length
         ? sliceAgentRowsByWindow(selectedRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow)
-        : sliceAgentRowsByWindow(visible.filteredRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow);
+        : sliceAgentRowsByWindow(visible.filteredRows, fullCurrentTable ? rowWindow : (rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow));
     const metrics = getMetricSummaryForAgent(rowsForSummary);
+    const currentModelValues = fullCurrentTable ? getUniqueColumnValues(visible.filteredRows, ['型号']) : [];
     const sections = [
       '【物性分析检索结果】',
-      `命中原因：${terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
+      `命中原因：${fullCurrentTable ? '用户要求汇总当前物性表格，使用当前筛选后的全量表格数据' : terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
       identifierTerms.length ? `精确型号/批次关键词：${identifierTerms.join('、')}；精确命中 ${exactMatches.length} 行。` : '',
       getAgentRowWindowDescription(rowWindow),
       `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
       `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
       '展示策略：前端会先展示全部匹配数据表格，AI 只需要继续输出表格后的分析。',
+      fullCurrentTable ? `当前筛选表格中的唯一型号（${currentModelValues.length} 个）：${currentModelValues.join('、') || '无'}` : '',
     ].filter(Boolean);
     const displayTableSections = [];
 
@@ -3531,7 +3608,11 @@ import { cloudStorage } from '../../services/cloud-storage';
     appendRows(`${exactMatches.length ? '精确匹配数据' : '强匹配数据'}（共 ${strongMatches.length} 行）：`, strongMatches, requestedRowLimit);
     appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches, requestedRowLimit ?? AGENT_CONTEXT_SIMILAR_LIMIT);
     if (!exactOnly && !strongMatches.length && !similarMatches.length) {
-      appendRows(selectedRows.length ? '当前已选数据：' : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`, fallbackRows, requestedRowLimit ?? AGENT_CONTEXT_ROW_LIMIT);
+      appendRows(
+        selectedRows.length ? '当前已选数据：' : fullCurrentTable ? `当前筛选全量数据（共 ${fallbackRows.length} 行）：` : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`,
+        fallbackRows,
+        fallbackRowLimit
+      );
     }
     if (metrics.length) sections.push('表格之后再输出的分析摘要：', ...metrics.map((item) => `- ${item}`));
     const content = sections.join('\n');
@@ -3539,7 +3620,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       ? (requestedRowLimit == null ? strongMatches.length : Math.min(strongMatches.length, requestedRowLimit))
       : similarMatches.length
         ? (requestedRowLimit == null ? Math.min(similarMatches.length, AGENT_CONTEXT_SIMILAR_LIMIT) : Math.min(similarMatches.length, requestedRowLimit))
-        : (requestedRowLimit == null ? Math.min(fallbackRows.length, AGENT_CONTEXT_ROW_LIMIT) : Math.min(fallbackRows.length, requestedRowLimit));
+        : (fallbackRowLimit == null ? fallbackRows.length : Math.min(fallbackRows.length, fallbackRowLimit));
 
     return {
       title: '物性分析',
@@ -3549,7 +3630,7 @@ import { cloudStorage } from '../../services/cloud-storage';
           ? '未命中关键词，使用当前已选物性数据'
           : '未命中关键词，使用当前筛选物性数据预览',
       content,
-      score: options.forceCurrentPage ? 9 : 7,
+      score: fullCurrentTable ? 12 : options.forceCurrentPage ? 9 : 7,
       stats: {
         exactMatches: exactMatches.length,
         strongMatches: strongMatches.length,
@@ -3559,11 +3640,13 @@ import { cloudStorage } from '../../services/cloud-storage';
         requestedRowLimit,
         rowWindowMode: rowWindow.mode,
         uploadedRows,
+        fullCurrentTable,
+        uniqueModels: currentModelValues.length,
         fullMatchedRowsUploaded: requestedRowLimit == null && strongMatches.length > 0,
         contextChars: content.length,
       },
       displayTable: displayTableSections.join('\n\n'),
-      fullContext: requestedRowLimit == null && strongMatches.length > 0,
+      fullContext: (requestedRowLimit == null && strongMatches.length > 0) || fullCurrentTable,
     };
   };
 

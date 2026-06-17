@@ -313,7 +313,10 @@ import { getLegacyApp } from '../core/app-context';
         ...routingContext,
       });
     }
-    const currentPageContext = getCurrentPageDomContext(question, { activePageId, forceCurrentPage });
+    const shouldUseDomTableContext = !['property-analysis', 'spectrum-analysis', 'image-cutout'].includes(activePageId);
+    const currentPageContext = shouldUseDomTableContext
+      ? getCurrentPageDomContext(question, { activePageId, forceCurrentPage })
+      : null;
     if (currentPageContext) {
       results.push({
         skillId: 'current-page-table',

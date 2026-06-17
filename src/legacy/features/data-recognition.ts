@@ -459,6 +459,73 @@ import { cloudStorage } from '../../services/cloud-storage';
     removeHistoryItemWithAnimation(id);
   };
 
+  const normalizeHistoryAgentItem = (item) => ({
+    id: String(item?.id || ''),
+    fileName: String(item?.file_name || item?.fileName || ''),
+    model: String(item?.model || ''),
+    modelCode: String(item?.model_code || item?.modelCode || ''),
+    batchCode: String(item?.batch_code || item?.batchCode || ''),
+    rowCount: Number(item?.row_count ?? item?.rowCount ?? 0),
+    createdAt: String(item?.created_at || item?.createdAt || ''),
+    title: getHistoryTitle(item),
+  });
+
+  const searchHistoryByAgent = async (input = {}) => {
+    const query = String(input.query || input.question || '').trim().toLowerCase();
+    const limit = Math.max(1, Math.min(20, Number.parseInt(input.limit, 10) || 8));
+    if (!state.history.length) {
+      try {
+        await refreshHistory();
+      } catch {
+        // Keep local state fallback when cloud history is unavailable.
+      }
+    }
+    const items = state.history
+      .map(normalizeHistoryAgentItem)
+      .filter((item) => {
+        if (!query) return true;
+        return [item.fileName, item.model, item.modelCode, item.batchCode, item.title]
+          .some((value) => String(value || '').toLowerCase().includes(query));
+      });
+    return {
+      ok: true,
+      message: items.length ? `已找到 ${items.length} 条识别历史。` : '没有找到匹配的识别历史。',
+      details: items.slice(0, limit).map((item) => `${item.title || item.fileName || item.id}：${item.rowCount} 行`),
+      data: {
+        rowCount: items.length,
+        items: items.slice(0, limit),
+      },
+    };
+  };
+
+  const inspectCurrentByAgent = () => {
+    const summary = getResultSummary();
+    const rows = Array.isArray(state.result?.rows) ? state.result.rows : [];
+    return {
+      ok: Boolean(state.imageDataUrl || rows.length),
+      message: rows.length ? `当前识别结果包含 ${rows.length} 行。` : '当前没有可用的识别结果。',
+      details: [
+        state.fileName ? `文件：${state.fileName}` : '',
+        summary.modelCode ? `型号：${summary.modelCode}` : '',
+        summary.batchCode ? `批次：${summary.batchCode}` : '',
+      ].filter(Boolean),
+      data: {
+        fileName: state.fileName || '',
+        model: state.model || '',
+        modelCode: summary.modelCode || '',
+        batchCode: summary.batchCode || '',
+        rowCount: rows.length,
+        result: state.result || null,
+        hasImage: Boolean(state.imageDataUrl),
+        image: state.imageDataUrl ? {
+          type: 'image_url',
+          image_url: { url: state.imageDataUrl },
+          label: state.fileName || '当前识别图片',
+        } : null,
+      },
+    };
+  };
+
   const parseSSEChunk = (chunk) => {
     const rows = String(chunk || '').split(/\r?\n/);
     const events = [];
@@ -1077,5 +1144,5 @@ import { cloudStorage } from '../../services/cloud-storage';
   installPageDefinition();
   installMarkup();
 
-  App.dataRecognition = { init };
+  App.dataRecognition = { init, searchHistoryByAgent, inspectCurrentByAgent };
 })();

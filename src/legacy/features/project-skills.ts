@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
+import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
 (function () {
   'use strict';
@@ -426,6 +427,12 @@ import { getLegacyApp } from '../core/app-context';
         'spectrum.manageImages',
         'analysis.buildJointPackage',
         'formula.createRecipe',
+        'assistant.currentPage',
+        'assistant.projectGuide',
+        'dataRecognition.searchHistory',
+        'dataRecognition.inspectCurrent',
+        'media.generateImage',
+        'media.analyzeImages',
         'assistant.openPage',
       ],
     };
@@ -726,7 +733,7 @@ import { getLegacyApp } from '../core/app-context';
       icon: 'ti-search',
       level: '查询型',
       summary: '按型号、批次或指标关键词检索物性数据，返回强匹配、相近匹配和指标摘要。',
-      inputSpec: '{ "query": "型号/批次/指标关键词" }',
+      inputSpec: '{ "query": "型号/批次/指标关键词", "mode": "query | selected | filtered" }',
       outputSpec: '{ "ok": true, "context": "物性分析检索结果..." }',
       paramDocs: [
         ['query', '要检索的型号、批次、材料名称或指标关键词', '必填'],
@@ -740,13 +747,29 @@ import { getLegacyApp } from '../core/app-context';
       examples: ['检索物性型号 320G6-N11', '查一下批次 A2404 的冲击强度'],
       infer(prompt) {
         const text = String(prompt || '');
-        if (!/(?:查找|搜索|检索|查一下|找).*(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度)|(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度).*(?:查找|搜索|检索|查一下|找)/.test(text)) return null;
-        return { skillId: this.id, confidence: 0.72, input: { query: stripCommandNoise(text) } };
+        const activeOnPropertyPage = getActivePageId() === 'property-analysis';
+        const selected = /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(text);
+        const filtered = /(?:当前筛选|筛选结果|当前列表|当前页面|本页)/.test(text);
+        const hasPropertyIntent = /(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度|材料|测试数据|检测数据|数据|PBT|PET|PET胶|PBT胶)/i.test(text);
+        const hasAnalyzeIntent = /(?:分析|对比|比较|判断|看看|看一下|评价|怎么样|如何|建议|结论)/.test(text);
+        const hasSearchIntent = /(?:查找|搜索|检索|查一下|找)/.test(text);
+        if (!(hasPropertyIntent && (hasSearchIntent || hasAnalyzeIntent || selected || filtered || activeOnPropertyPage))) return null;
+        return {
+          skillId: this.id,
+          confidence: selected ? 0.94 : activeOnPropertyPage ? 0.86 : 0.72,
+          input: {
+            query: stripCommandNoise(text),
+            mode: selected ? 'selected' : filtered ? 'filtered' : 'query',
+          },
+        };
       },
       async handler(input = {}) {
         const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', {
           activePageId: 'property-analysis',
           compact: true,
+          mode: input.mode || '',
+          selectedOnly: input.mode === 'selected',
+          filteredOnly: input.mode === 'filtered',
         });
         if (!context?.content) return { ok: false, message: '物性分析数据尚未加载，暂时无法检索。' };
         return {
@@ -856,6 +879,7 @@ import { getLegacyApp } from '../core/app-context';
         };
       },
     },
+    ...createRuntimeSkillDefinitions(App),
     {
       id: 'assistant.openPage',
       title: '切换项目页面',
@@ -985,6 +1009,34 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const formatSkillMessage = ({ skill, result }) => {
+    if (skill?.id === 'assistant.currentPage' || skill?.id === 'assistant.projectGuide') {
+      return [
+        result.message,
+        ...(result.details?.length ? ['', ...result.details.map((item) => `- ${item}`)] : []),
+      ].filter(Boolean).join('\n');
+    }
+    if (skill?.id === 'business.queryPageData') {
+      const data = result?.data || {};
+      const rows = Array.isArray(data.data) ? data.data : [];
+      const lines = [
+        data.summary || result.message || '已读取业务数据。',
+      ];
+      if (rows.length) {
+        const keys = Object.keys(rows[0] || {}).filter((key) => rows.some((row) => row?.[key] != null && row?.[key] !== ''));
+        if (keys.length) {
+          lines.push(
+            '',
+            `| ${keys.join(' | ')} |`,
+            `| ${keys.map(() => '---').join(' | ')} |`,
+            ...rows.slice(0, 12).map((row) => `| ${keys.map((key) => String(row?.[key] ?? '-').replace(/\|/g, '/')).join(' | ')} |`)
+          );
+        }
+      }
+      if (!rows.length && Number(data.rowCount || 0) > 0) {
+        lines.push(`命中记录：${data.rowCount} 条。`);
+      }
+      return lines.join('\n');
+    }
     const hasCandidateActions = skill?.id === 'spectrum.manageImages'
       && result?.data?.action === 'delete'
       && result.candidates?.length;

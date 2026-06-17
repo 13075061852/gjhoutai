@@ -304,6 +304,46 @@ import { getLegacyApp } from '../core/app-context';
     return { taskId, response };
   };
 
+  const trackSubmittedTasks = ({ type, payload, response }) => {
+    const allIds = normalizeAllTaskIds(response);
+    const createdIds = [];
+    for (const id of allIds) {
+      if (tasks.some((t) => t.id === id)) continue;
+      const task = {
+        id,
+        type,
+        model: payload.model,
+        prompt: payload.prompt,
+        size: payload.size || payload.aspect_ratio || uiState.size,
+        resolution: payload.resolution || uiState.resolution,
+        cost: Number(response?.data?.cost || response?.cost || 0) / (allIds.length || 1),
+        status: 'submitted',
+        progress: 0,
+        images: [],
+        videos: [],
+        thumbnail: '',
+        error: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        raw: response,
+      };
+      tasks = [task, ...tasks.filter((item) => item.id !== id)].slice(0, MAX_TASKS);
+      createdIds.push(id);
+    }
+    uiState.resultPage = 0;
+    uiState.resultCleared = false;
+    writeTasks();
+    render();
+    createdIds.forEach((id) => pollTask(id, true));
+    return createdIds;
+  };
+
+  const submitAndTrackGeneration = async (type, payload = {}) => {
+    const submitted = await submitGeneration(type, payload);
+    const createdIds = trackSubmittedTasks({ type, payload: { ...payload, model: payload.model || getConfig()[type === 'video' ? 'videoModel' : 'imageModel'] }, response: submitted.response });
+    return { ...submitted, createdIds };
+  };
+
   const getTaskStatus = async (taskId, language = 'zh') => {
     const payload = await requestJson(`/v1/tasks/${encodeURIComponent(taskId)}?language=${encodeURIComponent(language)}`);
     return payload?.data || payload;
@@ -1201,37 +1241,7 @@ import { getLegacyApp } from '../core/app-context';
       if (submitBtn) submitBtn.disabled = true;
       if (status) status.textContent = '正在提交到 APIMart...';
       const { type, payload } = collectFormPayload();
-      const { taskId, response } = await submitGeneration(type, payload);
-      const allIds = normalizeAllTaskIds(response);
-      const createdIds = [];
-      for (const id of allIds) {
-        if (tasks.some((t) => t.id === id)) continue;
-        const task = {
-          id,
-          type,
-          model: payload.model,
-          prompt: payload.prompt,
-          size: payload.size || payload.aspect_ratio || uiState.size,
-          resolution: payload.resolution || uiState.resolution,
-          cost: Number(response?.data?.cost || response?.cost || 0) / (allIds.length || 1),
-          status: 'submitted',
-          progress: 0,
-          images: [],
-          videos: [],
-          thumbnail: '',
-          error: '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          raw: response,
-        };
-        tasks = [task, ...tasks.filter((item) => item.id !== id)].slice(0, MAX_TASKS);
-        createdIds.push(id);
-      }
-      uiState.resultPage = 0;
-      uiState.resultCleared = false;
-      writeTasks();
-      render();
-      createdIds.forEach((id) => pollTask(id, true));
+      const { taskId, createdIds } = await submitAndTrackGeneration(type, payload);
       App.notify?.success?.(`已提交 ${createdIds.length} 个任务`, { key: `apimart-submit-${taskId}` });
     } catch (error) {
       if (status) status.textContent = error?.message || '提交失败';
@@ -1627,7 +1637,7 @@ import { getLegacyApp } from '../core/app-context';
     render,
     submitGeneration,
     getTaskStatus,
-    generateImage: (params) => submitGeneration('image', params),
-    generateVideo: (params) => submitGeneration('video', params),
+    generateImage: (params) => submitAndTrackGeneration('image', params),
+    generateVideo: (params) => submitAndTrackGeneration('video', params),
   };
 })();

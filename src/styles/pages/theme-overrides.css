@@ -49,12 +49,23 @@
     body:not([data-theme="dark"]) .cutout-crop-grid input,
     body:not([data-theme="dark"]) .cutout-reset-btn,
     body:not([data-theme="dark"]) .analysis-toolbar-btn,
-    body:not([data-theme="dark"]) .analysis-import-status,
     body:not([data-theme="dark"]) .sidebar-search,
     body:not([data-theme="dark"]) .chat-composer,
     body:not([data-theme="dark"]) .ai-message:not(.user){
       background:var(--surface);
       border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .analysis-import-status{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body:not([data-theme="dark"]) .analysis-import-status.is-success{
+      border-color:color-mix(in srgb, var(--success) 24%, var(--border));
+      background:color-mix(in srgb, var(--success) 8%, var(--surface));
+    }
+    body:not([data-theme="dark"]) .analysis-import-status.is-error{
+      border-color:color-mix(in srgb, var(--danger) 24%, var(--border));
+      background:color-mix(in srgb, var(--danger) 6%, var(--surface));
     }
     body:not([data-theme="dark"]) .spectrum-card-body{
       background:#fbfdff;
@@ -388,7 +399,6 @@
     body[data-theme="dark"] .analysis-search-suggest-item,
     body[data-theme="dark"] .analysis-search-mode-btn,
     body[data-theme="dark"] .analysis-toolbar-btn,
-    body[data-theme="dark"] .analysis-import-status,
     body[data-theme="dark"] .analysis-sheet-tab,
     body[data-theme="dark"] .analysis-page-btn,
     body[data-theme="dark"] .analysis-page-number,
@@ -423,6 +433,18 @@
       background-color:var(--surface-2);
       border-color:var(--border);
       color:var(--text);
+    }
+    body[data-theme="dark"] .analysis-import-status{
+      background:var(--surface-2);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .analysis-import-status.is-success{
+      border-color:color-mix(in srgb, var(--success) 28%, var(--border));
+      background:color-mix(in srgb, var(--success) 10%, var(--surface-2));
+    }
+    body[data-theme="dark"] .analysis-import-status.is-error{
+      border-color:color-mix(in srgb, var(--danger) 28%, var(--border));
+      background:color-mix(in srgb, var(--danger) 8%, var(--surface-2));
     }
     body[data-theme="dark"] .analysis-search-mode-btn.is-active,
     body[data-theme="dark"] .spectrum-filter-btn.is-active,
@@ -547,7 +569,6 @@
     body[data-theme="dark"] .analysis-footer-total,
     body[data-theme="dark"] .analysis-select-field,
     body[data-theme="dark"] .analysis-selection-meta,
-    body[data-theme="dark"] .analysis-import-status,
     body[data-theme="dark"] .analysis-search,
     body[data-theme="dark"] .analysis-search-suggest-type,
     body[data-theme="dark"] .spectrum-muted,

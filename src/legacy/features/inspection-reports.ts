@@ -18,7 +18,6 @@ import { cloudStorage } from '../../services/cloud-storage';
     uploading: false,
     search: '',
     activeReportId: '',
-    previewCollapsed: false,
   };
   const refs = {};
 
@@ -30,15 +29,14 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.refreshBtn = document.getElementById('inspectionReportRefreshBtn');
     refs.list = document.getElementById('inspectionReportList');
     refs.meta = document.getElementById('inspectionReportMeta');
-    refs.leftPanel = document.querySelector('.inspection-report-left-panel');
-    refs.previewPanel = document.getElementById('inspectionReportPreviewPanel');
+    refs.listView = document.querySelector('.inspection-report-list-view');
+    refs.previewView = document.querySelector('.inspection-report-preview-view');
+    refs.backBtn = document.getElementById('inspectionReportBackBtn');
     refs.previewFrame = document.getElementById('inspectionReportPreviewFrame');
     refs.previewTitle = document.getElementById('inspectionReportPreviewTitle');
     refs.previewMeta = document.getElementById('inspectionReportPreviewMeta');
-    refs.previewToggle = document.getElementById('inspectionReportPreviewToggle');
     refs.previewOpen = document.getElementById('inspectionReportPreviewOpen');
     refs.previewDownload = document.getElementById('inspectionReportPreviewDownload');
-    refs.previewEmpty = document.getElementById('inspectionReportPreviewEmpty');
   };
 
   const installPageDefinition = () => {
@@ -68,57 +66,60 @@ import { cloudStorage } from '../../services/cloud-storage';
     section.dataset.pageSection = PAGE_ID;
     section.innerHTML = `
       <div class="inspection-report-shell">
-        <section class="inspection-report-left-panel">
+        <div class="inspection-report-list-view">
           <div class="inspection-report-panel-head">
             <div>
               <h2>检测报告</h2>
-              <span id="inspectionReportMeta">PDF 文件保存在 Cloudflare 云端</span>
+              <span id="inspectionReportMeta">共 0 份检测报告</span>
             </div>
             <div class="inspection-report-actions">
-              <input class="inspection-report-search" id="inspectionReportSearchInput" type="search" placeholder="搜索报告" aria-label="搜索检测报告" />
-              <button class="analysis-toolbar-btn" id="inspectionReportRefreshBtn" type="button" title="刷新">
+              <button class="analysis-toolbar-btn" id="inspectionReportRefreshBtn" type="button" title="刷新列表">
                 <i class="ti ti-refresh" aria-hidden="true"></i>
               </button>
               <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="inspectionReportUploadBtn" type="button">
-                <i class="ti ti-file-upload" aria-hidden="true"></i>
-                <span>上传PDF</span>
+                <i class="ti ti-upload" aria-hidden="true"></i>
+                <span>上传</span>
               </button>
               <input id="inspectionReportInput" type="file" accept="application/pdf,.pdf" multiple hidden />
             </div>
           </div>
-          <div class="inspection-report-list" id="inspectionReportList">
-            <div class="inspection-report-empty">暂无检测报告</div>
+          <div class="inspection-report-search-bar">
+            <input class="inspection-report-search" id="inspectionReportSearchInput" type="search" placeholder="搜索报告名称、文件名..." aria-label="搜索检测报告" />
           </div>
-        </section>
+          <div class="inspection-report-list" id="inspectionReportList">
+            <div class="inspection-report-empty">
+              <div class="inspection-report-empty-icon">
+                <i class="ti ti-file-type-pdf" aria-hidden="true"></i>
+              </div>
+              <strong>暂无检测报告</strong>
+              <span>点击「上传」按钮添加 PDF 文件</span>
+            </div>
+          </div>
+        </div>
 
-        <section class="inspection-report-preview-panel" id="inspectionReportPreviewPanel">
-          <div class="inspection-report-panel-head inspection-report-preview-head">
-            <div>
-              <h2 id="inspectionReportPreviewTitle">预览区域</h2>
-              <span id="inspectionReportPreviewMeta">选择左侧报告后预览 PDF</span>
+        <div class="inspection-report-preview-view">
+          <div class="inspection-report-preview-head">
+            <button class="inspection-report-back-btn" id="inspectionReportBackBtn" type="button">
+              <i class="ti ti-arrow-left" aria-hidden="true"></i>
+              <span>返回</span>
+            </button>
+            <div class="inspection-report-preview-info">
+              <h3 id="inspectionReportPreviewTitle">文档预览</h3>
+              <span id="inspectionReportPreviewMeta">-</span>
             </div>
             <div class="inspection-report-preview-actions">
-              <a class="analysis-toolbar-btn" id="inspectionReportPreviewOpen" href="#" target="_blank" rel="noopener" title="新窗口打开" aria-disabled="true">
+              <a class="analysis-toolbar-btn" id="inspectionReportPreviewOpen" href="#" target="_blank" rel="noopener" title="在新窗口打开" aria-disabled="true">
                 <i class="ti ti-external-link" aria-hidden="true"></i>
               </a>
-              <a class="analysis-toolbar-btn" id="inspectionReportPreviewDownload" href="#" download title="下载PDF" aria-disabled="true">
+              <a class="analysis-toolbar-btn" id="inspectionReportPreviewDownload" href="#" download title="下载 PDF" aria-disabled="true">
                 <i class="ti ti-download" aria-hidden="true"></i>
               </a>
-              <button class="analysis-toolbar-btn" id="inspectionReportPreviewToggle" type="button" title="收起预览" aria-expanded="true">
-                <i class="ti ti-layout-sidebar-right-collapse" aria-hidden="true"></i>
-                <span>收起</span>
-              </button>
             </div>
           </div>
           <div class="inspection-report-preview-body">
-            <div class="inspection-report-preview-empty" id="inspectionReportPreviewEmpty">
-              <i class="ti ti-file-search" aria-hidden="true"></i>
-              <strong>未选择检测报告</strong>
-              <span>从左侧列表选择一份 PDF 后在这里预览</span>
-            </div>
             <iframe id="inspectionReportPreviewFrame" title="检测报告预览" hidden></iframe>
           </div>
-        </section>
+        </div>
       </div>
       <div class="bottom-space"></div>
     `;
@@ -190,34 +191,13 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const renderPreview = () => {
     const item = getActiveReport();
-    const collapsed = Boolean(state.previewCollapsed);
-    refs.previewPanel?.classList.toggle('is-collapsed', collapsed);
-    refs.page?.classList.toggle('preview-collapsed', collapsed);
-    refs.previewToggle?.setAttribute('aria-expanded', String(!collapsed));
-    const toggleIcon = refs.previewToggle?.querySelector('i');
-    const toggleLabel = refs.previewToggle?.querySelector('span');
-    if (toggleIcon) toggleIcon.className = `ti ${collapsed ? 'ti-layout-sidebar-right-expand' : 'ti-layout-sidebar-right-collapse'}`;
-    if (toggleLabel) toggleLabel.textContent = collapsed ? '展开' : '收起';
-    if (refs.previewToggle) refs.previewToggle.title = collapsed ? '展开预览' : '收起预览';
 
-    if (!item) {
-      if (refs.previewTitle) refs.previewTitle.textContent = '预览区域';
-      if (refs.previewMeta) refs.previewMeta.textContent = '选择左侧报告后预览 PDF';
-      if (refs.previewFrame) {
-        refs.previewFrame.hidden = true;
-        refs.previewFrame.removeAttribute('src');
-      }
-      if (refs.previewEmpty) refs.previewEmpty.hidden = false;
-      setPreviewLinkState(refs.previewOpen, '', '');
-      setPreviewLinkState(refs.previewDownload, '', '');
-      return;
-    }
+    if (!item) return;
 
     const url = cloudStorage.getInspectionReportFileUrl(item.id || '');
     const title = getReportTitle(item);
     if (refs.previewTitle) refs.previewTitle.textContent = title;
     if (refs.previewMeta) refs.previewMeta.textContent = `${formatFileSize(item.file_size)} · ${formatDate(item.created_at)}`;
-    if (refs.previewEmpty) refs.previewEmpty.hidden = true;
     if (refs.previewFrame) {
       refs.previewFrame.hidden = false;
       if (refs.previewFrame.getAttribute('src') !== url) refs.previewFrame.setAttribute('src', url);
@@ -226,16 +206,45 @@ import { cloudStorage } from '../../services/cloud-storage';
     setPreviewLinkState(refs.previewDownload, url, item.file_name || '');
   };
 
+  const isSmallScreen = () => window.innerWidth <= 768;
+
+  const showPreview = () => {
+    if (isSmallScreen()) {
+      refs.page?.classList.add('is-previewing');
+    }
+    renderPreview();
+  };
+
+  const showList = () => {
+    refs.page?.classList.remove('is-previewing');
+  };
+
   const renderReports = () => {
     if (!refs.list) return;
     const items = getFilteredReports();
     renderMeta(items);
     if (state.loading && !state.reports.length) {
-      refs.list.innerHTML = '<div class="inspection-report-empty">正在加载检测报告</div>';
+      refs.list.innerHTML = `
+        <div class="inspection-report-empty">
+          <div class="inspection-report-empty-icon">
+            <i class="ti ti-loader-2" aria-hidden="true"></i>
+          </div>
+          <strong>正在加载</strong>
+          <span>正在从云端获取检测报告...</span>
+        </div>
+      `;
       return;
     }
     if (!items.length) {
-      refs.list.innerHTML = `<div class="inspection-report-empty">${state.search ? '没有匹配的检测报告' : '暂无检测报告'}</div>`;
+      refs.list.innerHTML = `
+        <div class="inspection-report-empty">
+          <div class="inspection-report-empty-icon">
+            <i class="ti ti-${state.search ? 'search' : 'folder'}" aria-hidden="true"></i>
+          </div>
+          <strong>${state.search ? '未找到匹配结果' : '暂无检测报告'}</strong>
+          <span>${state.search ? '尝试使用其他关键词搜索' : '点击右上角上传按钮添加 PDF 文件'}</span>
+        </div>
+      `;
       return;
     }
     refs.list.innerHTML = items.map((item) => {
@@ -244,7 +253,6 @@ import { cloudStorage } from '../../services/cloud-storage';
       const fileName = utils.escapeHtml(item.file_name || '');
       const category = utils.escapeHtml(item.category || '检测报告');
       const notes = String(item.notes || '').trim();
-      const createdBy = utils.escapeHtml(item.created_by_name || '未记录');
       const fileUrl = utils.escapeHtml(cloudStorage.getInspectionReportFileUrl(item.id || ''));
       return `
         <article class="inspection-report-card ${item.id === state.activeReportId ? 'is-active' : ''}" data-report-id="${id}">
@@ -259,17 +267,16 @@ import { cloudStorage } from '../../services/cloud-storage';
             <div class="inspection-report-meta">
               <span>${utils.escapeHtml(formatFileSize(item.file_size))}</span>
               <span>${utils.escapeHtml(formatDate(item.created_at))}</span>
-              <span>${createdBy}</span>
             </div>
           </button>
           <div class="inspection-report-card-actions">
-            <a class="analysis-toolbar-btn" href="${fileUrl}" target="_blank" rel="noopener" title="新窗口打开">
-              <i class="ti ti-eye" aria-hidden="true"></i>
+            <a class="analysis-toolbar-btn" href="${fileUrl}" target="_blank" rel="noopener" title="在新窗口中打开">
+              <i class="ti ti-external-link" aria-hidden="true"></i>
             </a>
-            <a class="analysis-toolbar-btn" href="${fileUrl}" download="${fileName}" title="下载PDF">
+            <a class="analysis-toolbar-btn" href="${fileUrl}" download="${fileName}" title="下载文件">
               <i class="ti ti-download" aria-hidden="true"></i>
             </a>
-            <button class="analysis-toolbar-btn inspection-report-delete" type="button" data-report-delete="${id}" title="删除">
+            <button class="analysis-toolbar-btn inspection-report-delete" type="button" data-report-delete="${id}" title="删除报告">
               <i class="ti ti-trash" aria-hidden="true"></i>
             </button>
           </div>
@@ -353,10 +360,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const bindEvents = () => {
     refs.uploadBtn?.addEventListener('click', () => refs.input?.click());
     refs.refreshBtn?.addEventListener('click', refreshReports);
-    refs.previewToggle?.addEventListener('click', () => {
-      state.previewCollapsed = !state.previewCollapsed;
-      renderPreview();
-    });
+    refs.backBtn?.addEventListener('click', showList);
     refs.previewOpen?.addEventListener('click', (event) => {
       if (!getActiveReport()) event.preventDefault();
     });
@@ -373,26 +377,31 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
     refs.list?.addEventListener('click', (event) => {
       const deleteButton = event.target.closest('[data-report-delete]');
-      if (deleteButton) deleteReport(deleteButton.dataset.reportDelete || '');
+      if (deleteButton) {
+        event.stopPropagation();
+        deleteReport(deleteButton.dataset.reportDelete || '');
+        return;
+      }
       const previewButton = event.target.closest('[data-report-preview]');
       if (previewButton) {
         state.activeReportId = previewButton.dataset.reportPreview || '';
         renderReports();
+        showPreview();
       }
     });
-    refs.leftPanel?.addEventListener('dragover', (event) => {
+    refs.listView?.addEventListener('dragover', (event) => {
       if (!isFileDragEvent(event)) return;
       event.preventDefault();
-      refs.leftPanel.classList.add('is-drag-over');
+      refs.listView.classList.add('is-drag-over');
     });
-    refs.leftPanel?.addEventListener('dragleave', (event) => {
-      if (refs.leftPanel.contains(event.relatedTarget)) return;
-      refs.leftPanel.classList.remove('is-drag-over');
+    refs.listView?.addEventListener('dragleave', (event) => {
+      if (refs.listView.contains(event.relatedTarget)) return;
+      refs.listView.classList.remove('is-drag-over');
     });
-    refs.leftPanel?.addEventListener('drop', (event) => {
+    refs.listView?.addEventListener('drop', (event) => {
       if (!isFileDragEvent(event)) return;
       event.preventDefault();
-      refs.leftPanel.classList.remove('is-drag-over');
+      refs.listView.classList.remove('is-drag-over');
       uploadFiles(event.dataTransfer?.files);
     });
   };

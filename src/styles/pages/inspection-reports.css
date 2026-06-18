@@ -8,6 +8,8 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--border, #dce4ef);
+  border-radius: 8px;
   background: #f8fafc;
 }
 
@@ -26,6 +28,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  border-radius: inherit;
 }
 
 /* ============================================
@@ -56,7 +59,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 0 20px;
   border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
 }
@@ -291,18 +296,6 @@
   white-space: nowrap;
 }
 
-.inspection-report-title-row span {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: #dcfce7;
-  color: #16a34a;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
 /* 文件名 */
 .inspection-report-file {
   min-width: 0;
@@ -344,13 +337,52 @@
   display: flex;
   gap: 4px;
   align-items: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  justify-content: flex-end;
+  position: relative;
+  width: 110px;
+  min-height: 34px;
   flex-shrink: 0;
 }
 
-.inspection-report-card:hover .inspection-report-card-actions {
+.inspection-report-card-label {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: #eef6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
   opacity: 1;
+  transform: translateY(-50%);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.inspection-report-card-actions .analysis-toolbar-btn {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(8px);
+  transition: opacity 0.18s ease, transform 0.18s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.inspection-report-card:hover .inspection-report-card-label,
+.inspection-report-card:focus-within .inspection-report-card-label {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-8px);
+}
+
+.inspection-report-card:hover .inspection-report-card-actions .analysis-toolbar-btn,
+.inspection-report-card:focus-within .inspection-report-card-actions .analysis-toolbar-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .inspection-report-card-actions a {
@@ -370,7 +402,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 0 20px;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
@@ -545,7 +579,13 @@
     display: inline-flex;
   }
 
-  .inspection-report-card-actions {
+  .inspection-report-card-actions .analysis-toolbar-btn {
     opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+
+  .inspection-report-card-label {
+    display: none;
   }
 }

@@ -28,7 +28,6 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.searchInput = document.getElementById('inspectionReportSearchInput');
     refs.refreshBtn = document.getElementById('inspectionReportRefreshBtn');
     refs.list = document.getElementById('inspectionReportList');
-    refs.meta = document.getElementById('inspectionReportMeta');
     refs.listView = document.querySelector('.inspection-report-list-view');
     refs.previewView = document.querySelector('.inspection-report-preview-view');
     refs.backBtn = document.getElementById('inspectionReportBackBtn');
@@ -70,7 +69,6 @@ import { cloudStorage } from '../../services/cloud-storage';
           <div class="inspection-report-panel-head">
             <div>
               <h2>检测报告</h2>
-              <span id="inspectionReportMeta">共 0 份检测报告</span>
             </div>
             <div class="inspection-report-actions">
               <button class="analysis-toolbar-btn" id="inspectionReportRefreshBtn" type="button" title="刷新列表">
@@ -145,6 +143,17 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getReportTitle = (item) => String(item?.title || item?.file_name || '未命名检测报告').trim();
 
+  const getComparableReportName = (value) => String(value || '')
+    .trim()
+    .replace(/\.pdf$/i, '')
+    .toLowerCase();
+
+  const shouldShowReportFileName = (item) => {
+    const titleName = getComparableReportName(getReportTitle(item));
+    const fileName = getComparableReportName(item?.file_name);
+    return Boolean(fileName && titleName !== fileName);
+  };
+
   const getActiveReport = () => state.reports.find((item) => item.id === state.activeReportId) || null;
 
   const getFilteredReports = () => {
@@ -158,21 +167,6 @@ import { cloudStorage } from '../../services/cloud-storage';
       item?.created_by_name,
       formatDate(item?.created_at),
     ].some((value) => String(value || '').toLowerCase().includes(keyword)));
-  };
-
-  const renderMeta = (items) => {
-    if (!refs.meta) return;
-    if (state.uploading) {
-      refs.meta.textContent = '正在上传 PDF';
-      return;
-    }
-    if (state.loading) {
-      refs.meta.textContent = '正在加载云端报告';
-      return;
-    }
-    refs.meta.textContent = state.search
-      ? `匹配 ${items.length} / ${state.reports.length} 份报告`
-      : (state.reports.length ? `共 ${state.reports.length} 份检测报告` : 'PDF 文件保存在 Cloudflare 云端');
   };
 
   const setPreviewLinkState = (element, url, fileName) => {
@@ -189,18 +183,21 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (fileName && element === refs.previewDownload) element.setAttribute('download', fileName);
   };
 
+  const getPdfPreviewUrl = (url) => url ? `${url}#zoom=85` : '';
+
   const renderPreview = () => {
     const item = getActiveReport();
 
     if (!item) return;
 
     const url = cloudStorage.getInspectionReportFileUrl(item.id || '');
+    const previewUrl = getPdfPreviewUrl(url);
     const title = getReportTitle(item);
     if (refs.previewTitle) refs.previewTitle.textContent = title;
     if (refs.previewMeta) refs.previewMeta.textContent = `${formatFileSize(item.file_size)} · ${formatDate(item.created_at)}`;
     if (refs.previewFrame) {
       refs.previewFrame.hidden = false;
-      if (refs.previewFrame.getAttribute('src') !== url) refs.previewFrame.setAttribute('src', url);
+      if (refs.previewFrame.getAttribute('src') !== previewUrl) refs.previewFrame.setAttribute('src', previewUrl);
     }
     setPreviewLinkState(refs.previewOpen, url, item.file_name || '');
     setPreviewLinkState(refs.previewDownload, url, item.file_name || '');
@@ -222,7 +219,6 @@ import { cloudStorage } from '../../services/cloud-storage';
   const renderReports = () => {
     if (!refs.list) return;
     const items = getFilteredReports();
-    renderMeta(items);
     if (state.loading && !state.reports.length) {
       refs.list.innerHTML = `
         <div class="inspection-report-empty">
@@ -251,7 +247,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       const id = utils.escapeHtml(item.id || '');
       const title = utils.escapeHtml(getReportTitle(item));
       const fileName = utils.escapeHtml(item.file_name || '');
-      const category = utils.escapeHtml(item.category || '检测报告');
+      const fileNameHtml = shouldShowReportFileName(item) ? `<div class="inspection-report-file">${fileName}</div>` : '';
       const notes = String(item.notes || '').trim();
       const fileUrl = utils.escapeHtml(cloudStorage.getInspectionReportFileUrl(item.id || ''));
       return `
@@ -260,9 +256,8 @@ import { cloudStorage } from '../../services/cloud-storage';
           <button class="inspection-report-main" type="button" data-report-preview="${id}">
             <div class="inspection-report-title-row">
               <h3>${title}</h3>
-              <span>${category}</span>
             </div>
-            <div class="inspection-report-file">${fileName}</div>
+            ${fileNameHtml}
             ${notes ? `<p>${utils.escapeHtml(notes)}</p>` : ''}
             <div class="inspection-report-meta">
               <span>${utils.escapeHtml(formatFileSize(item.file_size))}</span>
@@ -270,6 +265,7 @@ import { cloudStorage } from '../../services/cloud-storage';
             </div>
           </button>
           <div class="inspection-report-card-actions">
+            <span class="inspection-report-card-label">检测报告</span>
             <a class="analysis-toolbar-btn" href="${fileUrl}" target="_blank" rel="noopener" title="在新窗口中打开">
               <i class="ti ti-external-link" aria-hidden="true"></i>
             </a>
@@ -318,7 +314,6 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     state.uploading = true;
     refs.uploadBtn?.setAttribute('disabled', '');
-    renderMeta(getFilteredReports());
     let successCount = 0;
     for (const file of pdfFiles) {
       const created = await cloudStorage.createInspectionReport({

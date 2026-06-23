@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
 import { cloudConfig } from '../../services/cloud-config';
+import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 
 (function () {
   'use strict';
@@ -13,14 +14,57 @@ import { cloudConfig } from '../../services/cloud-config';
   const PROVIDER_OPENROUTER = 'openrouter';
   const PROVIDER_LM_STUDIO = 'lmstudio';
   const PROVIDER_DEEPSEEK = 'deepseek';
+  const PROVIDER_SILICONFLOW = 'siliconflow';
   const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
   const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+  const DEFAULT_SILICONFLOW_BASE_URL = 'https://api.siliconflow.cn/v1';
+  const DEFAULT_SILICONFLOW_MODEL = 'Pro/zai-org/GLM-5.1';
+  const DEEPSEEK_CONTEXT_LENGTH = 1000000;
+  const DEEPSEEK_MODEL_PRICING = {
+    'deepseek-v4-flash': { prompt: '0.00000014', completion: '0.00000028' },
+    'deepseek-v4-pro': { prompt: '0.000000435', completion: '0.00000087' },
+    'deepseek-chat': { prompt: '0.00000014', completion: '0.00000028' },
+    'deepseek-reasoner': { prompt: '0.00000014', completion: '0.00000028' },
+  };
+  const DEEPSEEK_MODEL_NAMES = {
+    'deepseek-v4-flash': 'DeepSeek V4 Flash',
+    'deepseek-v4-pro': 'DeepSeek V4 Pro',
+    'deepseek-chat': 'DeepSeek Chat',
+    'deepseek-reasoner': 'DeepSeek Reasoner',
+  };
   const DEEPSEEK_MODEL_OPTIONS = [
-    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', context_length: 128000 },
-    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: 128000 },
-    { id: 'deepseek-chat', name: 'DeepSeek Chat', context_length: 128000 },
-    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', context_length: 128000 },
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-v4-flash'] },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-v4-pro'] },
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-chat'] },
+    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-reasoner'] },
   ];
+  const SILICONFLOW_CONTEXT_LENGTH = 131072;
+  const SILICONFLOW_MODEL_NAMES = {
+    'Pro/zai-org/GLM-5.1': 'GLM-5.1 Pro',
+    'Pro/zai-org/GLM-5': 'GLM-5 Pro',
+    'zai-org/GLM-4.5-Air': 'GLM-4.5 Air',
+    'deepseek-ai/DeepSeek-V3.2': 'DeepSeek V3.2',
+    'Pro/deepseek-ai/DeepSeek-V3.2': 'DeepSeek V3.2 Pro',
+    'deepseek-ai/DeepSeek-R1': 'DeepSeek R1',
+    'Pro/deepseek-ai/DeepSeek-R1': 'DeepSeek R1 Pro',
+    'Qwen/Qwen3-32B': 'Qwen3-32B',
+    'Qwen/Qwen3-14B': 'Qwen3-14B',
+    'Qwen/Qwen3-8B': 'Qwen3-8B',
+  };
+  const SILICONFLOW_MODEL_OPTIONS = [
+    { id: 'Pro/zai-org/GLM-5.1', name: 'GLM-5.1 Pro', context_length: 205000 },
+    { id: 'deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2', context_length: 164000 },
+    { id: 'Pro/deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2 Pro', context_length: 164000 },
+    { id: 'Qwen/Qwen3-32B', name: 'Qwen3-32B', context_length: SILICONFLOW_CONTEXT_LENGTH },
+    { id: 'Qwen/Qwen3-14B', name: 'Qwen3-14B', context_length: SILICONFLOW_CONTEXT_LENGTH },
+    { id: 'Qwen/Qwen3-8B', name: 'Qwen3-8B', context_length: SILICONFLOW_CONTEXT_LENGTH },
+  ];
+  const SILICONFLOW_CATALOG_BY_ID = new Map(SILICONFLOW_MODEL_CATALOG.map((model) => [model.id, model]));
+  const SILICONFLOW_CATALOG_BY_TARGET = new Map(
+    SILICONFLOW_MODEL_CATALOG
+      .filter((model) => model.targetModelName)
+      .map((model) => [model.targetModelName, model])
+  );
   const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
   let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
   const providerDrafts = {};
@@ -635,6 +679,7 @@ import { cloudConfig } from '../../services/cloud-config';
       google: 'Google',
       deepseek: 'DeepSeek',
       qwen: 'Qwen',
+      pro: 'SiliconFlow',
       meta: 'Meta',
       mistral: 'Mistral',
       cohere: 'Cohere',
@@ -662,10 +707,12 @@ import { cloudConfig } from '../../services/cloud-config';
 
   const isLmStudioProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_LM_STUDIO;
   const isDeepSeekProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_DEEPSEEK;
+  const isSiliconFlowProvider = (provider) => String(provider || '').toLowerCase() === PROVIDER_SILICONFLOW;
 
   const normalizeProvider = (provider) => {
     const raw = String(provider || '').toLowerCase();
     if (raw === PROVIDER_DEEPSEEK) return PROVIDER_DEEPSEEK;
+    if (raw === PROVIDER_SILICONFLOW) return PROVIDER_SILICONFLOW;
     return isLmStudioProvider(raw) ? PROVIDER_LM_STUDIO : PROVIDER_OPENROUTER;
   };
 
@@ -690,10 +737,205 @@ import { cloudConfig } from '../../services/cloud-config';
         modelChoice: DEFAULT_DEEPSEEK_MODEL,
       };
     }
+    if (isSiliconFlowProvider(normalizedProvider)) {
+      return {
+        baseUrl: DEFAULT_SILICONFLOW_BASE_URL,
+        appTitle: 'SiliconFlow',
+        modelChoice: DEFAULT_SILICONFLOW_MODEL,
+      };
+    }
     return {
       baseUrl: constants.DEFAULT_BASE_URL,
       appTitle: 'OpenRouter',
       modelChoice: constants.DEFAULT_CONFIG.modelChoice,
+    };
+  };
+
+  const normalizeDeepSeekModel = (item = {}) => {
+    const id = String(item?.id || '').trim();
+    if (!id) return item;
+    return {
+      ...item,
+      name: item.name || DEEPSEEK_MODEL_NAMES[id] || id,
+      context_length: Number(item.context_length || 0) > 0 ? item.context_length : DEEPSEEK_CONTEXT_LENGTH,
+      pricing: {
+        ...(DEEPSEEK_MODEL_PRICING[id] || {}),
+        ...(item.pricing && typeof item.pricing === 'object' ? item.pricing : {}),
+      },
+    };
+  };
+
+  const findFirstDefined = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
+
+  const normalizePriceValue = (value) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const text = String(value).replace(/[¥$,]/g, '').trim();
+    if (!text) return null;
+    const amount = Number.parseFloat(text);
+    return Number.isFinite(amount) ? amount : null;
+  };
+
+  const normalizePerMillionCnyToUsdPerToken = (value) => {
+    const amount = normalizePriceValue(value);
+    if (amount == null) return null;
+    return amount / 1000000 / usdToCny;
+  };
+
+  const normalizePerMillionUsdToUsdPerToken = (value) => {
+    const amount = normalizePriceValue(value);
+    if (amount == null) return null;
+    return amount / 1000000;
+  };
+
+  const getSiliconFlowCatalogEntry = (id) => {
+    const raw = String(id || '').trim();
+    if (!raw) return null;
+    return SILICONFLOW_CATALOG_BY_ID.get(raw)
+      || SILICONFLOW_CATALOG_BY_TARGET.get(raw)
+      || (raw.startsWith('Pro/') ? SILICONFLOW_CATALOG_BY_ID.get(raw.slice(4)) : null)
+      || null;
+  };
+
+  const isSiliconFlowChatCatalogModel = (item = {}) => {
+    const subType = String(item.subType || item.sub_type || '').toLowerCase();
+    const type = String(item.type || '').toLowerCase();
+    if (subType) return subType === 'chat';
+    if (type && type !== 'text') return false;
+    const id = String(item.id || '').toLowerCase();
+    return !/(embedding|rerank|bge-|bge_|ocr|image|video|speech|tts)/i.test(id);
+  };
+
+  const extractSiliconFlowPricing = (item = {}) => {
+    const pricing = item.pricing && typeof item.pricing === 'object' ? item.pricing : {};
+    const price = item.price && typeof item.price === 'object' ? item.price : {};
+    const billing = item.billing && typeof item.billing === 'object' ? item.billing : {};
+    const input = pricing.input && typeof pricing.input === 'object' ? pricing.input : {};
+    const output = pricing.output && typeof pricing.output === 'object' ? pricing.output : {};
+    const promptCnyPerMillion = findFirstDefined(
+      pricing.promptCny,
+      pricing.inputCny,
+      pricing.input_cny,
+      pricing.prompt_cny,
+      pricing.input_price_cny,
+      pricing.prompt_price_cny,
+      pricing.inputCnyPerMillion,
+      pricing.promptCnyPerMillion,
+      price.inputCny,
+      price.input_cny,
+      price.input_price_cny,
+      input.cny,
+      input.cny_per_million,
+      billing.inputCny,
+    );
+    const completionCnyPerMillion = findFirstDefined(
+      pricing.completionCny,
+      pricing.outputCny,
+      pricing.output_cny,
+      pricing.completion_cny,
+      pricing.output_price_cny,
+      pricing.completion_price_cny,
+      pricing.outputCnyPerMillion,
+      pricing.completionCnyPerMillion,
+      price.outputCny,
+      price.output_cny,
+      price.output_price_cny,
+      output.cny,
+      output.cny_per_million,
+      billing.outputCny,
+    );
+    const cachedInputCnyPerMillion = findFirstDefined(
+      pricing.cachedInputCnyPerMillion,
+      pricing.cached_input_cny_per_million,
+      pricing.cachedInputCny,
+      pricing.cacheCny,
+      price.cachedInputCny,
+      billing.cachedInputCny,
+    );
+    const promptUsdPerToken = findFirstDefined(
+      pricing.prompt,
+      pricing.input,
+      pricing.input_price,
+      pricing.prompt_price,
+      item.input_price,
+      item.prompt_price,
+      price.input,
+      input.usd_per_token,
+      billing.input,
+    );
+    const completionUsdPerToken = findFirstDefined(
+      pricing.completion,
+      pricing.output,
+      pricing.output_price,
+      pricing.completion_price,
+      item.output_price,
+      item.completion_price,
+      price.output,
+      output.usd_per_token,
+      billing.output,
+    );
+    const promptUsdPerMillion = findFirstDefined(
+      pricing.input_usd_per_million,
+      pricing.prompt_usd_per_million,
+      price.input_usd_per_million,
+      input.usd_per_million,
+      billing.input_usd_per_million,
+    );
+    const completionUsdPerMillion = findFirstDefined(
+      pricing.output_usd_per_million,
+      pricing.completion_usd_per_million,
+      price.output_usd_per_million,
+      output.usd_per_million,
+      billing.output_usd_per_million,
+    );
+    const prompt = normalizePerMillionCnyToUsdPerToken(promptCnyPerMillion)
+      ?? normalizePerMillionUsdToUsdPerToken(promptUsdPerMillion)
+      ?? normalizePriceValue(promptUsdPerToken);
+    const completion = normalizePerMillionCnyToUsdPerToken(completionCnyPerMillion)
+      ?? normalizePerMillionUsdToUsdPerToken(completionUsdPerMillion)
+      ?? normalizePriceValue(completionUsdPerToken);
+    const promptCny = normalizePriceValue(promptCnyPerMillion);
+    const completionCny = normalizePriceValue(completionCnyPerMillion);
+    const cachedInputCny = normalizePriceValue(cachedInputCnyPerMillion);
+    return {
+      inputCnyPerMillion: promptCny == null ? undefined : promptCny,
+      outputCnyPerMillion: completionCny == null ? undefined : completionCny,
+      cachedInputCnyPerMillion: cachedInputCny == null ? undefined : cachedInputCny,
+      prompt: prompt == null ? undefined : String(prompt),
+      completion: completion == null ? undefined : String(completion),
+      source: prompt != null || completion != null ? 'official-models-api' : '',
+      unavailable: prompt == null && completion == null && promptCny == null && completionCny == null ? 'official-models-api' : '',
+    };
+  };
+
+  const normalizeSiliconFlowModel = (item = {}) => {
+    const id = String(item?.id || '').trim();
+    if (!id) return item;
+    const catalog = getSiliconFlowCatalogEntry(id);
+    const fallback = SILICONFLOW_MODEL_OPTIONS.find((model) => model.id === id);
+    const sourcePricing = item.pricing && typeof item.pricing === 'object' ? item.pricing : {};
+    const merged = catalog
+      ? {
+          ...catalog,
+          ...item,
+          id,
+          name: item.name || catalog.name,
+          context_length: item.context_length || catalog.contextLength,
+          pricing: {
+            ...(catalog.pricing || {}),
+            ...sourcePricing,
+          },
+        }
+      : item;
+    const pricing = extractSiliconFlowPricing(merged);
+    return {
+      ...item,
+      name: item.name || catalog?.name || SILICONFLOW_MODEL_NAMES[id] || fallback?.name || id,
+      category: item.category || catalog?.subType || fallback?.category || '',
+      context_length: Number(item.context_length || 0) > 0
+        ? item.context_length
+        : catalog?.contextLength || fallback?.context_length || SILICONFLOW_CONTEXT_LENGTH,
+      pricing,
     };
   };
 
@@ -707,6 +949,7 @@ import { cloudConfig } from '../../services/cloud-config';
   const normalizeOpenRouterBaseUrl = (value) => {
     const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL);
     if (/api\.deepseek\.com/i.test(normalized)) return constants.DEFAULT_BASE_URL;
+    if (/api\.siliconflow\.cn/i.test(normalized)) return constants.DEFAULT_BASE_URL;
     return isLocalBaseUrl(normalized) ? constants.DEFAULT_BASE_URL : normalized;
   };
 
@@ -716,10 +959,19 @@ import { cloudConfig } from '../../services/cloud-config';
     return isLocalBaseUrl(normalized) ? DEFAULT_DEEPSEEK_BASE_URL : normalized.replace(/\/v1$/i, '');
   };
 
+  const normalizeSiliconFlowBaseUrl = (value) => {
+    const normalized = utils.normalizeBaseUrl(value || DEFAULT_SILICONFLOW_BASE_URL);
+    if (/openrouter\.ai|api\.deepseek\.com/i.test(normalized)) return DEFAULT_SILICONFLOW_BASE_URL;
+    const withoutChatPath = normalized.replace(/\/chat\/completions$/i, '');
+    if (isLocalBaseUrl(withoutChatPath)) return DEFAULT_SILICONFLOW_BASE_URL;
+    return /\/v1$/i.test(withoutChatPath) ? withoutChatPath : `${withoutChatPath}/v1`;
+  };
+
   const normalizeProviderBaseUrl = (provider, value) => {
     const normalizedProvider = normalizeProvider(provider);
     if (isLmStudioProvider(normalizedProvider)) return normalizeLmStudioBaseUrl(value);
     if (isDeepSeekProvider(normalizedProvider)) return normalizeDeepSeekBaseUrl(value);
+    if (isSiliconFlowProvider(normalizedProvider)) return normalizeSiliconFlowBaseUrl(value);
     return normalizeOpenRouterBaseUrl(value);
   };
 
@@ -745,6 +997,10 @@ import { cloudConfig } from '../../services/cloud-config';
       PROVIDER_DEEPSEEK,
       providerDrafts[PROVIDER_DEEPSEEK] || {}
     );
+    providerDrafts[PROVIDER_SILICONFLOW] = makeProviderDraft(
+      PROVIDER_SILICONFLOW,
+      providerDrafts[PROVIDER_SILICONFLOW] || {}
+    );
     providerDrafts[PROVIDER_LM_STUDIO] = {
       ...makeProviderDraft(PROVIDER_LM_STUDIO, providerDrafts[PROVIDER_LM_STUDIO] || {}),
       apiKey: '',
@@ -758,6 +1014,8 @@ import { cloudConfig } from '../../services/cloud-config';
       ? PROVIDER_LM_STUDIO
       : String(config.baseUrl || '').includes('api.deepseek.com')
         ? PROVIDER_DEEPSEEK
+        : String(config.baseUrl || '').includes('api.siliconflow.cn')
+          ? PROVIDER_SILICONFLOW
       : PROVIDER_OPENROUTER;
   };
 
@@ -772,6 +1030,8 @@ import { cloudConfig } from '../../services/cloud-config';
         ? 'LM Studio'
         : isDeepSeekProvider(normalizedProvider)
           ? 'DeepSeek'
+        : isSiliconFlowProvider(normalizedProvider)
+          ? 'SiliconFlow'
         : (refs.appTitle?.value || defaults.appTitle || '').trim(),
       modelChoice: refs.modelSelect?.value || providerDrafts[normalizedProvider]?.modelChoice || defaults.modelChoice,
       agentModels: normalizeAgentModels({
@@ -793,9 +1053,11 @@ import { cloudConfig } from '../../services/cloud-config';
     const normalizedProvider = normalizeProvider(provider);
     const openRouterInput = refs.aiProviderOpenRouter || document.getElementById('aiProviderOpenRouter');
     const deepSeekInput = document.getElementById('aiProviderDeepSeek');
+    const siliconFlowInput = document.getElementById('aiProviderSiliconFlow');
     const lmStudioInput = refs.aiProviderLmStudio || document.getElementById('aiProviderLmStudio');
     if (openRouterInput) openRouterInput.checked = normalizedProvider === PROVIDER_OPENROUTER;
     if (deepSeekInput) deepSeekInput.checked = normalizedProvider === PROVIDER_DEEPSEEK;
+    if (siliconFlowInput) siliconFlowInput.checked = normalizedProvider === PROVIDER_SILICONFLOW;
     if (lmStudioInput) lmStudioInput.checked = normalizedProvider === PROVIDER_LM_STUDIO;
   };
 
@@ -825,6 +1087,8 @@ import { cloudConfig } from '../../services/cloud-config';
         setLmStudioModelPlaceholder();
       } else if (isDeepSeekProvider(activeProvider)) {
         setDeepSeekModelOptions(draft.modelChoice || getProviderDefaults(activeProvider).modelChoice);
+      } else if (isSiliconFlowProvider(activeProvider)) {
+        setSiliconFlowModelOptions(draft.modelChoice || getProviderDefaults(activeProvider).modelChoice);
       } else {
         ensureModelOption(draft.modelChoice);
         refs.modelSelect.value = draft.modelChoice || getProviderDefaults(activeProvider).modelChoice;
@@ -851,6 +1115,7 @@ import { cloudConfig } from '../../services/cloud-config';
       agentModels: normalizeAgentModels(activeDraft.agentModels || {}),
       openrouterConfig: { ...providerDrafts[PROVIDER_OPENROUTER] },
       deepseekConfig: { ...providerDrafts[PROVIDER_DEEPSEEK], appTitle: 'DeepSeek' },
+      siliconflowConfig: { ...providerDrafts[PROVIDER_SILICONFLOW], appTitle: 'SiliconFlow' },
       lmStudioConfig: { ...providerDrafts[PROVIDER_LM_STUDIO], apiKey: '', appTitle: 'LM Studio' },
       systemPrompt: (refs.systemPrompt?.value || '').trim() || constants.DEFAULT_CONFIG.systemPrompt,
       temperature: Number(refs.temperature?.value ?? constants.DEFAULT_CONFIG.temperature),
@@ -896,6 +1161,10 @@ import { cloudConfig } from '../../services/cloud-config';
       next.deepseekConfig = { ...next.deepseekConfig };
       if (isRedactedValue(next.deepseekConfig.apiKey)) next.deepseekConfig.apiKey = '';
     }
+    if (next.siliconflowConfig && typeof next.siliconflowConfig === 'object') {
+      next.siliconflowConfig = { ...next.siliconflowConfig };
+      if (isRedactedValue(next.siliconflowConfig.apiKey)) next.siliconflowConfig.apiKey = '';
+    }
     if (next.lmStudioConfig && typeof next.lmStudioConfig === 'object') {
       next.lmStudioConfig = { ...next.lmStudioConfig, apiKey: '' };
     }
@@ -915,6 +1184,7 @@ import { cloudConfig } from '../../services/cloud-config';
     redact(next, 'apimartApiKey');
     redact(next.openrouterConfig, 'apiKey');
     redact(next.deepseekConfig, 'apiKey');
+    redact(next.siliconflowConfig, 'apiKey');
     redact(next.lmStudioConfig, 'apiKey');
     return next;
   };
@@ -924,12 +1194,16 @@ import { cloudConfig } from '../../services/cloud-config';
     const provider = inferProviderFromConfig(next);
     providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next.openrouterConfig || {});
     providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next.deepseekConfig || {});
+    providerDrafts[PROVIDER_SILICONFLOW] = makeProviderDraft(PROVIDER_SILICONFLOW, next.siliconflowConfig || {});
     providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next.lmStudioConfig || {});
     if (!next.openrouterConfig && provider === PROVIDER_OPENROUTER) {
       providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next);
     }
     if (!next.deepseekConfig && isDeepSeekProvider(provider)) {
       providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next);
+    }
+    if (!next.siliconflowConfig && isSiliconFlowProvider(provider)) {
+      providerDrafts[PROVIDER_SILICONFLOW] = makeProviderDraft(PROVIDER_SILICONFLOW, next);
     }
     if (!next.lmStudioConfig && isLmStudioProvider(provider)) {
       providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next);
@@ -953,6 +1227,8 @@ import { cloudConfig } from '../../services/cloud-config';
       const modelChoice = activeDraft.modelChoice;
       if (isDeepSeekProvider(activeProvider)) {
         setDeepSeekModelOptions(modelChoice || getProviderDefaults(activeProvider).modelChoice);
+      } else if (isSiliconFlowProvider(activeProvider)) {
+        setSiliconFlowModelOptions(modelChoice || getProviderDefaults(activeProvider).modelChoice);
       } else {
         ensureModelOption(modelChoice);
         refs.modelSelect.value = modelChoice;
@@ -1023,21 +1299,35 @@ import { cloudConfig } from '../../services/cloud-config';
       refs.appTitle.value = 'DeepSeek';
       return;
     }
+    if (isSiliconFlowProvider(provider)) {
+      refs.appTitle.value = 'SiliconFlow';
+      return;
+    }
     refs.appTitle.value = getModelProviderLabel(getResolvedModel());
   };
 
-  const mountDeepSeekProviderOption = () => {
-    if (document.getElementById('aiProviderDeepSeek')) return;
+  const mountProviderOption = ({ id, value, label }) => {
+    if (document.getElementById(id)) return;
     const segment = document.querySelector('.provider-segment');
     if (!segment) return;
     const option = document.createElement('label');
     option.className = 'provider-option';
     option.innerHTML = `
-      <input id="aiProviderDeepSeek" name="aiProvider" type="radio" value="deepseek" />
-      <span>DeepSeek</span>
+      <input id="${id}" name="aiProvider" type="radio" value="${value}" />
+      <span>${label}</span>
     `;
     const lmStudioOption = document.getElementById('aiProviderLmStudio')?.closest('.provider-option');
     segment.insertBefore(option, lmStudioOption || null);
+  };
+
+  const mountDeepSeekProviderOption = () => {
+    if (document.getElementById('aiProviderDeepSeek')) return;
+    mountProviderOption({ id: 'aiProviderDeepSeek', value: PROVIDER_DEEPSEEK, label: 'DeepSeek' });
+  };
+
+  const mountSiliconFlowProviderOption = () => {
+    if (document.getElementById('aiProviderSiliconFlow')) return;
+    mountProviderOption({ id: 'aiProviderSiliconFlow', value: PROVIDER_SILICONFLOW, label: '硅基流动' });
   };
 
   const mountBalanceControl = () => {
@@ -1051,7 +1341,6 @@ import { cloudConfig } from '../../services/cloud-config';
       button.type = 'button';
       button.innerHTML = `
         <i class="ti ti-coins" aria-hidden="true"></i>
-        <span class="balance-button-main">读取余额</span>
         <span class="balance-button-status" id="aiBalanceStatus">余额：未查询</span>
       `;
       actionButtons.appendChild(button);
@@ -1063,16 +1352,23 @@ import { cloudConfig } from '../../services/cloud-config';
     const provider = getAiProvider();
     const isLocal = isLmStudioProvider(provider);
     const isDeepSeek = isDeepSeekProvider(provider);
+    const isSiliconFlow = isSiliconFlowProvider(provider);
     const defaults = getProviderDefaults(provider);
 
     if (refs.apiKeyLabelText) {
-      refs.apiKeyLabelText.textContent = isLocal ? 'LM Studio API 密钥（可选）' : isDeepSeek ? 'DeepSeek API 密钥' : 'OpenRouter API 密钥';
+      refs.apiKeyLabelText.textContent = isLocal
+        ? 'LM Studio API 密钥（可选）'
+        : isDeepSeek
+          ? 'DeepSeek API 密钥'
+          : isSiliconFlow
+            ? '硅基流动 API 密钥'
+        : 'OpenRouter API 密钥';
     }
     if (refs.apiKeyNoteText) {
       refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '仅保存在本机浏览器';
     }
     if (refs.openrouterApiKey) {
-      refs.openrouterApiKey.placeholder = isLocal ? '可留空' : isDeepSeek ? 'sk-...' : 'sk-or-...';
+      refs.openrouterApiKey.placeholder = isLocal ? '可留空' : isDeepSeek || isSiliconFlow ? 'sk-...' : 'sk-or-...';
     }
     if (refs.apiKeyField) {
       refs.apiKeyField.hidden = isLocal;
@@ -1081,12 +1377,14 @@ import { cloudConfig } from '../../services/cloud-config';
       refs.aiProviderHelp.hidden = isLocal;
       refs.aiProviderHelp.href = isDeepSeek
         ? 'https://api-docs.deepseek.com/'
+        : isSiliconFlow
+          ? 'https://api-docs.siliconflow.cn/docs/userguide/get_started/introduction'
         : 'https://openrouter.ai/docs/api/api-reference/models/get-models';
     }
     if (refs.openrouterBaseUrl && !refs.openrouterBaseUrl.value.trim()) {
       refs.openrouterBaseUrl.value = defaults.baseUrl;
     }
-    if (refs.appTitle && (isLocal || isDeepSeek)) {
+    if (refs.appTitle && (isLocal || isDeepSeek || isSiliconFlow)) {
       refs.appTitle.value = defaults.appTitle;
     } else if (refs.appTitle && !refs.appTitle.value.trim()) {
       refs.appTitle.value = defaults.appTitle;
@@ -1141,6 +1439,10 @@ import { cloudConfig } from '../../services/cloud-config';
     return `${symbol}${safeAmount.toFixed(2)}`;
   };
 
+  const formatProviderBalance = (_provider, value, currency = 'USD') => {
+    return `余额：${formatBalanceAmount(value, currency)}`;
+  };
+
   const formatDeepSeekBalance = (payload = {}) => {
     const balances = Array.isArray(payload.balance_infos)
       ? payload.balance_infos
@@ -1152,11 +1454,7 @@ import { cloudConfig } from '../../services/cloud-config';
       || balances[0];
     if (!preferred) throw new Error('未返回余额信息');
     const currency = preferred.currency || 'USD';
-    const total = formatBalanceAmount(preferred.total_balance, currency);
-    const topped = formatBalanceAmount(preferred.topped_up_balance, currency);
-    const granted = formatBalanceAmount(preferred.granted_balance, currency);
-    const available = payload.is_available ?? payload.data?.is_available;
-    return `余额：DeepSeek ${total}（充值 ${topped} / 赠送 ${granted}）${available === false ? '，当前不可用' : ''}`;
+    return formatProviderBalance('DeepSeek', preferred.total_balance, currency);
   };
 
   const formatOpenRouterCredits = (payload = {}) => {
@@ -1164,19 +1462,27 @@ import { cloudConfig } from '../../services/cloud-config';
     const total = Number.parseFloat(data.total_credits);
     const usage = Number.parseFloat(data.total_usage);
     if (Number.isFinite(total) && Number.isFinite(usage)) {
-      const remaining = Math.max(0, total - usage);
-      return `余额：OpenRouter ${formatBalanceAmount(remaining)}（总额 ${formatBalanceAmount(total)} / 已用 ${formatBalanceAmount(usage)}）`;
+      return formatProviderBalance('OpenRouter', Math.max(0, total - usage));
     }
     const limit = Number.parseFloat(data.limit);
     const used = Number.parseFloat(data.usage ?? data.used);
     const remaining = Number.parseFloat(data.limit_remaining ?? data.remaining);
     if (Number.isFinite(remaining)) {
-      return `余额：OpenRouter ${formatBalanceAmount(remaining)}`;
+      return formatProviderBalance('OpenRouter', remaining);
     }
     if (Number.isFinite(limit) && Number.isFinite(used)) {
-      return `余额：OpenRouter ${formatBalanceAmount(Math.max(0, limit - used))}（限额 ${formatBalanceAmount(limit)} / 已用 ${formatBalanceAmount(used)}）`;
+      return formatProviderBalance('OpenRouter', Math.max(0, limit - used));
     }
     throw new Error('未返回余额信息');
+  };
+
+  const formatSiliconFlowUserInfo = (payload = {}) => {
+    const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+    const balance = data?.totalBalance ?? data?.chargeBalance ?? data?.balance;
+    if (balance === undefined) {
+      throw new Error('未返回余额信息');
+    }
+    return formatProviderBalance('硅基流动', balance, 'CNY');
   };
 
   const syncPreview = () => {
@@ -1205,7 +1511,7 @@ import { cloudConfig } from '../../services/cloud-config';
         ? `已准备使用 ${resolvedModel || '未选择的模型'} 调用 ${baseUrl}/chat/completions。导入/导出均使用 UTF-8。`
         : (isLocal
           ? '当前还没有选择本地模型。请先在 LM Studio 加载模型，再刷新模型列表。'
-          : '当前还没有填写 API 密钥。先保存配置，再用“加载模型列表”或“检测配置”验证 OpenRouter 接入。');
+          : '当前还没有填写 API 密钥。先保存配置，再用“加载模型列表”或“检测配置”验证模型接入。');
     }
     if (refs.previewStatusText) {
       refs.previewStatusText.textContent = isAiReady
@@ -1373,7 +1679,21 @@ import { cloudConfig } from '../../services/cloud-config';
     return `¥${cnyPerMillion.toFixed(cnyPerMillion >= 100 ? 0 : 2)}`;
   };
 
+  const formatOfficialCnyPerMillion = (value) => {
+    const amount = normalizePriceValue(value);
+    if (amount == null) return '未返回';
+    return `¥${amount.toFixed(amount >= 100 ? 0 : amount >= 1 ? 2 : 3).replace(/\.?0+$/, '')}`;
+  };
+
   const getPricingLabel = (pricing) => {
+    const inputCny = findFirstDefined(pricing?.inputCnyPerMillion, pricing?.promptCnyPerMillion);
+    const outputCny = findFirstDefined(pricing?.outputCnyPerMillion, pricing?.completionCnyPerMillion);
+    const cachedInputCny = pricing?.cachedInputCnyPerMillion;
+    if (inputCny !== undefined || outputCny !== undefined) {
+      const base = `${formatOfficialCnyPerMillion(inputCny)} / ${formatOfficialCnyPerMillion(outputCny)}`;
+      return cachedInputCny !== undefined ? `${base} · 缓存 ${formatOfficialCnyPerMillion(cachedInputCny)}` : base;
+    }
+    if (pricing?.unavailable) return '官方未返回价格';
     const prompt = formatCnyPerMillionTokens(pricing?.prompt);
     const completion = formatCnyPerMillionTokens(pricing?.completion);
     return `${prompt} / ${completion}`;
@@ -1741,7 +2061,7 @@ import { cloudConfig } from '../../services/cloud-config';
   };
 
   const setDeepSeekModelOptions = (preferredModel = DEFAULT_DEEPSEEK_MODEL) => {
-    buildModelSelect(DEEPSEEK_MODEL_OPTIONS);
+    buildModelSelect(DEEPSEEK_MODEL_OPTIONS.map(normalizeDeepSeekModel));
     if (!refs.modelSelect) return;
     const preferred = String(preferredModel || DEFAULT_DEEPSEEK_MODEL).trim();
     if ([...refs.modelSelect.options].some((option) => option.value === preferred)) {
@@ -1751,6 +2071,59 @@ import { cloudConfig } from '../../services/cloud-config';
     }
     syncModelState();
     syncPreview();
+  };
+
+  const setSiliconFlowModelOptions = (preferredModel = DEFAULT_SILICONFLOW_MODEL) => {
+    buildModelSelect(buildSiliconFlowModelList([]));
+    if (!refs.modelSelect) return;
+    const preferred = String(preferredModel || DEFAULT_SILICONFLOW_MODEL).trim();
+    if (preferred && ![...refs.modelSelect.options].some((option) => option.value === preferred)) {
+      ensureModelOption(preferred);
+    }
+    if ([...refs.modelSelect.options].some((option) => option.value === preferred)) {
+      refs.modelSelect.value = preferred;
+    } else {
+      refs.modelSelect.value = DEFAULT_SILICONFLOW_MODEL;
+    }
+    syncModelState();
+    syncModelDropdown();
+    syncPreview();
+  };
+
+  const getSiliconFlowModelSortRank = (id) => {
+    if (id === DEFAULT_SILICONFLOW_MODEL) return 0;
+    const optionIndex = SILICONFLOW_MODEL_OPTIONS.findIndex((option) => option.id === id);
+    if (optionIndex >= 0) return optionIndex + 1;
+    const catalogIndex = SILICONFLOW_MODEL_CATALOG.findIndex((option) => option.id === id);
+    return catalogIndex >= 0 ? catalogIndex + 20 : 1000;
+  };
+
+  const buildSiliconFlowModelList = (rawModels) => {
+    const apiModels = (Array.isArray(rawModels) ? rawModels : [])
+      .filter((item) => item?.id && item.id.includes('/'))
+      .map((item) => {
+        const catalog = getSiliconFlowCatalogEntry(item.id);
+        return normalizeSiliconFlowModel({
+          ...item,
+          category: item.category || catalog?.subType || '',
+        });
+      })
+      .filter((item) => {
+        const catalog = getSiliconFlowCatalogEntry(item.id);
+        return catalog ? isSiliconFlowChatCatalogModel(catalog) : isSiliconFlowChatCatalogModel(item);
+      });
+
+    const models = apiModels.length
+      ? apiModels
+      : SILICONFLOW_MODEL_CATALOG
+        .filter(isSiliconFlowChatCatalogModel)
+        .map((item) => normalizeSiliconFlowModel({ id: item.id }));
+
+    return models.sort((a, b) => {
+      const rankA = getSiliconFlowModelSortRank(a.id);
+      const rankB = getSiliconFlowModelSortRank(b.id);
+      return rankA - rankB || String(a.id || '').localeCompare(String(b.id || ''));
+    });
   };
 
   const setLmStudioModelPlaceholder = () => {
@@ -1770,6 +2143,7 @@ import { cloudConfig } from '../../services/cloud-config';
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
     const isDeepSeek = isDeepSeekProvider(config.aiProvider);
+    const isSiliconFlow = isSiliconFlowProvider(config.aiProvider);
     const requestedProvider = config.aiProvider;
     const isStaleProviderRequest = () => getAiProvider() !== requestedProvider;
     if (isLocal && refs.openrouterBaseUrl) {
@@ -1780,8 +2154,16 @@ import { cloudConfig } from '../../services/cloud-config';
     const timeout = setTimeout(() => controller.abort(), 15000);
 
     try {
-      setStatus(isLocal ? '正在加载 LM Studio 本地模型列表…' : isDeepSeek ? '正在加载 DeepSeek 模型列表…' : '正在加载 OpenRouter 官方模型列表…', 'success');
-      const modelsUrl = isLocal || isDeepSeek ? `${config.baseUrl}/models` : `${config.baseUrl}/models?output_modalities=text,image`;
+      setStatus(isLocal
+        ? '正在加载 LM Studio 本地模型列表…'
+        : isDeepSeek
+          ? '正在加载 DeepSeek 模型列表…'
+          : isSiliconFlow
+            ? '正在加载硅基流动模型列表…'
+        : '正在加载 OpenRouter 官方模型列表…', 'success');
+      const modelsUrl = isLocal || isDeepSeek || isSiliconFlow
+        ? `${config.baseUrl}/models`
+        : `${config.baseUrl}/models?output_modalities=text,image`;
       const response = await fetch(modelsUrl, {
         method: 'GET',
         headers: getRequestHeaders(config),
@@ -1801,6 +2183,7 @@ import { cloudConfig } from '../../services/cloud-config';
         : isDeepSeek
           ? rawModels
             .filter((item) => item.id && !item.id.includes('/'))
+            .map(normalizeDeepSeekModel)
             .sort((a, b) => {
               const rank = (id) => {
                 if (id === DEFAULT_DEEPSEEK_MODEL) return 0;
@@ -1811,6 +2194,8 @@ import { cloudConfig } from '../../services/cloud-config';
               };
               return rank(a.id) - rank(b.id) || String(a.id || '').localeCompare(String(b.id || ''));
             })
+          : isSiliconFlow
+            ? buildSiliconFlowModelList(rawModels)
         : rawModels
           .filter((item) => item.id.includes('/'))
           .filter((item) => !isSlowOrFreeModelLike(item))
@@ -1827,7 +2212,13 @@ import { cloudConfig } from '../../services/cloud-config';
       if (refs.modelSelect && !isLocal && isSlowOrFreeModelLike(savedModelChoice) && models.length) {
         refs.modelSelect.value = models[0].id;
       }
-      buildModelSelect(isDeepSeek && !models.length ? DEEPSEEK_MODEL_OPTIONS : models);
+      buildModelSelect(
+        isDeepSeek && !models.length
+          ? DEEPSEEK_MODEL_OPTIONS.map(normalizeDeepSeekModel)
+          : isSiliconFlow && !models.length
+            ? buildSiliconFlowModelList([])
+        : models
+      );
       if (isLocal && refs.modelSelect && models.length) {
         const hasSavedLocalModel = models.some((item) => item.id === savedModelChoice);
         refs.modelSelect.value = hasSavedLocalModel ? savedModelChoice : models[0].id;
@@ -1840,7 +2231,11 @@ import { cloudConfig } from '../../services/cloud-config';
       } else if (isLocal && refs.modelSelect && !models.length) {
         setLmStudioModelPlaceholder();
       } else if (!isLocal && refs.modelSelect) {
-        const providerKey = isDeepSeek ? PROVIDER_DEEPSEEK : PROVIDER_OPENROUTER;
+        const providerKey = isDeepSeek
+          ? PROVIDER_DEEPSEEK
+          : isSiliconFlow
+            ? PROVIDER_SILICONFLOW
+          : PROVIDER_OPENROUTER;
         providerDrafts[providerKey] = {
           ...providerDrafts[providerKey],
           modelChoice: refs.modelSelect.value,
@@ -1853,6 +2248,8 @@ import { cloudConfig } from '../../services/cloud-config';
         ? `已加载 LM Studio 本地模型列表：${models.length || 0} 项`
         : isDeepSeek
           ? `已加载 DeepSeek 模型列表：${models.length || 0} 项`
+          : isSiliconFlow
+            ? `已加载硅基流动模型列表：${models.length || 0} 项`
         : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
       return true;
@@ -1860,10 +2257,13 @@ import { cloudConfig } from '../../services/cloud-config';
       if (isStaleProviderRequest()) return;
       if (isLocal) setLmStudioModelPlaceholder();
       if (isDeepSeek) setDeepSeekModelOptions(providerDrafts[PROVIDER_DEEPSEEK]?.modelChoice || DEFAULT_DEEPSEEK_MODEL);
+      if (isSiliconFlow) setSiliconFlowModelOptions(providerDrafts[PROVIDER_SILICONFLOW]?.modelChoice || DEFAULT_SILICONFLOW_MODEL);
       setStatus(isLocal
         ? `本地模型加载失败：请确认 LM Studio 已启动并加载模型（${error?.message || '未知错误'}）`
         : isDeepSeek
           ? `DeepSeek 模型加载失败：已保留内置模型选项（${error?.message || '未知错误'}）`
+          : isSiliconFlow
+            ? `硅基流动模型加载失败：已保留内置模型选项（${error?.message || '未知错误'}）`
         : `模型加载失败：${error?.message || '未知错误'}`, 'warn');
       return false;
     } finally {
@@ -1886,6 +2286,7 @@ import { cloudConfig } from '../../services/cloud-config';
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
     const isDeepSeek = isDeepSeekProvider(config.aiProvider);
+    const isSiliconFlow = isSiliconFlowProvider(config.aiProvider);
     const balanceRefs = getBalanceRefs();
     if (isLocal) {
       setBalanceStatus('余额：本地模型无需查询');
@@ -1906,6 +2307,9 @@ import { cloudConfig } from '../../services/cloud-config';
       if (isDeepSeek) {
         const payload = await fetchBalanceJson(`${baseUrl}/user/balance`, config, controller.signal);
         setBalanceStatus(formatDeepSeekBalance(payload));
+      } else if (isSiliconFlow) {
+        const payload = await fetchBalanceJson(`${baseUrl}/user/info`, config, controller.signal);
+        setBalanceStatus(formatSiliconFlowUserInfo(payload));
       } else {
         try {
           const payload = await fetchBalanceJson(`${baseUrl}/credits`, config, controller.signal);
@@ -2260,8 +2664,8 @@ import { cloudConfig } from '../../services/cloud-config';
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
       const hasApimartConfig = Boolean(config.apimartApiKey);
       if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig) {
-        setStatus('请先填写 OpenRouter API 密钥、APIMart API Key 或 OSS 配置', 'warn');
-        App.notify?.warn?.('请先填写 OpenRouter API 密钥、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
+        setStatus('请先填写模型 API 密钥、APIMart API Key 或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写模型 API 密钥、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       try {
@@ -2433,6 +2837,7 @@ import { cloudConfig } from '../../services/cloud-config';
     mountApimartConfigSection();
     mountAgentRoutingConfigSection();
     mountDeepSeekProviderOption();
+    mountSiliconFlowProviderOption();
     mountBalanceControl();
     mountOssHelpLink();
     mountConfigContentPanel();

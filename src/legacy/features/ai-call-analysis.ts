@@ -465,7 +465,9 @@ import { cloudStorage } from '../../services/cloud-storage';
       const value = Number(item[valueKey] || 0);
       const x = padding.left + step * index;
       const y = padding.top + (1 - value / max) * plotHeight;
-      const valueY = y <= padding.top + 18 ? y + 23 : y - 13;
+      const nearTop = y <= padding.top + 18;
+      const nearBottom = y >= height - padding.bottom - 10;
+      const valueY = nearTop ? y + 23 : nearBottom ? y - 26 : y - 13;
       return {
         item,
         value,
@@ -509,21 +511,15 @@ import { cloudStorage } from '../../services/cloud-storage';
         </div>
         <div class="ai-call-trend-visual">
           <svg class="ai-call-trend-svg" viewBox="0 0 ${geometry.width} ${geometry.height}" preserveAspectRatio="none" role="img" aria-label="Token 使用趋势">
-            <defs>
-              <linearGradient id="aiCallTrendFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="currentColor" stop-opacity=".24"></stop>
-                <stop offset="100%" stop-color="currentColor" stop-opacity="0"></stop>
-              </linearGradient>
-            </defs>
             <path class="ai-call-trend-grid" d="${geometry.gridPath}"></path>
             <path class="ai-call-trend-area" d="${geometry.areaPath}"></path>
-            <path class="ai-call-trend-line" d="${geometry.linePath}"></path>
+            <path class="ai-call-trend-line" d="${geometry.linePath}" pathLength="1"></path>
           </svg>
           <div class="ai-call-trend-markers" aria-hidden="true">
-            ${geometry.points.map((point) => `
-              <span class="ai-call-trend-value" style="left:${point.xPercent.toFixed(3)}%; top:${point.valueYPercent.toFixed(3)}%;">${formatNumber(point.value)}</span>
-              <span class="ai-call-trend-point" style="left:${point.xPercent.toFixed(3)}%; top:${point.yPercent.toFixed(3)}%;" title="${esc(point.item.label)} · ${formatNumber(point.value)} Tokens"></span>
-              <span class="ai-call-trend-axis" style="left:${point.xPercent.toFixed(3)}%;">${esc(point.item.label)}</span>
+            ${geometry.points.map((point, index) => `
+              <span class="ai-call-trend-value" style="left:${point.xPercent.toFixed(3)}%; top:${point.valueYPercent.toFixed(3)}%; --ai-call-point-delay:${100 + index * 18}ms;">${formatNumber(point.value)}</span>
+              <span class="ai-call-trend-point" style="left:${point.xPercent.toFixed(3)}%; top:${point.yPercent.toFixed(3)}%; --ai-call-point-delay:${110 + index * 18}ms;" title="${esc(point.item.label)} · ${formatNumber(point.value)} Tokens"></span>
+              <span class="ai-call-trend-axis" style="left:${point.xPercent.toFixed(3)}%; --ai-call-point-delay:${160 + index * 10}ms;">${esc(point.item.label)}</span>
             `).join('')}
           </div>
         </div>

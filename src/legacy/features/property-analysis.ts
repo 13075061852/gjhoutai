@@ -142,6 +142,8 @@ import { cloudStorage } from '../../services/cloud-storage';
     compareBtn: document.getElementById('analysisCompareBtn'),
     importExcelBtn: document.getElementById('analysisImportExcelBtn'),
     exportJsonBtn: document.getElementById('analysisExportJsonBtn'),
+    mobileActionToggle: document.getElementById('analysisMobileActionToggle'),
+    mobileActionMenu: document.getElementById('analysisMobileActionMenu'),
     exportReportBtn: document.getElementById('analysisExportReportBtn'),
     manageRangesBtn: document.getElementById('analysisManageRangesBtn'),
     rangeWordInput: null,
@@ -150,6 +152,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     panelCount: document.getElementById('analysisPanelCount'),
     footerTotal: document.getElementById('analysisFooterTotal'),
     selectionMeta: document.getElementById('analysisSelectionMeta'),
+    statusRow: document.getElementById('analysisSelectionMeta')?.closest('.analysis-status-row'),
     sortSelect: document.getElementById('analysisSortSelect'),
     pageSizeSelect: document.getElementById('analysisPageSizeSelect'),
   };
@@ -233,6 +236,50 @@ import { cloudStorage } from '../../services/cloud-storage';
       actionGroup.appendChild(button);
       refs.exportReportBtn = button;
     }
+  };
+
+  const setMobileActionMenuOpen = (open) => {
+    if (!refs.mobileActionToggle || !refs.mobileActionMenu) return;
+    refs.mobileActionToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    refs.mobileActionMenu.classList.toggle('is-open', open);
+  };
+
+  const isMobileAnalysisLayout = () => window.matchMedia?.('(max-width: 980px)')?.matches || window.innerWidth <= 980;
+
+  const ensureMobileActionMenu = () => {
+    if (!refs.exportJsonBtn?.parentElement) return;
+
+    const sourceGroup = refs.exportJsonBtn.parentElement.closest('.analysis-action-group');
+    if (!sourceGroup) return;
+    const mobileActionHost = isMobileAnalysisLayout() ? refs.statusRow || sourceGroup : sourceGroup;
+
+    if (!refs.mobileActionToggle) {
+      const button = document.createElement('button');
+      button.className = 'analysis-action-menu-toggle';
+      button.id = 'analysisMobileActionToggle';
+      button.type = 'button';
+      button.setAttribute('aria-expanded', 'false');
+      button.setAttribute('aria-controls', 'analysisMobileActionMenu');
+      button.innerHTML = '<i class="ti ti-adjustments-horizontal" aria-hidden="true"></i><span>操作</span><i class="ti ti-chevron-down" aria-hidden="true"></i>';
+      mobileActionHost.appendChild(button);
+      refs.mobileActionToggle = button;
+    } else if (refs.mobileActionToggle.parentElement !== mobileActionHost) {
+      mobileActionHost.appendChild(refs.mobileActionToggle);
+    }
+
+    if (!refs.mobileActionMenu) {
+      const menu = document.createElement('div');
+      menu.className = 'analysis-action-menu';
+      menu.id = 'analysisMobileActionMenu';
+      mobileActionHost.appendChild(menu);
+      refs.mobileActionMenu = menu;
+    } else if (refs.mobileActionMenu.parentElement !== mobileActionHost) {
+      mobileActionHost.appendChild(refs.mobileActionMenu);
+    }
+
+    sourceGroup.querySelectorAll(':scope > .analysis-toolbar-btn').forEach((button) => {
+      refs.mobileActionMenu?.appendChild(button);
+    });
   };
 
   const normalizeRows = (value) => {
@@ -2460,14 +2507,10 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const paginateRows = (rows) => {
-    const totalPages = Math.max(1, Math.ceil(rows.length / state.pageSize));
-    const currentPage = Math.min(Math.max(state.page, 1), totalPages);
-    const start = (currentPage - 1) * state.pageSize;
-
     return {
-      currentPage,
-      totalPages,
-      rows: rows.slice(start, start + state.pageSize),
+      currentPage: 1,
+      totalPages: 1,
+      rows,
     };
   };
 
@@ -2633,6 +2676,12 @@ import { cloudStorage } from '../../services/cloud-storage';
     return [...mustShow, ...metricColumns, ...rest].filter((column) => column !== '__rowKey');
   };
 
+  const normalizeCompareColumns = (columns, fallbackColumns) => {
+    const available = new Set(fallbackColumns);
+    const normalized = (columns || []).filter((column) => available.has(column));
+    return normalized.length ? normalized : fallbackColumns;
+  };
+
   const getCompareCellText = (row, column) => {
     const cell = getCompareCellParts(row, column);
     return `${cell.main}${cell.average}`;
@@ -2654,101 +2703,56 @@ import { cloudStorage } from '../../services/cloud-storage';
     };
   };
 
-  const getCompareAverageColumns = (rows, columns) => {
-    return columns.filter((column) => (
-      METRIC_COLUMNS.includes(column)
-      && rows.some((row) => getMetricValue(row, column) != null)
-    ));
-  };
-
-  const COMPARE_CHART_COLORS = [
-    '#2563eb',
-    '#f97316',
-    '#16a34a',
-    '#dc2626',
-    '#7c3aed',
-    '#0891b2',
-    '#ca8a04',
-    '#db2777',
-  ];
-
-  const getCompareSeriesColor = (index) => COMPARE_CHART_COLORS[index % COMPARE_CHART_COLORS.length];
-
   const getCompareRowLabel = (row, index) => {
     const model = valueToText(row?.型号).trim();
     const batch = valueToText(row?.批次).trim();
     return [model, batch].filter(Boolean).join(' / ') || `样本 ${index + 1}`;
   };
 
-  const formatCompareAverageValue = (value) => {
-    if (value == null) return '--';
-    return Number(value).toFixed(2).replace(/\.?0+$/, '');
-  };
-
-  const buildCompareAverageChartHtml = (rows, columns) => {
-    const averageColumns = getCompareAverageColumns(rows, columns);
-    if (!averageColumns.length) return '';
-    const chartMinWidth = Math.max(680, averageColumns.length * Math.max(150, rows.length * 34 + 44));
-    const series = rows.map((row, index) => ({
-      label: getCompareRowLabel(row, index),
-      color: getCompareSeriesColor(index),
-    }));
+  const buildCompareTableHtml = (rows, columns, viewMode = 'horizontal') => {
+    if (viewMode === 'vertical') {
+      return `
+        <table class="analysis-compare-table analysis-compare-table-vertical">
+          <tbody>
+            ${columns.map((column) => `
+              <tr>
+                <th>${escapeHtml(formatHeader(column))}</th>
+                ${rows.map((row) => {
+                  const cell = getCellDisplay(row[column], column);
+                  return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
 
     return `
-      <section class="analysis-compare-section analysis-compare-chart-section" aria-label="平均数柱状图对比">
-        <div class="analysis-compare-section-title">
-          <i class="ti ti-chart-bar" aria-hidden="true"></i>
-          <span>平均数柱状图对比</span>
-        </div>
-        <div class="analysis-compare-chart-legend">
-          ${series.map((item) => `
-            <span class="analysis-compare-chart-legend-item" title="${escapeHtml(item.label)}">
-              <span class="analysis-compare-chart-swatch" style="background:${escapeHtml(item.color)}"></span>
-              <span>${escapeHtml(item.label)}</span>
-            </span>
+      <table class="analysis-compare-table">
+        <thead>
+          <tr>
+            ${columns.map((column) => `<th>${escapeHtml(formatHeader(column))}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              ${columns.map((column) => {
+                const cell = getCellDisplay(row[column], column);
+                return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
+              }).join('')}
+            </tr>
           `).join('')}
-        </div>
-        <div class="analysis-compare-chart-wrap">
-          <div class="analysis-compare-chart-plot" style="min-width:${chartMinWidth}px">
-          ${averageColumns.map((column) => {
-            const points = rows.map((row, index) => ({
-              label: getCompareRowLabel(row, index),
-              value: getMetricValue(row, column),
-              color: getCompareSeriesColor(index),
-            }));
-            const numericValues = points.map((point) => point.value).filter((value) => value != null);
-            const maxValue = Math.max(...numericValues, 0);
-
-            return `
-              <div class="analysis-compare-metric-group">
-                <div class="analysis-compare-metric-bars">
-                  ${points.map((point) => {
-                    const percent = point.value == null || maxValue <= 0 ? 0 : Math.max(4, (point.value / maxValue) * 100);
-                    return `
-                      <div
-                        class="analysis-compare-bar-column"
-                        style="--bar-height:${percent}%;--compare-bar-color:${escapeHtml(point.color)}"
-                        title="${escapeHtml(`${point.label} ${formatHeader(column)}平均数 ${formatCompareAverageValue(point.value)}`)}">
-                        <span class="analysis-compare-bar-column-value">${escapeHtml(formatCompareAverageValue(point.value))}</span>
-                        <span class="analysis-compare-bar-column-fill"></span>
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-                <div class="analysis-compare-metric-label" title="${escapeHtml(formatHeader(column))}">${escapeHtml(formatHeader(column))}</div>
-              </div>
-            `;
-          }).join('')}
-          </div>
-        </div>
-      </section>
+        </tbody>
+      </table>
     `;
   };
 
   const createCompareImageBlob = async (rows, options = {}) => {
-    const includeChart = options.includeChart !== false;
-    const columns = getCompareColumns(rows);
-    const averageColumns = includeChart ? getCompareAverageColumns(rows, columns) : [];
+    const tableView = options.tableView === 'vertical' ? 'vertical' : 'horizontal';
+    const allColumns = getCompareColumns(rows);
+    const columns = normalizeCompareColumns(options.columns, allColumns);
     const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -2760,15 +2764,13 @@ import { cloudStorage } from '../../services/cloud-storage';
     const font = `700 14px ${fontFamily}`;
     const headerFont = `900 14px ${fontFamily}`;
     const titleFont = `950 20px ${fontFamily}`;
+    const footerFont = `800 13px ${fontFamily}`;
+    const footerText = '以上测试数据为广俊实验室测试结果，仅供参考！';
     const horizontalPadding = 16;
     const titleHeight = 58;
     const rowHeight = 46;
     const headerHeight = 48;
-    const chartTitleHeight = averageColumns.length ? 34 : 0;
-    const chartLegendHeight = averageColumns.length ? Math.ceil(rows.length / 3) * 24 + 8 : 0;
-    const chartPlotHeight = averageColumns.length ? 220 : 0;
-    const chartLabelHeight = averageColumns.length ? 38 : 0;
-    const chartHeight = averageColumns.length ? chartTitleHeight + chartLegendHeight + chartPlotHeight + chartLabelHeight + 22 : 0;
+    const footerHeight = 42;
     const minColumnWidth = 92;
     const maxColumnWidth = 280;
 
@@ -2809,19 +2811,31 @@ import { cloudStorage } from '../../services/cloud-storage';
       return low > 0 ? `${safeText.slice(0, low)}${ellipsis}` : ellipsis;
     };
 
-    const columnWidths = columns.map((column) => {
-      const headerWidth = measureTextWidth(formatHeader(column), headerFont);
-      const cellWidth = Math.max(...rows.map((row) => measureTextWidth(getCompareCellText(row, column), font)), 0);
+    const getColumnWidth = (headerText, cellTexts = []) => {
+      const headerWidth = measureTextWidth(headerText, headerFont);
+      const cellWidth = Math.max(...cellTexts.map((text) => measureTextWidth(text, font)), 0);
       return Math.max(
         minColumnWidth,
         Math.min(Math.max(headerWidth, cellWidth) + horizontalPadding * 2, maxColumnWidth)
       );
-    });
+    };
+    const columnWidths = tableView === 'vertical'
+      ? [
+        getColumnWidth('项目', columns.map(formatHeader)),
+        ...rows.map((row, rowIndex) => getColumnWidth(
+          getCompareRowLabel(row, rowIndex),
+          columns.map((column) => getCompareCellText(row, column))
+        )),
+      ]
+      : columns.map((column) => getColumnWidth(
+        formatHeader(column),
+        rows.map((row) => getCompareCellText(row, column))
+      ));
 
     const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-    const chartMinWidth = averageColumns.length ? averageColumns.length * Math.max(150, rows.length * 34 + 44) + 32 : 0;
-    const imageWidth = Math.max(tableWidth + 2, averageColumns.length ? Math.max(760, chartMinWidth) : 0);
-    const imageHeight = titleHeight + chartHeight + headerHeight + rows.length * rowHeight + 2;
+    const bodyRowCount = tableView === 'vertical' ? columns.length : rows.length;
+    const imageWidth = Math.max(tableWidth + 2, measureTextWidth(footerText, footerFont) + horizontalPadding * 2);
+    const imageHeight = titleHeight + (tableView === 'vertical' ? 0 : headerHeight) + bodyRowCount * rowHeight + footerHeight + 2;
     const maxCanvasPixels = 24000000;
     const dpr = Math.min(baseDpr, Math.sqrt(maxCanvasPixels / Math.max(1, imageWidth * imageHeight)));
 
@@ -2891,16 +2905,6 @@ import { cloudStorage } from '../../services/cloud-storage';
       context.fillText(average, startX + mainWidth, y + height / 2);
     };
 
-    const drawClippedText = (text, x, y, maxWidth, activeFont, color = '#0f2748', align = 'left') => {
-      context.font = activeFont;
-      context.fillStyle = color;
-      context.textBaseline = 'middle';
-      context.textAlign = align;
-
-      const displayText = clipTextToWidth(text, maxWidth, activeFont);
-      context.fillText(displayText, x, y);
-    };
-
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, imageWidth, imageHeight);
     context.fillStyle = '#0f2748';
@@ -2911,108 +2915,78 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     let x = 1;
     let y = titleHeight;
-    if (averageColumns.length) {
-      const chartX = 16;
-      const chartWidth = imageWidth - chartX * 2;
-      const plotTopPadding = 24;
-      context.fillStyle = '#12376b';
-      context.font = `900 15px ${fontFamily}`;
-      context.textAlign = 'left';
-      context.textBaseline = 'middle';
-      context.fillText('平均数柱状图对比', chartX, y + chartTitleHeight / 2);
-      y += chartTitleHeight;
 
-      let legendX = chartX;
-      let legendY = y + 10;
-      rows.forEach((row, index) => {
-        const label = getCompareRowLabel(row, index);
-        const color = getCompareSeriesColor(index);
-        const labelWidth = Math.min(210, measureTextWidth(label, font) + 28);
-        if (legendX + labelWidth > chartX + chartWidth) {
-          legendX = chartX;
-          legendY += 24;
-        }
-        context.fillStyle = color;
-        context.fillRect(legendX, legendY - 5, 12, 12);
-        drawClippedText(label, legendX + 18, legendY + 1, labelWidth - 24, font, '#526174');
-        legendX += labelWidth + 14;
-      });
-      y += chartLegendHeight;
-
-      const plotTop = y;
-      const plotHeight = chartPlotHeight;
-      const groupWidth = chartWidth / averageColumns.length;
-      context.strokeStyle = '#e7edf5';
-      context.lineWidth = 1;
-      context.beginPath();
-      context.moveTo(chartX, plotTop + plotHeight + .5);
-      context.lineTo(chartX + chartWidth, plotTop + plotHeight + .5);
-      context.stroke();
-
-      averageColumns.forEach((column) => {
-        const points = rows.map((row, index) => ({
-          label: getCompareRowLabel(row, index),
-          value: getMetricValue(row, column),
-          color: getCompareSeriesColor(index),
-        }));
-        const numericValues = points.map((point) => point.value).filter((value) => value != null);
-        const maxValue = Math.max(...numericValues, 0);
-        const groupX = chartX + averageColumns.indexOf(column) * groupWidth;
-        const availableBarWidth = Math.max(16, groupWidth - 34);
-        const barGap = rows.length > 1 ? 6 : 0;
-        const barWidth = Math.max(12, Math.min(28, (availableBarWidth - barGap * (rows.length - 1)) / rows.length));
-        const barsWidth = barWidth * rows.length + barGap * (rows.length - 1);
-        const barsStartX = groupX + (groupWidth - barsWidth) / 2;
-
-        points.forEach((point, index) => {
-          const percent = point.value == null || maxValue <= 0 ? 0 : Math.max(5, (point.value / maxValue) * 100);
-          const barHeight = (plotHeight - plotTopPadding) * (percent / 100);
-          const barX = barsStartX + index * (barWidth + barGap);
-          const barY = plotTop + plotHeight - barHeight;
-          drawClippedText(formatCompareAverageValue(point.value), barX + barWidth / 2, barY - 8, Math.max(44, barWidth + 18), font, '#0b356b', 'center');
-          if (point.value != null && barHeight > 0) {
-            context.fillStyle = point.color;
-            context.beginPath();
-            context.roundRect(barX, barY, barWidth, barHeight, 4);
-            context.fill();
-          }
+    if (tableView === 'vertical') {
+      columns.forEach((column) => {
+        x = 1;
+        drawCell({
+          x,
+          y,
+          width: columnWidths[0],
+          height: rowHeight,
+          text: formatHeader(column),
+          fill: '#f8fbff',
+          color: '#1f3150',
+          activeFont: headerFont,
         });
-
-        drawClippedText(formatHeader(column), groupX + groupWidth / 2, plotTop + plotHeight + 22, groupWidth - 12, font, '#1f3150', 'center');
+        x += columnWidths[0];
+        rows.forEach((row, rowIndex) => {
+          drawCompareBodyCell({
+            x,
+            y,
+            width: columnWidths[rowIndex + 1],
+            height: rowHeight,
+            row,
+            column,
+          });
+          x += columnWidths[rowIndex + 1];
+        });
+        y += rowHeight;
       });
-      y += chartPlotHeight + chartLabelHeight + 22;
-    }
-
-    columns.forEach((column, index) => {
-      drawCell({
-        x,
-        y,
-        width: columnWidths[index],
-        height: headerHeight,
-        text: formatHeader(column),
-        fill: '#f8fbff',
-        color: '#1f3150',
-        activeFont: headerFont,
-      });
-      x += columnWidths[index];
-    });
-
-    y += headerHeight;
-    rows.forEach((row) => {
-      x = 1;
-      columns.forEach((column, index) => {
-        drawCompareBodyCell({
+    } else {
+      columns.map(formatHeader).forEach((header, index) => {
+        drawCell({
           x,
           y,
           width: columnWidths[index],
-          height: rowHeight,
-          row,
-          column,
+          height: headerHeight,
+          text: header,
+          fill: '#f8fbff',
+          color: '#1f3150',
+          activeFont: headerFont,
         });
         x += columnWidths[index];
       });
-      y += rowHeight;
-    });
+
+      y += headerHeight;
+      rows.forEach((row) => {
+        x = 1;
+        columns.forEach((column, index) => {
+          drawCompareBodyCell({
+            x,
+            y,
+            width: columnWidths[index],
+            height: rowHeight,
+            row,
+            column,
+          });
+          x += columnWidths[index];
+        });
+        y += rowHeight;
+      });
+    }
+
+    context.strokeStyle = '#e7edf5';
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(0, y + .5);
+    context.lineTo(imageWidth, y + .5);
+    context.stroke();
+    context.font = footerFont;
+    context.fillStyle = '#526174';
+    context.textAlign = 'left';
+    context.textBaseline = 'middle';
+    context.fillText(footerText, horizontalPadding, y + footerHeight / 2);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -3027,6 +3001,10 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (rows.length < 2) return;
     if (!navigator.clipboard?.write || !window.ClipboardItem) {
       App.notify?.error?.('当前浏览器不支持复制图片到剪贴板。');
+      return;
+    }
+    if (Array.isArray(options.columns) && !options.columns.length) {
+      App.notify?.error?.('请至少选择一个复制参数。');
       return;
     }
 
@@ -3051,7 +3029,6 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const buildCompareDialogHtml = (rows) => {
     const columns = getCompareColumns(rows);
-    const averageChartHtml = buildCompareAverageChartHtml(rows, columns);
 
     return `
       <div class="analysis-compare-dialog dialog-overlay" role="dialog" aria-modal="true" aria-label="物性数据对比">
@@ -3059,10 +3036,39 @@ import { cloudStorage } from '../../services/cloud-storage';
           <div class="analysis-compare-head">
             <div class="analysis-compare-title">广俊数据对比</div>
             <div class="analysis-compare-actions">
-              <label class="analysis-compare-chart-toggle">
-                <input type="checkbox" data-analysis-compare-include-chart checked />
-                <span>包含柱状图</span>
-              </label>
+              <div class="analysis-compare-view-toggle" role="group" aria-label="表格显示方式">
+                <button class="analysis-compare-view-btn" type="button" data-analysis-compare-view="horizontal" aria-pressed="false">
+                  <i class="ti ti-layout-columns" aria-hidden="true"></i>
+                  <span>横向</span>
+                </button>
+                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-view="vertical" aria-pressed="true">
+                  <i class="ti ti-table" aria-hidden="true"></i>
+                  <span>纵向</span>
+                </button>
+              </div>
+              <div class="analysis-compare-param-settings">
+                <button class="analysis-compare-copy" type="button" data-analysis-compare-settings aria-expanded="false">
+                  <i class="ti ti-table-options" aria-hidden="true"></i>
+                  <span>参数设置</span>
+                </button>
+                <div class="analysis-compare-param-panel" data-analysis-compare-param-panel hidden>
+                  <div class="analysis-compare-param-head">
+                    <span>复制参数</span>
+                    <div class="analysis-compare-param-tools">
+                      <button type="button" data-analysis-compare-param-all>全选</button>
+                      <button type="button" data-analysis-compare-param-clear>清空</button>
+                    </div>
+                  </div>
+                  <div class="analysis-compare-param-list">
+                    ${columns.map((column) => `
+                      <label class="analysis-compare-param-item">
+                        <input type="checkbox" value="${escapeHtml(column)}" data-analysis-compare-param checked />
+                        <span>${escapeHtml(formatHeader(column))}</span>
+                      </label>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
               <button class="analysis-compare-copy" type="button" data-analysis-compare-copy>
                 <i class="ti ti-clipboard-copy" aria-hidden="true"></i>
                 <span>复制图片</span>
@@ -3073,26 +3079,9 @@ import { cloudStorage } from '../../services/cloud-storage';
             </div>
           </div>
           <div class="analysis-compare-body">
-            ${averageChartHtml}
             <section class="analysis-compare-section">
-              <div class="analysis-compare-table-wrap">
-                <table class="analysis-compare-table">
-                  <thead>
-                    <tr>
-                      ${columns.map((column) => `<th>${escapeHtml(formatHeader(column))}</th>`).join('')}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${rows.map((row) => `
-                      <tr>
-                        ${columns.map((column) => {
-                          const cell = getCellDisplay(row[column], column);
-                          return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
-                        }).join('')}
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+              <div class="analysis-compare-table-wrap" data-analysis-compare-table-host>
+                ${buildCompareTableHtml(rows, columns, 'vertical')}
               </div>
             </section>
           </div>
@@ -3117,13 +3106,70 @@ import { cloudStorage } from '../../services/cloud-storage';
     closeCompareDialog();
     document.body.insertAdjacentHTML('beforeend', buildCompareDialogHtml(rows));
     const dialog = document.querySelector('.analysis-compare-dialog');
+    const columns = getCompareColumns(rows);
+    let tableView = 'vertical';
+    let tableSwitchTimer = null;
+    const getCopyColumns = () => Array.from(dialog.querySelectorAll('[data-analysis-compare-param]:checked'))
+      .map((input) => input.value)
+      .filter((column) => columns.includes(column));
     dialog?.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const settingsButton = target.closest('[data-analysis-compare-settings]');
+      const settingsPanel = dialog.querySelector('[data-analysis-compare-param-panel]');
+      if (settingsButton) {
+        const expanded = settingsButton.getAttribute('aria-expanded') === 'true';
+        settingsButton.setAttribute('aria-expanded', String(!expanded));
+        if (settingsPanel) settingsPanel.hidden = expanded;
+        return;
+      }
+      if (target.closest('[data-analysis-compare-param-all]')) {
+        dialog.querySelectorAll('[data-analysis-compare-param]').forEach((input) => {
+          input.checked = true;
+        });
+        return;
+      }
+      if (target.closest('[data-analysis-compare-param-clear]')) {
+        dialog.querySelectorAll('[data-analysis-compare-param]').forEach((input) => {
+          input.checked = false;
+        });
+        return;
+      }
+      if (settingsPanel && !settingsPanel.hidden && !target.closest('.analysis-compare-param-settings')) {
+        settingsPanel.hidden = true;
+        dialog.querySelector('[data-analysis-compare-settings]')?.setAttribute('aria-expanded', 'false');
+      }
+      const viewButton = target.closest('[data-analysis-compare-view]');
+      if (viewButton) {
+        const nextTableView = viewButton.getAttribute('data-analysis-compare-view') === 'vertical' ? 'vertical' : 'horizontal';
+        if (nextTableView === tableView) return;
+        tableView = nextTableView;
+        dialog.querySelectorAll('[data-analysis-compare-view]').forEach((button) => {
+          const isActive = button === viewButton;
+          button.classList.toggle('is-active', isActive);
+          button.setAttribute('aria-pressed', String(isActive));
+        });
+        const tableHost = dialog.querySelector('[data-analysis-compare-table-host]');
+        if (tableHost) {
+          if (tableSwitchTimer) window.clearTimeout(tableSwitchTimer);
+          tableHost.style.minHeight = `${tableHost.offsetHeight}px`;
+          tableHost.classList.remove('is-switching-in');
+          tableHost.classList.add('is-switching-out');
+          tableSwitchTimer = window.setTimeout(() => {
+            tableHost.style.minHeight = '';
+            tableHost.innerHTML = buildCompareTableHtml(rows, columns, tableView);
+            tableHost.classList.remove('is-switching-out');
+            tableHost.classList.add('is-switching-in');
+            window.requestAnimationFrame(() => {
+              tableHost.classList.remove('is-switching-in');
+            });
+          }, 80);
+        }
+        return;
+      }
       const copyButton = target.closest('[data-analysis-compare-copy]');
-      if (copyButton) {
-        const includeChart = dialog.querySelector('[data-analysis-compare-include-chart]')?.checked !== false;
-        copyCompareImage(copyButton, { includeChart });
+      if (copyButton && !copyButton.hasAttribute('data-analysis-compare-settings')) {
+        copyCompareImage(copyButton, { tableView, columns: getCopyColumns() });
         return;
       }
       if (target.closest('[data-analysis-compare-close]') || target === dialog) closeCompareDialog();
@@ -3736,15 +3782,23 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     const names = getSheetNames(state.data);
     const activeSheet = getActiveSheet(state.data);
+    const selectedCounts = new Map(names.map((name) => [
+      name,
+      getRowsForSheet(name).filter((row) => state.selectedKeys.has(row.__rowKey)).length,
+    ]));
 
-    refs.sheetTabs.innerHTML = names.map((name) => `
-      <button
-        type="button"
-        class="analysis-sheet-tab${name === activeSheet ? ' is-active' : ''}"
-        data-sheet-name="${escapeHtml(name)}">
-        ${escapeHtml(name.trim() || '未命名')}
-      </button>
-    `).join('');
+    refs.sheetTabs.innerHTML = names.map((name) => {
+      const selectedCount = selectedCounts.get(name) || 0;
+      return `
+        <button
+          type="button"
+          class="analysis-sheet-tab${name === activeSheet ? ' is-active' : ''}"
+          data-sheet-name="${escapeHtml(name)}">
+          <span>${escapeHtml(name.trim() || '未命名')}</span>
+          ${selectedCount ? `<span class="analysis-sheet-tab-count">${selectedCount}</span>` : ''}
+        </button>
+      `;
+    }).join('');
   };
 
   const render = () => {
@@ -3776,9 +3830,8 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     const modelTypeCount = getModelTypeCount(filteredRows);
     const totalText = `共 ${filteredRows.length} 条 / ${modelTypeCount} 种型号`;
-    if (refs.panelCount) refs.panelCount.textContent = totalText;
     if (refs.footerTotal) refs.footerTotal.textContent = totalText;
-    if (refs.pagination) refs.pagination.hidden = !hasFilteredRows;
+    if (refs.pagination) refs.pagination.hidden = true;
 
     updateToolbarState(filteredRows);
     renderPagination(currentPage, totalPages);
@@ -3982,7 +4035,6 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (refs.tableWrap) {
         refs.tableWrap.innerHTML = '<div class="analysis-empty">云端物性数据加载失败，请检查 OSS 配置、文件路径或跨域设置。</div>';
       }
-      if (refs.panelCount) refs.panelCount.textContent = '共 0 条';
       if (refs.footerTotal) refs.footerTotal.textContent = '共 0 条';
       if (refs.selectionMeta) refs.selectionMeta.textContent = '已选 0 条';
       setUploadStatus('读取失败');
@@ -4003,6 +4055,10 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const bind = () => {
     ensureReportToolbar();
+    ensureMobileActionMenu();
+    if (refs.pageSizeSelect?.parentElement) {
+      refs.pageSizeSelect.parentElement.hidden = true;
+    }
 
     refs.sheetTabs?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-sheet-name]');
@@ -4151,6 +4207,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       }
 
       updateToolbarState(getVisibleRows().filteredRows);
+      renderTabs();
     });
 
     refs.selectAllBtn?.addEventListener('click', toggleSelectAllFiltered);
@@ -4158,6 +4215,16 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.exportJsonBtn?.addEventListener('click', exportCurrentJson);
     refs.manageRangesBtn?.addEventListener('click', () => openRangeManagerDialog());
     refs.exportReportBtn?.addEventListener('click', openReportDialog);
+    refs.mobileActionToggle?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const isOpen = refs.mobileActionToggle?.getAttribute('aria-expanded') === 'true';
+      setMobileActionMenuOpen(!isOpen);
+    });
+    refs.mobileActionMenu?.addEventListener('click', (event) => {
+      if (event.target instanceof Element && event.target.closest('.analysis-toolbar-btn')) {
+        setMobileActionMenuOpen(false);
+      }
+    });
     refs.importExcelBtn?.addEventListener('click', () => {
       if (!refs.excelInput) return;
       refs.excelInput.value = '';
@@ -4186,9 +4253,26 @@ import { cloudStorage } from '../../services/cloud-storage';
         return;
       }
 
+      if (
+        refs.mobileActionToggle?.contains?.(target) ||
+        refs.mobileActionMenu?.contains?.(target)
+      ) {
+        return;
+      }
+
+      setMobileActionMenuOpen(false);
       state.suggestionOpen = false;
       state.suggestionIndex = -1;
       renderSuggestions();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setMobileActionMenuOpen(false);
+    });
+
+    window.addEventListener('resize', () => {
+      ensureMobileActionMenu();
+      setMobileActionMenuOpen(false);
     });
   };
 

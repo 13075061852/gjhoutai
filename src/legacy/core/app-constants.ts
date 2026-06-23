@@ -169,7 +169,7 @@ import { ensureLegacyApp } from './app-context';
       'ai-config': {
         title: '配置中心',
         eyebrow: '系统管理',
-        desc: '这里可以配置 OpenRouter 接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
+        desc: '这里可以配置 AI 模型接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
       },
     },
   };

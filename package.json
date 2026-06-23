@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "check-icons": "node scripts/check-icon-mappings.mjs"
+    "check-icons": "node scripts/check-icon-mappings.mjs",
+    "update:siliconflow-catalog": "node scripts/update-siliconflow-catalog.mjs"
   },
   "dependencies": {
     "@icon-park/svg": "^1.4.2",

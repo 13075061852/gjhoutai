@@ -141,6 +141,147 @@ import { createAgentPlan } from './agent-runtime/router';
     return null;
   };
 
+  const promptRequiresEntityLookupSearch = (prompt) => {
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+    return /(?:\bAI\b|\bLLM\b|\bmodel\b|模型|Claude|GPT|Gemini|Fable|Mythos|Opus|Sonnet|Haiku|OpenRouter|Anthropic|DeepSeek|Qwen|GLM)/i.test(text)
+      && /(?:知道|了解|是什么|有没有|发布|官网|最新|模型|查|搜索|\bmodel\b|\bAI\b|\bLLM\b)/i.test(text);
+  };
+
+  const SEARCH_PLAN_MAX_QUERIES = 3;
+  const SEARCH_PLAN_MIN_RESULTS = 3;
+  const SEARCH_PLAN_MAX_RESULTS = 20;
+
+  const clampSearchResultCount = (value, fallback = 8) => {
+    const parsed = Number.parseInt(value, 10);
+    const safeFallback = Number.isFinite(Number(fallback)) ? Number(fallback) : 8;
+    const next = Number.isFinite(parsed) ? parsed : safeFallback;
+    return Math.max(SEARCH_PLAN_MIN_RESULTS, Math.min(SEARCH_PLAN_MAX_RESULTS, next));
+  };
+
+  const normalizeSearchQueryText = (value) => String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+
+  const dedupeSearchQueries = (queries) => {
+    const seen = new Set();
+    return (Array.isArray(queries) ? queries : [])
+      .map(normalizeSearchQueryText)
+      .filter((query) => {
+        if (!query) return false;
+        const key = query.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, SEARCH_PLAN_MAX_QUERIES);
+  };
+
+  const buildFallbackSearchPlan = (prompt, config = {}) => {
+    const basePrompt = normalizeSearchQueryText(prompt);
+    const queries = [basePrompt];
+    const latinTerms = Array.from(new Set(String(prompt || '').match(/[A-Za-z][A-Za-z0-9._/-]{2,}/g) || []));
+    latinTerms.slice(0, 2).forEach((term) => {
+      queries.push(term);
+      const spaced = term.replace(/([A-Za-z])([0-9]+)/g, '$1 $2').replace(/([0-9]+)([A-Za-z])/g, '$1 $2');
+      if (spaced !== term) queries.push(spaced);
+    });
+    return {
+      queries: dedupeSearchQueries(queries),
+      maxResults: clampSearchResultCount(Math.max(Number(config.searchMaxResults || 0), 8)),
+      searchDepth: String(config.searchDepth || 'basic'),
+      topic: String(config.searchTopic || 'general'),
+      reason: 'fallback',
+    };
+  };
+
+  const parseSearchPlan = (content, prompt, config = {}) => {
+    const fallback = buildFallbackSearchPlan(prompt, config);
+    const text = String(content || '').trim();
+    if (!text) return fallback;
+    const jsonText = text.match(/\{[\s\S]*\}/)?.[0] || text;
+    try {
+      const parsed = JSON.parse(jsonText);
+      const configuredMinimum = Number(config.searchMaxResults || 0);
+      const queries = dedupeSearchQueries(parsed?.queries || parsed?.query || []);
+      return {
+        queries: queries.length ? queries : fallback.queries,
+        maxResults: clampSearchResultCount(Math.max(Number(parsed?.maxResults || parsed?.max_results || 0), configuredMinimum, 5), fallback.maxResults),
+        searchDepth: ['basic', 'advanced'].includes(String(parsed?.searchDepth || parsed?.search_depth || '').toLowerCase())
+          ? String(parsed?.searchDepth || parsed?.search_depth).toLowerCase()
+          : fallback.searchDepth,
+        topic: ['general', 'news'].includes(String(parsed?.topic || '').toLowerCase())
+          ? String(parsed.topic).toLowerCase()
+          : fallback.topic,
+        reason: String(parsed?.reason || '').trim() || fallback.reason,
+      };
+    } catch {
+      return fallback;
+    }
+  };
+
+  const createSearchPlanWithAi = async (config, model, prompt, options = {}) => {
+    const fallback = buildFallbackSearchPlan(prompt, config);
+    const messages = [
+      {
+        role: 'system',
+        content: [
+          'You are a web-search planning module. Return strict JSON only.',
+          'Create the most useful search keywords for the user question.',
+          'Prefer exact entity names, official product/model names, company names, release names, aliases, English variants, and the missing facts needed to answer.',
+          'Choose maxResults dynamically: 5 for simple lookups, 8-12 for ambiguous or new topics, 15-20 for broad comparisons or unclear names.',
+          'Return 1 to 3 queries. Do not explain outside JSON.',
+          '{"queries":["query 1","query 2"],"maxResults":8,"searchDepth":"basic","topic":"general","reason":"short reason"}',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          `Current date/time: ${getCurrentDateTimeLabel()} Asia/Shanghai`,
+          `Configured minimum result count: ${config.searchMaxResults || 5}`,
+          `Question: ${prompt}`,
+        ].join('\n'),
+      },
+    ];
+    try {
+      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: App.config.getRequestHeaders(config),
+        signal: options.signal,
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0,
+          max_tokens: 220,
+          stream: false,
+        }),
+      });
+      if (!response.ok) return fallback;
+      const payload = await response.json();
+      const content = payload?.choices?.[0]?.message?.content || '';
+      return parseSearchPlan(content, prompt, config);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      console.warn('[chat] Search planning failed, fallback to prompt query:', error);
+      return fallback;
+    }
+  };
+
+  const mergeSearchResults = (groups, limit) => {
+    const seen = new Set();
+    const merged = [];
+    (Array.isArray(groups) ? groups : []).flat().forEach((item) => {
+      const url = String(item?.url || '').trim().toLowerCase();
+      const title = String(item?.title || '').trim().toLowerCase();
+      const key = url || title;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(item);
+    });
+    return merged.slice(0, clampSearchResultCount(limit));
+  };
+
   const decideSearchWithAi = async (config, model, prompt, options = {}) => {
     const messages = [
       {
@@ -215,6 +356,72 @@ import { createAgentPlan } from './agent-runtime/router';
     return {
       results,
       context: formatSearchContext(results),
+    };
+  };
+
+  const searchWebForPromptDynamic = async (config, prompt, options = {}) => {
+    const provider = String(config.searchProvider || 'tavily').toLowerCase();
+    if (provider !== 'tavily') return { results: [], context: '', plan: null };
+    const searchPlan = options.searchPlan || buildFallbackSearchPlan(prompt, config);
+    const fallbackPlan = buildFallbackSearchPlan(prompt, config);
+    const queries = dedupeSearchQueries(searchPlan.queries).length ? dedupeSearchQueries(searchPlan.queries) : fallbackPlan.queries;
+    const targetResults = clampSearchResultCount(searchPlan.maxResults, config.searchMaxResults || 8);
+    const perQueryResults = clampSearchResultCount(Math.ceil(targetResults / Math.max(1, queries.length)) + 2, targetResults);
+    const resultGroups = [];
+    const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+
+    reportProgress?.({
+      completedQueries: 0,
+      totalQueries: queries.length,
+      resultCount: 0,
+      targetResults,
+    });
+
+    for (const [queryIndex, query] of queries.entries()) {
+      if (options.signal?.aborted) throw createAbortError();
+      const datedQuery = [
+        query,
+        query !== prompt ? `Original question: ${prompt}` : '',
+        `Current date: ${getCurrentDateTimeLabel()} Asia/Shanghai.`,
+        'Prefer official, recent, primary, or highly relevant sources.',
+      ].filter(Boolean).join(' ');
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.searchApiKey}`,
+        },
+        signal: options.signal,
+        body: JSON.stringify({
+          query: datedQuery,
+          topic: searchPlan.topic || config.searchTopic || 'general',
+          search_depth: searchPlan.searchDepth || config.searchDepth || 'basic',
+          max_results: perQueryResults,
+          include_answer: false,
+          include_raw_content: false,
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`Web search failed: HTTP ${response.status}${errorText ? `: ${errorText.slice(0, 220)}` : ''}`);
+      }
+      const payload = await response.json();
+      resultGroups.push(normalizeSearchResults(payload));
+      const mergedCount = mergeSearchResults(resultGroups, targetResults).length;
+      reportProgress?.({
+        completedQueries: queryIndex + 1,
+        totalQueries: queries.length,
+        resultCount: mergedCount,
+        targetResults,
+      });
+      if (mergedCount >= targetResults) break;
+    }
+
+    const results = mergeSearchResults(resultGroups, targetResults);
+    return {
+      results,
+      context: formatSearchContext(results),
+      plan: searchPlan,
     };
   };
 
@@ -663,7 +870,9 @@ import { createAgentPlan } from './agent-runtime/router';
   const renderPendingContent = (item) => {
     const status = getPendingStatus(item);
     const body = stripPendingStatus(item.content, status);
-    const bodyHtml = body ? utils.markdownLite(body) : '';
+    const hasExplicitStatus = Boolean(String(item?.pendingStatus || '').trim());
+    const isShortStatusBody = hasExplicitStatus && body && !/[\r\n]/.test(body) && body.length <= 48;
+    const bodyHtml = body && !isShortStatusBody ? utils.markdownLite(body) : '';
     return `
       ${bodyHtml}
       <div class="ai-waiting-row" role="status" aria-live="polite">
@@ -2778,7 +2987,7 @@ import { createAgentPlan } from './agent-runtime/router';
 
     const config = App.config.getFormConfig();
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
-      pushChatMessage('assistant', '请先在配置中心填入 OpenRouter API 密钥，或切换到 LM Studio 本地模型。');
+      pushChatMessage('assistant', '请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。');
       return;
     }
 
@@ -2826,6 +3035,7 @@ import { createAgentPlan } from './agent-runtime/router';
     let attachedDataContext = '';
     let webSearchContext = '';
     let webSearchResults = [];
+    let webSearchPlan = null;
     let searchDecision = null;
     let needsWebSearch = false;
     let usedStream = false;
@@ -2852,7 +3062,7 @@ import { createAgentPlan } from './agent-runtime/router';
             console.warn('[chat] Search decision failed, fallback to local rules:', error);
           }
         }
-        const localSearchRequired = agentPlan.needsWebSearch || (!agentPlan.useProjectContext && promptRequiresWebSearch(prompt));
+        const localSearchRequired = agentPlan.needsWebSearch || (!agentPlan.useProjectContext && (promptRequiresWebSearch(prompt) || promptRequiresEntityLookupSearch(prompt)));
         needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
       } else {
         searchDecision = { needsSearch: false, reason: 'Web search disabled by chat toggle' };
@@ -2871,11 +3081,25 @@ import { createAgentPlan } from './agent-runtime/router';
         flushStreamRender(pendingIndex, streamedContent);
       } else if (needsWebSearch) {
         flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
-        const searchResult = await searchWebForPrompt(config, prompt, {
+        webSearchPlan = await createSearchPlanWithAi(config, model, prompt, {
           signal: activeChatAbortController?.signal,
+        });
+        const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {}) => {
+          const targetLabel = targetResults ? ` / 目标 ${targetResults} 条` : '';
+          const status = `正在联网搜索 · 已获取 ${resultCount} 条${targetLabel}`;
+          flushStreamRender(pendingIndex, status, {
+            pending: true,
+            pendingStatus: status,
+          });
+        };
+        const searchResult = await searchWebForPromptDynamic(config, prompt, {
+          signal: activeChatAbortController?.signal,
+          searchPlan: webSearchPlan,
+          onProgress: updateSearchProgress,
         });
         webSearchContext = searchResult.context || '';
         webSearchResults = searchResult.results || [];
+        webSearchPlan = searchResult.plan || webSearchPlan;
         if (!webSearchResults.length) {
           streamedContent = [
             '联网搜索没有返回可用结果，因此本次不继续让 AI 直接猜测。',
@@ -3206,6 +3430,7 @@ import { createAgentPlan } from './agent-runtime/router';
           webSearch: webSearchResults.length,
           webSearchNeeded: needsWebSearch,
           webSearchDecision: searchDecision,
+          webSearchPlan,
           stream: usedStream,
         },
       });
@@ -3252,6 +3477,7 @@ import { createAgentPlan } from './agent-runtime/router';
           webSearch: webSearchResults.length,
           webSearchNeeded: needsWebSearch,
           webSearchDecision: searchDecision,
+          webSearchPlan,
           stream: usedStream,
         },
       });

@@ -10,10 +10,7 @@
   display: grid;
   overflow: hidden;
   border-radius: 8px;
-  background:
-    radial-gradient(circle at 16% 18%, rgba(0, 87, 255, .28), transparent 34%),
-    radial-gradient(circle at 84% 20%, rgba(245, 158, 11, .22), transparent 32%),
-    linear-gradient(135deg, #08111f 0%, #152238 52%, #0f172a 100%);
+  background: #08111f;
 }
 
 .apimart-reactbits-hero .card-spotlight {
@@ -33,9 +30,7 @@
   position: absolute;
   inset: -32%;
   opacity: .72;
-  background:
-    conic-gradient(from 110deg, transparent 0 9%, rgba(77, 163, 255, .24) 13%, transparent 22% 46%, rgba(255, 210, 128, .22) 51%, transparent 62%),
-    radial-gradient(circle at 50% 50%, transparent 0 30%, rgba(255, 255, 255, .07) 31% 32%, transparent 33%);
+  background: rgba(77, 163, 255, .08);
   filter: blur(.2px);
   animation: apimart-reactbits-spin 18s linear infinite;
   pointer-events: none;
@@ -45,11 +40,7 @@
   position: absolute;
   inset: 0;
   opacity: .18;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, .22) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, .18) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: linear-gradient(180deg, transparent, #000 24%, #000 72%, transparent);
+  background-image: none;
   pointer-events: none;
 }
 
@@ -304,5 +295,72 @@ body[data-theme="dark"] .apimart-rb-custom-model{
   .apimart-reactbits-orbit,
   .shiny-text {
     animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .apimart-rb-model-card {
+    min-height: 52px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 8px;
+  }
+
+  .apimart-rb-model-cover {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+
+  .apimart-rb-model-main select {
+    font-size: 12px;
+  }
+
+  .apimart-reactbits-prompt-strip {
+    gap: 7px;
+  }
+
+  .apimart-reactbits-prompt-head strong {
+    font-size: 11.5px;
+  }
+
+  .apimart-reactbits-prompt-head span {
+    font-size: 10.5px;
+  }
+
+  .apimart-reactbits-prompt-grid {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .apimart-reactbits-prompt-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .apimart-reactbits-prompt-card .card-spotlight {
+    min-height: 56px;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 5px 8px;
+    padding: 8px;
+    border-radius: 8px;
+  }
+
+  .apimart-reactbits-prompt-card em {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    font-size: 14px;
+  }
+
+  .apimart-reactbits-prompt-card strong {
+    font-size: 11.5px;
+  }
+
+  .apimart-reactbits-prompt-card span {
+    font-size: 10px;
+    line-height: 1.3;
+    -webkit-line-clamp: 1;
   }
 }

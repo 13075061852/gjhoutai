@@ -46,7 +46,9 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     }, 120);
   };
 
-  const isSidebarCollapsed = () => refs.shell?.classList.contains('sidebar-collapsed');
+  const isMobileSidebarOpen = () => refs.shell?.classList.contains('sidebar-open');
+
+  const isSidebarCollapsed = () => refs.shell?.classList.contains('sidebar-collapsed') && !isMobileSidebarOpen();
 
   const getNavPageButtons = () => [...document.querySelectorAll('[data-page]')];
 
@@ -211,6 +213,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   const setMobileSidebarOpen = (open) => {
     if (!refs.shell) return;
     refs.shell.classList.toggle('sidebar-open', Boolean(open));
+    removeCollapsedNavFlyout();
     updateMobileMenuToggle();
   };
 
@@ -816,7 +819,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
 
     refs.groupToggles.forEach((groupToggle) => {
       groupToggle.addEventListener('click', () => {
-        if (refs.shell?.classList.contains('sidebar-collapsed')) return;
+        if (isSidebarCollapsed()) return;
         const group = groupToggle.closest('.nav-group');
         if (!group) return;
         const expanded = group.classList.toggle('expanded');

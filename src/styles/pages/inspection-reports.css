@@ -35,6 +35,7 @@
    列表视图
    ============================================ */
 .inspection-report-list-view {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 380px;
@@ -170,6 +171,11 @@
   padding: 0;
 }
 
+.inspection-report-actions .analysis-toolbar-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* 文件列表 */
 .inspection-report-list {
   display: flex;
@@ -179,6 +185,117 @@
   overflow-y: auto;
   padding: 8px;
   gap: 4px;
+}
+
+.inspection-report-list-view.is-uploading .inspection-report-list {
+  padding-bottom: 88px;
+}
+
+.inspection-report-drop-hint {
+  position: absolute;
+  inset: 110px 12px 12px;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed #3b82f6;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.96);
+  pointer-events: none;
+}
+
+.inspection-report-list-view.is-drag-over .inspection-report-drop-hint {
+  display: flex;
+}
+
+.inspection-report-drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #1d4ed8;
+  text-align: center;
+}
+
+.inspection-report-drop-card i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 26px;
+}
+
+.inspection-report-drop-card strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.inspection-report-drop-card span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.inspection-report-upload-status {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 25;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.inspection-report-upload-status[hidden] {
+  display: none;
+}
+
+.inspection-report-upload-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.inspection-report-upload-status-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspection-report-upload-status-head em {
+  color: #2563eb;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.inspection-report-upload-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.inspection-report-upload-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 0.2s ease;
 }
 
 /* 空状态 */
@@ -257,7 +374,7 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: #ef4444;
   color: #fff;
   flex-shrink: 0;
   font-size: 22px;

@@ -29,6 +29,10 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.refreshBtn = document.getElementById('inspectionReportRefreshBtn');
     refs.list = document.getElementById('inspectionReportList');
     refs.listView = document.querySelector('.inspection-report-list-view');
+    refs.uploadStatus = document.getElementById('inspectionReportUploadStatus');
+    refs.uploadStatusText = document.getElementById('inspectionReportUploadStatusText');
+    refs.uploadProgressBar = document.getElementById('inspectionReportUploadProgressBar');
+    refs.uploadProgressLabel = document.getElementById('inspectionReportUploadProgressLabel');
     refs.previewView = document.querySelector('.inspection-report-preview-view');
     refs.backBtn = document.getElementById('inspectionReportBackBtn');
     refs.previewFrame = document.getElementById('inspectionReportPreviewFrame');
@@ -91,6 +95,22 @@ import { cloudStorage } from '../../services/cloud-storage';
               </div>
               <strong>暂无检测报告</strong>
               <span>点击「上传」按钮添加 PDF 文件</span>
+            </div>
+          </div>
+          <div class="inspection-report-drop-hint" aria-hidden="true">
+            <div class="inspection-report-drop-card">
+              <i class="ti ti-upload" aria-hidden="true"></i>
+              <strong>松开后上传检测报告</strong>
+              <span>仅支持 50MB 以内的 PDF 文件</span>
+            </div>
+          </div>
+          <div class="inspection-report-upload-status" id="inspectionReportUploadStatus" role="status" aria-live="polite" hidden>
+            <div class="inspection-report-upload-status-head">
+              <span id="inspectionReportUploadStatusText">正在上传检测报告...</span>
+              <em id="inspectionReportUploadProgressLabel">0%</em>
+            </div>
+            <div class="inspection-report-upload-track" aria-hidden="true">
+              <span id="inspectionReportUploadProgressBar"></span>
             </div>
           </div>
         </div>
@@ -302,7 +322,27 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const normalizeTitle = (fileName) => String(fileName || '检测报告').replace(/\.pdf$/i, '').trim() || '检测报告';
 
+  const setUploadProgress = ({ current = 0, total = 0, fileName = '' } = {}) => {
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const safeCurrent = Math.min(Math.max(0, Number(current) || 0), safeTotal);
+    const percent = safeTotal ? Math.round((safeCurrent / safeTotal) * 100) : 0;
+    const displayCurrent = fileName ? Math.min(safeCurrent + 1, safeTotal) : safeCurrent;
+    refs.listView?.classList.toggle('is-uploading', state.uploading);
+    if (refs.uploadStatus) refs.uploadStatus.hidden = !state.uploading;
+    if (refs.uploadStatusText) {
+      refs.uploadStatusText.textContent = state.uploading
+        ? `正在上传 ${displayCurrent}/${safeTotal}${fileName ? `：${fileName}` : ''}`
+        : '';
+    }
+    if (refs.uploadProgressLabel) refs.uploadProgressLabel.textContent = `${percent}%`;
+    if (refs.uploadProgressBar) refs.uploadProgressBar.style.width = `${percent}%`;
+  };
+
   const uploadFiles = async (files) => {
+    if (state.uploading) {
+      App.notify?.warn?.('检测报告正在上传，请稍后再试。', { key: 'inspection-report-uploading' });
+      return;
+    }
     const pdfFiles = Array.from(files || []).filter((file) => {
       const isPdf = file?.type === 'application/pdf' || String(file?.name || '').toLowerCase().endsWith('.pdf');
       return isPdf && file.size > 0 && file.size <= MAX_PDF_SIZE;
@@ -314,8 +354,10 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     state.uploading = true;
     refs.uploadBtn?.setAttribute('disabled', '');
+    setUploadProgress({ current: 0, total: pdfFiles.length });
     let successCount = 0;
-    for (const file of pdfFiles) {
+    for (const [index, file] of pdfFiles.entries()) {
+      setUploadProgress({ current: index, total: pdfFiles.length, fileName: file.name });
       const created = await cloudStorage.createInspectionReport({
         file,
         title: normalizeTitle(file.name),
@@ -323,9 +365,11 @@ import { cloudStorage } from '../../services/cloud-storage';
         notes: '',
       });
       if (created?.id) successCount += 1;
+      setUploadProgress({ current: index + 1, total: pdfFiles.length });
     }
     state.uploading = false;
     refs.uploadBtn?.removeAttribute('disabled');
+    setUploadProgress();
     if (successCount) {
       App.notify?.success?.(`已上传 ${successCount} 份检测报告。`, { key: 'inspection-report-uploaded' });
       await refreshReports();
@@ -387,6 +431,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.listView?.addEventListener('dragover', (event) => {
       if (!isFileDragEvent(event)) return;
       event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
       refs.listView.classList.add('is-drag-over');
     });
     refs.listView?.addEventListener('dragleave', (event) => {

@@ -532,12 +532,6 @@
       border-color:color-mix(in srgb, var(--accent) 24%, var(--border));
       background:color-mix(in srgb, var(--surface-2) 78%, var(--accent-soft));
     }
-    body[data-theme="dark"] .ai-waiting-row{
-      background:color-mix(in srgb, var(--accent-soft) 54%, var(--surface-2));
-      border-color:color-mix(in srgb, var(--accent) 26%, var(--border));
-      color:var(--text-2);
-      box-shadow:0 8px 20px rgba(0,0,0,.16);
-    }
     body[data-theme="dark"] .send-btn.is-stop{
       background:#dc2626;
       color:#fff;

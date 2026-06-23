@@ -844,13 +844,33 @@ import { cloudStorage } from '../../services/cloud-storage';
     const savedConfig = await (App.config?.loadSavedConfig?.() || {});
     const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaults = App.constants?.DEFAULT_CONFIG || {};
+    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase();
+    const provider = ['lmstudio', 'deepseek', 'siliconflow', 'openrouter'].includes(rawProvider) ? rawProvider : 'openrouter';
+    const providerConfig = provider === 'lmstudio'
+      ? saved.lmStudioConfig
+      : provider === 'deepseek'
+        ? saved.deepseekConfig
+        : provider === 'siliconflow'
+          ? saved.siliconflowConfig
+      : saved.openrouterConfig;
+    const activeProviderConfig = providerConfig && typeof providerConfig === 'object' ? providerConfig : {};
     const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
-    const modelChoice = spectrumModel || saved.modelChoice || defaults.modelChoice || '';
-    const baseUrl = saved.baseUrl || defaults.baseUrl || App.constants?.DEFAULT_BASE_URL || '';
+    const modelChoice = spectrumModel
+      || saved.modelChoice
+      || activeProviderConfig.modelChoice
+      || defaults.modelChoice
+      || '';
+    const baseUrl = saved.baseUrl
+      || activeProviderConfig.baseUrl
+      || defaults.baseUrl
+      || App.constants?.DEFAULT_BASE_URL
+      || '';
     return {
       ...defaults,
+      ...activeProviderConfig,
       ...saved,
-      apiKey: String(saved.apiKey || '').trim(),
+      apiKey: provider === 'lmstudio' ? '' : String(saved.apiKey || activeProviderConfig.apiKey || '').trim(),
+      aiProvider: provider,
       baseUrl: utils.normalizeBaseUrl(baseUrl),
       modelChoice,
       modelSource: spectrumModel ? '图谱分析模型' : '默认主模型',
@@ -900,7 +920,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       return;
     }
     if (!config.apiKey && !isLocal) {
-      setStatus('请先在配置中心填写 OpenRouter API 密钥，或切换到 LM Studio 本地模型。', 'error');
+      setStatus('请先在配置中心填写模型 API 密钥，或切换到 LM Studio 本地模型。', 'error');
       return;
     }
 

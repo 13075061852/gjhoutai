@@ -229,12 +229,7 @@
   padding: 14px 14px;
   overflow: auto;
   border-top: 1px solid rgba(89, 210, 255, .18);
-  background:
-    linear-gradient(135deg, rgba(36, 99, 235, .18), transparent 34%),
-    linear-gradient(rgba(148, 163, 184, .055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, .045) 1px, transparent 1px),
-    #081224;
-  background-size: auto, 18px 18px, 18px 18px, auto;
+  background: #081224;
   color: #dff7ff;
   font: 12.5px/1.65 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   text-shadow: 0 0 10px rgba(56, 189, 248, .16);
@@ -423,7 +418,7 @@
 .data-recognition-result-table [contenteditable="true"]:focus {
   outline: 2px solid #2563eb;
   outline-offset: -2px;
-  background-image: linear-gradient(rgba(255, 255, 255, .42), rgba(255, 255, 255, .42));
+  background-color: rgba(255, 255, 255, .42);
 }
 
 .data-recognition-result-table thead th {
@@ -491,16 +486,177 @@
 }
 
 @media (max-width: 720px) {
+  .data-recognition-page.active {
+    gap: 8px;
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .data-recognition-workbench {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 8px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .data-recognition-preview-panel,
+  .data-recognition-json-panel,
+  .data-recognition-history-panel,
+  .data-recognition-table-panel {
+    width: 100%;
+    box-sizing: border-box;
+    align-self: stretch;
+    flex: 0 0 auto;
+    min-height: 0;
+    border-radius: 7px;
+  }
+
+  .data-recognition-panel-head {
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 38px;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+  }
+
+  .data-recognition-panel-head > div {
+    min-width: 0;
+  }
+
+  .data-recognition-panel-head h2 {
+    font-size: 12px;
+  }
+
+  .data-recognition-panel-head span {
+    font-size: 10px;
+  }
+
   .data-recognition-actions {
+    width: 100%;
     justify-content: stretch;
+    gap: 6px;
   }
 
   .data-recognition-actions .analysis-toolbar-btn {
-    flex: 1 1 140px;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 30px;
   }
 
-  .data-recognition-dropzone,
+  .data-recognition-dropzone {
+    flex: 0 0 auto;
+    height: 128px;
+    min-height: 128px;
+    max-height: 32vh;
+  }
+
+  .data-recognition-empty {
+    gap: 6px;
+    padding: 12px;
+    font-size: 12px;
+  }
+
+  .data-recognition-empty i {
+    font-size: 28px;
+  }
+
+  .data-recognition-json-panel {
+    align-self: stretch;
+    width: 100%;
+    max-height: none;
+  }
+
   .data-recognition-json {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    height: 260px;
+    min-height: 220px;
+    max-height: 42vh;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .data-recognition-history-panel {
     min-height: 0;
+    max-height: 190px;
+  }
+
+  .data-recognition-history-panel .data-recognition-panel-head {
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .data-recognition-history-search {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 72px;
+    height: 28px;
+  }
+
+  .data-recognition-history-refresh {
+    flex: 0 0 30px;
+    height: 28px;
+    margin-left: -4px;
+  }
+
+  .data-recognition-history-list {
+    flex: 0 1 auto;
+    max-height: 136px;
+  }
+
+  .data-recognition-history-item {
+    grid-template-columns: minmax(0, 1fr) 28px;
+    padding: 7px 8px;
+  }
+
+  .data-recognition-history-delete {
+    width: 28px;
+    min-width: 28px;
+  }
+
+  .data-recognition-table-panel {
+    flex-basis: auto;
+    max-height: none;
+  }
+
+  .data-recognition-table-panel:has(.data-recognition-result-table) {
+    max-height: none;
+  }
+
+  .data-recognition-table-panel .data-recognition-panel-head {
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .data-recognition-copy-btn {
+    flex: 0 0 auto;
+    height: 30px;
+    padding: 0 9px;
+  }
+
+  .data-recognition-table-wrap,
+  .data-recognition-table-wrap:has(.data-recognition-result-table) {
+    flex: 0 1 auto;
+    max-height: 42vh;
+  }
+
+  .data-recognition-table-empty {
+    min-height: 128px;
+  }
+
+  .data-recognition-result-table {
+    font-size: 12px;
+  }
+
+  .data-recognition-result-table th,
+  .data-recognition-result-table td {
+    min-width: 78px;
+    height: 24px;
+    padding: 3px 6px;
   }
 }

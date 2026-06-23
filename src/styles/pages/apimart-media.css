@@ -46,7 +46,7 @@
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  background:linear-gradient(180deg,#f8fbff 0,#fff 72px);
+  background:#fff;
 }
 
 .apimart-type-row{
@@ -180,10 +180,7 @@
   width:38px;
   height:38px;
   border-radius:8px;
-  background:
-    radial-gradient(circle at 58% 30%,#ffba6c 0 7%,transparent 8%),
-    radial-gradient(circle at 42% 48%,#ff5c7a 0 8%,transparent 9%),
-    linear-gradient(145deg,#0f172a 0%,#223461 48%,#0d111a 100%);
+  background:#eef5ff;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);
 }
 
@@ -698,7 +695,7 @@
   gap:8px;
   border:0;
   border-radius:10px;
-  background:linear-gradient(135deg,var(--accent, #0057ff),#1d4ed8);
+  background:var(--accent, #0057ff);
   color:#fff;
   font:inherit;
   font-size:14px;
@@ -984,7 +981,7 @@ video.apimart-result-media{
 }
 
 .apimart-empty-card-back{
-  background:linear-gradient(135deg,#93c5fd,#2563eb);
+  background:#93c5fd;
   transform:translate(-62%,-44%) rotate(-8deg);
   opacity:.72;
 }
@@ -992,7 +989,7 @@ video.apimart-result-media{
 .apimart-empty-card-front{
   display:grid;
   place-items:center;
-  background:linear-gradient(135deg,#8ec5ff,#2f6df6);
+  background:#2f6df6;
   color:#fff;
   font-size:42px;
   transform:translate(-42%,-53%) rotate(6deg);
@@ -1063,7 +1060,7 @@ video.apimart-result-media{
   display:grid;
   place-items:center;
   overflow:hidden;
-  background:linear-gradient(135deg,#152238,#285ca8 52%,#ff8a6b);
+  background:#152238;
   color:#fff;
   font:inherit;
   text-align:inherit;
@@ -1079,7 +1076,7 @@ button.apimart-history-thumb:focus-visible{
 }
 
 .apimart-history-thumb.is-pending{
-  background:linear-gradient(135deg,#1f2937,#334155 52%,#64748b);
+  background:#1f2937;
 }
 
 .apimart-history-thumb img,
@@ -1095,7 +1092,7 @@ button.apimart-history-thumb:focus-visible{
   position:absolute;
   inset:auto 0 0;
   height:48%;
-  background:linear-gradient(180deg,transparent,rgba(0,0,0,.62));
+  background:rgba(0,0,0,.42);
 }
 
 .apimart-image-size-badge{
@@ -1405,9 +1402,7 @@ button.apimart-history-thumb:focus-visible{
   padding:14px 16px;
   border:1px solid rgba(148,163,184,.22);
   border-radius:8px;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(0,87,255,.10), transparent 34%),
-    linear-gradient(135deg, rgba(248,251,255,.96), rgba(255,255,255,.98));
+  background:#f8fbff;
   color:var(--muted);
   font-size:13px;
 }
@@ -1425,9 +1420,7 @@ button.apimart-history-thumb:focus-visible{
   height:40px;
   border:1px solid rgba(59,130,246,.18);
   border-radius:8px;
-  background:
-    radial-gradient(circle at 68% 30%, rgba(245,158,11,.50) 0 11%, transparent 12%),
-    linear-gradient(135deg, #eff6ff, #ffffff 54%, #e0f2fe);
+  background:#eff6ff;
   box-shadow:0 10px 24px rgba(15,23,42,.08);
 }
 
@@ -1505,40 +1498,123 @@ body[data-theme="dark"] .apimart-page-indicator{
 
 body[data-theme="dark"] .apimart-history-empty{
   border-color:var(--border);
-  background:
-    radial-gradient(circle at 12% 18%, rgba(59,130,246,.18), transparent 34%),
-    linear-gradient(135deg, rgba(15,23,42,.78), rgba(30,41,59,.92));
+  background:#111827;
 }
 
 body[data-theme="dark"] .apimart-history-empty-tile{
   border-color:rgba(148,163,184,.22);
-  background:
-    radial-gradient(circle at 68% 30%, rgba(245,158,11,.42) 0 11%, transparent 12%),
-    linear-gradient(135deg, #172033, #273449 54%, #0f172a);
+  background:#172033;
 }
 
 @media (max-width:1040px){
+  .apimart-media-page,
+  .apimart-media-shell{
+    height:auto;
+    min-height:100%;
+    overflow:visible;
+  }
+
   .apimart-workbench{
     grid-template-columns:1fr;
+    height:auto;
+    min-height:0;
     overflow:auto;
   }
 
   .apimart-creator-panel{
-    min-height:720px;
+    height:auto;
+    min-height:0;
   }
 
   .apimart-preview-column{
+    min-height:0;
     overflow:visible;
   }
 }
 
 @media (max-width:720px){
+  .apimart-workbench{
+    gap:10px;
+    overflow:visible;
+  }
+
+  .apimart-creator-panel,
+  .apimart-result-panel,
+  .apimart-history-panel{
+    width:100%;
+    box-sizing:border-box;
+    border-radius:8px;
+  }
+
+  .apimart-type-row{
+    min-height:44px;
+    padding:5px;
+  }
+
+  .apimart-type-row label{
+    min-height:34px;
+    gap:6px;
+    font-size:12px;
+  }
+
+  .apimart-type-row .ti{
+    width:18px;
+    height:18px;
+    font-size:13px;
+  }
+
   .apimart-scroll-area{
-    padding:14px;
+    flex:0 0 auto;
+    overflow:visible;
+    padding:12px 14px 14px;
+  }
+
+  .apimart-panel-block{
+    gap:7px;
+    padding-bottom:12px;
+  }
+
+  .apimart-field-label,
+  .apimart-panel-title,
+  .apimart-field > span{
+    font-size:11.5px;
+  }
+
+  .apimart-prompt-box{
+    min-height:146px;
+  }
+
+  .apimart-prompt-box textarea{
+    min-height:94px;
+    padding:11px 12px 7px;
+    font-size:12px;
+    line-height:1.55;
+  }
+
+  .apimart-prompt-tools{
+    gap:6px;
+    padding:7px 8px;
+  }
+
+  .apimart-prompt-tools button{
+    height:30px;
+    padding:0 8px;
+    font-size:11px;
+  }
+
+  .apimart-prompt-tools > span{
+    font-size:11px;
   }
 
   .apimart-ratio-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:6px;
+  }
+
+  .apimart-ratio-option{
+    height:32px;
+    gap:4px;
+    font-size:11px;
   }
 
   .apimart-params-grid,
@@ -1546,8 +1622,34 @@ body[data-theme="dark"] .apimart-history-empty-tile{
     grid-template-columns:1fr;
   }
 
+  .apimart-params-grid{
+    gap:8px;
+  }
+
+  .apimart-field .custom-select,
+  .apimart-field .custom-select-trigger,
+  .apimart-custom-model,
+  .apimart-field select,
+  .apimart-field input,
+  .apimart-stepper{
+    height:36px;
+    min-height:36px;
+  }
+
+  .apimart-submit-bar{
+    gap:8px;
+    padding:10px 14px 12px;
+  }
+
+  .apimart-submit-btn{
+    height:40px;
+    border-radius:8px;
+    font-size:13px;
+  }
+
   .apimart-save-btn{
     width:100%;
+    height:38px;
   }
 
   .apimart-reference-box{
@@ -1556,6 +1658,41 @@ body[data-theme="dark"] .apimart-history-empty-tile{
 
   .apimart-reference-file-names{
     grid-column:2;
+  }
+
+  .apimart-result-panel,
+  .apimart-history-panel{
+    padding:12px;
+  }
+
+  .apimart-section-head{
+    min-height:30px;
+    margin-bottom:10px;
+  }
+
+  .apimart-section-head h2{
+    font-size:14px;
+  }
+
+  .apimart-ghost-btn{
+    height:30px;
+    padding:0 10px;
+  }
+
+  .apimart-result-stage,
+  .apimart-result-empty,
+  .apimart-reactbits-mount{
+    min-height:176px;
+  }
+
+  .apimart-result-media,
+  .apimart-result-preview-btn{
+    min-height:170px;
+  }
+
+  .apimart-history-strip{
+    grid-auto-columns:minmax(148px, 170px);
+    gap:8px;
   }
 
   .apimart-image-preview{

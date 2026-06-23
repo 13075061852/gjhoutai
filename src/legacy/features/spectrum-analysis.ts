@@ -20,6 +20,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const IMAGE_STORE_NAME = 'images';
   const EMPTY_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
   const EDITABLE_FIELDS = ['title', 'category', 'date', 'tags', 'note'];
+  const SPECTRUM_TYPES = ['DSC', 'TGA', 'FTIR'];
   const DELETE_ANIMATION_MS = 240;
   const SKILL_MUTATION_LIMIT = 30;
 
@@ -39,6 +40,8 @@ import { cloudStorage } from '../../services/cloud-storage';
     detailCollapsed: false,
     detailAutoCompact: false,
     detailModalOpen: false,
+    galleryCountTotal: 0,
+    galleryCountSelected: 0,
   };
 
   const refs = {};
@@ -50,16 +53,32 @@ import { cloudStorage } from '../../services/cloud-storage';
   let imageDbPromise = null;
   let imageObserver = null;
   const pendingImageLoads = new Map();
+  let exportCategoryMenuOpen = false;
+  let exportCategorySelection = new Set();
   let categoryDragActive = false;
   const DETAIL_COMPACT_MQ = window.matchMedia('(max-width: 1200px)');
+  const SPECTRUM_MOBILE_MQ = window.matchMedia('(max-width: 980px)');
+
+  const ensureSpectrumModeButtons = () => {
+    const switcher = document.querySelector('.spectrum-mode-switch');
+    if (!switcher || switcher.querySelector('[data-spectrum-mode="FTIR"]')) return;
+    const button = document.createElement('button');
+    button.className = 'spectrum-mode-btn';
+    button.type = 'button';
+    button.dataset.spectrumMode = 'FTIR';
+    button.textContent = 'FTIR';
+    switcher.append(button);
+  };
 
   const initRefs = () => {
+    ensureSpectrumModeButtons();
     refs.searchInput = document.getElementById('spectrumSearchInput');
     refs.uploadBtn = document.getElementById('spectrumUploadBtn');
     refs.uploadInput = document.getElementById('spectrumUploadInput');
     refs.importBtn = document.getElementById('spectrumImportBtn');
     refs.importInput = document.getElementById('spectrumImportInput');
     refs.exportBtn = document.getElementById('spectrumExportBtn');
+    ensureExportCategoryPicker();
     refs.printBtn = document.getElementById('spectrumPrintBtn');
     refs.categorySearchInput = document.getElementById('spectrumCategorySearchInput');
     refs.categoryFilters = document.getElementById('spectrumCategoryFilters');
@@ -68,6 +87,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.deleteSelectedBtn = document.getElementById('spectrumDeleteSelectedBtn');
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
+    refs.galleryTitle = document.querySelector('.spectrum-gallery-title-row .spectrum-panel-title');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
     refs.toggleDetailBtn = document.getElementById('spectrumToggleDetailBtn');
     refs.gallery = document.getElementById('spectrumGallery');
@@ -76,6 +96,25 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.detailPanel = document.getElementById('spectrumDetailPanel');
     refs.viewButtons = document.querySelectorAll('[data-spectrum-view]');
     refs.modeButtons = document.querySelectorAll('[data-spectrum-mode]');
+  };
+
+  const ensureExportCategoryPicker = () => {
+    if (!refs.exportBtn || refs.exportBtn.closest('.spectrum-export-picker')) return;
+    const parent = refs.exportBtn.parentElement;
+    if (!parent) return;
+
+    const picker = document.createElement('div');
+    picker.className = 'spectrum-export-picker';
+    parent.insertBefore(picker, refs.exportBtn);
+    picker.append(refs.exportBtn);
+
+    const menu = document.createElement('div');
+    menu.className = 'spectrum-export-menu';
+    menu.hidden = true;
+    picker.append(menu);
+
+    refs.exportPicker = picker;
+    refs.exportMenu = menu;
   };
 
   const getPreviewAiCache = () => {
@@ -129,8 +168,7 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getSpectrumTypeFromName = (name) => {
     const baseName = String(name || '').replace(/\.[^.]*$/, '').trim().toUpperCase();
-    const suffix = baseName.slice(-3);
-    return suffix === 'DSC' || suffix === 'TGA' ? suffix : '';
+    return SPECTRUM_TYPES.find((type) => baseName.endsWith(type)) || '';
   };
 
   const getUploadTitle = (file) => file.name.replace(/\.[^.]+$/, '') || file.name;
@@ -469,9 +507,7 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const normalizeSpectrumType = (value, fallback = '') => {
     const text = String(value || fallback || '').trim().toUpperCase();
-    if (text.includes('DSC')) return 'DSC';
-    if (text.includes('TGA')) return 'TGA';
-    return '';
+    return SPECTRUM_TYPES.find((type) => text.includes(type)) || '';
   };
 
   const escapeSvgText = (value) => String(value || '')
@@ -643,6 +679,68 @@ import { cloudStorage } from '../../services/cloud-storage';
       return `<button class="spectrum-tag-filter${active}" type="button" data-spectrum-tag="${utils.escapeHtml(tag)}">${utils.escapeHtml(tag)} <span>${count}</span></button>`;
     }).join('');
 
+  };
+
+  const getExportCategory = (item) => {
+    const category = String(item?.category || '').trim();
+    return category || '未分类';
+  };
+
+  const getExportableItems = () => state.items.filter((item) => String(item?.image || '').trim() || item?.imageStored);
+
+  const getExportCategories = () => orderCategories([...new Set(getExportableItems().map(getExportCategory))]);
+
+  const renderExportCategoryMenu = () => {
+    if (!refs.exportMenu) return;
+    const categories = getExportCategories();
+    const validCategories = new Set(categories);
+    exportCategorySelection = new Set([...exportCategorySelection].filter((category) => validCategories.has(category)));
+    const allChecked = categories.length > 0 && categories.every((category) => exportCategorySelection.has(category));
+    const selectedCount = categories.filter((category) => exportCategorySelection.has(category)).length;
+
+    refs.exportMenu.innerHTML = `
+      <div class="spectrum-export-menu-head">
+        <div>
+          <strong>选择导出分类</strong>
+          <span>已选 ${selectedCount}/${categories.length}</span>
+        </div>
+        <label class="spectrum-export-check spectrum-export-check-all">
+          <input type="checkbox" data-spectrum-export-all ${allChecked ? 'checked' : ''} ${categories.length ? '' : 'disabled'} />
+          <span>全选</span>
+        </label>
+      </div>
+      <div class="spectrum-export-category-list">
+        ${categories.length ? categories.map((category) => {
+          const count = getExportableItems().filter((item) => getExportCategory(item) === category).length;
+          return `
+            <label class="spectrum-export-check">
+              <input type="checkbox" data-spectrum-export-category="${utils.escapeHtml(category)}" ${exportCategorySelection.has(category) ? 'checked' : ''} />
+              <span>${utils.escapeHtml(category)}</span>
+              <em>${count}</em>
+            </label>
+          `;
+        }).join('') : '<div class="spectrum-export-empty">暂无可导出的图谱</div>'}
+      </div>
+      <div class="spectrum-export-menu-actions">
+        <button class="analysis-toolbar-btn" type="button" data-spectrum-export-cancel>取消</button>
+        <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" type="button" data-spectrum-export-confirm ${selectedCount ? '' : 'disabled'}>导出</button>
+      </div>
+    `;
+  };
+
+  const closeExportCategoryMenu = () => {
+    exportCategoryMenuOpen = false;
+    if (refs.exportMenu) refs.exportMenu.hidden = true;
+    refs.exportPicker?.classList.remove('is-open');
+  };
+
+  const openExportCategoryMenu = () => {
+    const categories = getExportCategories();
+    exportCategorySelection = new Set(categories);
+    exportCategoryMenuOpen = true;
+    renderExportCategoryMenu();
+    if (refs.exportMenu) refs.exportMenu.hidden = false;
+    refs.exportPicker?.classList.add('is-open');
   };
 
   const renderSelectedList = () => {
@@ -913,7 +1011,8 @@ import { cloudStorage } from '../../services/cloud-storage';
   const renderGallery = () => {
     const items = syncActiveWithFilteredItems();
     const selectedCount = state.selectedIds.size;
-    refs.galleryCount.textContent = `共 ${items.length} 张，已选 ${selectedCount} 张`;
+    syncGalleryTitleText();
+    setGalleryCountText(items.length, selectedCount);
     refs.gallery.className = `spectrum-gallery is-${state.view}`;
 
     if (!items.length) {
@@ -943,7 +1042,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       return `
         <article class="spectrum-card${selected}${active}" data-spectrum-id="${utils.escapeHtml(item.id)}" data-spectrum-type="${utils.escapeHtml(item.spectrumType || 'UNKNOWN')}" role="button" tabindex="0" aria-pressed="${state.selectedIds.has(item.id) ? 'true' : 'false'}">
           <div class="spectrum-card-image">
-            <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" alt="${utils.escapeHtml(item.title)}" />
+            <img src="${utils.escapeHtml(getItemImageSrc(item))}" data-spectrum-image-id="${utils.escapeHtml(item.id)}" loading="lazy" draggable="false" alt="${utils.escapeHtml(item.title)}" />
           </div>
           <div class="spectrum-card-body">
             <div class="spectrum-card-top">
@@ -1213,6 +1312,30 @@ import { cloudStorage } from '../../services/cloud-storage';
     return DETAIL_COMPACT_MQ.matches;
   };
 
+  const isSpectrumMobileLayout = () => {
+    return SPECTRUM_MOBILE_MQ.matches || window.innerWidth <= 980;
+  };
+
+  const setGalleryCountText = (total, selected) => {
+    state.galleryCountTotal = total;
+    state.galleryCountSelected = selected;
+    if (!refs.galleryCount) return;
+    refs.galleryCount.textContent = isSpectrumMobileLayout()
+      ? `${total}/${selected}`
+      : `共 ${total} 张，已选 ${selected} 张`;
+  };
+
+  const syncGalleryCountText = () => {
+    setGalleryCountText(state.galleryCountTotal, state.galleryCountSelected);
+  };
+
+  const syncGalleryTitleText = () => {
+    if (!refs.galleryTitle) return;
+    const title = String(state.category || '').trim() || '图谱库';
+    refs.galleryTitle.textContent = title;
+    refs.galleryTitle.title = title;
+  };
+
   const syncDetailAutoCollapse = () => {
     if (!refs.workbench) return;
     const compact = isDetailCompactMode();
@@ -1324,11 +1447,14 @@ import { cloudStorage } from '../../services/cloud-storage';
     const savedConfig = await (App.config?.loadSavedConfig?.() || {});
     const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaults = App.constants?.DEFAULT_CONFIG || {};
-    const provider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase() === 'lmstudio'
-      ? 'lmstudio'
-      : 'openrouter';
+    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase();
+    const provider = ['lmstudio', 'deepseek', 'siliconflow', 'openrouter'].includes(rawProvider) ? rawProvider : 'openrouter';
     const providerConfig = provider === 'lmstudio'
       ? saved.lmStudioConfig
+      : provider === 'deepseek'
+        ? saved.deepseekConfig
+        : provider === 'siliconflow'
+          ? saved.siliconflowConfig
       : saved.openrouterConfig;
     const activeProviderConfig = providerConfig && typeof providerConfig === 'object' ? providerConfig : {};
     const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
@@ -1347,6 +1473,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       ...activeProviderConfig,
       ...saved,
       apiKey: provider === 'lmstudio' ? '' : String(saved.apiKey || activeProviderConfig.apiKey || '').trim(),
+      aiProvider: provider,
       baseUrl: utils.normalizeBaseUrl(baseUrl),
       modelChoice,
       modelSource: spectrumModel ? '图谱分析模型' : '默认主模型',
@@ -1440,6 +1567,7 @@ import { cloudStorage } from '../../services/cloud-storage';
           unit: String(row.unit || '').trim(),
           curve,
           event: inferredSpectrumType === 'DSC' ? (DSC_EVENT_BY_CURVE[curve] || rawEvent) : rawEvent,
+          strength: String(row.strength || row.intensity || row.peakStrength || row.relativeIntensity || '').trim(),
           sourceText: String(row.sourceText || row.source || row.note || row.description || '').trim(),
         };
       })
@@ -1465,8 +1593,8 @@ import { cloudStorage } from '../../services/cloud-storage';
       let cleaned = String(str || '').trim();
       // Remove file extensions
       cleaned = cleaned.replace(/\.(png|jpg|jpeg|gif|webp|bmp|tiff?|svg)$/i, '');
-      // Remove trailing spectrum type keywords (DSC, TGA, DMA)
-      cleaned = cleaned.replace(/[\s_-]*(DSC|TGA|DMA)\s*$/i, '').trim();
+      // Remove trailing spectrum type keywords (DSC, TGA, FTIR, DMA)
+      cleaned = cleaned.replace(/[\s_-]*(DSC|TGA|FTIR|DMA)\s*$/i, '').trim();
       return cleaned;
     };
     const tokenPattern = /[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+|[A-Za-z]\d{5,}/g;
@@ -1490,7 +1618,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const getPropertyBatchMatchQuery = (item, aiResult) => {
     const stripExtAndType = (str) => String(str || '')
       .replace(/\.(png|jpg|jpeg|gif|webp|bmp|tiff?|svg)$/i, '')
-      .replace(/[\s_-]*(DSC|TGA|DMA)\s*$/i, '')
+      .replace(/[\s_-]*(DSC|TGA|FTIR|DMA)\s*$/i, '')
       .trim();
     const batchPattern = /\b[AB]\d{5,}\b/gi;
     const batches = new Set();
@@ -1596,12 +1724,103 @@ import { cloudStorage } from '../../services/cloud-storage';
     return row?.event || curve || '未分类';
   };
 
+  const isFtirSpectrum = (item, aiResult) => {
+    const text = [
+      item?.spectrumType,
+      item?.title,
+      item?.code,
+      aiResult?.propertyQueryNames?.[2],
+    ].filter(Boolean).join(' ').toUpperCase();
+    return text.includes('FTIR');
+  };
+
+  const normalizeFtirStrength = (...values) => {
+    const text = values.map((value) => String(value || '').trim()).filter(Boolean).join(' ').toLowerCase();
+    if (!text) return '未判断';
+    if (/(?:very\s*)?strong|intense|high|major|强|强峰|强吸收|很强|高强度/.test(text)) return '强';
+    if (/medium|moderate|mid|中|中等|中强/.test(text)) return '中';
+    if (/weak|low|minor|small|弱|弱峰|弱吸收|低强度/.test(text)) return '弱';
+    if (/shoulder|肩/.test(text)) return '肩峰';
+    return text.length <= 8 ? text : '未判断';
+  };
+
+  const getFtirPeakPosition = (row) => {
+    const value = String(row?.value || '').trim();
+    const unit = String(row?.unit || '').trim();
+    const sourceText = String(row?.sourceText || '').trim();
+    const text = [value, unit, sourceText].filter(Boolean).join(' ');
+    const match = text.match(/(\d{3,4}(?:\.\d+)?)\s*(?:cm\s*(?:\^-?1|[-−]1|⁻¹)|cm-1|cm\^-1)?/i);
+    if (!match) return null;
+    const number = Number(match[1]);
+    if (!Number.isFinite(number)) return null;
+    const rounded = Number.isInteger(number) ? String(number) : String(Number(number.toFixed(1)));
+    return {
+      number,
+      text: `${rounded} cm^-1`,
+    };
+  };
+
+  const renderFtirExtractTable = (aiResult, item) => {
+    const rows = aiResult?.keyPoints || [];
+    const peaks = [];
+    const seen = new Set();
+    rows.forEach((row) => {
+      const position = getFtirPeakPosition(row);
+      if (!position) return;
+      const key = String(Math.round(position.number * 10) / 10);
+      if (seen.has(key)) return;
+      seen.add(key);
+      peaks.push({
+        ...position,
+        strength: normalizeFtirStrength(row.strength, row.event, row.label, row.sourceText),
+      });
+    });
+
+    if (!peaks.length) {
+      return '<div class="spectrum-ai-empty">暂未提取到 FTIR 特征峰。</div>';
+    }
+
+    peaks.sort((a, b) => b.number - a.number);
+    const imageName = item?.title || item?.code || aiResult?.propertyQueryNames?.[0] || '-';
+
+    return `
+      <div class="spectrum-ai-table-wrap spectrum-ai-ftir-table-wrap">
+        <table class="spectrum-ai-table spectrum-ai-keypoint-table spectrum-ai-ftir-table">
+          <thead>
+            <tr>
+              <th class="spectrum-ai-keypoint-image-head">图片名称</th>
+              <th class="spectrum-ai-keypoint-project-head">项目</th>
+              ${peaks.map((_, index) => `<th>特征峰 ${index + 1}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="spectrum-ai-keypoint-image-cell" title="${utils.escapeHtml(imageName)}">${utils.escapeHtml(imageName)}</th>
+              <th class="spectrum-ai-keypoint-project-cell">峰位/强弱</th>
+              ${peaks.map((peak) => `
+                <td>
+                  <span class="spectrum-ai-ftir-peak">
+                    <strong>${utils.escapeHtml(peak.text)}</strong>
+                    <em data-ftir-strength="${utils.escapeHtml(peak.strength)}">${utils.escapeHtml(peak.strength)}</em>
+                  </span>
+                </td>
+              `).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   const renderAiExtractTable = (aiResult, item) => {
     const rows = aiResult?.keyPoints || [];
     if (!rows.length) {
       return '<div class="spectrum-ai-empty">暂未提取到可表格化的信息点。</div>';
     }
     const preferredDscEventOrder = ['第一次放热', '第一次吸热', '第二次吸热'];
+    if (isFtirSpectrum(item, aiResult)) {
+      return renderFtirExtractTable(aiResult, item);
+    }
     const eventOrder = [];
     const groups = new Map();
     rows.forEach((row) => {
@@ -2069,7 +2288,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (!config.apiKey && !isLocal) {
       previewAiState[id] = {
         status: 'error',
-        error: '请先在配置中心填写 OpenRouter API 密钥，或切换到 LM Studio 本地模型。',
+        error: '请先在配置中心填写模型 API 密钥，或切换到 LM Studio 本地模型。',
         model,
         modelSource: config.modelSource,
       };
@@ -2122,6 +2341,19 @@ import { cloudStorage } from '../../services/cloud-storage';
           '- event 字段填：第一次放热 / 第一次吸热 / 第二次吸热',
           '- 表中看不到的信息就不要编造，留空即可',
         );
+      } else if (spectrumType === 'FTIR') {
+        base.push(
+          '这是 FTIR（傅里叶变换红外光谱）图片。请只提取图片上已经标注出来的全部特征峰。',
+          'FTIR 提取要求：',
+          '- 必须逐个列出图片中可见的所有蓝色峰位标注，不要只提取主峰，不要遗漏弱峰、小峰或肩峰',
+          '- value 字段只填写峰位数字，例如 3068；unit 字段填写 cm^-1',
+          '- strength 字段必须判断该峰强弱，只能填写：强 / 中 / 弱 / 肩峰',
+          '- 强弱依据峰高、峰面积和视觉显著程度判断；最高或最尖锐的一组为强，明显但非最高为中，小峰或浅峰为弱，肩部凸起为肩峰',
+          '- label 字段统一填写“特征峰位置”',
+          '- event 字段填写“FTIR特征峰”',
+          '- sourceText 字段填写图中对应的原始峰位标注，例如 3068 cm^-1',
+          '- 按图片从左到右的峰位顺序输出；如果无法判断强弱，也要填写最接近的强/中/弱，不要留空',
+        );
       } else if (spectrumType === 'TGA') {
         base.push(
           '这是一张 TGA（热重分析）图谱。请提取：',
@@ -2151,6 +2383,7 @@ import { cloudStorage } from '../../services/cloud-storage';
         '      "unit": "℃ / J/g / mJ / mW / W/g / %",',
         '      "curve": "红色 / 黑色 / 蓝色",',
         '      "event": "第一次放热 / 第一次吸热 / 第二次吸热 / 失重阶段1 / ...",',
+        '      "strength": "FTIR 峰强弱：强 / 中 / 弱 / 肩峰；非 FTIR 可为空",',
         '      "sourceText": "图中对应原文，尽量短"',
         '    }',
         '  ],',
@@ -3274,9 +3507,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     }
 
     const filtered = getFilteredItems();
-    if (refs.galleryCount) {
-      refs.galleryCount.textContent = `共 ${filtered.length} 张，已选 ${state.selectedIds.size} 张`;
-    }
+    setGalleryCountText(filtered.length, state.selectedIds.size);
 
     renderDetail();
     renderSelectedList();
@@ -3290,6 +3521,12 @@ import { cloudStorage } from '../../services/cloud-storage';
     reader.addEventListener('error', () => resolve(''));
     reader.readAsDataURL(file);
   });
+
+  const hasSpectrumUploadDragData = (dataTransfer) => {
+    if (!dataTransfer) return false;
+    if ([...(dataTransfer.items || [])].some((item) => item.kind === 'file')) return true;
+    return (dataTransfer.files?.length || 0) > 0;
+  };
 
   const dataUrlToBase64 = (dataUrl) => {
     const match = String(dataUrl || '').match(/^data:[^;]+;base64,(.+)$/);
@@ -3434,7 +3671,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     return window.JSZip;
   };
 
-  const exportSpectrumPackage = async () => {
+  const exportSpectrumPackage = async (categorySelection = null) => {
     try {
       await ensureJsZipLoaded();
     } catch (error) {
@@ -3442,9 +3679,21 @@ import { cloudStorage } from '../../services/cloud-storage';
       return;
     }
 
-    const items = state.items.filter((item) => String(item?.image || '').trim());
+    const selectedCategories = categorySelection instanceof Set ? categorySelection : null;
+    const candidateItems = getExportableItems()
+      .filter((item) => !selectedCategories || selectedCategories.has(getExportCategory(item)));
+    if (!candidateItems.length) {
+      openUploadIssueDialog([{ name: '图谱库', reason: selectedCategories ? '所选分类没有可导出的图片' : '当前没有可导出的图片' }]);
+      return;
+    }
+
+    const items = (await Promise.all(candidateItems.map(async (item) => ({
+      ...item,
+      image: item.image || await ensureItemImage(item.id),
+    })))).filter((item) => String(item.image || '').trim());
+
     if (!items.length) {
-      openUploadIssueDialog([{ name: '图谱库', reason: '当前没有可导出的图片' }]);
+      openUploadIssueDialog([{ name: '图谱库', reason: '所选分类的图片暂时无法读取，请稍后重试' }]);
       return;
     }
 
@@ -3453,7 +3702,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const tags = [];
 
     items.forEach((item, index) => {
-      const category = sanitizeArchiveSegment(item.category || '未分类');
+      const category = sanitizeArchiveSegment(getExportCategory(item));
       const sourceName = getPathFileName(item.title || item.code || `图谱-${index + 1}`);
       const extension = getImageExtensionFromDataUrl(item.image);
       const fileName = sanitizeArchiveSegment(/\.[^.]+$/.test(sourceName) ? sourceName : `${sourceName}${extension}`, `图谱-${index + 1}${extension}`);
@@ -3795,6 +4044,8 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const bindEvents = () => {
+    SPECTRUM_MOBILE_MQ.addEventListener('change', syncGalleryCountText);
+
     refs.searchInput?.addEventListener('input', () => {
       state.query = refs.searchInput.value || '';
       render();
@@ -4160,9 +4411,7 @@ import { cloudStorage } from '../../services/cloud-storage';
           removedCard.setAttribute('aria-pressed', 'false');
         }
         const filtered = getFilteredItems();
-        if (refs.galleryCount) {
-          refs.galleryCount.textContent = `共 ${filtered.length} 张，已选 ${state.selectedIds.size} 张`;
-        }
+        setGalleryCountText(filtered.length, state.selectedIds.size);
         renderSelectedList();
         renderDetail();
         updateActions();
@@ -4199,7 +4448,49 @@ import { cloudStorage } from '../../services/cloud-storage';
 
     refs.printBtn?.addEventListener('click', printSelectedList);
 
-    refs.exportBtn?.addEventListener('click', exportSpectrumPackage);
+    refs.exportBtn?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (exportCategoryMenuOpen) closeExportCategoryMenu();
+      else openExportCategoryMenu();
+    });
+    refs.exportMenu?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const cancelButton = event.target.closest('[data-spectrum-export-cancel]');
+      if (cancelButton) {
+        closeExportCategoryMenu();
+        return;
+      }
+
+      const confirmButton = event.target.closest('[data-spectrum-export-confirm]');
+      if (confirmButton) {
+        const selectedCategories = new Set(exportCategorySelection);
+        closeExportCategoryMenu();
+        exportSpectrumPackage(selectedCategories);
+      }
+    });
+    refs.exportMenu?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+
+      if (target.matches('[data-spectrum-export-all]')) {
+        exportCategorySelection = target.checked ? new Set(getExportCategories()) : new Set();
+        renderExportCategoryMenu();
+        return;
+      }
+
+      const category = target.getAttribute('data-spectrum-export-category') || '';
+      if (!category) return;
+      if (target.checked) exportCategorySelection.add(category);
+      else exportCategorySelection.delete(category);
+      renderExportCategoryMenu();
+    });
+    document.addEventListener('click', (event) => {
+      if (!exportCategoryMenuOpen || refs.exportPicker?.contains(event.target)) return;
+      closeExportCategoryMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && exportCategoryMenuOpen) closeExportCategoryMenu();
+    });
     refs.importBtn?.addEventListener('click', () => refs.importInput?.click());
     refs.importInput?.addEventListener('change', () => {
       importSpectrumPackage(refs.importInput.files?.[0]);
@@ -4213,11 +4504,13 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
 
     refs.galleryPanel?.addEventListener('dragenter', (event) => {
+      if (!hasSpectrumUploadDragData(event.dataTransfer)) return;
       event.preventDefault();
       refs.galleryPanel.classList.add('is-drag-over');
     });
 
     refs.galleryPanel?.addEventListener('dragover', (event) => {
+      if (!hasSpectrumUploadDragData(event.dataTransfer)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
       refs.galleryPanel.classList.add('is-drag-over');
@@ -4229,9 +4522,14 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
 
     refs.galleryPanel?.addEventListener('drop', (event) => {
+      if (!hasSpectrumUploadDragData(event.dataTransfer)) {
+        refs.galleryPanel.classList.remove('is-drag-over');
+        return;
+      }
       event.preventDefault();
       refs.galleryPanel.classList.remove('is-drag-over');
       const files = [...(event.dataTransfer.files || [])];
+      if (!files.length) return;
       const zipFile = files.find(isZipUploadFile);
       if (zipFile) importSpectrumPackage(zipFile);
       else uploadSpectrumFiles(files);

@@ -238,12 +238,16 @@
       overflow:hidden;
     }
     .spectrum-search .spectrum-mode-switch{
+      --spectrum-mode-item:46px;
+      display:grid;
+      grid-template-columns:repeat(4, var(--spectrum-mode-item));
       flex:0 0 auto;
       height:32px;
       padding:0;
       border:0;
       border-radius:10px;
       background:var(--surface-2);
+      gap:0;
     }
     .spectrum-view-switch::before,
     .spectrum-mode-switch::before{
@@ -260,7 +264,7 @@
     .spectrum-search .spectrum-mode-switch::before{
       top:2px;
       left:2px;
-      width:42px;
+      width:calc(var(--spectrum-mode-item) - 4px);
       height:calc(100% - 4px);
       border-radius:6px;
     }
@@ -271,21 +275,22 @@
       width:32px;
     }
     .spectrum-mode-switch:has([data-spectrum-mode="DSC"].is-active)::before{
-      transform:translateX(50px);
+      transform:translateX(var(--spectrum-mode-item));
     }
     .spectrum-mode-switch:has([data-spectrum-mode="TGA"].is-active)::before{
-      transform:translateX(100px);
+      transform:translateX(calc(var(--spectrum-mode-item) * 2));
     }
     .spectrum-mode-switch:has([data-spectrum-mode="FTIR"].is-active)::before{
-      transform:translateX(150px);
+      transform:translateX(calc(var(--spectrum-mode-item) * 3));
     }
     .spectrum-view-switch:has([data-spectrum-view="list"].is-active)::before{
       transform:translateX(36px);
     }
     .spectrum-mode-btn{
-      min-width:46px;
+      width:var(--spectrum-mode-item, 46px);
+      min-width:0;
       height:32px;
-      padding:0 11px;
+      padding:0;
       border:0;
       border-radius:6px;
       background:transparent;
@@ -1715,6 +1720,31 @@
       display:grid;
       place-items:stretch;
       position:relative;
+    }
+    .spectrum-preview-back{
+      position:absolute;
+      top:18px;
+      left:18px;
+      z-index:8;
+      height:36px;
+      padding:0 12px;
+      border:1px solid rgba(255,255,255,.32);
+      border-radius:999px;
+      background:rgba(15,23,42,.72);
+      color:#fff;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      font:inherit;
+      font-size:13px;
+      font-weight:800;
+      line-height:1;
+      cursor:pointer;
+    }
+    .spectrum-preview-back .ti{
+      font-size:16px;
+      line-height:1;
     }
     .spectrum-preview-card{
       width:100%;

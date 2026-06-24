@@ -3380,6 +3380,10 @@ import { cloudStorage } from '../../services/cloud-storage';
     if ((items || []).length < 2) previewAiMergeMode = false;
     const modelInfo = getPreviewAiModelInfo(item);
     refs.previewDialog.innerHTML = `
+      <button class="spectrum-preview-back" type="button" data-spectrum-preview-close aria-label="返回图谱列表">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+        <span>返回</span>
+      </button>
       <aside class="spectrum-preview-rail" aria-label="已选图谱预览列表">
         ${items.map((entry) => `
           <button class="spectrum-preview-thumb${entry.id === item.id ? ' is-active' : ''}" type="button" data-spectrum-preview-open="${utils.escapeHtml(entry.id)}" aria-label="查看 ${utils.escapeHtml(entry.title)}">

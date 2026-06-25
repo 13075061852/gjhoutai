@@ -1,6 +1,11 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
-import { createAgentPlan } from './agent-runtime/router';
+import {
+  buildAgentRouteClassifierMessages,
+  createAgentPlan,
+  createAgentPlanWithAi,
+  parseAgentRouteClassification,
+} from './agent-runtime/router';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
@@ -20,6 +25,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   let activeChatAbortController = null;
   let activeChatRequestId = 0;
   let chatAbortRequested = false;
+  let chatSubmissionLocked = false;
+  let chatEventsBound = false;
   let webSearchEnabled = true;
   const imageUploadAuthResolvers = new Map();
 
@@ -86,14 +93,24 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }).filter(Boolean);
   };
 
+  const normalizeSearchSources = (results) => normalizeSearchResults({ results })
+    .slice(0, 10)
+    .map((item, index) => ({
+      id: index + 1,
+      title: item.title,
+      url: item.url,
+      publishedDate: item.publishedDate,
+    }));
+
   const formatSearchContext = (results) => {
     const items = normalizeSearchResults({ results }).slice(0, 10);
     if (!items.length) return '';
     return [
       '【联网搜索资料，用户不可见】',
       `【当前日期时间】${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
-      '以下资料来自实时搜索结果。回答时必须优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化，并在答案末尾列出简短来源标题。',
-      '来源只写文章/网页标题，不要单独输出 URL，也不要把 URL 放在括号里追加到标题后面。',
+      '以下资料来自实时搜索结果。回答时必须优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化。',
+      '凡是引用搜索结果中的事实、数据、发布时间、政策、价格、产品或机构信息，必须在对应句子末尾标注 [来源 N]，N 必须对应下面的来源编号。',
+      '答案末尾可以列出简短来源标题，但不要单独输出 URL，也不要把 URL 放在括号里追加到标题后面。',
       '如果搜索结果没有覆盖今天，请明确说“未检索到今天的结果”，但仍必须把上面的当前日期当作今天；禁止把旧结果日期改写为今天。',
       '禁止编造未出现在搜索资料中的事件、时间、机构、产品、价格或链接；资料不足时必须说明“搜索资料不足，无法确认”。',
       ...items.map((item, index) => [
@@ -270,15 +287,59 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
+  const createRouteClassifier = (config, model, options = {}) => async ({ prompt, activePageId }) => {
+    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      signal: options.signal,
+      body: JSON.stringify({
+        model,
+        messages: buildAgentRouteClassifierMessages({ prompt, activePageId }),
+        temperature: 0,
+        max_tokens: 220,
+        stream: false,
+      }),
+    }, AI_FETCH_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return parseAgentRouteClassification(payload?.choices?.[0]?.message?.content || '');
+  };
+
   const mergeSearchResults = (groups, limit) => {
     const seen = new Set();
     const merged = [];
+    const normalizeUrlKey = (value) => String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/[?#].*$/, '')
+      .replace(/\/+$/, '');
+    const tokenize = (value) => new Set(String(value || '')
+      .toLowerCase()
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/[^\p{L}\p{N}\u4e00-\u9fa5]+/gu, ' ')
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 2));
+    const jaccardSimilarity = (left, right) => {
+      if (!left.size || !right.size) return 0;
+      let intersection = 0;
+      left.forEach((word) => {
+        if (right.has(word)) intersection += 1;
+      });
+      return intersection / (left.size + right.size - intersection);
+    };
+    const seenFingerprints = [];
     (Array.isArray(groups) ? groups : []).flat().forEach((item) => {
-      const url = String(item?.url || '').trim().toLowerCase();
+      const url = normalizeUrlKey(item?.url);
       const title = String(item?.title || '').trim().toLowerCase();
       const key = url || title;
       if (!key || seen.has(key)) return;
+      const fingerprint = tokenize(`${item?.title || ''} ${item?.content || ''}`);
+      if (seenFingerprints.some((existing) => jaccardSimilarity(existing, fingerprint) >= 0.82)) return;
       seen.add(key);
+      if (fingerprint.size) seenFingerprints.push(fingerprint);
       merged.push(item);
     });
     return merged.slice(0, clampSearchResultCount(limit));
@@ -475,6 +536,18 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
+  const normalizeMessageSearchSources = (sources) => (Array.isArray(sources) ? sources.map((source, index) => {
+    const title = String(source?.title || source?.url || '').trim();
+    const url = String(source?.url || '').trim();
+    if (!title && !url) return null;
+    return {
+      id: Number.parseInt(source?.id, 10) || index + 1,
+      title: title || `来源 ${index + 1}`,
+      url,
+      publishedDate: String(source?.publishedDate || '').trim(),
+    };
+  }).filter(Boolean).slice(0, 10) : []);
+
   const normalizeMessage = (message) => ({
     role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
     content: String(message?.content || ''),
@@ -508,6 +581,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     } : null,
     actions: normalizeSkillActions(message?.actions),
     imageUploadAuth: normalizeImageUploadAuth(message?.imageUploadAuth),
+    searchSources: normalizeMessageSearchSources(message?.searchSources),
   });
 
   const deriveSessionTitle = (messages) => {
@@ -623,6 +697,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         images: stripPersistedImages(item),
         tokenUsage: item.tokenUsage || null,
         actions: normalizeSkillActions(item.actions),
+        searchSources: normalizeMessageSearchSources(item.searchSources),
       })),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
@@ -894,6 +969,22 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     `;
   };
 
+  const renderSearchSourceReferences = (html, sources = []) => {
+    const sourceMap = new Map(normalizeMessageSearchSources(sources).map((source) => [source.id, source]));
+    if (!sourceMap.size) return html;
+    return String(html || '').replace(/\[来源\s*(\d+)\]/g, (match, rawId) => {
+      const id = Number.parseInt(rawId, 10);
+      const source = sourceMap.get(id);
+      if (!source) return match;
+      const title = source.publishedDate ? `${source.title} · ${source.publishedDate}` : source.title;
+      const label = `来源 ${id}`;
+      if (!source.url) {
+        return `<span class="ai-source-ref" title="${utils.escapeHtml(title)}">${utils.escapeHtml(label)}</span>`;
+      }
+      return `<a class="ai-source-ref" href="${utils.escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" title="${utils.escapeHtml(title)}">${utils.escapeHtml(label)}</a>`;
+    });
+  };
+
   const renderedChatMessageNodes = [];
   const renderedChatMessageKeys = [];
 
@@ -907,6 +998,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     tokenUsage: item?.tokenUsage || null,
     actions: item?.actions || null,
     imageUploadAuth: item?.imageUploadAuth || null,
+    searchSources: item?.searchSources || null,
   });
 
   const createChatMessageElement = (item, messageIndex) => {
@@ -926,7 +1018,10 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
     const pending = item.role === 'assistant' && item.pending;
     const displayContent = item.role === 'assistant' ? stripVerboseSourceUrls(item.content) : item.content;
-    const contentHtml = pending ? renderPendingContent({ ...item, content: displayContent }) : utils.markdownLite(displayContent);
+    const rawContentHtml = pending ? renderPendingContent({ ...item, content: displayContent }) : utils.markdownLite(displayContent);
+    const contentHtml = item.role === 'assistant'
+      ? renderSearchSourceReferences(rawContentHtml, item.searchSources)
+      : rawContentHtml;
     const template = document.createElement('template');
     template.innerHTML = `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
     return template.content.firstElementChild;
@@ -1545,8 +1640,23 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const normalized = limit ? normalizedImages.slice(0, limit) : normalizedImages;
     const activePageId = getActivePageId();
     const preserveAlpha = activePageId === 'image-cutout' || /(?:透明|抠图|去背|png)/.test(String(options.prompt || ''));
-    const maxSize = activePageId === 'image-cutout' ? 768 : 768;
-    return Promise.all(normalized.map((image) => compressImageForAi(image, { maxSize, preserveAlpha })));
+    const maxSize = activePageId === 'image-cutout'
+      ? 768
+      : normalized.length > 4
+        ? 640
+        : 896;
+    const concurrency = Math.min(3, Math.max(1, normalized.length));
+    const compressed = new Array(normalized.length);
+    let cursor = 0;
+    const runWorker = async () => {
+      while (cursor < normalized.length) {
+        const index = cursor;
+        cursor += 1;
+        compressed[index] = await compressImageForAi(normalized[index], { maxSize, preserveAlpha });
+      }
+    };
+    await Promise.all(Array.from({ length: concurrency }, runWorker));
+    return compressed.filter(Boolean);
   };
 
   const settleImageUploadAuthorization = (requestId, approved) => {
@@ -1655,7 +1765,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     });
   });
 
-  const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled()) => {
+  const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled(), options = {}) => {
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     const attachedDataContext = projectContextEnabled && prompt ? getAttachedDataContext(prompt) : '';
     const currentDateTime = getCurrentDateTimeLabel();
@@ -1669,7 +1779,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         ].join('\n'),
       },
     ];
-    const skillProtocolContext = projectContextEnabled ? (App.projectSkills?.getAiProtocolContext?.() || '') : '';
+    const skillProtocolContext = projectContextEnabled ? (App.projectSkills?.getAiProtocolContext?.({ plan: options.agentPlan }) || '') : '';
 
     if (projectContextEnabled) {
       messages.push({
@@ -2323,6 +2433,83 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
+  const waitForRetry = (ms, signal = null) => new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        window.clearTimeout(timer);
+        reject(createAbortError());
+      }, { once: true });
+    }
+  });
+
+  const executeProjectSkillWithRetry = async (skillId, input, meta = {}, options = {}) => {
+    let lastExecution = null;
+    let lastError = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      if (options.signal?.aborted) throw createAbortError();
+      try {
+        lastExecution = await App.projectSkills.executeSkill(skillId, input, {
+          ...meta,
+          retryAttempt: attempt,
+        });
+        if (lastExecution?.result?.ok) return { execution: lastExecution, recovered: attempt > 1, failed: false };
+        lastError = new Error(lastExecution?.result?.message || '项目技能返回失败状态。');
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        lastError = error;
+      }
+      if (attempt < 2) await waitForRetry(1500, options.signal);
+    }
+    return {
+      execution: lastExecution,
+      recovered: false,
+      failed: true,
+      error: lastError,
+    };
+  };
+
+  const runPlainChatFallback = async ({ config, model, prompt, signal }) => {
+    const messages = [
+      { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+      {
+        role: 'system',
+        content: [
+          `当前日期时间是 ${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）。`,
+          '项目技能或项目数据读取暂时不可用时，请只基于用户问题做普通回答；不要声称已经读取或修改后台数据。',
+        ].join('\n'),
+      },
+      { role: 'user', content: buildPromptWithCurrentDate(prompt) },
+    ];
+    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: config.temperature,
+        max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 2048),
+        stream: false,
+      }),
+    }, AI_FETCH_TIMEOUT_MS);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`纯聊天降级失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 220)}` : ''}`);
+    }
+    const data = await response.json();
+    return {
+      content: String(data?.choices?.[0]?.message?.content || '').trim(),
+      usage: data?.usage || null,
+      messages,
+      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
+    };
+  };
+
   const runProjectAgentLoop = async ({ config, model, prompt, pendingIndex, localPlan = null, signal = null }) => {
     const timer = createAbortTimer('项目级 Agent 调度', PROJECT_AGENT_LOOP_TIMEOUT_MS, signal);
     const traceItems = ['理解问题'];
@@ -2337,10 +2524,29 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         pendingStatus: '正在理解问题',
       });
 
-      const manifestExecution = await App.projectSkills.executeSkill('project.getManifest', { includeFields: true }, {
+      const manifestRetry = await executeProjectSkillWithRetry('project.getManifest', { includeFields: true }, {
         source: 'agent-loop',
         prompt,
+      }, {
+        signal: timer.signal,
       });
+      const manifestExecution = manifestRetry.execution;
+      if (manifestRetry.failed || !manifestExecution) {
+        const fallback = await runPlainChatFallback({ config, model, prompt, signal: timer.signal }).catch((error) => {
+          if (isAbortError(error)) throw error;
+          return null;
+        });
+        return {
+          content: [
+            fallback?.content || '项目技能暂时不可用，我无法可靠读取后台项目数据。',
+            '',
+            `【提示】项目能力读取失败，已尝试降级为普通对话。${manifestRetry.error?.message || ''}`.trim(),
+          ].join('\n'),
+          usage: fallback?.usage || apiUsage,
+          messages: fallback?.messages || apiMessages,
+          finishReason: fallback?.finishReason || 'agent_manifest_failed',
+        };
+      }
       observations.push(compactObservation(manifestExecution));
       traceItems.push('读取项目页面说明书');
 
@@ -2418,10 +2624,29 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         pendingStatus: '正在读取项目数据',
       });
 
-      const execution = await App.projectSkills.executeSkill(skillId, input, {
+      const skillRetry = await executeProjectSkillWithRetry(skillId, input, {
         source: planner?.decision ? 'agent-planner' : 'agent-planner-fallback',
         prompt,
+      }, {
+        signal: timer.signal,
       });
+      const execution = skillRetry.execution;
+      if (skillRetry.failed || !execution) {
+        const fallback = await runPlainChatFallback({ config, model, prompt, signal: timer.signal }).catch((error) => {
+          if (isAbortError(error)) throw error;
+          return null;
+        });
+        return {
+          content: [
+            fallback?.content || '项目技能暂时不可用，我无法可靠读取后台项目数据。',
+            '',
+            `【提示】项目技能 ${skillId} 连续失败，已降级为普通对话；部分功能暂时不可用。${skillRetry.error?.message || ''}`.trim(),
+          ].join('\n'),
+          usage: fallback?.usage || apiUsage,
+          messages: fallback?.messages || apiMessages,
+          finishReason: fallback?.finishReason || 'agent_skill_failed',
+        };
+      }
       const observation = compactObservation(execution);
       observations.push(observation);
 
@@ -2864,6 +3089,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     pending: Boolean(options.pending),
     pendingStatus: options.pendingStatus || '',
     imageUploadAuth: normalizeImageUploadAuth(options.imageUploadAuth),
+    searchSources: normalizeMessageSearchSources(options.searchSources),
   });
 
   const scheduleStreamRender = (pendingIndex, content, options = {}) => {
@@ -3060,27 +3286,31 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       stopCurrentChatAnalysis();
       return;
     }
+    if (chatSubmissionLocked) return;
     const prompt = (refs.chatInput?.value || '').trim();
     if (!prompt) return;
+    chatSubmissionLocked = true;
 
     const projectAccessEnabled = isProjectAccessEnabled();
     const activePageId = getActivePageId();
-    const agentPlan = createAgentPlan({
+    let agentPlan = createAgentPlan({
       prompt,
       activePageId,
       projectAccessEnabled,
       webSearchEnabled,
     });
-    const projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
+    let projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
     if (shouldAnswerCurrentDateLocally(prompt)) {
       pushChatMessage('user', prompt);
       if (refs.chatInput) refs.chatInput.value = '';
       pushChatMessage('assistant', buildCurrentDateLocalAnswer());
+      chatSubmissionLocked = false;
       return;
     }
 
-    const localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
+    let localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
     if (shouldRunLocalPlanDirectly(localPlan)) {
+      chatSubmissionLocked = false;
       await runLocalSkillPlan(prompt, localPlan);
       return;
     }
@@ -3088,14 +3318,32 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const config = App.config.getFormConfig();
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
       pushChatMessage('assistant', '请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。');
+      chatSubmissionLocked = false;
       return;
     }
 
     const model = App.config.getResolvedModel();
     if (!model) {
       pushChatMessage('assistant', '请先选择一个模型。');
+      chatSubmissionLocked = false;
       return;
     }
+
+    agentPlan = await createAgentPlanWithAi({
+      prompt,
+      activePageId,
+      projectAccessEnabled,
+      webSearchEnabled,
+      classifier: createRouteClassifier(config, model),
+    });
+    projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
+    localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
+    if (shouldRunLocalPlanDirectly(localPlan)) {
+      chatSubmissionLocked = false;
+      await runLocalSkillPlan(prompt, localPlan);
+      return;
+    }
+
     const selectedModelOption = Array.from(refs.modelSelect?.options || []).find((option) => option.value === model);
     const inputModalities = JSON.parse(selectedModelOption?.dataset?.inputModalities || '[]');
     const outputModalities = JSON.parse(selectedModelOption?.dataset?.outputModalities || '[]');
@@ -3119,6 +3367,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       requestId: chatRequestId,
     } = beginChatRequest();
     setChatBusyState(true);
+    chatSubmissionLocked = false;
 
     pushChatMessage('user', prompt);
     pendingDraftImages = [];
@@ -3315,10 +3564,10 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
           });
         });
       apiMessages = [
-        ...getContextMessages(config, '', projectContextEnabled),
+        ...getContextMessages(config, '', projectContextEnabled, { agentPlan }),
         ...(webSearchContext ? [
           { role: 'user', content: webSearchContext },
-          { role: 'assistant', content: '已读取联网搜索资料。我会结合资料回答，并在需要时列出来源链接。' },
+          { role: 'assistant', content: '已读取联网搜索资料。我会结合资料回答，并用 [来源 N] 标注引用。' },
         ] : []),
         ...requestMessages,
       ];
@@ -3511,6 +3760,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         images: streamedImages,
         actions: normalizeSkillActions(skillActions),
         tokenUsage,
+        searchSources: normalizeSearchSources(webSearchResults),
       };
       const session = getActiveSession();
       if (session) session.updatedAt = nowIso();
@@ -3614,6 +3864,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   };
 
   const bindChat = () => {
+    if (chatEventsBound) return;
+    chatEventsBound = true;
     ensureWebSearchToggleButton();
     moveClearChatButtonToHeader();
     refs.assistantDataToggleBtn?.addEventListener('click', () => {

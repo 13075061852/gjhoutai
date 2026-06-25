@@ -65,6 +65,20 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     return Array.isArray(stored) ? stored : [];
   };
   const writeHistory = (items) => utils.writeJson(HISTORY_KEY, items.slice(0, MAX_HISTORY));
+  const measureJsonSize = (value) => {
+    try {
+      return new Blob([JSON.stringify(value ?? null)]).size;
+    } catch {
+      return String(value ?? '').length;
+    }
+  };
+  const formatBytes = (value) => {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${Math.round(bytes)} B`;
+    return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+  };
+  const nowMs = () => window.performance?.now?.() ?? Date.now();
 
   const getActivePageId = () => {
     try {
@@ -984,10 +998,21 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
   const executeSkill = async (skillId, input = {}, meta = {}) => {
     const normalizedInvocation = normalizeSkillInvocation(skillId, input);
+    const startedAt = nowMs();
+    const inputSize = measureJsonSize(normalizedInvocation.input);
     const skill = getSkillById(normalizedInvocation.skillId);
     if (!skill) {
       const missing = normalizeResult({ ok: false, message: `未知项目技能：${normalizedInvocation.skillId}` });
-      appendHistory({ skillId: normalizedInvocation.skillId, title: normalizedInvocation.skillId, ok: false, message: missing.message, source: meta.source || 'unknown' });
+      appendHistory({
+        skillId: normalizedInvocation.skillId,
+        title: normalizedInvocation.skillId,
+        ok: false,
+        message: missing.message,
+        source: meta.source || 'unknown',
+        durationMs: Math.round(nowMs() - startedAt),
+        inputSize,
+        outputSize: measureJsonSize(missing),
+      });
       return { skill: { id: normalizedInvocation.skillId, title: normalizedInvocation.skillId }, result: missing };
     }
 
@@ -1004,6 +1029,9 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       ok: result.ok,
       message: result.message,
       source: meta.source || 'unknown',
+      durationMs: Math.round(nowMs() - startedAt),
+      inputSize,
+      outputSize: measureJsonSize(result),
     });
     return { skill, result };
   };
@@ -1228,19 +1256,33 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     });
   };
 
-  const getAiProtocolContext = () => {
-    const skills = getSkillRegistry().map((skill) => (
+  const getAiProtocolContext = (options = {}) => {
+    const kind = String(options.kind || options.plan?.kind || '').trim();
+    if (kind === 'chat' || kind === 'web-search') return '';
+    const requestedSkillId = String(options.skillId || options.plan?.localSkillPlan?.skillId || '').trim();
+    const fullProtocol = !kind || (!requestedSkillId && kind === 'local-tool');
+    const selectedSkills = getSkillRegistry().filter((skill) => {
+      if (fullProtocol) return true;
+      if (requestedSkillId) return skill.id === requestedSkillId;
+      if (kind === 'image-generation') return skill.id === 'media.generateImage';
+      if (kind === 'image-analysis') return ['media.analyzeImages', 'spectrum.manageImages'].includes(skill.id);
+      return false;
+    });
+    if (!selectedSkills.length) return '';
+    const skills = selectedSkills.map((skill) => (
       `- ${skill.id}：${skill.title}；输入 ${formatCompactJsonSpec(skill.inputSpec)}；输出 ${formatCompactJsonSpec(skill.outputSpec)}`
     ));
-    return [
+    const commonRules = [
       '【项目技能调用协议】',
       '你是项目技能调度器：先理解用户真实意图，再从可用技能中选择最合适的技能和参数。',
       '当用户要求执行项目内操作、修改页面数据、整理/删除/归类/打标/跳转/查询项目数据时，优先调用项目技能，不要凭空声称已经操作。',
-      `用户明确要求打开、进入、切换、跳转或查看某个“页面/面板/中心”时，才调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
-      '用户询问“几个、多少、有哪些、哪几个、列表、明细、统计、当前、现在”等数据问题时，不要调用 assistant.openPage，应直接回答或调取数据上下文。',
       '如果需要让前端执行技能，只输出严格 JSON，不要混入解释、Markdown 或自然语言：',
       formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
       '技能执行后，前端会把执行结果回写给用户。',
+    ];
+    const localRules = [
+      `用户明确要求打开、进入、切换、跳转或查看某个“页面/面板/中心”时，才调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
+      '用户询问“几个、多少、有哪些、哪几个、列表、明细、统计、当前、现在”等数据问题时，不要调用 assistant.openPage，应直接回答或调取数据上下文。',
       '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
       '用户在同一句里同时提到物性和图谱，或要求“结合/联合/综合”物性与图谱分析时，必须优先使用 analysis.buildJointPackage；联合意图优先于下面的单独物性或单独图谱规则。',
       '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。',
@@ -1248,19 +1290,35 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       '只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
       '物性数据默认上传所有符合条件的匹配行；只有用户明确说“前 N 条/只要 N 行/显示 N 个”等数量限制时，才限制上传数量。',
       '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
+    ];
+    const spectrumRules = [
       '凡是调用 spectrum.manageImages 且 action=search 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
       '图谱图片默认上传所有符合条件的匹配图片；只有用户明确说“前 N 张/只要 N 张/显示 N 个”等数量限制时，才给 spectrum.manageImages 填写 limit。',
       '用户说“当前、选中、已选、本页、筛选结果、这张”等范围词并且要分析图谱时，调用 spectrum.manageImages 时必须填写 action=search 和 mode，例如选中范围用 mode=selected，不要把“选中”当成 query 关键词。',
       '图谱数据处理统一调用 spectrum.manageImages：查询 action=search；新增 action=create；选择 action=select；修改标题/分类/日期/备注 action=update；标签 action=tag；归类 action=categorize；删除 action=delete。',
-      '配方数据处理：用户要求创建、 新增或生成配方记录时，调用 formula.createRecipe；不要只用自然语言声称已创建。',
       '注意：spectrum.manageImages 的 action=select 只用于改变左侧图谱库的勾选状态，不会上传图片、不会做视觉分析。用户说“分析选中的图谱/看一下已选图谱/对比当前选中图片”时，必须调用 action=search 并设置 mode=selected。',
       '所有增删改都必须给出明确 target 或 mode。单个对象优先使用名称/编号精确匹配；用户说“当前选中”用 mode=selected，说“当前筛选/当前分类”用 mode=filtered。',
       '如果目标可能命中无关数据，先调用 spectrum.manageImages 的 action=search 或 action=select 缩小范围，不要一次处理大范围模糊数据。增删改单次默认 maxAffected=30，删除默认更保守。',
+    ];
+    const formulaRules = [
+      '配方数据处理：用户要求创建、 新增或生成配方记录时，调用 formula.createRecipe；不要只用自然语言声称已创建。',
+    ];
+    const imageRules = [
+      '图片生成只调用 media.generateImage，不要输出自然语言假装已生成。',
+      '图片分析只在用户明确要求看图、读图、分析图谱或当前图片时调用 media.analyzeImages。',
+    ];
+    const rules = [
+      ...commonRules,
+      ...(fullProtocol || ['business.queryPageData', 'assistant.openPage', 'property.searchRows', 'analysis.buildJointPackage'].includes(requestedSkillId) ? localRules : []),
+      ...(fullProtocol || kind === 'image-analysis' || requestedSkillId === 'spectrum.manageImages' || requestedSkillId === 'media.analyzeImages' ? spectrumRules : []),
+      ...(fullProtocol || requestedSkillId === 'formula.createRecipe' ? formulaRules : []),
+      ...(kind === 'image-generation' || kind === 'image-analysis' || requestedSkillId?.startsWith('media.') ? imageRules : []),
       '如果技能返回多个候选对象，前端会生成可点击的候选按钮，用户点击后再执行对应对象。',
       '如果用户表达含糊，你可以选择最接近的技能并填入从语义中推断出的参数；缺少关键参数时再自然语言追问。',
       '可用技能：',
       ...skills,
-    ].join('\n');
+    ];
+    return rules.join('\n');
   };
 
   const renderHistory = () => {
@@ -1290,6 +1348,11 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
           </div>
           <strong>${esc(item.title || item.skillId)}</strong>
           <p>${esc(item.message || '')}</p>
+          <div class="project-skill-log-meta">
+            <span>耗时 ${esc(`${Math.max(0, Number(item.durationMs || 0))} ms`)}</span>
+            <span>输入 ${esc(formatBytes(item.inputSize))}</span>
+            <span>输出 ${esc(formatBytes(item.outputSize))}</span>
+          </div>
         </div>
       </article>
     `).join('');

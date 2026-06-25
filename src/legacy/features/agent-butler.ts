@@ -46,6 +46,8 @@ import { getLegacyApp } from '../core/app-context';
   };
   const MAX_RESULT_CONTEXT_CHARS = 10000;
   const MAX_TOTAL_CONTEXT_CHARS = 12000;
+  const RETRIEVE_CACHE_TTL_MS = 2000;
+  let retrieveCache = null;
   const BUSINESS_QUERY_PATTERN = /(?:当前|现在|页面|表格|列表|有几个|多少|数量|总数|最低|最少|最小|最高|最多|最大|账号|账户|用户|人员|员工|部门|客户|供应商|订单|库存|商品|产品|成品|配方|采购|生产)/;
   const PAGE_RESOURCE_RULES = [
     { pageIds: ['personnel-archive', 'permission-management'], label: '账号/人员/权限', patterns: [/账号|账户|用户|登录|人员|员工|部门|角色|权限|在线|在岗/] },
@@ -301,10 +303,33 @@ import { getLegacyApp } from '../core/app-context';
     return score(b) - score(a);
   });
 
-  const retrieveContext = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => {
+  const getRetrieveCacheKey = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => JSON.stringify({
+    question: String(question || ''),
+    activePageId: String(activePageId || ''),
+    forceCurrentPage: Boolean(forceCurrentPage),
+  });
+
+  const cloneRetrieveBundle = (bundle) => ({
+    intent: bundle.intent,
+    results: [...(bundle.results || [])],
+    images: [...(bundle.images || [])],
+  });
+
+  const retrieveBundle = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => {
+    const cacheKey = getRetrieveCacheKey({ question, activePageId, forceCurrentPage });
+    const now = Date.now();
+    if (
+      retrieveCache
+      && retrieveCache.key === cacheKey
+      && now - retrieveCache.at <= RETRIEVE_CACHE_TTL_MS
+    ) {
+      return cloneRetrieveBundle(retrieveCache.value);
+    }
+
     const intent = analyzeIntent(question, activePageId);
     const skills = sortSkills(getSkillRegistry(), activePageId, intent);
     const results = [];
+    const images = [];
     const routingContext = getResourceRoutingContext(question, activePageId);
     if (routingContext) {
       results.push({
@@ -336,6 +361,13 @@ import { getLegacyApp } from '../core/app-context';
         forceCurrentPage: forceCurrentPage && skill.pageId === activePageId,
         intent,
       });
+      if (!isPageGuideQuestion(question) && skill.getImages) {
+        images.push(...skill.getImages(question, {
+          activePageId,
+          forceCurrentPage: forceCurrentPage && skill.pageId === activePageId,
+          intent,
+        }));
+      }
       if (!result || !String(result.content || '').trim()) return;
       results.push({
         skillId: skill.id,
@@ -348,12 +380,20 @@ import { getLegacyApp } from '../core/app-context';
       results.push(getProjectGuideContext(question, { activePageId, forceCurrentPage }));
     }
 
-    return {
+    const value = {
       intent,
       results: results
         .sort((a, b) => (b.score || 0) - (a.score || 0))
         .slice(0, forceCurrentPage ? 4 : 3),
+      images,
     };
+    retrieveCache = { key: cacheKey, at: now, value: cloneRetrieveBundle(value) };
+    return value;
+  };
+
+  const retrieveContext = (options = {}) => {
+    const { intent, results } = retrieveBundle(options);
+    return { intent, results };
   };
 
   const compressContext = ({ intent, results } = {}) => {
@@ -382,7 +422,7 @@ import { getLegacyApp } from '../core/app-context';
     return limitText(sections.join('\n'), MAX_TOTAL_CONTEXT_CHARS, hasFullContextResult);
   };
 
-  const buildContext = (options = {}) => compressContext(retrieveContext(options));
+  const buildContext = (options = {}) => compressContext(retrieveBundle(options));
 
   const buildAgentPrompt = (question = '', context = '') => [
     '【用户问题】',
@@ -405,24 +445,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const getImages = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => {
     if (isPageGuideQuestion(question)) return [];
-    const intent = analyzeIntent(question, activePageId);
-    const skills = sortSkills(getSkillRegistry(), activePageId, intent);
-    const images = [];
-
-    skills.forEach((skill) => {
-      if (!skill.getImages) return;
-      const shouldRun = forceCurrentPage && skill.pageId === activePageId
-        ? true
-        : skill.canHandle(question, activePageId, intent);
-      if (!shouldRun) return;
-      images.push(...skill.getImages(question, {
-        activePageId,
-        forceCurrentPage: forceCurrentPage && skill.pageId === activePageId,
-        intent,
-      }));
-    });
-
-    return images;
+    return retrieveBundle({ question, activePageId, forceCurrentPage }).images;
   };
 
   App.agentButler = {

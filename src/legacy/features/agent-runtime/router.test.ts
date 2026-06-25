@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { createAgentPlan, shouldUseWebSearchForPrompt } from './router';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildLocalSkillPlan,
+  createAgentPlan,
+  createAgentPlanWithAi,
+  parseAgentRouteClassification,
+  shouldUseWebSearchForPrompt,
+} from './router';
 
 describe('agent runtime router', () => {
   it('keeps local project data questions off web search', () => {
@@ -107,5 +113,70 @@ describe('agent runtime router', () => {
     });
     expect(plan.kind).not.toBe('local-tool');
     expect(plan.needsWebSearch).toBe(false);
+  });
+
+  it('lets AI classification upgrade ambiguous wording to web search', async () => {
+    const classifier = vi.fn().mockResolvedValue({
+      kind: 'web-search',
+      confidence: 0.86,
+      reason: '用户要求外部查询',
+    });
+    const plan = await createAgentPlanWithAi({
+      prompt: '帮我查查 Claude 新模型现在什么情况',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      classifier,
+    });
+    expect(classifier).toHaveBeenCalledOnce();
+    expect(plan.kind).toBe('web-search');
+    expect(plan.needsWebSearch).toBe(true);
+  });
+
+  it('lets AI classification route ambiguous project data to a local skill', async () => {
+    const plan = await createAgentPlanWithAi({
+      prompt: '帮我看看业务现在怎么样',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      classifier: vi.fn().mockResolvedValue({
+        kind: 'local-tool',
+        skillId: 'business.queryPageData',
+        confidence: 0.8,
+        reason: '用户询问后台业务状态',
+      }),
+    });
+    expect(plan.kind).toBe('local-tool');
+    expect(plan.localSkillPlan?.skillId).toBe('business.queryPageData');
+    expect(plan.localSkillPlan?.input).toEqual({ question: '帮我看看业务现在怎么样' });
+  });
+
+  it('keeps regex route when AI classification fails', async () => {
+    const plan = await createAgentPlanWithAi({
+      prompt: '生成一张工厂质检海报',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      classifier: vi.fn().mockRejectedValue(new Error('network')),
+    });
+    expect(plan.kind).toBe('image-generation');
+    expect(plan.localSkillPlan?.skillId).toBe('media.generateImage');
+  });
+
+  it('parses strict route JSON from model output', () => {
+    expect(parseAgentRouteClassification('```json\n{"kind":"chat","reason":"普通对话"}\n```')).toEqual({
+      kind: 'chat',
+      skillId: '',
+      input: {},
+      confidence: 0,
+      reason: '普通对话',
+      useProjectContext: undefined,
+      needsWebSearch: undefined,
+    });
+  });
+
+  it('exposes local skill plan fallback detection', () => {
+    expect(buildLocalSkillPlan('我当前在什么页面')?.skillId).toBe('assistant.currentPage');
+    expect(buildLocalSkillPlan('随便聊两句')).toBeNull();
   });
 });

@@ -515,6 +515,21 @@
       line-height:1.55;
       font-weight:650;
     }
+    .project-skill-log-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+    }
+    .project-skill-log-meta span{
+      padding:2px 7px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background:var(--surface);
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.5;
+      font-weight:800;
+    }
     .project-skill-empty{
       flex:1 1 auto;
       min-height:200px;

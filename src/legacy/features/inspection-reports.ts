@@ -381,7 +381,11 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const deleteReport = async (id) => {
     if (!id) return;
-    if (!window.confirm('确定删除这份检测报告？')) return;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除检测报告',
+      message: '确定删除这份检测报告？',
+    });
+    if (!confirmed) return;
     const ok = await cloudStorage.deleteInspectionReport(id);
     if (!ok) {
       App.notify?.error?.('检测报告删除失败。', { key: 'inspection-report-delete-failed' });

@@ -2,6 +2,8 @@
 import { getLegacyApp } from '../core/app-context';
 import { cloudConfig } from '../../services/cloud-config';
 import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
+import { cloneJsonValue, parseJsonMaybe } from '../../utils/json';
+import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
   'use strict';
@@ -51,20 +53,72 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
     'Qwen/Qwen3-14B': 'Qwen3-14B',
     'Qwen/Qwen3-8B': 'Qwen3-8B',
   };
-  const SILICONFLOW_MODEL_OPTIONS = [
-    { id: 'Pro/zai-org/GLM-5.1', name: 'GLM-5.1 Pro', context_length: 205000 },
-    { id: 'deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2', context_length: 164000 },
-    { id: 'Pro/deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2 Pro', context_length: 164000 },
-    { id: 'Qwen/Qwen3-32B', name: 'Qwen3-32B', context_length: SILICONFLOW_CONTEXT_LENGTH },
-    { id: 'Qwen/Qwen3-14B', name: 'Qwen3-14B', context_length: SILICONFLOW_CONTEXT_LENGTH },
-    { id: 'Qwen/Qwen3-8B', name: 'Qwen3-8B', context_length: SILICONFLOW_CONTEXT_LENGTH },
+  const SILICONFLOW_RECOMMENDED_MODEL_IDS = [
+    'Pro/zai-org/GLM-5.1',
+    'deepseek-ai/DeepSeek-V3.2',
+    'Pro/deepseek-ai/DeepSeek-V3.2',
+    'Qwen/Qwen3-32B',
+    'Qwen/Qwen3-14B',
+    'Qwen/Qwen3-8B',
   ];
-  const SILICONFLOW_CATALOG_BY_ID = new Map(SILICONFLOW_MODEL_CATALOG.map((model) => [model.id, model]));
-  const SILICONFLOW_CATALOG_BY_TARGET = new Map(
+  const SILICONFLOW_RECOMMENDED_MODEL_FALLBACKS = new Map([
+    ['Pro/zai-org/GLM-5.1', { id: 'Pro/zai-org/GLM-5.1', name: 'GLM-5.1 Pro', context_length: 205000 }],
+    ['deepseek-ai/DeepSeek-V3.2', { id: 'deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2', context_length: 164000 }],
+    ['Pro/deepseek-ai/DeepSeek-V3.2', { id: 'Pro/deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek V3.2 Pro', context_length: 164000 }],
+    ['Qwen/Qwen3-32B', { id: 'Qwen/Qwen3-32B', name: 'Qwen3-32B', context_length: SILICONFLOW_CONTEXT_LENGTH }],
+    ['Qwen/Qwen3-14B', { id: 'Qwen/Qwen3-14B', name: 'Qwen3-14B', context_length: SILICONFLOW_CONTEXT_LENGTH }],
+    ['Qwen/Qwen3-8B', { id: 'Qwen/Qwen3-8B', name: 'Qwen3-8B', context_length: SILICONFLOW_CONTEXT_LENGTH }],
+  ]);
+  const buildSiliconFlowCatalogIndexes = () => {
+    const byId = new Map();
+    const byTarget = new Map();
+    SILICONFLOW_MODEL_CATALOG.forEach((model) => {
+      if (model.id) byId.set(model.id, model);
+      if (model.targetModelName) byTarget.set(model.targetModelName, model);
+    });
+    return { byId, byTarget };
+  };
+  const {
+    byId: SILICONFLOW_CATALOG_BY_ID,
+    byTarget: SILICONFLOW_CATALOG_BY_TARGET,
+  } = buildSiliconFlowCatalogIndexes();
+  const isSiliconFlowCatalogChatOption = (model = {}) => {
+    const subType = String(model.subType || model.sub_type || '').toLowerCase();
+    const type = String(model.type || '').toLowerCase();
+    if (subType) return subType === 'chat';
+    if (type && type !== 'text') return false;
+    return !/(embedding|rerank|bge-|bge_|ocr|image|video|speech|tts)/i.test(String(model.id || ''));
+  };
+  const makeSiliconFlowStaticModelOption = (model = {}) => ({
+    id: model.id || '',
+    name: SILICONFLOW_MODEL_NAMES[model.id] || model.name || model.id || '',
+    category: model.subType || model.type || '',
+    context_length: model.contextLength || SILICONFLOW_CONTEXT_LENGTH,
+    pricing: model.pricing || {},
+  });
+  const buildSiliconFlowStaticModelOptions = () => {
+    const seen = new Set();
+    const append = (options, item) => {
+      if (!item?.id || seen.has(item.id)) return;
+      seen.add(item.id);
+      options.push(item);
+    };
+    const options = [];
+    SILICONFLOW_RECOMMENDED_MODEL_IDS.forEach((id) => {
+      append(
+        options,
+        SILICONFLOW_CATALOG_BY_ID.has(id)
+          ? makeSiliconFlowStaticModelOption(SILICONFLOW_CATALOG_BY_ID.get(id))
+          : SILICONFLOW_RECOMMENDED_MODEL_FALLBACKS.get(id)
+      );
+    });
     SILICONFLOW_MODEL_CATALOG
-      .filter((model) => model.targetModelName)
-      .map((model) => [model.targetModelName, model])
-  );
+      .filter(isSiliconFlowCatalogChatOption)
+      .map(makeSiliconFlowStaticModelOption)
+      .forEach((item) => append(options, item));
+    return options;
+  };
+  const SILICONFLOW_MODEL_OPTIONS = buildSiliconFlowStaticModelOptions();
   const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
   let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
   const providerDrafts = {};
@@ -278,13 +332,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
     getModelOptions().forEach((option) => {
       const parts = splitModelLabel(option.label);
       const provider = getProviderGroupLabel(option.value);
-      const pricing = option.pricing ? (() => {
-        try {
-          return JSON.parse(option.pricing);
-        } catch {
-          return null;
-        }
-      })() : null;
+      const pricing = parseJsonMaybe(option.pricing);
       const category = option.category || getModelCategoryLabel(option);
       const contextLabel = formatContextLength(option.contextLength);
       const normalized = {
@@ -1172,7 +1220,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
   };
 
   const redactSensitiveConfig = (config = {}) => {
-    const next = JSON.parse(JSON.stringify(config || {}));
+    const next = cloneJsonValue(config || {});
     const redact = (target, key) => {
       if (!target || !String(target[key] || '').trim()) return;
       target[key] = SENSITIVE_CONFIG_PLACEHOLDER;
@@ -1609,13 +1657,9 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
     const fallback = `HTTP ${response.status}`;
     const text = await response.text().catch(() => '');
     if (!text) return fallback;
-    try {
-      const payload = JSON.parse(text);
-      const message = payload?.error?.message || payload?.message || payload?.error;
-      return message ? `${fallback}：${String(message).slice(0, 240)}` : `${fallback}：${text.slice(0, 240)}`;
-    } catch {
-      return `${fallback}：${text.slice(0, 240)}`;
-    }
+    const payload = parseJsonMaybe(text);
+    const message = payload?.error?.message || payload?.message || payload?.error;
+    return message ? `${fallback}：${String(message).slice(0, 240)}` : `${fallback}：${text.slice(0, 240)}`;
   };
 
   const getRequestHeaders = (config) => {
@@ -1835,7 +1879,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 
   const fetchUsdToCnyRate = async () => {
     try {
-      const response = await fetch('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' });
+      const response = await fetchWithTimeout('https://open.er-api.com/v6/latest/USD', { cache: 'no-store' });
       if (!response.ok) throw new Error(await readApiErrorMessage(response));
       const payload = await response.json();
       const rate = Number(payload?.rates?.CNY);
@@ -1932,13 +1976,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
     options.forEach((option) => {
       const parts = splitModelLabel(option.label);
       const provider = getProviderGroupLabel(option.value);
-      const pricing = option.pricing ? (() => {
-        try {
-          return JSON.parse(option.pricing);
-        } catch {
-          return null;
-        }
-      })() : null;
+      const pricing = parseJsonMaybe(option.pricing);
       const category = option.category || getModelCategoryLabel(option);
       const contextLabel = formatContextLength(option.contextLength);
       const items = grouped.get(provider) || [];
@@ -2164,12 +2202,12 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
       const modelsUrl = isLocal || isDeepSeek || isSiliconFlow
         ? `${config.baseUrl}/models`
         : `${config.baseUrl}/models?output_modalities=text,image`;
-      const response = await fetch(modelsUrl, {
+      const response = await fetchWithTimeout(modelsUrl, {
         method: 'GET',
         headers: getRequestHeaders(config),
         cache: 'no-store',
         signal: controller.signal,
-      });
+      }, 15000);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       const rawModels = Array.isArray(payload?.data)
@@ -2272,12 +2310,12 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
   };
 
   const fetchBalanceJson = async (url, config, signal) => {
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       method: 'GET',
       headers: getRequestHeaders(config),
       cache: 'no-store',
       signal,
-    });
+    }, 12000);
     if (!response.ok) throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
     return response.json();
   };
@@ -2350,7 +2388,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 
     try {
       setStatus('正在测试聊天接入…', 'success');
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: getRequestHeaders(config),
         signal: controller.signal,
@@ -2361,7 +2399,7 @@ import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
           max_tokens: 32,
           stream: false,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
       if (!response.ok) throw new Error(await readApiErrorMessage(response));
       const payload = await response.json();
       const answer = payload?.choices?.[0]?.message?.content?.trim();

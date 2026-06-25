@@ -1,83 +1,53 @@
 import { cloudStorage } from './cloud-storage';
-
-const CLOUD_LOCAL_STORAGE_KEYS = [
-  'sidebar-collapsed',
-  'assistant-collapsed',
-  'gjh-orders-v1',
-  'gjh-order-logs-v1',
-  'gjh-inventory-materials-v1',
-  'gjh-inventory-categories-v1',
-  'gjh-formula-recipes-v1',
-  'gjh-procurements-v1',
-  'gjh-suppliers-v1',
-  'gjh-customers-v1',
-  'openrouter-ai-chat-v1',
-  'openrouter-ai-chat-sessions-v1',
-  'openrouter-ai-chat-active-session-v1',
-  'openrouter-ai-chat-data-attachment-v1',
-  'openrouter-ai-chat-search-enabled-v1',
-  'openrouter-ai-call-log-v1',
-  'gjh-property-report-ranges-v1',
-  'gjh-property-report-seal-position-v1',
-  'gjh-role-page-permissions-v1',
-  'gjh-spectrum-filter-state-v1',
-  'gjh-spectrum-preview-ai-results-v1',
-  'apimart-media-tasks-v1',
-] as const;
+import {
+  CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEYS,
+  CLOUD_LOCAL_STORAGE_KEYS,
+  SEED_LOCAL_WHEN_REMOTE_EMPTY_KEYS,
+} from './local-storage-keys';
 
 const CLOUD_LOCAL_STORAGE_KEY_SET = new Set<string>(CLOUD_LOCAL_STORAGE_KEYS);
-const SEED_LOCAL_WHEN_REMOTE_EMPTY_KEYS = new Set<string>([
-  'gjh-role-page-permissions-v1',
-]);
-const CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEYS = new Set<string>([
-  'gjh-orders-v1',
-  'gjh-order-logs-v1',
-  'gjh-inventory-materials-v1',
-  'gjh-inventory-categories-v1',
-  'gjh-formula-recipes-v1',
-  'gjh-procurements-v1',
-  'gjh-suppliers-v1',
-  'gjh-customers-v1',
-]);
-const originalSetItem = Storage.prototype.setItem;
-const originalRemoveItem = Storage.prototype.removeItem;
-let syncInstalled = false;
+const SEED_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET = new Set<string>(SEED_LOCAL_WHEN_REMOTE_EMPTY_KEYS);
+const CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET = new Set<string>(CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEYS);
+
+export function isCloudBackedLocalStorageKey(key: string): boolean {
+  return CLOUD_LOCAL_STORAGE_KEY_SET.has(key);
+}
+
+export function setCloudBackedLocalStorageItem(key: string, value: string): void {
+  localStorage.setItem(key, value);
+  if (isCloudBackedLocalStorageKey(key)) {
+    void cloudStorage.putJson(key, value);
+  }
+}
+
+export function removeCloudBackedLocalStorageItem(key: string): void {
+  localStorage.removeItem(key);
+  if (isCloudBackedLocalStorageKey(key)) {
+    void cloudStorage.deleteJson(key);
+  }
+}
 
 export async function hydrateCloudBackedLocalStorage(): Promise<void> {
   await Promise.all(CLOUD_LOCAL_STORAGE_KEYS.map(async (key) => {
-    const remoteValue = await cloudStorage.getJson<string>(key);
+    let remoteValue: string | null = null;
+    try {
+      remoteValue = await cloudStorage.getJson<string>(key);
+    } catch (error) {
+      console.error(`Failed to hydrate cloud-backed localStorage key "${key}".`, error);
+    }
     if (remoteValue != null) {
-      originalSetItem.call(localStorage, key, typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue));
+      localStorage.setItem(key, typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue));
       return;
     }
-    if (CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEYS.has(key)) {
-      originalRemoveItem.call(localStorage, key);
+    if (CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET.has(key)) {
+      localStorage.removeItem(key);
       return;
     }
-    if (SEED_LOCAL_WHEN_REMOTE_EMPTY_KEYS.has(key)) {
+    if (SEED_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET.has(key)) {
       const localValue = localStorage.getItem(key);
       if (typeof localValue === 'string') {
         void cloudStorage.putJson(key, localValue);
       }
     }
   }));
-}
-
-export function installCloudBackedLocalStorageSync(): void {
-  if (syncInstalled) return;
-  syncInstalled = true;
-
-  Storage.prototype.setItem = function setItem(key: string, value: string) {
-    originalSetItem.call(this, key, value);
-    if (this === localStorage && CLOUD_LOCAL_STORAGE_KEY_SET.has(key)) {
-      void cloudStorage.putJson(key, value);
-    }
-  };
-
-  Storage.prototype.removeItem = function removeItem(key: string) {
-    originalRemoveItem.call(this, key);
-    if (this === localStorage && CLOUD_LOCAL_STORAGE_KEY_SET.has(key)) {
-      void cloudStorage.putJson(key, null);
-    }
-  };
 }

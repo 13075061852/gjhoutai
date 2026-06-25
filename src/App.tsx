@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
 import { LegacyShell } from './pages/LegacyShell';
 import { authClient, type AppUser } from './services/auth';
-import { hydrateCloudBackedLocalStorage, installCloudBackedLocalStorageSync } from './services/cloud-sync';
+import { hydrateCloudBackedLocalStorage } from './services/cloud-sync';
+import { normalizeSafeAvatarUrl } from './utils/avatarSecurity';
 import { mountIconParkAdapter } from './utils/iconParkAdapter';
 
 const DEPARTMENT_LABELS: Record<AppUser['department'], string> = {
@@ -23,6 +24,8 @@ type AuthParticle = {
   maxLife: number;
   hue: number;
 };
+
+type AuthUserState = AppUser | null | undefined;
 
 function AuthParticleTrail() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -197,7 +200,7 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
   );
 }
 
-function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: (user: AppUser) => void }) {
+function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: Dispatch<SetStateAction<AuthUserState>> }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
   const [error, setError] = useState('');
@@ -249,28 +252,66 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
 }
 
 function App() {
-  const [user, setUser] = useState<AppUser | null | undefined>(undefined);
+  const [user, setUser] = useState<AuthUserState>(undefined);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const avatarUrlRef = useRef<string | null>(null);
   const [hasSessionOnLoad] = useState(() => authClient.hasSessionMarker());
-  useEffect(() => {
-    void authClient.me().then(setUser).catch(() => {
-      if (!authClient.hasSessionMarker()) setUser(null);
-    });
+  const setManagedAvatarUrl = useCallback((nextUrl: string | null) => {
+    const previousUrl = avatarUrlRef.current;
+    if (previousUrl && previousUrl !== nextUrl) URL.revokeObjectURL(previousUrl);
+    avatarUrlRef.current = nextUrl;
+    setAvatarUrl(nextUrl);
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (avatarUrlRef.current) URL.revokeObjectURL(avatarUrlRef.current);
+      avatarUrlRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    void authClient.me().then((nextUser) => {
+      if (!disposed) setUser(nextUser);
+    }).catch(() => {
+      if (!disposed && !authClient.hasSessionMarker()) setUser(null);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
     const refreshCurrentUser = () => {
       void authClient.me().then((nextUser) => {
-        if (nextUser) setUser(nextUser);
+        if (!disposed && nextUser) setUser(nextUser);
       });
     };
     window.addEventListener('gjh:auth-users-changed', refreshCurrentUser);
-    return () => window.removeEventListener('gjh:auth-users-changed', refreshCurrentUser);
+    return () => {
+      disposed = true;
+      window.removeEventListener('gjh:auth-users-changed', refreshCurrentUser);
+    };
   }, []);
   useEffect(() => {
-    if (!user || user.mustChangePassword) return;
-    void authClient.getAvatarUrl().then(setAvatarUrl);
-  }, [user]);
+    if (!user || user.mustChangePassword) {
+      setManagedAvatarUrl(null);
+      return;
+    }
+    let disposed = false;
+    void authClient.getAvatarUrl().then((nextUrl) => {
+      if (disposed) {
+        if (nextUrl) URL.revokeObjectURL(nextUrl);
+        return;
+      }
+      setManagedAvatarUrl(nextUrl);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [user, setManagedAvatarUrl]);
   useEffect(() => {
     if (!user || user.mustChangePassword) return;
     let cleanup: (() => void) | undefined;
@@ -280,7 +321,6 @@ function App() {
     window.GJHApp.currentUser = user;
     void (async () => {
       await hydrateCloudBackedLocalStorage();
-      installCloudBackedLocalStorageSync();
       const { bootLegacyApp, teardownLegacyApp } = await import('./legacy/bootstrap');
       if (disposed) return;
       cleanup = await bootLegacyApp();
@@ -296,28 +336,39 @@ function App() {
         accountButton.setAttribute('aria-haspopup', 'menu');
         accountButton.setAttribute('aria-expanded', 'false');
         accountButton.setAttribute('aria-label', '账户菜单');
-        accountButton.innerHTML = `
-          <span class="top-auth-avatar" aria-hidden="true">
-            ${avatarUrl ? `<img src="${avatarUrl}" alt="" />` : '<i class="ti ti-user"></i>'}
-          </span>
-        `;
-        const renderAccountAvatar = (url: string | null) => {
-          accountButton.innerHTML = `
-            <span class="top-auth-avatar" aria-hidden="true">
-              ${url ? `<img src="${url}" alt="" />` : '<i class="ti ti-user"></i>'}
-            </span>
-          `;
+        const createAccountAvatar = (url: string | null) => {
+          const avatar = document.createElement('span');
+          avatar.className = 'top-auth-avatar';
+          avatar.setAttribute('aria-hidden', 'true');
+          const safeUrl = normalizeSafeAvatarUrl(url, window.location.href);
+          if (safeUrl) {
+            const image = document.createElement('img');
+            image.src = safeUrl;
+            image.alt = '';
+            avatar.append(image);
+          } else {
+            const icon = document.createElement('i');
+            icon.className = 'ti ti-user';
+            avatar.append(icon);
+          }
+          return avatar;
         };
+        const renderAccountAvatar = (url: string | null) => {
+          accountButton.replaceChildren(createAccountAvatar(url));
+        };
+        renderAccountAvatar(avatarUrl);
         const menu = document.createElement('div');
         menu.className = 'top-auth-panel';
         menu.setAttribute('role', 'menu');
         menu.hidden = true;
-        menu.innerHTML = `
-          <div class="top-auth-meta">
-            <strong>${user.username}</strong>
-            <span>${DEPARTMENT_LABELS[user.department]}</span>
-          </div>
-        `;
+        const meta = document.createElement('div');
+        meta.className = 'top-auth-meta';
+        const username = document.createElement('strong');
+        username.textContent = user.username;
+        const department = document.createElement('span');
+        department.textContent = DEPARTMENT_LABELS[user.department];
+        meta.append(username, department);
+        menu.append(meta);
         const avatarInput = document.createElement('input');
         avatarInput.type = 'file';
         avatarInput.accept = 'image/png,image/jpeg,image/webp';
@@ -334,11 +385,10 @@ function App() {
           const ok = await authClient.uploadAvatar(file);
           avatarButton.disabled = false;
           avatarInput.value = '';
-          if (!ok) return;
+          if (!ok || disposed) return;
           const previewUrl = URL.createObjectURL(file);
-          if (avatarUrl) URL.revokeObjectURL(avatarUrl);
           renderAccountAvatar(previewUrl);
-          setAvatarUrl(previewUrl);
+          setManagedAvatarUrl(previewUrl);
         });
         const resetAvatarButton = document.createElement('button');
         resetAvatarButton.className = 'top-auth-menu-item';
@@ -348,10 +398,9 @@ function App() {
           resetAvatarButton.disabled = true;
           const ok = await authClient.clearAvatar();
           resetAvatarButton.disabled = false;
-          if (!ok) return;
-          if (avatarUrl) URL.revokeObjectURL(avatarUrl);
+          if (!ok || disposed) return;
           renderAccountAvatar(null);
-          setAvatarUrl(null);
+          setManagedAvatarUrl(null);
         });
         const logoutButton = document.createElement('button');
         logoutButton.className = 'top-auth-menu-item';
@@ -362,7 +411,7 @@ function App() {
           logoutButton.disabled = true;
           await authClient.logout();
           setUser(null);
-          setAvatarUrl(null);
+          setManagedAvatarUrl(null);
         });
         menu.append(avatarButton, resetAvatarButton, logoutButton, avatarInput);
         accountButton.addEventListener('click', () => {
@@ -389,7 +438,7 @@ function App() {
       cleanup?.();
       void import('./legacy/bootstrap').then(({ teardownLegacyApp }) => teardownLegacyApp());
     };
-  }, [user, avatarUrl]);
+  }, [user, avatarUrl, setManagedAvatarUrl]);
 
   if (user === undefined && hasSessionOnLoad) return <LegacyShell booting={false} />;
   if (user === undefined) return (

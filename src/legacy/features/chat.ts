@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
 import { createAgentPlan } from './agent-runtime/router';
+import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
   'use strict';
@@ -17,6 +18,7 @@ import { createAgentPlan } from './agent-runtime/router';
   let pendingDraftImages = [];
   let streamRenderTimer = 0;
   let activeChatAbortController = null;
+  let activeChatRequestId = 0;
   let chatAbortRequested = false;
   let webSearchEnabled = true;
   const imageUploadAuthResolvers = new Map();
@@ -245,7 +247,7 @@ import { createAgentPlan } from './agent-runtime/router';
       },
     ];
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config.getRequestHeaders(config),
         signal: options.signal,
@@ -256,7 +258,7 @@ import { createAgentPlan } from './agent-runtime/router';
           max_tokens: 220,
           stream: false,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
       if (!response.ok) return fallback;
       const payload = await response.json();
       const content = payload?.choices?.[0]?.message?.content || '';
@@ -302,7 +304,7 @@ import { createAgentPlan } from './agent-runtime/router';
         ].join('\n'),
       },
     ];
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
       signal: options.signal,
@@ -313,7 +315,7 @@ import { createAgentPlan } from './agent-runtime/router';
         max_tokens: 120,
         stream: false,
       }),
-    });
+    }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       throw new Error(`搜索决策失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 180)}` : ''}`);
@@ -331,7 +333,7 @@ import { createAgentPlan } from './agent-runtime/router';
       `当前日期：${getCurrentDateTimeLabel()}（北京时间）。`,
       '优先查找今天或最近发布的资料。',
     ].join(' ');
-    const response = await fetch('https://api.tavily.com/search', {
+    const response = await fetchWithTimeout('https://api.tavily.com/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -385,7 +387,7 @@ import { createAgentPlan } from './agent-runtime/router';
         `Current date: ${getCurrentDateTimeLabel()} Asia/Shanghai.`,
         'Prefer official, recent, primary, or highly relevant sources.',
       ].filter(Boolean).join(' ');
-      const response = await fetch('https://api.tavily.com/search', {
+    const response = await fetchWithTimeout('https://api.tavily.com/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -663,12 +665,19 @@ import { createAgentPlan } from './agent-runtime/router';
     return { sessions: [session], activeId: session.id };
   };
 
+  const isVisibleScrollElement = (element) => {
+    if (!element?.isConnected) return false;
+    const rects = element.getClientRects?.();
+    return Boolean(rects?.length && element.clientHeight > 0);
+  };
+
   const getChatScrollElement = () => {
     const messages = refs.chatMessages;
     if (!messages) return null;
+    if (!isVisibleScrollElement(messages)) return null;
     if (messages.scrollHeight > messages.clientHeight + 1) return messages;
     const body = messages.closest?.('.assistant-body');
-    if (body && body.scrollHeight > body.clientHeight + 1) return body;
+    if (body && isVisibleScrollElement(body) && body.scrollHeight > body.clientHeight + 1) return body;
     return messages;
   };
 
@@ -683,7 +692,9 @@ import { createAgentPlan } from './agent-runtime/router';
     const scrollElement = getChatScrollElement();
     if (!scrollElement) return;
     requestAnimationFrame(() => {
-      scrollElement.scrollTop = scrollElement.scrollHeight;
+      const currentScrollElement = getChatScrollElement();
+      if (!currentScrollElement) return;
+      currentScrollElement.scrollTop = currentScrollElement.scrollHeight;
     });
   };
 
@@ -1393,8 +1404,20 @@ import { createAgentPlan } from './agent-runtime/router';
     return [];
   };
 
+  const shouldUseCorsForImageCompression = (url) => {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+      return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
   const loadImageForCompression = (url) => new Promise((resolve, reject) => {
     const image = new Image();
+    if (shouldUseCorsForImageCompression(url)) {
+      image.crossOrigin = 'anonymous';
+    }
     image.addEventListener('load', () => resolve(image), { once: true });
     image.addEventListener('error', () => reject(new Error('图片读取失败')), { once: true });
     image.src = url;
@@ -1402,24 +1425,51 @@ import { createAgentPlan } from './agent-runtime/router';
 
   const canvasToDataUrl = (canvas, mimeType, quality) => new Promise((resolve) => {
     if (canvas.toBlob) {
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          resolve(canvas.toDataURL(mimeType, quality));
-          return;
-        }
-        const reader = new FileReader();
-        reader.addEventListener('load', () => resolve(String(reader.result || '')), { once: true });
-        reader.addEventListener('error', () => resolve(canvas.toDataURL(mimeType, quality)), { once: true });
-        reader.readAsDataURL(blob);
-      }, mimeType, quality);
+      try {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            try {
+              resolve(canvas.toDataURL(mimeType, quality));
+            } catch {
+              resolve('');
+            }
+            return;
+          }
+          const reader = new FileReader();
+          reader.addEventListener('load', () => resolve(String(reader.result || '')), { once: true });
+          reader.addEventListener('error', () => {
+            try {
+              resolve(canvas.toDataURL(mimeType, quality));
+            } catch {
+              resolve('');
+            }
+          }, { once: true });
+          reader.readAsDataURL(blob);
+        }, mimeType, quality);
+      } catch {
+        resolve('');
+      }
       return;
     }
-    resolve(canvas.toDataURL(mimeType, quality));
+    try {
+      resolve(canvas.toDataURL(mimeType, quality));
+    } catch {
+      resolve('');
+    }
   });
+
+  const isCanvasReadable = (ctx) => {
+    try {
+      ctx.getImageData(0, 0, 1, 1);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const compressImageForAi = async (image, options = {}) => {
     const sourceUrl = String(image?.image_url?.url || image?.url || '').trim();
-    if (!sourceUrl || !sourceUrl.startsWith('data:image/')) return image;
+    if (!sourceUrl || !/^(?:data:image\/|blob:|https?:\/\/)/i.test(sourceUrl)) return image;
 
     try {
       const img = await loadImageForCompression(sourceUrl);
@@ -1444,6 +1494,7 @@ import { createAgentPlan } from './agent-runtime/router';
         ctx.fillRect(0, 0, targetWidth, targetHeight);
       }
       ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      if (!isCanvasReadable(ctx)) return image;
 
       const compressedUrl = await canvasToDataUrl(canvas, mimeType, preserveAlpha ? 0.82 : 0.78);
       if (!compressedUrl || compressedUrl.length >= sourceUrl.length) return image;
@@ -2013,7 +2064,7 @@ import { createAgentPlan } from './agent-runtime/router';
     const requestTimer = createAbortTimer('AI 分析', SKILL_SYNTHESIS_TIMEOUT_MS, signal);
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config.getRequestHeaders(config),
         signal: requestTimer.signal,
@@ -2024,7 +2075,7 @@ import { createAgentPlan } from './agent-runtime/router';
           max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
           stream: streamEnabled,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
@@ -2219,7 +2270,7 @@ import { createAgentPlan } from './agent-runtime/router';
 
   const callProjectAgentPlanner = async ({ config, model, prompt, manifest, observations, traceItems, recommendedPlan = null, signal, forceFinal = false }) => {
     const messages = buildProjectAgentPlannerMessages({ config, prompt, manifest, observations, traceItems, recommendedPlan, forceFinal });
-    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
       signal,
@@ -2230,7 +2281,7 @@ import { createAgentPlan } from './agent-runtime/router';
         max_tokens: Math.min(Math.max(Number(config.maxTokens) || 0, 1200), 2400),
         stream: false,
       }),
-    });
+    }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
@@ -2428,7 +2479,7 @@ import { createAgentPlan } from './agent-runtime/router';
     const requestTimer = createAbortTimer('综合汇总分析', SKILL_SYNTHESIS_TIMEOUT_MS, signal);
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config.getRequestHeaders(config),
         signal: requestTimer.signal,
@@ -2439,7 +2490,7 @@ import { createAgentPlan } from './agent-runtime/router';
           max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
           stream: streamEnabled,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
@@ -2923,13 +2974,34 @@ import { createAgentPlan } from './agent-runtime/router';
     renderChatSubmitState();
   };
 
+  const cancelActiveChatRequest = () => {
+    if (streamRenderTimer) {
+      window.clearTimeout(streamRenderTimer);
+      streamRenderTimer = 0;
+    }
+    if (activeChatAbortController && !activeChatAbortController.signal?.aborted) {
+      activeChatAbortController.abort();
+    }
+  };
+
+  const beginChatRequest = () => {
+    cancelActiveChatRequest();
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const requestId = activeChatRequestId + 1;
+    activeChatRequestId = requestId;
+    activeChatAbortController = controller;
+    chatAbortRequested = false;
+    return {
+      signal: controller?.signal || null,
+      requestId,
+    };
+  };
+
   const stopCurrentChatAnalysis = () => {
     if (!state.chatBusy || chatAbortRequested) return;
     chatAbortRequested = true;
     renderChatSubmitState();
-    if (activeChatAbortController) {
-      activeChatAbortController.abort();
-    }
+    cancelActiveChatRequest();
   };
 
   const getRecentBusinessTopic = () => {
@@ -3014,8 +3086,10 @@ import { createAgentPlan } from './agent-runtime/router';
     let attachedImages = [];
     let wantsImages = false;
 
-    activeChatAbortController = typeof AbortController === 'function' ? new AbortController() : null;
-    chatAbortRequested = false;
+    const {
+      signal: chatAbortSignal,
+      requestId: chatRequestId,
+    } = beginChatRequest();
     setChatBusyState(true);
 
     pushChatMessage('user', prompt);
@@ -3043,6 +3117,11 @@ import { createAgentPlan } from './agent-runtime/router';
     let skipAiRequest = false;
     const callStartedAt = nowIso();
     const callStartMs = window.performance?.now?.() ?? Date.now();
+    const isCurrentChatRequest = () => activeChatRequestId === chatRequestId;
+    const assertCurrentChatRequest = () => {
+      if (!isCurrentChatRequest()) throw createAbortError('本次分析已被新的请求取代。');
+      if (chatAbortSignal?.aborted) throw createAbortError();
+    };
 
     try {
       attachedDataFile = projectContextEnabled ? getAttachedDataFile(prompt) : null;
@@ -3054,7 +3133,7 @@ import { createAgentPlan } from './agent-runtime/router';
         } else {
           try {
             searchDecision = await decideSearchWithAi(config, model, prompt, {
-              signal: activeChatAbortController?.signal,
+              signal: chatAbortSignal,
             });
           } catch (error) {
             if (isAbortError(error)) throw error;
@@ -3082,7 +3161,7 @@ import { createAgentPlan } from './agent-runtime/router';
       } else if (needsWebSearch) {
         flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
         webSearchPlan = await createSearchPlanWithAi(config, model, prompt, {
-          signal: activeChatAbortController?.signal,
+          signal: chatAbortSignal,
         });
         const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {}) => {
           const targetLabel = targetResults ? ` / 目标 ${targetResults} 条` : '';
@@ -3093,7 +3172,7 @@ import { createAgentPlan } from './agent-runtime/router';
           });
         };
         const searchResult = await searchWebForPromptDynamic(config, prompt, {
-          signal: activeChatAbortController?.signal,
+          signal: chatAbortSignal,
           searchPlan: webSearchPlan,
           onProgress: updateSearchProgress,
         });
@@ -3127,7 +3206,7 @@ import { createAgentPlan } from './agent-runtime/router';
         const approved = await requestImageUploadAuthorization(rawAttachedImages, {
           pendingIndex,
           source: '本次消息',
-          signal: activeChatAbortController?.signal,
+          signal: chatAbortSignal,
         });
         if (!approved) {
           streamedContent = `已取消上传 ${rawAttachedImages.length} 张图片，本次未向 AI 发送图片。`;
@@ -3165,7 +3244,7 @@ import { createAgentPlan } from './agent-runtime/router';
           prompt,
           pendingIndex,
           localPlan,
-          signal: activeChatAbortController?.signal,
+          signal: chatAbortSignal,
         });
         streamedContent = loopResult.content;
         apiUsage = loopResult.usage || apiUsage;
@@ -3183,7 +3262,7 @@ import { createAgentPlan } from './agent-runtime/router';
           mainModel: model,
           prompt,
           pendingIndex,
-          signal: activeChatAbortController?.signal,
+          signal: chatAbortSignal,
         });
         streamedContent = compositeResult.content;
         apiUsage = compositeResult.usage || apiUsage;
@@ -3216,10 +3295,10 @@ import { createAgentPlan } from './agent-runtime/router';
         ...requestMessages,
       ];
 
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config.getRequestHeaders(config),
-        signal: activeChatAbortController?.signal,
+        signal: chatAbortSignal,
         body: JSON.stringify({
           model,
           messages: apiMessages,
@@ -3228,7 +3307,7 @@ import { createAgentPlan } from './agent-runtime/router';
           modalities: wantsImages ? ['image', 'text'] : undefined,
           stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
@@ -3243,9 +3322,10 @@ import { createAgentPlan } from './agent-runtime/router';
 
       if (usedStream) {
         const streamResult = await consumeChatCompletionStream(response, (delta) => {
+          if (!isCurrentChatRequest() || chatAbortSignal?.aborted) return;
           streamedContent += delta;
           scheduleStreamRender(pendingIndex, streamedContent);
-        }, { signal: activeChatAbortController?.signal });
+        }, { signal: chatAbortSignal });
         if (!streamResult.receivedDelta) {
           throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
         }
@@ -3253,9 +3333,9 @@ import { createAgentPlan } from './agent-runtime/router';
         finishReason = streamResult.finishReason || finishReason;
         flushStreamRender(pendingIndex, streamedContent);
       } else {
-        if (activeChatAbortController?.signal.aborted) throw createAbortError();
+        assertCurrentChatRequest();
         const data = await response.json();
-        if (activeChatAbortController?.signal.aborted) throw createAbortError();
+        assertCurrentChatRequest();
         streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
         finishReason = String(data?.choices?.[0]?.finish_reason || '');
         apiUsage = data?.usage || null;
@@ -3277,7 +3357,7 @@ import { createAgentPlan } from './agent-runtime/router';
           })
         : null;
       }
-      if (activeChatAbortController?.signal.aborted) throw createAbortError();
+      assertCurrentChatRequest();
       if (skillExecution) {
         const needsSynthesis = shouldSynthesizeSkillResult(skillExecution);
         const displayPrefix = getSkillDisplayPrefix(skillExecution);
@@ -3308,7 +3388,7 @@ import { createAgentPlan } from './agent-runtime/router';
                   pendingIndex,
                   displayPrefix,
                   source: '图谱检索结果',
-                  signal: activeChatAbortController?.signal,
+                  signal: chatAbortSignal,
                 });
                 if (!skillUploadApproved) {
                   streamedContent = [
@@ -3332,7 +3412,7 @@ import { createAgentPlan } from './agent-runtime/router';
                     execution: skillExecution,
                     pendingIndex,
                     displayPrefix,
-                    signal: activeChatAbortController?.signal,
+                    signal: chatAbortSignal,
                     images: skillImages,
                   });
                   streamedContent = `${synthesized.content || App.projectSkills.formatSkillMessage(skillExecution)}${imageNotice}`;
@@ -3349,7 +3429,7 @@ import { createAgentPlan } from './agent-runtime/router';
                   execution: skillExecution,
                   pendingIndex,
                   displayPrefix,
-                  signal: activeChatAbortController?.signal,
+                  signal: chatAbortSignal,
                   images: [],
                 });
                 streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
@@ -3383,6 +3463,7 @@ import { createAgentPlan } from './agent-runtime/router';
         streamedImages = [];
       }
       }
+      assertCurrentChatRequest();
       streamedContent = formatInternalJsonAnswer(streamedContent);
       const skillActions = skillExecution
         ? (App.projectSkills.getResultActions?.(skillExecution) || [])
@@ -3435,6 +3516,7 @@ import { createAgentPlan } from './agent-runtime/router';
         },
       });
     } catch (error) {
+      if (!isCurrentChatRequest()) return;
       if (streamRenderTimer) {
         window.clearTimeout(streamRenderTimer);
         streamRenderTimer = 0;
@@ -3482,9 +3564,11 @@ import { createAgentPlan } from './agent-runtime/router';
         },
       });
     } finally {
-      activeChatAbortController = null;
-      setChatBusyState(false);
-      if (refs.chatInput) refs.chatInput.focus();
+      if (activeChatRequestId === chatRequestId) {
+        activeChatAbortController = null;
+        setChatBusyState(false);
+        if (refs.chatInput) refs.chatInput.focus();
+      }
     }
   };
 

@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { getLegacyApp, getPublicApp } from '../core/app-context';
+import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
+import { parseJsonOr } from '../../utils/json';
 
 (function () {
   'use strict';
@@ -18,6 +20,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
   let navigationBound = false;
+  let navigationGlobalListenersBound = false;
   const DEFAULT_PAGE_ID = 'dashboard';
   const NAV_GROUP_STATE_KEY = 'sidebar-expanded-groups';
   const SIDEBAR_TRANSITION_MS = 520;
@@ -58,12 +61,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     .join('|');
 
   const readExpandedGroups = () => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(NAV_GROUP_STATE_KEY) || '{}');
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
+    const parsed = parseJsonOr(localStorage.getItem(NAV_GROUP_STATE_KEY), {});
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   };
 
   const saveExpandedGroups = () => {
@@ -273,7 +272,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       syncAssistantFullscreenAttr(false);
     }
     refs.shell.classList.toggle('assistant-collapsed', collapsed);
-    localStorage.setItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
+    setCloudBackedLocalStorageItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
     syncAssistantCollapsedAttr(Boolean(collapsed));
     updateAssistantToggle();
     updateAssistantFullscreenToggle();
@@ -290,7 +289,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
       refs.shell.classList.remove('assistant-fullscreen-open');
       syncAssistantCollapsedAttr(false);
       syncAssistantFullscreenAttr(true);
-      localStorage.setItem(constants.ASSISTANT_STATE_KEY, '0');
+      setCloudBackedLocalStorageItem(constants.ASSISTANT_STATE_KEY, '0');
       updateAssistantToggle();
       updateAssistantFullscreenToggle();
       (PublicApp?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
@@ -343,12 +342,8 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
   );
 
   const getRecentPages = () => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(constants.NAV_RECENT_PAGES_KEY) || '[]');
-      return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string' && item) : [];
-    } catch (error) {
-      return [];
-    }
+    const parsed = parseJsonOr(localStorage.getItem(constants.NAV_RECENT_PAGES_KEY), []);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string' && item) : [];
   };
 
   const saveRecentPages = (pages) => {
@@ -779,6 +774,78 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     updateAssistantFullscreenToggle();
   };
 
+  const handleNavigationStorage = (event) => {
+    if (event.storageArea && event.storageArea !== localStorage) return;
+
+    const key = event.key;
+    const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || getFallbackPageId();
+
+    if (key === constants.NAV_PAGE_KEY || key === null) {
+      const nextPage = event.newValue || currentPage;
+      showPage(nextPage, { scrollTop: false, trackRecent: false });
+    }
+
+    if (key === NAV_GROUP_STATE_KEY || key === null) {
+      restoreExpandedGroups();
+      removeCollapsedNavFlyout();
+    }
+
+    if (key === constants.NAV_RECENT_PAGES_KEY || key === constants.NAV_PAGE_KEY || key === null) {
+      renderRecentPages(localStorage.getItem(constants.NAV_PAGE_KEY) || currentPage);
+    }
+
+    if (key === constants.SIDEBAR_STATE_KEY || key === constants.ASSISTANT_STATE_KEY || key === null) {
+      restoreLayoutState();
+      removeCollapsedNavFlyout();
+    }
+  };
+
+  const handleNavigationKeydown = (event) => {
+    if (event.key === 'Escape') {
+      removeCollapsedNavFlyout();
+      setMobileSidebarOpen(false);
+    }
+  };
+
+  const handleNavigationDocumentClick = (event) => {
+    if (refs.shell?.classList.contains('sidebar-open')) {
+      const target = event.target;
+      if (!target.closest('.sidebar') && !target.closest('#mobileMenuBtn')) {
+        setMobileSidebarOpen(false);
+      }
+    }
+
+    if (!collapsedNavFlyout) return;
+    if (event.target.closest('.sidebar-flyout') || event.target.closest('.nav-group')) return;
+    removeCollapsedNavFlyout();
+  };
+
+  const cleanupNavigationGlobals = () => {
+    if (!navigationGlobalListenersBound) return;
+    window.removeEventListener('storage', handleNavigationStorage);
+    window.removeEventListener('resize', removeCollapsedNavFlyout);
+    window.removeEventListener('scroll', removeCollapsedNavFlyout, true);
+    document.removeEventListener('keydown', handleNavigationKeydown);
+    document.removeEventListener('click', handleNavigationDocumentClick);
+    navigationGlobalListenersBound = false;
+  };
+
+  const bindNavigationGlobals = () => {
+    cleanupNavigationGlobals();
+    window.addEventListener('storage', handleNavigationStorage);
+    window.addEventListener('resize', removeCollapsedNavFlyout);
+    window.addEventListener('scroll', removeCollapsedNavFlyout, true);
+    document.addEventListener('keydown', handleNavigationKeydown);
+    document.addEventListener('click', handleNavigationDocumentClick);
+    navigationGlobalListenersBound = true;
+  };
+
+  const cleanupNavigation = () => {
+    cleanupNavigationGlobals();
+    cleanupVisitedDrag();
+    removeCollapsedNavFlyout();
+  };
+
   const bindNavigation = () => {
     if (navigationBound) return;
     navigationBound = true;
@@ -791,7 +858,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         if (!collapsed) {
           removeCollapsedNavFlyout();
         }
-        localStorage.setItem(constants.SIDEBAR_STATE_KEY, collapsed ? '1' : '0');
+        setCloudBackedLocalStorageItem(constants.SIDEBAR_STATE_KEY, collapsed ? '1' : '0');
         syncSidebarCollapsedAttr(Boolean(collapsed));
         updateSidebarToggle(Boolean(collapsed));
       });
@@ -805,7 +872,7 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
         runSidebarTransition('expand');
         refs.shell.classList.remove('sidebar-collapsed');
         removeCollapsedNavFlyout();
-        localStorage.setItem(constants.SIDEBAR_STATE_KEY, '0');
+        setCloudBackedLocalStorageItem(constants.SIDEBAR_STATE_KEY, '0');
         syncSidebarCollapsedAttr(false);
         updateSidebarToggle(false);
         PublicApp?.animations?.nextFrame?.(() => refs.sidebarSearchInput?.focus())
@@ -909,30 +976,12 @@ import { getLegacyApp, getPublicApp } from '../core/app-context';
     showPage(savedPage, { scrollTop: false });
     restoreLayoutState();
 
-    window.addEventListener('resize', removeCollapsedNavFlyout);
-    window.addEventListener('scroll', removeCollapsedNavFlyout, true);
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        removeCollapsedNavFlyout();
-        setMobileSidebarOpen(false);
-      }
-    });
-    document.addEventListener('click', (event) => {
-      if (refs.shell?.classList.contains('sidebar-open')) {
-        const target = event.target;
-        if (!target.closest('.sidebar') && !target.closest('#mobileMenuBtn')) {
-          setMobileSidebarOpen(false);
-        }
-      }
-
-      if (!collapsedNavFlyout) return;
-      if (event.target.closest('.sidebar-flyout') || event.target.closest('.nav-group')) return;
-      removeCollapsedNavFlyout();
-    });
+    bindNavigationGlobals();
   };
 
   App.navigation = {
     init: bindNavigation,
+    cleanup: cleanupNavigation,
     showPage,
     refreshAccess: refreshNavAccess,
     restoreLayoutState,

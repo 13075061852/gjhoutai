@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { getLegacyApp, getPublicApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
+import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
+import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
   'use strict';
@@ -12,8 +14,8 @@ import { cloudStorage } from '../../services/cloud-storage';
   const { utils } = App;
   const STORAGE_KEY = 'gjh-spectrum-user-images-v2';
   const EDIT_STORAGE_KEY = 'gjh-spectrum-edits-v2';
-  const FILTER_STORAGE_KEY = 'gjh-spectrum-filter-state-v1';
-  const PREVIEW_AI_STORAGE_KEY = 'gjh-spectrum-preview-ai-results-v1';
+  const FILTER_STORAGE_KEY = LOCAL_STORAGE_KEYS.spectrumFilterState;
+  const PREVIEW_AI_STORAGE_KEY = LOCAL_STORAGE_KEYS.spectrumPreviewAiResults;
   const PREVIEW_AI_CACHE_LIMIT = 120;
   const IMAGE_DB_NAME = 'gjh-spectrum-images-db';
   const IMAGE_DB_VERSION = 1;
@@ -2407,7 +2409,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const RENDER_THROTTLE_MS = 150;
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config?.getRequestHeaders?.(config) || { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2423,7 +2425,7 @@ import { cloudStorage } from '../../services/cloud-storage';
           max_tokens: Math.max(Number(config.maxTokens) || 4096, 2048),
           stream: true,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');

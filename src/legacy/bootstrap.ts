@@ -66,6 +66,7 @@ export function teardownLegacyApp(): void {
   booted = false;
   bootPromise = null;
   const App = getLegacyApp();
+  App?.navigation?.cleanup?.();
   App?.animations?.cleanup?.();
   App?.motionEffects?.cleanup?.();
 }

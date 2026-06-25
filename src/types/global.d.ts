@@ -1,9 +1,164 @@
 export {};
 
 declare global {
+  type LegacyPageId =
+    | 'dashboard'
+    | 'order-management'
+    | 'order-detail'
+    | 'invoice-print'
+    | 'formula-management'
+    | 'production-plan'
+    | 'inventory-management'
+    | 'supplier-archive'
+    | 'supplier-detail'
+    | 'raw-material-procurement'
+    | 'customer-archive'
+    | 'customer-detail'
+    | 'personnel-archive'
+    | 'property-analysis'
+    | 'spectrum-analysis'
+    | 'inspection-reports'
+    | 'image-cutout'
+    | 'project-skills'
+    | 'apimart-media'
+    | 'ai-call-analysis'
+    | 'permission-management'
+    | 'theme-settings'
+    | 'ai-config';
+
+  type LegacyAiProvider = 'openrouter' | 'deepseek' | 'siliconflow' | 'lmstudio';
+  type LegacySearchProvider = 'tavily' | 'serpapi' | 'bing' | 'none';
+  type LegacySearchDepth = 'basic' | 'advanced';
+  type LegacySearchTopic = 'general' | 'news' | 'finance';
+  type LegacyMotionType = 'animation' | 'transition';
+
   type LegacyLifecycleModule = {
-    init?: () => void;
+    init?: () => void | Promise<void>;
     cleanup?: () => void;
+  };
+
+  type LegacyPageDefinition = {
+    title: string;
+    eyebrow: string;
+    desc: string;
+  };
+
+  type LegacyConfig = {
+    apiKey: string;
+    aiProvider: LegacyAiProvider;
+    baseUrl: string;
+    appTitle: string;
+    httpReferer: string;
+    modelChoice: string;
+    agentModels: {
+      data: string;
+      spectrum: string;
+    };
+    systemPrompt: string;
+    temperature: number;
+    maxTokens: number;
+    streamEnabled: boolean;
+    jsonMode: boolean;
+    logEnabled: boolean;
+    searchProvider: LegacySearchProvider;
+    searchApiKey: string;
+    searchDepth: LegacySearchDepth;
+    searchMaxResults: number;
+    searchTopic: LegacySearchTopic;
+    apimartApiKey: string;
+    apimartBaseUrl: string;
+    apimartImageModel: string;
+    apimartVideoModel: string;
+    ossBucket: string;
+    ossEndpoint: string;
+    ossObjectKey: string;
+    ossAccessKeyId: string;
+    ossAccessKeySecret: string;
+    ossExcelBackupPrefix: string;
+  };
+
+  type LegacyAppConstants = {
+    SIDEBAR_STATE_KEY: string;
+    ASSISTANT_STATE_KEY: string;
+    NAV_PAGE_KEY: string;
+    NAV_RECENT_PAGES_KEY: string;
+    CONFIG_STORAGE_KEY: string;
+    CONFIG_LOG_KEY: string;
+    CHAT_STORAGE_KEY: string;
+    CHAT_SESSIONS_KEY: string;
+    CHAT_ACTIVE_SESSION_KEY: string;
+    CHAT_DATA_ATTACHMENT_KEY: string;
+    CHAT_SEARCH_ENABLED_KEY: string;
+    AI_CALL_LOG_KEY: string;
+    DEFAULT_BASE_URL: string;
+    DEFAULT_LM_STUDIO_BASE_URL: string;
+    DEFAULT_APIMART_BASE_URL: string;
+    DEFAULT_CONFIG: LegacyConfig;
+    PAGE_DEFS: Record<LegacyPageId, LegacyPageDefinition>;
+  };
+
+  type LegacyRefs = Record<string, Element | NodeListOf<Element> | null> & {
+    shell: HTMLElement | null;
+    navPageButtons: NodeListOf<HTMLElement>;
+    groupToggles: NodeListOf<HTMLElement>;
+  };
+
+  type LegacyState = {
+    chatHistory: unknown[];
+    chatSessions: unknown[];
+    chatSessionId: string;
+    conversationMenuQuery: string;
+    chatBusy: boolean;
+    dataAttachmentEnabled: boolean;
+  };
+
+  type LegacyUtils = {
+    normalizeBaseUrl: (value?: string | null) => string;
+    escapeHtml: (value: unknown) => string;
+    markdownLite: (value: unknown) => string;
+    maskKey: (key: unknown) => string;
+    readJson: <T>(key: string, fallback: T) => T;
+    writeJson: (key: string, value: unknown) => boolean;
+    downloadUtf8Json: (filename: string, data: unknown) => void;
+    copyText: (text: string) => Promise<boolean>;
+  };
+
+  type LegacyWaitForMotionOptions = {
+    type?: LegacyMotionType;
+    propertyName?: string;
+    timeout?: number;
+  };
+
+  type LegacyRunClassAnimationOptions = LegacyWaitForMotionOptions & {
+    duration?: number;
+    hideFromAT?: boolean;
+    cleanup?: boolean;
+  };
+
+  type LegacyAnimationApi = {
+    prefersReducedMotion: () => boolean;
+    syncMotionPreference: () => void;
+    frame: () => Promise<number>;
+    nextFrame: (callback?: () => void) => Promise<void>;
+    doubleFrame: (callback?: () => void) => Promise<void>;
+    schedule: (duration?: number, callback?: () => void) => number;
+    delay: (duration?: number, callback?: () => void) => Promise<void>;
+    clearDelay: (timer?: number | null) => void;
+    waitForMotion: (element: Element | null | undefined, options?: LegacyWaitForMotionOptions) => Promise<boolean>;
+    setClass: (element: Element | null | undefined, className: string, enabled: boolean) => boolean;
+    addClass: (element: Element | null | undefined, className: string) => void;
+    removeClass: (element: Element | null | undefined, className: string) => void;
+    runClassAnimation: (element: Element | null | undefined, className: string, options?: LegacyRunClassAnimationOptions) => Promise<boolean>;
+    cleanup: () => void;
+  };
+
+  type LegacyMotionEffectsApi = {
+    run: (element: HTMLElement | SVGElement | null | undefined, keyframes: Record<string, string | number | Array<string | number>>, options?: Record<string, unknown>) => unknown;
+    stop: (element: HTMLElement | SVGElement | null | undefined) => void;
+    enterFromRight: (element: HTMLElement | SVGElement | null | undefined, options?: Record<string, unknown>) => unknown;
+    exitToRight: (element: HTMLElement | SVGElement | null | undefined, options?: Record<string, unknown>) => unknown;
+    softSettle: (element: HTMLElement | SVGElement | null | undefined, options?: Record<string, unknown>) => unknown;
+    cleanup: () => void;
   };
 
   interface LegacyAppNamespace extends Record<string, unknown> {
@@ -14,15 +169,19 @@ declare global {
       department: string;
       mustChangePassword: boolean;
     };
+    constants?: LegacyAppConstants;
+    refs?: LegacyRefs;
+    state?: LegacyState;
+    utils?: LegacyUtils;
     aiCallAnalysis?: LegacyLifecycleModule;
     apimartMedia?: LegacyLifecycleModule;
-    animations?: LegacyLifecycleModule;
+    animations?: LegacyAnimationApi;
     chat?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;
     dataRecognition?: LegacyLifecycleModule;
     imageCutout?: LegacyLifecycleModule;
     inspectionReports?: LegacyLifecycleModule;
-    motionEffects?: LegacyLifecycleModule;
+    motionEffects?: LegacyMotionEffectsApi;
     navigation?: LegacyLifecycleModule;
     projectSkills?: LegacyLifecycleModule;
     propertyAnalysis?: LegacyLifecycleModule;

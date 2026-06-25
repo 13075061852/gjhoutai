@@ -244,6 +244,30 @@
       font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size:.95em;
     }
+    .ai-message-content pre{
+      margin:0;
+      padding:12px;
+      max-width:100%;
+      overflow:auto;
+      border:1px solid #dbe4ef;
+      border-radius:8px;
+      background:#f8fafc;
+    }
+    .ai-message-content pre code{
+      display:block;
+      padding:0;
+      border-radius:0;
+      background:transparent;
+      white-space:pre;
+    }
+    .ai-message-content img:not(.ai-message-image){
+      display:block;
+      max-width:100%;
+      height:auto;
+      border:1px solid #dbe4ef;
+      border-radius:8px;
+      background:#fff;
+    }
     .ai-message-images{
       display:flex;
       flex-direction:column;

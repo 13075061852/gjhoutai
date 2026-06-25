@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ensureLegacyApp } from './app-context';
 
 (function () {
@@ -6,7 +5,7 @@ import { ensureLegacyApp } from './app-context';
 
   const App = ensureLegacyApp();
 
-  const state = {
+  const state: LegacyState = {
     chatHistory: [],
     chatSessions: [],
     chatSessionId: '',

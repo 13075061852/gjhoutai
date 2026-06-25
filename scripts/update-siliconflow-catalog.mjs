@@ -4,6 +4,7 @@ import path from 'node:path';
 const MODELS_URL = 'https://siliconflow.cn/models';
 const PRICING_URL = 'https://siliconflow.cn/pricing';
 const OUTPUT_PATH = path.resolve('src/legacy/data/siliconflow-model-catalog.ts');
+const FETCH_TIMEOUT_MS = 15000;
 
 const decodeEscapedText = (value) => {
   let text = String(value || '');
@@ -181,8 +182,21 @@ ${models.map((model) => `  {
 ] as const;
 `;
 
+const fetchWithTimeout = async (url, init = {}, timeoutMs = FETCH_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const fetchText = async (url) => {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       accept: 'text/html,application/xhtml+xml',
       'user-agent': 'Mozilla/5.0 (compatible; gjhoutai catalog updater)',

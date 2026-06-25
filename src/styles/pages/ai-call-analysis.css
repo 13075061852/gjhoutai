@@ -922,6 +922,30 @@
       font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size:.95em;
     }
+    .ai-call-detail-content pre{
+      margin:0;
+      padding:12px;
+      max-width:100%;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .ai-call-detail-content pre code{
+      display:block;
+      padding:0;
+      border-radius:0;
+      background:transparent;
+      white-space:pre;
+    }
+    .ai-call-detail-content img{
+      display:block;
+      max-width:100%;
+      height:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
     .ai-call-detail-content .markdown-table-wrap{
       width:100%;
       max-width:100%;

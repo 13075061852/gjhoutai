@@ -1,26 +1,34 @@
+import { parseJsonMaybe } from '../utils/json';
+import { fetchWithTimeout, UPLOAD_FETCH_TIMEOUT_MS } from '../utils/fetch';
+
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 
 const buildUrl = (path: string) => `${API_BASE}${path}`;
 
 const parseJson = async <T>(response: Response): Promise<T | null> => {
-  if (!response.ok) return null;
-  return response.json() as Promise<T>;
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Storage request failed: HTTP ${response.status}`);
+  }
+  const text = await response.text();
+  if (!text.trim()) return null;
+  const payload = parseJsonMaybe<T>(text);
+  if (payload == null) {
+    throw new Error('Storage response is not valid JSON');
+  }
+  return payload;
 };
 
 export const cloudStorage = {
   async getJson<T>(key: string): Promise<T | null> {
-    try {
-      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), { credentials: 'include' });
-      const payload = await parseJson<{ value: T }>(response);
-      return payload?.value ?? null;
-    } catch {
-      return null;
-    }
+    const response = await fetchWithTimeout(buildUrl(`/api/state/${encodeURIComponent(key)}`), { credentials: 'include' });
+    const payload = await parseJson<{ value: T }>(response);
+    return payload?.value ?? null;
   },
 
-  async putJson<T>(key: string, value: T): Promise<boolean> {
+  async putJson<T>(key: string, value: T extends null ? never : T): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
         method: 'PUT',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -34,7 +42,7 @@ export const cloudStorage = {
 
   async deleteJson(key: string): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -46,7 +54,7 @@ export const cloudStorage = {
 
   async getDataUrl(namespace: string, key: string): Promise<string | null> {
     try {
-      const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), { credentials: 'include' });
+      const response = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), { credentials: 'include' });
       if (response.status === 204) return null;
       if (!response.ok) return null;
       const blob = await response.blob();
@@ -63,14 +71,14 @@ export const cloudStorage = {
 
   async putDataUrl(namespace: string, key: string, dataUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(dataUrl);
+      const response = await fetchWithTimeout(dataUrl);
       const blob = await response.blob();
-      const upload = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
+      const upload = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
         method: 'PUT',
         credentials: 'include',
         headers: { 'content-type': blob.type || 'application/octet-stream' },
         body: blob,
-      });
+      }, UPLOAD_FETCH_TIMEOUT_MS);
       return upload.ok;
     } catch {
       return false;
@@ -79,7 +87,7 @@ export const cloudStorage = {
 
   async deleteBlob(namespace: string, key: string): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -91,7 +99,7 @@ export const cloudStorage = {
 
   async listDataRecognitionHistory(limit = 40): Promise<any[] | null> {
     try {
-      const response = await fetch(buildUrl(`/api/data-recognition/history?limit=${encodeURIComponent(String(limit))}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history?limit=${encodeURIComponent(String(limit))}`), {
         credentials: 'include',
       });
       const payload = await parseJson<{ items: any[] }>(response);
@@ -112,7 +120,7 @@ export const cloudStorage = {
     rawText: string;
   }): Promise<{ id: string } | null> {
     try {
-      const response = await fetch(buildUrl('/api/data-recognition/history'), {
+      const response = await fetchWithTimeout(buildUrl('/api/data-recognition/history'), {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -126,12 +134,12 @@ export const cloudStorage = {
 
   async getDataRecognitionHistory(id: string): Promise<any | null> {
     try {
-      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
         credentials: 'include',
       });
       const payload = await parseJson<{ item: any }>(response);
       if (!payload?.item) return null;
-      const imageResponse = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}/image`), {
+      const imageResponse = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}/image`), {
         credentials: 'include',
       });
       if (imageResponse.ok && imageResponse.status !== 204) {
@@ -157,7 +165,7 @@ export const cloudStorage = {
     rawText: string;
   }): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
         method: 'PUT',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -171,7 +179,7 @@ export const cloudStorage = {
 
   async deleteDataRecognitionHistory(id: string): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -183,7 +191,7 @@ export const cloudStorage = {
 
   async listInspectionReports(limit = 100): Promise<any[] | null> {
     try {
-      const response = await fetch(buildUrl(`/api/inspection-reports?limit=${encodeURIComponent(String(limit))}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/inspection-reports?limit=${encodeURIComponent(String(limit))}`), {
         credentials: 'include',
       });
       const payload = await parseJson<{ items: any[] }>(response);
@@ -205,11 +213,11 @@ export const cloudStorage = {
       form.append('title', payload.title || '');
       form.append('category', payload.category || '');
       form.append('notes', payload.notes || '');
-      const response = await fetch(buildUrl('/api/inspection-reports'), {
+      const response = await fetchWithTimeout(buildUrl('/api/inspection-reports'), {
         method: 'POST',
         credentials: 'include',
         body: form,
-      });
+      }, UPLOAD_FETCH_TIMEOUT_MS);
       return await parseJson<{ id: string }>(response);
     } catch {
       return null;
@@ -222,7 +230,7 @@ export const cloudStorage = {
 
   async deleteInspectionReport(id: string): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}`), {
+      const response = await fetchWithTimeout(buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}`), {
         method: 'DELETE',
         credentials: 'include',
       });

@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../utils/fetch';
+
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 
 const buildUrl = (path: string) => `${API_BASE}${path}`;
@@ -16,7 +18,7 @@ export const cloudConfig = {
   async get<T>(): Promise<T | null> {
     if (shouldSkipAdminConfigRequest()) return null;
     try {
-      const response = await fetch(buildUrl('/api/config'), { credentials: 'include' });
+      const response = await fetchWithTimeout(buildUrl('/api/config'), { credentials: 'include' });
       const payload = await parseJson<{ value: T | null }>(response);
       return payload?.value ?? null;
     } catch {
@@ -26,7 +28,7 @@ export const cloudConfig = {
 
   async put<T>(value: T): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl('/api/config'), {
+      const response = await fetchWithTimeout(buildUrl('/api/config'), {
         method: 'PUT',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -40,7 +42,7 @@ export const cloudConfig = {
 
   async clear(): Promise<boolean> {
     try {
-      const response = await fetch(buildUrl('/api/config'), {
+      const response = await fetchWithTimeout(buildUrl('/api/config'), {
         method: 'DELETE',
         credentials: 'include',
       });

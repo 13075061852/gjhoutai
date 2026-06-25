@@ -1,5 +1,87 @@
 // @ts-nocheck
+import MarkdownIt from 'markdown-it';
 import { ensureLegacyApp } from './app-context';
+import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
+import { parseJsonOr } from '../../utils/json';
+
+const SAFE_MARKDOWN_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+const isSafeMarkdownUrl = (value) => {
+  const url = String(value || '').trim();
+  if (!url) return false;
+  if (/^(#|\/(?!\/)|\.{1,2}\/)/.test(url)) return true;
+
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return SAFE_MARKDOWN_URL_PROTOCOLS.has(parsed.protocol);
+  } catch {
+    return false;
+  }
+};
+
+const addUnderlineRule = (md) => {
+  md.inline.ruler.before('emphasis', 'underline', (state, silent) => {
+    const marker = state.src.slice(state.pos, state.pos + 2);
+    if (marker !== '++') return false;
+
+    const start = state.pos + 2;
+    const end = state.src.indexOf('++', start);
+    if (end < 0 || end === start) return false;
+
+    if (!silent) {
+      let token = state.push('ins_open', 'ins', 1);
+      token.markup = '++';
+      state.md.inline.parse(state.src.slice(start, end), state.md, state.env, state.tokens);
+      token = state.push('ins_close', 'ins', -1);
+      token.markup = '++';
+    }
+
+    state.pos = end + 2;
+    return true;
+  });
+};
+
+const normalizeMarkdownUnderline = (value) => String(value || '')
+  .replace(/<u>([\s\S]*?)<\/u>/gi, '++$1++')
+  .replace(/<ins>([\s\S]*?)<\/ins>/gi, '++$1++');
+
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  typographer: false,
+})
+  .enable(['table', 'strikethrough'])
+  .use(addUnderlineRule);
+
+markdownRenderer.validateLink = isSafeMarkdownUrl;
+
+const defaultLinkOpen = markdownRenderer.renderer.rules.link_open || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+markdownRenderer.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const href = token.attrGet('href') || '';
+  if (!isSafeMarkdownUrl(href)) {
+    token.attrSet('href', '#');
+  }
+  token.attrSet('target', '_blank');
+  token.attrSet('rel', 'noopener noreferrer');
+  return defaultLinkOpen(tokens, idx, options, env, self);
+};
+
+markdownRenderer.renderer.rules.table_open = () => '<div class="markdown-table-wrap"><table>';
+markdownRenderer.renderer.rules.table_close = () => '</table></div>';
+
+const defaultImage = markdownRenderer.renderer.rules.image || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+markdownRenderer.renderer.rules.image = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  const src = token.attrGet('src') || '';
+  if (!isSafeMarkdownUrl(src)) {
+    token.attrSet('src', '');
+  }
+  token.attrSet('loading', 'lazy');
+  token.attrSet('decoding', 'async');
+  return defaultImage(tokens, idx, options, env, self);
+};
 
 (function () {
   'use strict';
@@ -24,128 +106,9 @@ import { ensureLegacyApp } from './app-context';
       }[ch]));
     },
     markdownLite(value) {
-      const text = String(value || '').replace(/\r\n/g, '\n').trim();
+      const text = normalizeMarkdownUnderline(value).replace(/\r\n/g, '\n').trim();
       if (!text) return '';
-
-      const escape = (input) => utils.escapeHtml(input);
-      const formatInline = (input) => {
-        const escaped = escape(input);
-        return escaped
-          .replace(/`([^`]+)`/g, '<code>$1</code>')
-          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      };
-      const isTableSeparator = (line) => /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(line) && line.includes('|');
-      const splitTableRow = (line) => {
-        return line
-          .trim()
-          .replace(/^\|/, '')
-          .replace(/\|$/, '')
-          .split('|')
-          .map((cell) => cell.trim());
-      };
-
-      const lines = text.split('\n');
-      const blocks = [];
-      let i = 0;
-
-      while (i < lines.length) {
-        const line = lines[i].trimEnd();
-        const trimmed = line.trim();
-
-        if (!trimmed) {
-          i += 1;
-          continue;
-        }
-
-        if (/^---+$/.test(trimmed)) {
-          blocks.push('<hr>');
-          i += 1;
-          continue;
-        }
-
-        if (trimmed.includes('|')) {
-          const tableLines = [];
-          let j = i;
-          while (j < lines.length) {
-            const candidate = lines[j].trim();
-            if (!candidate) break;
-            if (!candidate.includes('|') && !isTableSeparator(candidate)) break;
-            tableLines.push(candidate);
-            j += 1;
-          }
-
-          const hasTableSeparator = tableLines.some(isTableSeparator);
-          const hasMultipleRows = tableLines.length >= 2;
-          const isLikelyTable = hasMultipleRows && (hasTableSeparator || tableLines.every((line) => line.includes('|')));
-
-          if (isLikelyTable) {
-            const rows = tableLines.filter((line) => !isTableSeparator(line)).map(splitTableRow);
-            if (rows.length >= 2) {
-              const header = rows[0];
-              const body = rows.slice(1);
-              const headHtml = `<thead><tr>${header.map((cell) => `<th>${formatInline(cell)}</th>`).join('')}</tr></thead>`;
-              const bodyHtml = `<tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${formatInline(cell)}</td>`).join('')}</tr>`).join('')}</tbody>`;
-              blocks.push(`<div class="markdown-table-wrap"><table>${headHtml}${bodyHtml}</table></div>`);
-              i = j;
-              continue;
-            }
-          }
-        }
-
-        const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-        if (headingMatch) {
-          const level = headingMatch[1].length;
-          blocks.push(`<h${level}>${formatInline(headingMatch[2].trim())}</h${level}>`);
-          i += 1;
-          continue;
-        }
-
-        const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/);
-        if (unorderedMatch) {
-          const items = [];
-          while (i < lines.length) {
-            const current = lines[i].trim();
-            const match = current.match(/^[-*+]\s+(.+)$/);
-            if (!match) break;
-            items.push(`<li>${formatInline(match[1].trim())}</li>`);
-            i += 1;
-          }
-          blocks.push(`<ul>${items.join('')}</ul>`);
-          continue;
-        }
-
-        const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
-        if (orderedMatch) {
-          const items = [];
-          while (i < lines.length) {
-            const current = lines[i].trim();
-            const match = current.match(/^\d+\.\s+(.+)$/);
-            if (!match) break;
-            items.push(`<li>${formatInline(match[1].trim())}</li>`);
-            i += 1;
-          }
-          blocks.push(`<ol>${items.join('')}</ol>`);
-          continue;
-        }
-
-        const paragraph = [];
-        while (i < lines.length) {
-          const current = lines[i];
-          const currentTrimmed = current.trim();
-          if (!currentTrimmed) break;
-          if (/^---+$/.test(currentTrimmed) || /^(#{1,6})\s+/.test(currentTrimmed) || /^[-*+]\s+/.test(currentTrimmed) || /^\d+\.\s+/.test(currentTrimmed)) {
-            break;
-          }
-          paragraph.push(currentTrimmed);
-          i += 1;
-        }
-
-        const paragraphHtml = formatInline(paragraph.join(' ')).replace(/\n/g, '<br>');
-        blocks.push(`<p>${paragraphHtml}</p>`);
-      }
-
-      return blocks.join('');
+      return markdownRenderer.render(text).trim();
     },
     maskKey(key) {
       const value = String(key || '').trim();
@@ -154,17 +117,11 @@ import { ensureLegacyApp } from './app-context';
       return `${value.slice(0, 4)}…${value.slice(-4)}`;
     },
     readJson(key, fallback) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return fallback;
-        return JSON.parse(raw);
-      } catch {
-        return fallback;
-      }
+      return parseJsonOr(localStorage.getItem(key), fallback);
     },
     writeJson(key, value) {
       try {
-        localStorage.setItem(key, JSON.stringify(value));
+        setCloudBackedLocalStorageItem(key, JSON.stringify(value));
         return true;
       } catch {
         return false;

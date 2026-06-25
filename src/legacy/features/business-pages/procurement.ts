@@ -1,6 +1,7 @@
 // @ts-nocheck
+import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 
-export const PROCUREMENT_STORAGE_KEY = 'gjh-procurements-v1';
+export const PROCUREMENT_STORAGE_KEY = LOCAL_STORAGE_KEYS.procurements;
 
 export const procurementStatusOptions = ['已下单', '已到货', '已入库', '已质检', '已结算'];
 export const procurementPageSizeOptions = [5, 10, 20, 50];

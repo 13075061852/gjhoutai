@@ -3,6 +3,7 @@ import { renderDashboard } from './dashboard';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
 import { authClient } from '../../../services/auth';
 import { cloudStorage } from '../../../services/cloud-storage';
+import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 import {
   INVENTORY_CATEGORY_STORAGE_KEY,
   INVENTORY_STORAGE_KEY,
@@ -1586,7 +1587,7 @@ import { createBusinessPageShared } from './shared';
   let formulaLibraryCollapsed = false;
   const formulaPageSizeOptions = [5, 10, 20, 50];
 
-  const SUPPLIER_STORAGE_KEY = 'gjh-suppliers-v1';
+  const SUPPLIER_STORAGE_KEY = LOCAL_STORAGE_KEYS.suppliers;
   const supplierCategoryOptions = ['基础树脂', '改性添加剂', '销售成品', '增强填料', '稳定助剂', '色母助剂', '物流服务'];
   const supplierStatusOptions = ['正常合作', '样品评估', '暂停合作'];
   const defaultSupplierRows = [];
@@ -1721,7 +1722,7 @@ import { createBusinessPageShared } from './shared';
     'ai-config': ['系统管理员'],
   };
   let permissionActiveDepartment = personnelDepartments[0];
-  const ROLE_PAGE_PERMISSION_STORAGE_KEY = 'gjh-role-page-permissions-v1';
+  const ROLE_PAGE_PERMISSION_STORAGE_KEY = LOCAL_STORAGE_KEYS.rolePagePermissions;
   let rolePagePermissionOverrides = utils.readJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, {});
   const getUserDepartment = (user = {}) => normalizePersonnelDepartment(user.department || legacyRoleDepartments[user.role] || '');
   const normalizePersonnelDepartment = (department) => {
@@ -2116,7 +2117,7 @@ import { createBusinessPageShared } from './shared';
   const getInventoryMaterial = (name) => inventoryRows.find((row) => row[0] === name)
     || [name, '库存材料', '未分类', '未关联供应商', '--', '待确认'];
 
-  const FORMULA_STORAGE_KEY = 'gjh-formula-recipes-v1';
+  const FORMULA_STORAGE_KEY = LOCAL_STORAGE_KEYS.formulaRecipes;
   const defaultFormulaRecipes = [];
 
   const cloneFormulaData = (value) => JSON.parse(JSON.stringify(value));
@@ -3657,7 +3658,7 @@ import { createBusinessPageShared } from './shared';
     `;
   };
 
-  const CUSTOMER_STORAGE_KEY = 'gjh-customers-v1';
+  const CUSTOMER_STORAGE_KEY = LOCAL_STORAGE_KEYS.customers;
   const PERSONNEL_STORAGE_KEY = 'gjh-personnel-v1';
   const PERSONNEL_DELETED_AUTH_USERS_KEY = 'gjh-personnel-deleted-auth-users-v1';
   let authUsers = [];

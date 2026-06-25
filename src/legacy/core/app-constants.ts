@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { ensureLegacyApp } from './app-context';
+import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 
 ﻿(function () {
   'use strict';
@@ -7,18 +7,18 @@ import { ensureLegacyApp } from './app-context';
   const App = ensureLegacyApp();
 
   const constants = {
-    SIDEBAR_STATE_KEY: 'sidebar-collapsed',
-    ASSISTANT_STATE_KEY: 'assistant-collapsed',
+    SIDEBAR_STATE_KEY: LOCAL_STORAGE_KEYS.sidebarCollapsed,
+    ASSISTANT_STATE_KEY: LOCAL_STORAGE_KEYS.assistantCollapsed,
     NAV_PAGE_KEY: 'sidebar-active-page',
     NAV_RECENT_PAGES_KEY: 'sidebar-recent-pages',
     CONFIG_STORAGE_KEY: 'openrouter-ai-config-v1',
     CONFIG_LOG_KEY: 'openrouter-ai-config-log-v1',
-    CHAT_STORAGE_KEY: 'openrouter-ai-chat-v1',
-    CHAT_SESSIONS_KEY: 'openrouter-ai-chat-sessions-v1',
-    CHAT_ACTIVE_SESSION_KEY: 'openrouter-ai-chat-active-session-v1',
-    CHAT_DATA_ATTACHMENT_KEY: 'openrouter-ai-chat-data-attachment-v1',
-    CHAT_SEARCH_ENABLED_KEY: 'openrouter-ai-chat-search-enabled-v1',
-    AI_CALL_LOG_KEY: 'openrouter-ai-call-log-v1',
+    CHAT_STORAGE_KEY: LOCAL_STORAGE_KEYS.chat,
+    CHAT_SESSIONS_KEY: LOCAL_STORAGE_KEYS.chatSessions,
+    CHAT_ACTIVE_SESSION_KEY: LOCAL_STORAGE_KEYS.chatActiveSession,
+    CHAT_DATA_ATTACHMENT_KEY: LOCAL_STORAGE_KEYS.chatDataAttachment,
+    CHAT_SEARCH_ENABLED_KEY: LOCAL_STORAGE_KEYS.chatSearchEnabled,
+    AI_CALL_LOG_KEY: LOCAL_STORAGE_KEYS.aiCallLog,
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     DEFAULT_LM_STUDIO_BASE_URL: 'http://127.0.0.1:1234/v1',
     DEFAULT_APIMART_BASE_URL: 'https://api.apimart.ai',
@@ -172,7 +172,7 @@ import { ensureLegacyApp } from './app-context';
         desc: '这里可以配置 AI 模型接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
       },
     },
-  };
+  } satisfies LegacyAppConstants;
 
   App.constants = constants;
 })();

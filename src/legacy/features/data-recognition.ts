@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
+import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
+import { parseJsonMaybe } from '../../utils/json';
 
 (function () {
   'use strict';
@@ -448,7 +450,11 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const deleteHistoryRecord = async (id) => {
     if (!id || state.running) return;
-    if (!window.confirm('确定删除这条历史识别记录？')) return;
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除历史记录',
+      message: '确定删除这条历史识别记录？',
+    });
+    if (!confirmed) return;
     const ok = await cloudStorage.deleteDataRecognitionHistory(id);
     if (!ok) {
       App.notify?.warn?.('历史记录删除失败。', { key: 'data-recognition-history-delete-failed' });
@@ -526,14 +532,45 @@ import { cloudStorage } from '../../services/cloud-storage';
     };
   };
 
+  const splitSSEBuffer = (value) => {
+    const blocks = [];
+    const text = String(value || '');
+    const boundaryPattern = /\r\n\r\n|\n\n|\r\r/g;
+    let start = 0;
+    let match;
+
+    while ((match = boundaryPattern.exec(text)) !== null) {
+      blocks.push(text.slice(start, match.index));
+      start = match.index + match[0].length;
+    }
+
+    return {
+      blocks,
+      tail: text.slice(start),
+    };
+  };
+
   const parseSSEChunk = (chunk) => {
-    const rows = String(chunk || '').split(/\r?\n/);
-    const events = [];
+    const rows = String(chunk || '').split(/\r\n|\n|\r/);
+    const payloadLines = [];
+
     rows.forEach((line) => {
-      if (!line.startsWith('data: ')) return;
-      const payload = line.slice(6).trim();
-      if (!payload || payload === '[DONE]') return;
-      try { events.push(JSON.parse(payload)); } catch { /* ignore malformed chunks */ }
+      if (!line.startsWith('data:')) return;
+      const rawPayload = line.slice(5);
+      payloadLines.push(rawPayload.startsWith(' ') ? rawPayload.slice(1) : rawPayload);
+    });
+
+    const payload = payloadLines.join('\n').trim();
+    if (!payload || payload === '[DONE]') return [];
+
+    const event = parseJsonMaybe(payload);
+    return event ? [event] : [];
+  };
+
+  const parseSSEBlocks = (blocks) => {
+    const events = [];
+    blocks.forEach((block) => {
+      parseSSEChunk(block).forEach((event) => events.push(event));
     });
     return events;
   };
@@ -544,19 +581,18 @@ import { cloudStorage } from '../../services/cloud-storage';
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
     const candidates = [fenced, text].filter(Boolean);
     for (const candidate of candidates) {
-      try {
-        return JSON.parse(candidate);
-      } catch {
-        const objectStart = candidate.indexOf('{');
-        const objectEnd = candidate.lastIndexOf('}');
-        const arrayStart = candidate.indexOf('[');
-        const arrayEnd = candidate.lastIndexOf(']');
-        const useArray = arrayStart >= 0 && arrayEnd > arrayStart && (objectStart < 0 || arrayStart < objectStart);
-        const start = useArray ? arrayStart : objectStart;
-        const end = useArray ? arrayEnd : objectEnd;
-        if (start >= 0 && end > start) {
-          try { return JSON.parse(candidate.slice(start, end + 1)); } catch { /* keep trying */ }
-        }
+      const parsed = parseJsonMaybe(candidate);
+      if (parsed) return parsed;
+      const objectStart = candidate.indexOf('{');
+      const objectEnd = candidate.lastIndexOf('}');
+      const arrayStart = candidate.indexOf('[');
+      const arrayEnd = candidate.lastIndexOf(']');
+      const useArray = arrayStart >= 0 && arrayEnd > arrayStart && (objectStart < 0 || arrayStart < objectStart);
+      const start = useArray ? arrayStart : objectStart;
+      const end = useArray ? arrayEnd : objectEnd;
+      if (start >= 0 && end > start) {
+        const sliced = parseJsonMaybe(candidate.slice(start, end + 1));
+        if (sliced) return sliced;
       }
     }
     return null;
@@ -935,7 +971,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     let lastRenderTime = 0;
 
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config?.getRequestHeaders?.(config) || { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -951,7 +987,7 @@ import { cloudStorage } from '../../services/cloud-storage';
           max_tokens: Math.max(Number(config.maxTokens) || 4096, 2048),
           stream: true,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
@@ -967,14 +1003,12 @@ import { cloudStorage } from '../../services/cloud-storage';
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split(/\r?\n\r?\n/);
-        buffer = parts.pop() || '';
+        const { blocks, tail } = splitSSEBuffer(buffer);
+        buffer = tail;
 
-        parts.forEach((block) => {
-          parseSSEChunk(block).forEach((event) => {
-            const delta = event?.choices?.[0]?.delta?.content;
-            if (delta) state.streamText += delta;
-          });
+        parseSSEBlocks(blocks).forEach((event) => {
+          const delta = event?.choices?.[0]?.delta?.content;
+          if (delta) state.streamText += delta;
         });
 
         const payload = extractJsonPayload(state.streamText);
@@ -987,6 +1021,13 @@ import { cloudStorage } from '../../services/cloud-storage';
           renderTable();
         }
       }
+
+      buffer += decoder.decode();
+      parseSSEBlocks([buffer]).forEach((event) => {
+        const delta = event?.choices?.[0]?.delta?.content;
+        if (delta) state.streamText += delta;
+      });
+      buffer = '';
 
       const payload = extractJsonPayload(state.streamText);
       if (!payload) throw new Error('模型没有返回可解析的 JSON。');

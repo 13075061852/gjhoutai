@@ -1,7 +1,8 @@
 // @ts-nocheck
+import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 
-export const ORDER_STORAGE_KEY = 'gjh-orders-v1';
-export const ORDER_LOG_KEY = 'gjh-order-logs-v1';
+export const ORDER_STORAGE_KEY = LOCAL_STORAGE_KEYS.orders;
+export const ORDER_LOG_KEY = LOCAL_STORAGE_KEYS.orderLogs;
 
 export const orderStatusOptions = ['待处理', '已安排', '生产中', '已完成', '已发货', '已结清'];
 export const productionQueueStatuses = ['已安排', '生产中', '已完成'];

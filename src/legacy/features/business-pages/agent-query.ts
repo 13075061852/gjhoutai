@@ -1,5 +1,57 @@
 // @ts-nocheck
 
+type AgentQueryRow = Record<string, unknown>;
+type AgentQueryAliases = Record<string, string>;
+type AgentQueryFilter = {
+  field?: string;
+  key?: string;
+  op?: string;
+  operator?: string;
+  value?: unknown;
+  values?: unknown;
+};
+type AgentQuerySort = {
+  field?: string;
+  key?: string;
+  direction?: string;
+  order?: string;
+};
+type AgentQueryRequest = {
+  intent?: string;
+  fields?: string[];
+  filters?: AgentQueryFilter[];
+  sort?: AgentQuerySort[];
+  limit?: number | string;
+  field?: string;
+  direction?: string;
+  groupBy?: string;
+  groupField?: string;
+  target?: string;
+  key?: string;
+  id?: string;
+};
+type AgentQueryInput = {
+  pageId?: string;
+  entity?: string;
+  rows?: AgentQueryRow[];
+  request?: AgentQueryRequest;
+  defaultFields?: string[];
+  fieldAliases?: AgentQueryAliases;
+};
+type AgentQueryResult = {
+  ok: true;
+  skillId: 'business.queryPageData';
+  pageId: string;
+  entity: string;
+  intent: string;
+  rowCount: number;
+  totalRows: number;
+  data: AgentQueryRow[];
+  summary: string;
+  comparedRows?: number;
+  groupBy?: string;
+};
+
 const toText = (value) => String(value ?? '').trim();
 
 export const parseAgentNumber = (value) => {
@@ -78,7 +130,7 @@ export const queryAgentRows = ({
   request = {},
   defaultFields = [],
   fieldAliases = {},
-} = {}) => {
+}: AgentQueryInput = {}): AgentQueryResult => {
   const intent = toText(request.intent || 'list') || 'list';
   const requestedFields = Array.isArray(request.fields) && request.fields.length
     ? request.fields.map((field) => normalizeField(field, fieldAliases)).filter(Boolean)

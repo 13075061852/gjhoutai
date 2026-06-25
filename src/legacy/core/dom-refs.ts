@@ -1,15 +1,14 @@
-// @ts-nocheck
 import { ensureLegacyApp } from './app-context';
 
 (function () {
   'use strict';
 
   const App = ensureLegacyApp();
-  const byId = (id) => document.getElementById(id);
-  const qs = (selector) => document.querySelector(selector);
-  const qsa = (selector) => document.querySelectorAll(selector);
+  const byId = <T extends HTMLElement = HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
+  const qs = <T extends Element = Element>(selector: string): T | null => document.querySelector<T>(selector);
+  const qsa = <T extends Element = Element>(selector: string): NodeListOf<T> => document.querySelectorAll<T>(selector);
 
-  const refs = {
+  const refs: LegacyRefs = {
     shell: byId('shell'),
     mobileMenuBtn: byId('mobileMenuBtn'),
     sidebarToggle: byId('sidebarToggle'),
@@ -17,8 +16,8 @@ import { ensureLegacyApp } from './app-context';
     topVisitedPages: byId('topVisitedPages'),
     sidebarSearch: qs('.sidebar-search'),
     sidebarSearchInput: qs('.sidebar-search input'),
-    navPageButtons: qsa('[data-page]'),
-    groupToggles: qsa('[data-toggle="group"]'),
+    navPageButtons: qsa<HTMLElement>('[data-page]'),
+    groupToggles: qsa<HTMLElement>('[data-toggle="group"]'),
     aiPageSection: qs('[data-page-section="ai-config"]'),
     propertyAnalysisPageSection: qs('[data-page-section="property-analysis"]'),
     spectrumAnalysisPageSection: qs('[data-page-section="spectrum-analysis"]'),

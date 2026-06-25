@@ -26,6 +26,6 @@ describe('agent runtime media', () => {
     const summary = buildImageUploadAuthSummary([{ url: 'data:image/webp;base64,c', title: '图谱 1' }], '图谱检索结果');
     expect(summary.source).toBe('图谱检索结果');
     expect(summary.count).toBe(1);
-    expect(summary.items[0].label).toBe('图谱 1');
+    expect(summary.items[0]?.label).toBe('图谱 1');
   });
 });

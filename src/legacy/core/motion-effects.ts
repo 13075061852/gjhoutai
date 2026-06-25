@@ -1,30 +1,38 @@
-// @ts-nocheck
 import { animate } from 'motion/mini';
 import { ensureLegacyApp, ensurePublicApp } from './app-context';
+
+type LegacyMotionPlayback = {
+  stop?: () => void;
+  finished?: Promise<unknown>;
+};
+
+type LegacyMotionKeyframes = Record<string, string | number | Array<string | number>>;
+type LegacyMotionOptions = Record<string, unknown>;
 
 (function () {
   'use strict';
 
   const App = ensureLegacyApp();
   const PublicApp = ensurePublicApp();
-  const activeAnimations = new WeakMap();
+  const activeAnimations = new WeakMap<HTMLElement | SVGElement, LegacyMotionPlayback>();
 
   const prefersReducedMotion = () => App.animations?.prefersReducedMotion?.() ?? false;
 
-  const stop = (element) => {
+  const stop = (element: HTMLElement | SVGElement | null | undefined): void => {
+    if (!element) return;
     const animation = activeAnimations.get(element);
     animation?.stop?.();
     activeAnimations.delete(element);
   };
 
-  const run = (element, keyframes, options = {}) => {
+  const run = (element: HTMLElement | SVGElement | null | undefined, keyframes: LegacyMotionKeyframes, options: LegacyMotionOptions = {}): LegacyMotionPlayback | null => {
     if (!element) return null;
     stop(element);
 
     if (prefersReducedMotion()) {
       Object.entries(keyframes).forEach(([property, value]) => {
         const values = Array.isArray(value) ? value : [value];
-        element.style[property] = values[values.length - 1];
+        element.style.setProperty(property, String(values[values.length - 1] ?? ''));
       });
       return null;
     }
@@ -33,7 +41,7 @@ import { ensureLegacyApp, ensurePublicApp } from './app-context';
       duration: 0.28,
       easing: 'cubic-bezier(.22,.9,.24,1)',
       ...options,
-    });
+    } as Parameters<typeof animate>[2]) as LegacyMotionPlayback;
     activeAnimations.set(element, animation);
     animation.finished?.finally?.(() => {
       if (activeAnimations.get(element) === animation) activeAnimations.delete(element);
@@ -41,17 +49,17 @@ import { ensureLegacyApp, ensurePublicApp } from './app-context';
     return animation;
   };
 
-  const enterFromRight = (element, options = {}) => run(element, {
+  const enterFromRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
     opacity: [0, 1],
     transform: ['translateX(10px)', 'translateX(0px)'],
   }, options);
 
-  const exitToRight = (element, options = {}) => run(element, {
+  const exitToRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
     opacity: [1, 0],
     transform: ['translateX(0px)', 'translateX(10px)'],
   }, options);
 
-  const softSettle = (element, options = {}) => run(element, {
+  const softSettle = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
     opacity: [0.94, 1],
     transform: ['translateY(3px)', 'translateY(0px)'],
   }, {
@@ -59,12 +67,12 @@ import { ensureLegacyApp, ensurePublicApp } from './app-context';
     ...options,
   });
 
-  const cleanup = () => {
+  const cleanup = (): void => {
     // WeakMap entries are intentionally not enumerable; active animations stop
     // themselves when their owning elements are removed.
   };
 
-  const api = {
+  const api: LegacyMotionEffectsApi = {
     run,
     stop,
     enterFromRight,

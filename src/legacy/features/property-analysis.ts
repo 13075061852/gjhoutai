@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
+import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
+import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
+import { fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
   'use strict';
@@ -10,13 +13,13 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const { constants, utils } = App;
   const PAGE_SIZE_DEFAULT = 20;
-  const REPORT_RANGE_STORAGE_KEY = 'gjh-property-report-ranges-v1';
+  const REPORT_RANGE_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportRanges;
   const REPORT_COMPANY_NAME = '宁波广俊塑料科技有限公司';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
   const REPORT_COMPANY_TEL = '0574-63072712';
   const REPORT_COMPANY_FAX = '0574-63805667';
   const REPORT_SEAL_SRC = '/inspection-seal.png';
-  const REPORT_SEAL_POSITION_STORAGE_KEY = 'gjh-property-report-seal-position-v1';
+  const REPORT_SEAL_POSITION_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportSealPosition;
   const REPORT_SEAL_DEFAULT = { x: 428, y: 760, size: 150, rotation: 0 };
   let reportSealImagePromise = null;
   const HEADER_LABELS = {
@@ -582,17 +585,13 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const fetchJsonWithTimeout = async (url, timeoutMs = 15000) => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      const response = await fetchWithTimeout(url, { cache: 'no-store' }, timeoutMs);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (error) {
-      if (error?.name === 'AbortError') throw new Error('request_timeout');
+      if (error?.name === 'AbortError' || error?.name === 'TimeoutError') throw new Error('request_timeout');
       throw error;
-    } finally {
-      window.clearTimeout(timer);
     }
   };
 
@@ -904,7 +903,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const saveReportRanges = () => {
-    localStorage.setItem(REPORT_RANGE_STORAGE_KEY, JSON.stringify(state.reportRanges));
+    setCloudBackedLocalStorageItem(REPORT_RANGE_STORAGE_KEY, JSON.stringify(state.reportRanges));
   };
 
   const getReportMetricConfig = (metricKey) => (
@@ -1302,7 +1301,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
 
   const saveReportSealPosition = () => {
-    localStorage.setItem(REPORT_SEAL_POSITION_STORAGE_KEY, JSON.stringify(state.reportSealPosition));
+    setCloudBackedLocalStorageItem(REPORT_SEAL_POSITION_STORAGE_KEY, JSON.stringify(state.reportSealPosition));
   };
 
   const getReportSealScale = (canvas) => {

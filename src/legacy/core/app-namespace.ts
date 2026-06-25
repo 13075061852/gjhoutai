@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ensureLegacyApp } from './app-context';
 
 (function () {

@@ -1,6 +1,8 @@
+import { LOCAL_STORAGE_KEYS } from '../services/local-storage-keys';
+
 const THEME_KEYS = {
-  sidebar: 'sidebar-collapsed',
-  assistant: 'assistant-collapsed',
+  sidebar: LOCAL_STORAGE_KEYS.sidebarCollapsed,
+  assistant: LOCAL_STORAGE_KEYS.assistantCollapsed,
   mode: 'gjh-theme-mode-v1',
   vars: 'gjh-theme-vars-v1',
   font: 'gjh-font-vars-v1',

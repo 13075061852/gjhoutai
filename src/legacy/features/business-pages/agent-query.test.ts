@@ -44,7 +44,7 @@ describe('queryAgentRows', () => {
       },
     });
     expect(result.data).toHaveLength(1);
-    expect(result.data[0].name).toBe('GJ-PCABS-901');
+    expect(result.data[0]?.name).toBe('GJ-PCABS-901');
     expect(result.comparedRows).toBe(2);
   });
 
@@ -62,7 +62,7 @@ describe('queryAgentRows', () => {
   it('returns a targeted detail row', () => {
     const result = queryAgentRows({ ...baseRequest, request: { intent: 'detail', target: 'PCABS', limit: 1 } });
     expect(result.data).toHaveLength(1);
-    expect(result.data[0].name).toBe('GJ-PCABS-901');
+    expect(result.data[0]?.name).toBe('GJ-PCABS-901');
   });
 
   it('returns compare candidates without expanding beyond the limit', () => {

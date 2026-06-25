@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { mountApimartReactBitsShowcase } from '../../components/reactbits/ApimartReactBitsShowcase';
+import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
+import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { getLegacyApp } from '../core/app-context';
 
 (function () {
@@ -10,7 +12,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const { refs, constants, utils } = App;
   const PAGE_ID = 'apimart-media';
-  const STORAGE_KEY = 'apimart-media-tasks-v1';
+  const STORAGE_KEY = LOCAL_STORAGE_KEYS.apimartMediaTasks;
   const MAX_TASKS = 30;
   const IMAGE_MODELS = [
     ['gpt-image-2', 'GPT-Image-2'],
@@ -245,7 +247,7 @@ import { getLegacyApp } from '../core/app-context';
   const requestJson = async (path, options = {}) => {
     const config = getConfig();
     if (!config.apiKey) throw new Error('请先在配置中心填写 APIMart API Key');
-    const response = await fetch(`${config.baseUrl}${path}`, {
+    const response = await fetchWithTimeout(`${config.baseUrl}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
@@ -611,7 +613,7 @@ import { getLegacyApp } from '../core/app-context';
     const originalHTML = btn.innerHTML;
     btn.innerHTML = '<span class="apimart-ai-optimize-spinner"></span><span>优化中...</span>';
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: App.config?.getRequestHeaders?.(config) || { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify({
@@ -638,7 +640,7 @@ import { getLegacyApp } from '../core/app-context';
           max_tokens: 600,
           stream: false,
         }),
-      });
+      }, AI_FETCH_TIMEOUT_MS);
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         throw new Error(`HTTP ${response.status}${errorText ? `: ${errorText.slice(0, 120)}` : ''}`);
@@ -846,7 +848,7 @@ import { getLegacyApp } from '../core/app-context';
   const fetchImageFileSize = async (url) => {
     if (!url || url.startsWith('data:')) return getDataUrlFileSize(url);
     try {
-      const head = await fetch(url, { method: 'HEAD', cache: 'force-cache' });
+      const head = await fetchWithTimeout(url, { method: 'HEAD', cache: 'force-cache' });
       if (head.ok) {
         const length = Number(head.headers.get('content-length') || 0);
         if (length > 0) return length;
@@ -854,7 +856,7 @@ import { getLegacyApp } from '../core/app-context';
     } catch {
       // Some image hosts block HEAD/CORS metadata; fall back to reading the blob.
     }
-    const response = await fetch(url, { cache: 'force-cache' });
+    const response = await fetchWithTimeout(url, { cache: 'force-cache' });
     if (!response.ok) return 0;
     const blob = await response.blob();
     return Number(blob.size || 0);

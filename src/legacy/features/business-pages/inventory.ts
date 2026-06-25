@@ -1,7 +1,8 @@
 // @ts-nocheck
+import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 
-export const INVENTORY_STORAGE_KEY = 'gjh-inventory-materials-v1';
-export const INVENTORY_CATEGORY_STORAGE_KEY = 'gjh-inventory-categories-v1';
+export const INVENTORY_STORAGE_KEY = LOCAL_STORAGE_KEYS.inventoryMaterials;
+export const INVENTORY_CATEGORY_STORAGE_KEY = LOCAL_STORAGE_KEYS.inventoryCategories;
 
 export const defaultInventoryRows = [];
 

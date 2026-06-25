@@ -18,6 +18,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src"],
-  "exclude": ["src/legacy/**/*.ts"]
+  "include": ["src"]
 }

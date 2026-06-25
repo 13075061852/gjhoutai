@@ -1,3 +1,5 @@
+import { fetchWithTimeout, UPLOAD_FETCH_TIMEOUT_MS } from '../utils/fetch';
+
 export type AppDepartment = '系统管理员' | '研发部' | '测试部' | '销售部' | '生产部' | '生产部主管';
 
 export interface AppUser {
@@ -36,7 +38,7 @@ const clearSessionMarker = () => {
 };
 
 async function requestAuthMe(): Promise<AppUser | null> {
-  const response = await fetch(buildUrl('/api/auth/me'), {
+  const response = await fetchWithTimeout(buildUrl('/api/auth/me'), {
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
   });
@@ -47,7 +49,7 @@ async function requestAuthMe(): Promise<AppUser | null> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
-  const response = await fetch(buildUrl(path), {
+  const response = await fetchWithTimeout(buildUrl(path), {
     credentials: 'include',
     ...init,
     headers: {
@@ -89,7 +91,7 @@ export const authClient = {
     return Boolean(payload?.ok);
   },
   async getAvatarUrl(): Promise<string | null> {
-    const response = await fetch(buildUrl('/api/profile/avatar'), {
+    const response = await fetchWithTimeout(buildUrl('/api/profile/avatar'), {
       credentials: 'include',
       cache: 'no-store',
     });
@@ -98,23 +100,23 @@ export const authClient = {
     return URL.createObjectURL(blob);
   },
   async uploadAvatar(file: File): Promise<boolean> {
-    const response = await fetch(buildUrl('/api/profile/avatar'), {
+    const response = await fetchWithTimeout(buildUrl('/api/profile/avatar'), {
       method: 'PUT',
       credentials: 'include',
       headers: { 'content-type': file.type },
       body: file,
-    });
+    }, UPLOAD_FETCH_TIMEOUT_MS);
     return response.ok;
   },
   async clearAvatar(): Promise<boolean> {
-    const response = await fetch(buildUrl('/api/profile/avatar'), {
+    const response = await fetchWithTimeout(buildUrl('/api/profile/avatar'), {
       method: 'DELETE',
       credentials: 'include',
     });
     return response.ok;
   },
   async createUser(input: { username: string; displayName: string; department: AppDepartment; password: string }): Promise<boolean> {
-    const response = await fetch(buildUrl('/api/users'), {
+    const response = await fetchWithTimeout(buildUrl('/api/users'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
@@ -128,7 +130,7 @@ export const authClient = {
     return payload?.users ?? [];
   },
   async updateUser(id: string, input: { username?: string; displayName: string; department: AppDepartment; password?: string }): Promise<boolean> {
-    const response = await fetch(buildUrl(`/api/users/${encodeURIComponent(id)}`), {
+    const response = await fetchWithTimeout(buildUrl(`/api/users/${encodeURIComponent(id)}`), {
       method: 'PUT',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },

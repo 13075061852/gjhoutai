@@ -6,32 +6,36 @@
   "scripts": {
     "dev": "vite",
     "dev:worker": "wrangler dev",
-    "build": "tsc -b && vite build",
+    "build": "npm run check:legacy-types && tsc -b && vite build",
     "deploy:web": "npm run build && wrangler pages deploy dist --project-name gjhoutai-web",
     "deploy:api": "wrangler deploy",
     "deploy:db": "wrangler d1 migrations apply gjhoutai --remote",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "check:lockfile": "node scripts/check-package-lock.mjs",
+    "typecheck": "npm run check:legacy-types && tsc -b --noEmit",
     "test": "vitest run",
     "check-icons": "node scripts/check-icon-mappings.mjs",
+    "check:legacy-types": "node scripts/check-legacy-ts-nocheck.mjs",
     "update:siliconflow-catalog": "node scripts/update-siliconflow-catalog.mjs"
   },
   "dependencies": {
-    "@icon-park/svg": "^1.4.2",
-    "motion": "^12.38.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@icon-park/svg": "1.4.2",
+    "markdown-it": "14.2.0",
+    "motion": "12.38.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^5.2.0",
-    "typescript": "^5.6.3",
-    "vite": "^7.3.3",
-    "vitest": "^4.1.5",
-    "wrangler": "^4.92.0"
+    "@types/markdown-it": "14.1.2",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.3",
+    "vitest": "4.1.5",
+    "wrangler": "4.92.0"
   },
   "overrides": {
-    "ws": "^8.20.1"
+    "ws": "8.20.1"
   }
 }

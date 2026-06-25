@@ -143,6 +143,9 @@ class FakeD1Database {
     if (sql.includes('INSERT INTO app_state')) {
       this.appState.set(String(values[0]), String(values[1]));
     }
+    if (sql.includes('DELETE FROM app_state')) {
+      this.appState.delete(String(values[0]));
+    }
     if (sql.includes('INSERT INTO data_recognition_records')) {
       this.dataRecognitionRecords.set(String(values[0]), {
         id: String(values[0]),
@@ -355,6 +358,37 @@ describe('worker security controls', () => {
       value: JSON.stringify([{ id: 'FM-REAL', name: '真实配方' }]),
     });
     expect([...env.DB.appState.keys()]).toEqual(['gjh-formula-recipes-v1']);
+  });
+
+  it('deletes app state through DELETE instead of storing null', async () => {
+    const env = createEnv();
+    env.DB.addUser({
+      id: 'prod-1',
+      username: 'prod',
+      display_name: 'Production',
+      role: 'warehouse_manager',
+      department: '生产部',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    await env.DB.addSession('prod-1', 'prod-token');
+
+    const key = 'gjh-formula-recipes-v1';
+    const writeResponse = await worker.fetch(authedRequest(`/api/state/${key}`, 'prod-token', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: JSON.stringify([{ id: 'FM-DELETE', name: '待删除配方' }]) }),
+    }), env as any);
+    expect(writeResponse.status).toBe(200);
+    expect(env.DB.appState.has(key)).toBe(true);
+
+    const deleteResponse = await worker.fetch(authedRequest(`/api/state/${key}`, 'prod-token', {
+      method: 'DELETE',
+    }), env as any);
+    expect(deleteResponse.status).toBe(200);
+    expect(env.DB.appState.has(key)).toBe(false);
   });
 
   it('locks login attempts after repeated failures', async () => {

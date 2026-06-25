@@ -308,7 +308,23 @@ function renderIcon(element: Element) {
 }
 
 function renderIcons(root: ParentNode = document) {
-  root.querySelectorAll('.ti').forEach(renderIcon);
+  root.querySelectorAll('.ti').forEach((element) => {
+    renderIcon(element);
+    observeIconClass(element);
+  });
+}
+
+const observedIconElements = new WeakSet<Element>();
+const iconAttributeObserver = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    if (mutation.type === 'attributes') renderIcon(mutation.target as Element);
+  });
+});
+
+function observeIconClass(element: Element) {
+  if (observedIconElements.has(element)) return;
+  observedIconElements.add(element);
+  iconAttributeObserver.observe(element, { attributeFilter: ['class'], attributes: true });
 }
 
 export function mountIconParkAdapter() {
@@ -316,25 +332,24 @@ export function mountIconParkAdapter() {
 
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
-      if (mutation.type === 'attributes') {
-        renderIcon(mutation.target as Element);
-        return;
-      }
-
       mutation.addedNodes.forEach((node) => {
         if (!(node instanceof Element)) return;
-        if (node.classList.contains('ti')) renderIcon(node);
+        if (node.classList.contains('ti')) {
+          renderIcon(node);
+          observeIconClass(node);
+        }
         renderIcons(node);
       });
     });
   });
 
   observer.observe(document.body, {
-    attributeFilter: ['class'],
-    attributes: true,
     childList: true,
     subtree: true,
   });
 
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+    iconAttributeObserver.disconnect();
+  };
 }

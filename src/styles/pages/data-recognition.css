@@ -463,6 +463,31 @@
   background: #85d8f3;
 }
 
+.data-recognition-table-pager {
+  position: sticky;
+  left: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 100%;
+  padding: 8px 10px;
+  border-top: 1px solid #d8dee8;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.data-recognition-table-pager .analysis-toolbar-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 @media (max-width: 1180px) {
   .data-recognition-workbench {
     grid-template-columns: 1fr;

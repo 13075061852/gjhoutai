@@ -894,6 +894,44 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     `;
   };
 
+  const renderedChatMessageNodes = [];
+  const renderedChatMessageKeys = [];
+
+  const getChatMessageRenderKey = (item, messageIndex) => JSON.stringify({
+    messageIndex,
+    role: item?.role || '',
+    pending: Boolean(item?.pending),
+    pendingStatus: item?.pendingStatus || '',
+    content: item?.content || '',
+    images: item?.images || [],
+    tokenUsage: item?.tokenUsage || null,
+    actions: item?.actions || null,
+    imageUploadAuth: item?.imageUploadAuth || null,
+  });
+
+  const createChatMessageElement = (item, messageIndex) => {
+    const images = Array.isArray(item.images) && item.images.length
+      ? `<div class="ai-message-images">${item.images.map((image) => {
+          if (image?.type === 'image_note') {
+            return `<div class="ai-image-note">${utils.escapeHtml(image.label || '已附带图片')}</div>`;
+          }
+          const imageUrl = String(image?.image_url?.url || image?.url || '').trim();
+          if (!imageUrl) return '';
+          const previewUrl = String(image?.preview_url || image?.previewUrl || imageUrl).trim();
+          return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" /></button>`;
+        }).join('')}</div>`
+      : '';
+    const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
+    const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
+    const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
+    const pending = item.role === 'assistant' && item.pending;
+    const displayContent = item.role === 'assistant' ? stripVerboseSourceUrls(item.content) : item.content;
+    const contentHtml = pending ? renderPendingContent({ ...item, content: displayContent }) : utils.markdownLite(displayContent);
+    const template = document.createElement('template');
+    template.innerHTML = `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
+    return template.content.firstElementChild;
+  };
+
   const stripVerboseSourceUrls = (content) => {
     let text = String(content || '');
     text = text.replace(/\]\((https?:\/\/[^)\s]+)\)/g, ']');
@@ -908,28 +946,18 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const intro = refs.chatIntroText;
     const items = state.chatHistory;
 
-    refs.chatMessages.innerHTML = items.length
-      ? items.map((item, messageIndex) => {
-          const images = Array.isArray(item.images) && item.images.length
-            ? `<div class="ai-message-images">${item.images.map((image) => {
-                if (image?.type === 'image_note') {
-                  return `<div class="ai-image-note">${utils.escapeHtml(image.label || '已附带图片')}</div>`;
-                }
-                const imageUrl = String(image?.image_url?.url || image?.url || '').trim();
-                if (!imageUrl) return '';
-                const previewUrl = String(image?.preview_url || image?.previewUrl || imageUrl).trim();
-                return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" /></button>`;
-              }).join('')}</div>`
-            : '';
-          const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
-          const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
-          const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
-          const pending = item.role === 'assistant' && item.pending;
-          const displayContent = item.role === 'assistant' ? stripVerboseSourceUrls(item.content) : item.content;
-          const contentHtml = pending ? renderPendingContent({ ...item, content: displayContent }) : utils.markdownLite(displayContent);
-          return `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
-        }).join('')
-      : '';
+    const messageNodes = items.map((item, messageIndex) => {
+      const nextKey = getChatMessageRenderKey(item, messageIndex);
+      if (renderedChatMessageKeys[messageIndex] !== nextKey || !renderedChatMessageNodes[messageIndex]) {
+        renderedChatMessageKeys[messageIndex] = nextKey;
+        renderedChatMessageNodes[messageIndex] = createChatMessageElement(item, messageIndex);
+      }
+      return renderedChatMessageNodes[messageIndex];
+    }).filter(Boolean);
+
+    renderedChatMessageNodes.length = items.length;
+    renderedChatMessageKeys.length = items.length;
+    refs.chatMessages.replaceChildren(...messageNodes);
 
     if (intro) {
       const hasKey = Boolean((App.config.getFormConfig().apiKey || '').trim());

@@ -19,6 +19,16 @@ import { parseJsonOr } from '../../utils/json';
   let draggedVisitedOriginalNext = null;
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
+  let businessPagesPromise = null;
+  let pageRenderSeq = 0;
+
+  const loadBusinessPages = async () => {
+    if (App.businessPages) return;
+    if (!businessPagesPromise) {
+      businessPagesPromise = import('../features/business-pages');
+    }
+    await businessPagesPromise;
+  };
   let navigationBound = false;
   let navigationGlobalListenersBound = false;
   const DEFAULT_PAGE_ID = 'dashboard';
@@ -699,7 +709,8 @@ import { parseJsonOr } from '../../utils/json';
     }
   };
 
-  const showPage = (pageId, options = {}) => {
+  const showPage = async (pageId, options = {}) => {
+    const renderSeq = ++pageRenderSeq;
     pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
     if (!isPageVisible(pageId)) pageId = getFallbackPageId();
     const { scrollTop = true, trackRecent = true } = options;
@@ -731,7 +742,12 @@ import { parseJsonOr } from '../../utils/json';
     refs.shell?.classList.toggle('page-other', !isAiPage);
     removeCollapsedNavFlyout();
 
-    if (!isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage) {
+    const isBusinessPage = !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage;
+
+    if (isBusinessPage) {
+      await loadBusinessPages();
+    }
+    if (isBusinessPage && renderSeq === pageRenderSeq) {
       App.businessPages?.render?.(pageId, def);
     }
     if (isApimartMediaPage) {

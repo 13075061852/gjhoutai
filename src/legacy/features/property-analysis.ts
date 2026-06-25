@@ -2506,10 +2506,14 @@ import { fetchWithTimeout } from '../../utils/fetch';
   };
 
   const paginateRows = (rows) => {
+    const pageSize = Math.max(Number(state.pageSize) || PAGE_SIZE_DEFAULT, 1);
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPage = Math.min(Math.max(Number(state.page) || 1, 1), totalPages);
+    const start = (currentPage - 1) * pageSize;
     return {
-      currentPage: 1,
-      totalPages: 1,
-      rows,
+      currentPage,
+      totalPages,
+      rows: rows.slice(start, start + pageSize),
     };
   };
 
@@ -3830,7 +3834,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     const modelTypeCount = getModelTypeCount(filteredRows);
     const totalText = `共 ${filteredRows.length} 条 / ${modelTypeCount} 种型号`;
     if (refs.footerTotal) refs.footerTotal.textContent = totalText;
-    if (refs.pagination) refs.pagination.hidden = true;
+    if (refs.pagination) refs.pagination.hidden = !hasFilteredRows || totalPages <= 1;
 
     updateToolbarState(filteredRows);
     renderPagination(currentPage, totalPages);
@@ -4056,7 +4060,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     ensureReportToolbar();
     ensureMobileActionMenu();
     if (refs.pageSizeSelect?.parentElement) {
-      refs.pageSizeSelect.parentElement.hidden = true;
+      refs.pageSizeSelect.parentElement.hidden = false;
     }
 
     refs.sheetTabs?.addEventListener('click', (event) => {

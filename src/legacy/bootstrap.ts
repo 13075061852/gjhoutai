@@ -18,7 +18,6 @@ let bootPromise: Promise<(() => void) | undefined> | null = null;
 
 async function loadLegacyFeatures(): Promise<void> {
   await Promise.all([
-    import('./features/business-pages'),
     import('./shell/navigation'),
     import('./features/property-analysis'),
     import('./features/spectrum-analysis'),

@@ -33,6 +33,7 @@ import { parseJsonMaybe } from '../../utils/json';
   const IMAGE_MIN_SCALE = 1;
   const IMAGE_MAX_SCALE = 4;
   const IMAGE_SCALE_STEP = 0.2;
+  const TABLE_WINDOW_SIZE = 80;
 
   const state = {
     fileName: '',
@@ -47,6 +48,8 @@ import { parseJsonMaybe } from '../../utils/json';
     activeHistoryId: '',
     historySyncTimer: null,
     historySearch: '',
+    tablePage: 1,
+    tableRowsRef: null,
     imageView: {
       scale: 1,
       x: 0,
@@ -818,6 +821,8 @@ import { parseJsonMaybe } from '../../utils/json';
     const rows = state.result?.rows || [];
     if (!refs.tableWrap) return;
     if (!rows.length) {
+      state.tableRowsRef = rows;
+      state.tablePage = 1;
       refs.tableWrap.style.height = '';
       refs.tableWrap.innerHTML = '<div class="data-recognition-table-empty">完成识别后生成表格</div>';
       if (refs.tableMeta) refs.tableMeta.textContent = '只渲染参考表格内的字段';
@@ -825,11 +830,19 @@ import { parseJsonMaybe } from '../../utils/json';
       return;
     }
 
+    if (state.tableRowsRef !== rows) {
+      state.tableRowsRef = rows;
+      state.tablePage = 1;
+    }
     rows.forEach((row) => {
       row[MODEL_KEY] = normalizeModelCode(row[MODEL_KEY]);
       row[TEMPERATURE_KEY] = normalizeTemperature(row[TEMPERATURE_KEY]);
     });
-    const groupMeta = buildGroupMeta(rows);
+    const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_WINDOW_SIZE));
+    state.tablePage = Math.min(Math.max(Number(state.tablePage) || 1, 1), totalPages);
+    const start = (state.tablePage - 1) * TABLE_WINDOW_SIZE;
+    const pageRows = rows.slice(start, start + TABLE_WINDOW_SIZE);
+    const groupMeta = buildGroupMeta(pageRows);
     refs.tableWrap.style.height = '';
     refs.tableWrap.innerHTML = `
       <table class="data-recognition-result-table">
@@ -837,22 +850,37 @@ import { parseJsonMaybe } from '../../utils/json';
           <tr>${DISPLAY_HEADERS.map((header) => `<th>${utils.escapeHtml(header)}</th>`).join('')}</tr>
         </thead>
         <tbody>
-          ${rows.map((row, rowIndex) => `
+          ${pageRows.map((row, pageRowIndex) => {
+            const rowIndex = start + pageRowIndex;
+            return `
             <tr>
               ${FIELD_KEYS.map((key, colIndex) => {
                 if (GROUP_KEYS.includes(key)) {
-                  const rowSpan = groupMeta[rowIndex][key];
+                  const rowSpan = groupMeta[pageRowIndex][key];
                   if (!rowSpan) return '';
                   return `<th rowspan="${rowSpan}" class="data-recognition-group-cell" contenteditable="true" spellcheck="false" data-row="${rowIndex}" data-key="${utils.escapeHtml(key)}" data-rowspan="${rowSpan}">${utils.escapeHtml(row[key] || '-')}</th>`;
                 }
                 return `<td contenteditable="true" spellcheck="false" data-col="${colIndex}" data-row="${rowIndex}" data-key="${utils.escapeHtml(key)}">${utils.escapeHtml(row[key] || '')}</td>`;
               }).join('')}
             </tr>
-          `).join('')}
+          `;
+          }).join('')}
         </tbody>
       </table>
+      ${totalPages > 1 ? `
+        <div class="data-recognition-table-pager">
+          <button class="analysis-toolbar-btn" type="button" data-recognition-table-prev ${state.tablePage <= 1 ? 'disabled' : ''}>上一页</button>
+          <span>第 ${state.tablePage} / ${totalPages} 页</span>
+          <button class="analysis-toolbar-btn" type="button" data-recognition-table-next ${state.tablePage >= totalPages ? 'disabled' : ''}>下一页</button>
+        </div>
+      ` : ''}
     `;
-    if (refs.tableMeta) refs.tableMeta.textContent = `已识别 ${rows.length} 行`;
+    if (refs.tableMeta) {
+      const end = Math.min(start + pageRows.length, rows.length);
+      refs.tableMeta.textContent = totalPages > 1
+        ? `已识别 ${rows.length} 行 · 显示 ${start + 1}-${end} 行`
+        : `已识别 ${rows.length} 行`;
+    }
     updateCopyButton();
   };
 
@@ -1181,6 +1209,19 @@ import { parseJsonMaybe } from '../../utils/json';
       if (event.key === 'Enter') {
         event.preventDefault();
         cell.blur();
+      }
+    });
+    refs.tableWrap?.addEventListener('click', (event) => {
+      const prev = event.target.closest('[data-recognition-table-prev]');
+      const next = event.target.closest('[data-recognition-table-next]');
+      if (prev && !prev.disabled) {
+        state.tablePage = Math.max(1, state.tablePage - 1);
+        renderTable();
+        return;
+      }
+      if (next && !next.disabled) {
+        state.tablePage += 1;
+        renderTable();
       }
     });
     refs.tableWrap?.addEventListener('input', (event) => {

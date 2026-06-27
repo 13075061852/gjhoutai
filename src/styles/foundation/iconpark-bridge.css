@@ -145,6 +145,7 @@
 .ti-chevron-right{--ip-icon:var(--ip-arrow-right)}
 .ti-clipboard-list,.ti-list,.ti-list-check,.ti-list-details,.ti-menu-2{--ip-icon:var(--ip-list)}
 .ti-cloud-data-connection{--ip-icon:var(--ip-cloud)}
+.ti-column-insert-right{--ip-icon:var(--ip-columns)}
 .ti-clipboard-copy,.ti-copy{--ip-icon:var(--ip-copy)}
 .ti-cpu-2{--ip-icon:var(--ip-cpu)}
 .ti-crop{--ip-icon:var(--ip-crop)}
@@ -193,6 +194,7 @@
 .ti-robot{--ip-icon:var(--ip-ai)}
 .ti-settings{--ip-icon:var(--ip-settings)}
 .ti-route{--ip-icon:var(--ip-route)}
+.ti-row-insert-bottom{--ip-icon:var(--ip-table)}
 .ti-scale{--ip-icon:var(--ip-scale)}
 .ti-search{--ip-icon:var(--ip-search)}
 .ti-schema{--ip-icon:var(--ip-code-tree)}
@@ -200,6 +202,7 @@
 .ti-shield-check{--ip-icon:var(--ip-shield)}
 .ti-shopping-cart{--ip-icon:var(--ip-cart)}
 .ti-thermometer{--ip-icon:var(--ip-thermometer)}
+.ti-table-plus{--ip-icon:var(--ip-table)}
 .ti-trash{--ip-icon:var(--ip-delete)}
 .ti-trending-down{--ip-icon:var(--ip-trend-down)}
 .ti-user{--ip-icon:var(--ip-user)}

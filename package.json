@@ -15,11 +15,11 @@
     "typecheck": "npm run check:legacy-types && tsc -b --noEmit",
     "test": "vitest run",
     "check-icons": "node scripts/check-icon-mappings.mjs",
+    "optimize:images": "node scripts/optimize-images.mjs",
     "check:legacy-types": "node scripts/check-legacy-ts-nocheck.mjs",
     "update:siliconflow-catalog": "node scripts/update-siliconflow-catalog.mjs"
   },
   "dependencies": {
-    "@babel/core": "7.29.7",
     "@icon-park/svg": "1.4.2",
     "markdown-it": "14.2.0",
     "motion": "12.38.0",
@@ -28,10 +28,13 @@
     "undici": "8.5.0"
   },
   "devDependencies": {
+    "@babel/core": "7.29.7",
     "@types/markdown-it": "14.1.2",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
+    "lightningcss": "1.32.0",
+    "sharp": "0.35.2",
     "typescript": "5.9.3",
     "vite": "7.3.3",
     "vitest": "4.1.5",

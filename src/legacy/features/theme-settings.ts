@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 
 (function () {
   'use strict';

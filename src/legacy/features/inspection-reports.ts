@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
@@ -12,14 +11,14 @@ import { cloudStorage } from '../../services/cloud-storage';
   const PAGE_ID = 'inspection-reports';
   const MAX_PDF_SIZE = 50 * 1024 * 1024;
 
-  const state = {
+  const state: any = {
     reports: [],
     loading: false,
     uploading: false,
     search: '',
     activeReportId: '',
   };
-  const refs = {};
+  const refs: any = {};
 
   const getFreshRefs = () => {
     refs.page = document.querySelector(`[data-page-section="${PAGE_ID}"]`);
@@ -322,7 +321,7 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const normalizeTitle = (fileName) => String(fileName || '检测报告').replace(/\.pdf$/i, '').trim() || '检测报告';
 
-  const setUploadProgress = ({ current = 0, total = 0, fileName = '' } = {}) => {
+  const setUploadProgress = ({ current = 0, total = 0, fileName = '' } = {} as any) => {
     const safeTotal = Math.max(0, Number(total) || 0);
     const safeCurrent = Math.min(Math.max(0, Number(current) || 0), safeTotal);
     const percent = safeTotal ? Math.round((safeCurrent / safeTotal) * 100) : 0;
@@ -462,3 +461,4 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   App.inspectionReports = { init, refresh: refreshReports };
 })();
+

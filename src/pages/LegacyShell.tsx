@@ -3,6 +3,13 @@ import { legacyMarkup } from '../legacy/legacyMarkup';
 const NAV_PAGE_KEY = 'sidebar-active-page';
 const DEFAULT_PAGE_ID = 'dashboard';
 const TRUSTED_LEGACY_MARKUP = assertTrustedLegacyMarkup(legacyMarkup);
+const LEGACY_LOADING_MARKUP = `
+  <div class="legacy-loading-state" role="status" aria-live="polite" aria-label="正在加载工作台">
+    <span class="legacy-loading-spinner" aria-hidden="true"></span>
+    <strong>正在加载工作台</strong>
+    <span>正在同步数据与页面配置...</span>
+  </div>
+`;
 const DIRECT_PAGE_SECTIONS = new Set([
   'ai-config',
   'property-analysis',
@@ -38,6 +45,10 @@ function getInitialLegacyMarkup(booting = true) {
     .replace(/\bpage-section active\b/g, 'page-section')
     .replace('class="shell"', booting ? 'class="shell legacy-shell-booting"' : 'class="shell"')
     .replace(sectionPattern, '$1 active$2');
+
+  if (booting) {
+    markup = markup.replace('<div class="content">', `<div class="content">${LEGACY_LOADING_MARKUP}`);
+  }
 
   if (pageId !== DEFAULT_PAGE_ID) {
     markup = markup.replace(

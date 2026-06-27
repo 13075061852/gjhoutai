@@ -1,5 +1,4 @@
-// @ts-nocheck
-
+﻿
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -34,6 +33,10 @@ const getOrderAmount = (order) => Number(order?.quantity || 0) * Number(order?.u
 const formatWan = (value) => (Number(value || 0) / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 1 });
 const formatNumber = (value) => Number(value || 0).toLocaleString('zh-CN');
 const formatPercent = (part, total) => (total ? Math.round((part / total) * 1000) / 10 : 0);
+const getBarHeightPercent = (value, chartMax) => {
+  const percent = (Number(value) / Math.max(1, Number(chartMax) || 0)) * 100;
+  return Number.isFinite(percent) ? Math.max(4, percent) : 4;
+};
 const getOrderDateCode = (order) => String(order?.id || '').match(/\d{8}/)?.[0] || '';
 const toDateCode = (dateText) => String(dateText || '').replace(/-/g, '');
 const isTodayOrder = (order, today) => getOrderDateCode(order) === toDateCode(today) || order?.deliveryDate === today;
@@ -42,8 +45,17 @@ const getInventoryStatus = (row) => String(row?.[5] || '').trim();
 const getInventoryName = (row) => String(row?.[0] || '').trim();
 const getInventoryStock = (row) => String(row?.[4] || '--').trim() || '--';
 const getInventoryUnit = (row) => String(row?.[6] || '').trim();
+const getDateOnly = (value) => {
+  const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/);
+  return match?.[0] || '';
+};
+const isWithinRecentDays = (value, today, days) => {
+  const dateText = getDateOnly(value);
+  if (!dateText) return false;
+  return dateText >= addDays(today, -(days - 1)) && dateText <= today;
+};
 
-const buildDashboardData = (state = {}) => {
+const buildDashboardData = (state = {} as any) => {
   const today = getToday();
   const orders = Array.isArray(state.orders) ? state.orders : [];
   const inventoryRows = Array.isArray(state.inventoryRows) ? state.inventoryRows : [];
@@ -62,7 +74,7 @@ const buildDashboardData = (state = {}) => {
   const urgentOrders = openOrders.filter((order) => order.deliveryDate && order.deliveryDate <= addDays(today, 3));
   const riskyInventory = inventoryRows.filter((row) => riskyInventoryStatuses.includes(getInventoryStatus(row)));
   const activeCustomers = customers.filter((customer) => activeCustomerStatuses.includes(customer.status));
-  const newCustomers = customers.filter((customer) => String(customer.code || '').match(/\d+/)?.[0] && Number(String(customer.code).match(/\d+/)?.[0]) > Math.max(0, customers.length - 7));
+  const newCustomers = customers.filter((customer) => isWithinRecentDays(customer.createdAt || customer.updatedAt || customer.date, today, 7));
   const completedProduction = productionOrders.filter((order) => order.status === '已完成').length;
   const productionDoneRate = formatPercent(completedProduction, productionOrders.length);
   const recent7Days = Array.from({ length: 7 }, (_, index) => addDays(today, index - 6));
@@ -192,7 +204,7 @@ const renderTrend = (value, positiveText, neutralText = '较昨日持平') => {
   return `<div class="kpi-trend"><i class="ti ti-minus" aria-hidden="true"></i>${escapeHtml(neutralText)}</div>`;
 };
 
-export const renderDashboard = (state = {}) => {
+export const renderDashboard = (state = {} as any) => {
   const data = buildDashboardData(state);
 
   return `
@@ -261,7 +273,7 @@ export const renderDashboard = (state = {}) => {
             <div class="biz-chart-bars">
               ${data.chartRows.map(({ label, value, color }) => `
                 <div class="biz-bar-col">
-                  <div class="biz-bar-fill" style="height:${Math.max(4, (Number(value) / data.chartMax) * 100)}%;background:${color}"></div>
+                  <div class="biz-bar-fill" style="height:${getBarHeightPercent(value, data.chartMax)}%;background:${color}"></div>
                   <span class="biz-bar-value">${escapeHtml(value)}</span>
                   <span class="biz-bar-label">${escapeHtml(label)}</span>
                 </div>

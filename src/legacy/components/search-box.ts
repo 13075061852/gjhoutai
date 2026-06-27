@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+﻿import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
 
 (function () {
   const App = ensureLegacyApp();
@@ -16,7 +15,7 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     }[char]));
   };
 
-  const renderAttributes = (attributes = {}) => Object.entries(attributes)
+  const renderAttributes = (attributes = {} as any) => Object.entries(attributes)
     .filter(([, value]) => value !== false && value !== null && value !== undefined)
     .map(([name, value]) => (value === true || value === '' ? escapeHtml(name) : `${escapeHtml(name)}="${escapeHtml(value)}"`))
     .join(' ');
@@ -29,8 +28,8 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     label = placeholder,
     icon = 'ti ti-search',
     type = 'search',
-    attributes = {},
-  } = {}) => {
+    attributes = {} as any,
+  } = {} as any) => {
     const inputAttributes = renderAttributes({
       autocomplete: 'off',
       spellcheck: 'false',

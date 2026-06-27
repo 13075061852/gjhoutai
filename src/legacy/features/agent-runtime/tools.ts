@@ -1,4 +1,4 @@
-import { mapImageGenerationParams } from './media';
+﻿import { mapImageGenerationParams } from './media';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
 
@@ -50,7 +50,7 @@ export const createRuntimeSkillDefinitions = (App: any) => [
       if (!/(?:这个|当前|本|该)?(?:页面|模块|功能|系统|项目|网站|应用|平台).*(?:做什么|是什么|用途|作用|介绍|说明|怎么用|如何使用|有什么|包含|能干嘛)|(?:你是谁|你是什么|你能做什么|你会什么|介绍一下你自己|这个后台能做什么)/.test(String(prompt || ''))) return null;
       return { skillId: this.id, confidence: 0.88, input: { question: prompt } };
     },
-    async handler(input: Record<string, unknown> = {}) {
+    async handler(input: Record<string, any> = {} as any) {
       const pageKey = App?.constants?.NAV_PAGE_KEY || 'sidebar-active-page';
       const pageId = localStorage.getItem(pageKey) || 'dashboard';
       const pageDef = App?.constants?.PAGE_DEFS?.[pageId] || {};
@@ -105,7 +105,7 @@ export const createRuntimeSkillDefinitions = (App: any) => [
       if (!/识别历史|识别记录|数据识别历史|识别过/.test(String(prompt || ''))) return null;
       return { skillId: this.id, confidence: 0.82, input: { query: prompt, limit: 8 } };
     },
-    async handler(input: Record<string, unknown> = {}) {
+    async handler(input: Record<string, any> = {} as any) {
       if (!App?.dataRecognition?.searchHistoryByAgent) {
         return { ok: false, message: '数据识别模块尚未暴露历史查询接口。' };
       }
@@ -157,7 +157,7 @@ export const createRuntimeSkillDefinitions = (App: any) => [
       if (!/(?:生成图片|生成图像|出图|画一张|画图|绘图|海报|封面|壁纸|插图)/.test(String(prompt || ''))) return null;
       return { skillId: this.id, confidence: 0.86, input: { prompt } };
     },
-    async handler(input: Record<string, unknown> = {}) {
+    async handler(input: Record<string, any> = {} as any) {
       const params = mapImageGenerationParams(input);
       if (!params.prompt) return { ok: false, message: '请先提供图片生成提示词。' };
       if (!App?.apimartMedia?.generateImage) return { ok: false, message: 'AI 绘图模块尚未初始化。' };
@@ -184,7 +184,7 @@ export const createRuntimeSkillDefinitions = (App: any) => [
       if (!/(?:分析|看看|识别|读取|提取|对比|判断|解读).*(?:图谱|谱图|图片|图像|曲线|照片|dsc|tga|峰)|(?:图谱|谱图|图片|图像|曲线|照片).*(?:分析|识别|读取|提取|对比|判断|解读)/i.test(String(prompt || ''))) return null;
       return { skillId: this.id, confidence: 0.74, input: { question: prompt } };
     },
-    async handler(input: Record<string, unknown> = {}) {
+    async handler(input: Record<string, any> = {} as any) {
       const question = normalizeText(input.question || input.prompt || input.query);
       const activePageId = localStorage.getItem(App?.constants?.NAV_PAGE_KEY || 'sidebar-active-page') || '';
       const context = App?.agentButler?.buildContext?.({ question, activePageId, forceCurrentPage: true }) || '';
@@ -198,3 +198,4 @@ export const createRuntimeSkillDefinitions = (App: any) => [
     },
   },
 ];
+

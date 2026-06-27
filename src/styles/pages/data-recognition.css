@@ -4,6 +4,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  container-type: inline-size;
 }
 
 .data-recognition-page.active {
@@ -97,11 +98,22 @@
 .data-recognition-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 300px) clamp(220px, 20vw, 280px);
+  grid-template-areas:
+    "preview json history"
+    "table table table";
+  grid-template-rows: minmax(0, 1fr) clamp(220px, 34vh, 340px);
   gap: 10px;
-  height: auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
   min-height: 0;
   flex: 1 1 auto;
 }
+
+.data-recognition-preview-panel { grid-area: preview; }
+.data-recognition-json-panel { grid-area: json; }
+.data-recognition-history-panel { grid-area: history; }
+.data-recognition-table-panel { grid-area: table; }
 
 .data-recognition-preview-panel,
 .data-recognition-json-panel,
@@ -114,11 +126,9 @@
 }
 
 .data-recognition-json-panel {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  height: min(100%, calc(100vh - 32px));
-  max-height: calc(100vh - 32px);
+  height: auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .data-recognition-history-panel {
@@ -354,16 +364,15 @@
 .data-recognition-table-panel {
   min-width: 0;
   display: flex;
-  flex: 0 0 320px;
   flex-direction: column;
   min-height: 0;
-  max-height: 46vh;
+  max-height: none;
 }
 
 .data-recognition-table-panel:has(.data-recognition-result-table) {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: 58vh;
+  max-height: none;
 }
 
 .data-recognition-table-wrap {
@@ -375,9 +384,9 @@
 }
 
 .data-recognition-table-wrap:has(.data-recognition-result-table) {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: calc(58vh - 43px);
+  max-height: none;
 }
 
 .data-recognition-table-empty {
@@ -489,24 +498,38 @@
 }
 
 @media (max-width: 1180px) {
-  .data-recognition-workbench {
-    grid-template-columns: 1fr;
-    flex: 1 1 auto;
+  .data-recognition-page.active {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
   }
 
-  .data-recognition-json-panel {
-    position: static;
+  .data-recognition-workbench {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, .72fr);
+    grid-template-areas:
+      "preview preview"
+      "json history"
+      "table table";
+    grid-template-rows: auto clamp(260px, 38vh, 420px) auto;
     height: auto;
-    max-height: none;
+    flex: 0 0 auto;
   }
 
   .data-recognition-history-panel {
-    min-height: 220px;
+    min-height: 0;
+  }
+
+  .data-recognition-dropzone {
+    min-height: 260px;
   }
 
   .data-recognition-table-panel {
-    flex-basis: 300px;
-    max-height: 42vh;
+    min-height: 220px;
+    max-height: min(48vh, 460px);
+  }
+
+  .data-recognition-table-panel:has(.data-recognition-result-table) {
+    max-height: min(48vh, 460px);
   }
 }
 
@@ -519,9 +542,14 @@
   }
 
   .data-recognition-workbench {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "preview preview"
+      "json history"
+      "table table";
+    grid-template-rows: auto 300px auto;
     flex: 0 0 auto;
-    flex-direction: column;
     gap: 8px;
     height: auto;
     overflow: visible;
@@ -534,7 +562,6 @@
     width: 100%;
     box-sizing: border-box;
     align-self: stretch;
-    flex: 0 0 auto;
     min-height: 0;
     border-radius: 7px;
   }
@@ -573,9 +600,9 @@
 
   .data-recognition-dropzone {
     flex: 0 0 auto;
-    height: 128px;
-    min-height: 128px;
-    max-height: 32vh;
+    height: auto;
+    min-height: 260px;
+    max-height: none;
   }
 
   .data-recognition-empty {
@@ -591,29 +618,37 @@
   .data-recognition-json-panel {
     align-self: stretch;
     width: 100%;
+    height: 300px;
     max-height: none;
   }
 
   .data-recognition-json {
     width: 100%;
     box-sizing: border-box;
-    flex: 0 0 auto;
-    height: 260px;
-    min-height: 220px;
-    max-height: 42vh;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
     padding: 12px;
     font-size: 12px;
     line-height: 1.6;
   }
 
   .data-recognition-history-panel {
+    height: 300px;
     min-height: 0;
-    max-height: 190px;
+    max-height: none;
   }
 
   .data-recognition-history-panel .data-recognition-panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 30px;
     align-items: center;
-    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .data-recognition-history-panel .data-recognition-panel-head > div {
+    grid-column: 1 / -1;
   }
 
   .data-recognition-history-search {
@@ -630,8 +665,8 @@
   }
 
   .data-recognition-history-list {
-    flex: 0 1 auto;
-    max-height: 136px;
+    flex: 1 1 auto;
+    max-height: none;
   }
 
   .data-recognition-history-item {
@@ -645,7 +680,7 @@
   }
 
   .data-recognition-table-panel {
-    flex-basis: auto;
+    min-height: 0;
     max-height: none;
   }
 

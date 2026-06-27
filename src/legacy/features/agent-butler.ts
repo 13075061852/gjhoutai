@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 
 (function () {
   'use strict';
@@ -66,7 +65,7 @@ import { getLegacyApp } from '../core/app-context';
 
   const getResourceRoutingContext = (question = '', activePageId = '') => {
     const text = String(question || '').toLowerCase();
-    const matched = PAGE_RESOURCE_RULES
+    const matched: any[] = PAGE_RESOURCE_RULES
       .filter((rule) => rule.patterns.some((pattern) => pattern.test(text)))
       .map((rule) => ({
         ...rule,
@@ -77,6 +76,7 @@ import { getLegacyApp } from '../core/app-context';
         label: '当前页面补充',
         pageIds: [activePageId],
         titles: [`${getPageTitle(activePageId)}(${activePageId})`],
+        patterns: [],
       });
     }
     if (!matched.length) return null;
@@ -97,7 +97,7 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
-  const getCurrentPageDomContext = (question = '', options = {}) => {
+  const getCurrentPageDomContext = (question = '', options = {} as any) => {
     const activePageId = options.activePageId || '';
     const pageTitle = getPageTitle(activePageId);
     const root = App.refs?.businessPageContent
@@ -172,7 +172,7 @@ import { getLegacyApp } from '../core/app-context';
     },
   ];
 
-  const getProjectGuideContext = (question = '', options = {}) => {
+  const getProjectGuideContext = (question = '', options = {} as any) => {
     const activePageLabel = getPageTitle(options.activePageId);
     return {
       title: '项目管家',
@@ -303,7 +303,7 @@ import { getLegacyApp } from '../core/app-context';
     return score(b) - score(a);
   });
 
-  const getRetrieveCacheKey = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => JSON.stringify({
+  const getRetrieveCacheKey = ({ question = '', activePageId = '', forceCurrentPage = false } = {} as any) => JSON.stringify({
     question: String(question || ''),
     activePageId: String(activePageId || ''),
     forceCurrentPage: Boolean(forceCurrentPage),
@@ -315,7 +315,7 @@ import { getLegacyApp } from '../core/app-context';
     images: [...(bundle.images || [])],
   });
 
-  const retrieveBundle = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => {
+  const retrieveBundle = ({ question = '', activePageId = '', forceCurrentPage = false } = {} as any) => {
     const cacheKey = getRetrieveCacheKey({ question, activePageId, forceCurrentPage });
     const now = Date.now();
     if (
@@ -391,12 +391,12 @@ import { getLegacyApp } from '../core/app-context';
     return value;
   };
 
-  const retrieveContext = (options = {}) => {
+  const retrieveContext = (options = {} as any) => {
     const { intent, results } = retrieveBundle(options);
     return { intent, results };
   };
 
-  const compressContext = ({ intent, results } = {}) => {
+  const compressContext = ({ intent, results } = {} as any) => {
     const hasFullContextResult = (results || []).some((result) => result?.fullContext);
     const limitText = (value, limit, bypass = false) => {
       const text = String(value || '').trim();
@@ -422,7 +422,7 @@ import { getLegacyApp } from '../core/app-context';
     return limitText(sections.join('\n'), MAX_TOTAL_CONTEXT_CHARS, hasFullContextResult);
   };
 
-  const buildContext = (options = {}) => compressContext(retrieveBundle(options));
+  const buildContext = (options = {} as any) => compressContext(retrieveBundle(options));
 
   const buildAgentPrompt = (question = '', context = '') => [
     '【用户问题】',
@@ -443,7 +443,7 @@ import { getLegacyApp } from '../core/app-context';
     '不要把塑料材料型号解释成服务器、网络设备或外部产品。',
   ].join('\n');
 
-  const getImages = ({ question = '', activePageId = '', forceCurrentPage = false } = {}) => {
+  const getImages = ({ question = '', activePageId = '', forceCurrentPage = false } = {} as any) => {
     if (isPageGuideQuestion(question)) return [];
     return retrieveBundle({ question, activePageId, forceCurrentPage }).images;
   };
@@ -455,7 +455,7 @@ import { getLegacyApp } from '../core/app-context';
     buildContext,
     buildAgentPrompt,
     getProjectManifest,
-    answerQuestion: (question = '', options = {}) => App.businessPages?.answerQuestion?.(question, options) || '',
+    answerQuestion: (question = '', options = {} as any) => App.businessPages?.answerQuestion?.(question, options) || '',
     getImages,
   };
 })();

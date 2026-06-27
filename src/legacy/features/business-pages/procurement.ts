@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
+﻿import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 
 export const PROCUREMENT_STORAGE_KEY = LOCAL_STORAGE_KEYS.procurements;
 
@@ -10,7 +9,7 @@ export const defaultProcurementRows = [];
 
 const getProcurementFallbackDate = () => new Date().toISOString().slice(0, 10);
 
-export const createNormalizeProcurement = ({ getDefaultSupplierName }) => (procurement = {}, index = 0) => {
+export const createNormalizeProcurement = ({ getDefaultSupplierName }) => (procurement = {} as any, index = 0) => {
   const status = procurementStatusOptions.includes(procurement.status) ? procurement.status : procurementStatusOptions[0];
   const fallbackDate = getProcurementFallbackDate();
 
@@ -26,9 +25,9 @@ export const createNormalizeProcurement = ({ getDefaultSupplierName }) => (procu
   };
 };
 
-export const createNormalizeProcurements = (normalizeProcurement) => (value) => {
+export const createNormalizeProcurements = (normalizeProcurement) => (value: any) => {
   const rows = Array.isArray(value)
-    ? value.map(normalizeProcurement).filter((procurement) => procurement.id && procurement.supplier)
+    ? value.map(normalizeProcurement).filter((procurement: any) => procurement.id && procurement.supplier)
     : [];
 
   return rows;

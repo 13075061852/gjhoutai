@@ -158,14 +158,14 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
       <AuthParticleTrail />
       <section className="auth-brand-panel" aria-hidden="true">
         <div className="auth-brand-mark">
-          <img src="/logo.png" alt="" />
+          <img src="/logo.webp" alt="" />
           <span>广俊塑料科技</span>
         </div>
         <div className="auth-brand-copy">
           <h1>后台管理系统</h1>
           <p>让生产、库存与业务协同更清晰</p>
         </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.png" alt="" />
+        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
       </section>
 
       <section className="auth-panel-wrap">
@@ -195,7 +195,7 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
           </form>
         </section>
       </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.png" alt="" aria-hidden="true" />
+      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
 }
@@ -215,14 +215,14 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
     <main className="auth-shell">
       <section className="auth-brand-panel" aria-hidden="true">
         <div className="auth-brand-mark">
-          <img src="/logo.png" alt="" />
+          <img src="/logo.webp" alt="" />
           <span>广俊塑料科技</span>
         </div>
         <div className="auth-brand-copy">
           <h1>后台管理系统</h1>
           <p>先完成一次安全设置，再进入业务工作台</p>
         </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.png" alt="" />
+        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
       </section>
 
       <section className="auth-panel-wrap">
@@ -246,7 +246,7 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
           </form>
         </section>
       </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.png" alt="" aria-hidden="true" />
+      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
 }
@@ -315,17 +315,41 @@ function App() {
   useEffect(() => {
     if (!user || user.mustChangePassword) return;
     let cleanup: (() => void) | undefined;
+    let cleanupTopActionsPlacement: (() => void) | undefined;
     let disposed = false;
     const cleanupIcons = mountIconParkAdapter();
     window.GJHApp = window.GJHApp || {};
     window.GJHApp.currentUser = user;
     void (async () => {
-      await hydrateCloudBackedLocalStorage();
-      const { bootLegacyApp, teardownLegacyApp } = await import('./legacy/bootstrap');
+      const [legacyModule] = await Promise.all([
+        import('./legacy/bootstrap'),
+        hydrateCloudBackedLocalStorage(),
+      ]);
       if (disposed) return;
+      const { bootLegacyApp, teardownLegacyApp } = legacyModule;
       cleanup = await bootLegacyApp();
       document.getElementById('shell')?.classList.remove('legacy-shell-booting');
       const topActions = document.querySelector('.top-actions');
+      const topActionsHome = topActions?.parentElement ?? null;
+      const topActionsNextSibling = topActions?.nextSibling ?? null;
+      const sidebarMobileActions = document.querySelector('[data-sidebar-mobile-actions]');
+      const mobileActionsQuery = window.matchMedia('(max-width: 980px)');
+      const placeTopActions = () => {
+        if (!topActions || !topActionsHome) return;
+        if (mobileActionsQuery.matches && sidebarMobileActions) {
+          sidebarMobileActions.append(topActions);
+          return;
+        }
+        topActionsHome.insertBefore(topActions, topActionsNextSibling);
+      };
+      placeTopActions();
+      mobileActionsQuery.addEventListener('change', placeTopActions);
+      cleanupTopActionsPlacement = () => {
+        mobileActionsQuery.removeEventListener('change', placeTopActions);
+        if (topActions && topActionsHome) {
+          topActionsHome.insertBefore(topActions, topActionsNextSibling);
+        }
+      };
       const accountButton = topActions?.querySelector<HTMLButtonElement>('.icon-btn');
       if (accountButton && topActions) {
         const accountWrap = document.createElement('div');
@@ -434,25 +458,26 @@ function App() {
     })();
     return () => {
       disposed = true;
+      cleanupTopActionsPlacement?.();
       cleanupIcons();
       cleanup?.();
       void import('./legacy/bootstrap').then(({ teardownLegacyApp }) => teardownLegacyApp());
     };
   }, [user, avatarUrl, setManagedAvatarUrl]);
 
-  if (user === undefined && hasSessionOnLoad) return <LegacyShell booting={false} />;
+  if (user === undefined && hasSessionOnLoad) return <LegacyShell booting />;
   if (user === undefined) return (
     <main className="auth-shell">
       <section className="auth-brand-panel" aria-hidden="true">
         <div className="auth-brand-mark">
-          <img src="/logo.png" alt="" />
+          <img src="/logo.webp" alt="" />
           <span>广俊塑料科技</span>
         </div>
         <div className="auth-brand-copy">
           <h1>后台管理系统</h1>
           <p>让生产、库存与业务协同更清晰</p>
         </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.png" alt="" />
+        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
       </section>
       <section className="auth-panel-wrap">
         <section className="auth-card auth-card-loading">
@@ -465,12 +490,12 @@ function App() {
           </div>
         </section>
       </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.png" alt="" aria-hidden="true" />
+      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
   if (!user) return <LoginScreen onAuthenticated={setUser} />;
   if (user.mustChangePassword) return <PasswordResetScreen user={user} onComplete={setUser} />;
-  return <LegacyShell />;
+  return <LegacyShell booting />;
 }
 
 export default App;

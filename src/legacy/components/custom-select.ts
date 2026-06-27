@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+﻿import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
 
 (function () {
   const App = ensureLegacyApp();

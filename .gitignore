@@ -1,11 +1,15 @@
 node_modules/
 dist/
+coverage/
+.wrangler/
 *.tsbuildinfo
+*.log
 
 # Environment
 .env
 .env.local
 .env.*.local
+.dev.vars
 
 # IDE
 .idea/

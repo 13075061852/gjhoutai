@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp, getPublicApp } from '../core/app-context';
+﻿import { getLegacyApp, getPublicApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
@@ -26,7 +25,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   const DELETE_ANIMATION_MS = 240;
   const SKILL_MUTATION_LIMIT = 30;
 
-  const state = {
+  const state: any = {
     items: [],
     edits: {},
     selectedIds: new Set(),
@@ -46,8 +45,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     galleryCountSelected: 0,
   };
 
-  const refs = {};
-  const previewAiState = {};
+  const refs: any = {};
+  const previewAiState: any = {};
   let previewAiCollapsed = true;
   let previewAiMergeMode = false;
   let previewAiMergeViewMode = 'table';
@@ -287,7 +286,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   };
 
   const getCachedImage = async (id, version = '') => {
-    const cached = await runImageStore('readonly', (store) => store.get(id));
+    const cached: any = await runImageStore('readonly', (store) => store.get(id));
     if (typeof cached === 'string') return version ? null : cached;
     if (!cached || typeof cached !== 'object') return null;
     if (version && cached.version !== version) return null;
@@ -449,7 +448,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   const getItemImageSrc = (item) => item.image || EMPTY_IMAGE_SRC;
 
   const loadFilterState = () => {
-    const saved = utils.readJson(FILTER_STORAGE_KEY, {});
+    const saved: any = utils.readJson(FILTER_STORAGE_KEY, {});
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
     state.category = String(saved.category || '全部');
     state.categoryOrder = Array.isArray(saved.categoryOrder)
@@ -770,7 +769,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     `).join('');
   };
 
-  const saveDetailForm = (form, options = {}) => {
+  const saveDetailForm = (form, options = {} as any) => {
     const id = form.elements.id.value;
     const index = state.items.findIndex((item) => item.id === id);
     if (index < 0) return null;
@@ -799,7 +798,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     state.items = state.items.filter((entry) => !targets.has(entry.id));
     targets.forEach((id) => {
       state.selectedIds.delete(id);
-      delete state.edits[id];
+      delete state.edits[id as any];
     });
     deleteStoredImages(targets);
     state.activeId = state.items[0]?.id || '';
@@ -2043,7 +2042,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
               const headerIndex = new Map(table.headers.map((header, index) => [header, index]));
               return table.rows.map((row) => `
                 <tr>
-                  ${headers.map((header) => `<td>${utils.escapeHtml(row[headerIndex.get(header)] || '-')}</td>`).join('')}
+                  ${headers.map((header) => `<td>${utils.escapeHtml(row[headerIndex.get(header) as any] || '-')}</td>`).join('')}
                 </tr>
               `).join('');
             }).join('')}
@@ -2643,7 +2642,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     `${index + 1}. ${item.title || item.code || '未命名图谱'}；类型=${item.spectrumType || '-'}；分类=${item.category || '-'}；标签=${Array.isArray(item.tags) && item.tags.length ? item.tags.join('、') : '-'}；日期=${item.date || '-'}；备注=${item.note || '-'}`
   ));
 
-  const getAgentItems = (question = '', options = {}) => {
+  const getAgentItems = (question = '', options = {} as any) => {
     const selected = getSelectedItems();
     if (selected.length) return { items: selected, reason: '使用当前已选图谱' };
 
@@ -2670,7 +2669,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const getAgentContext = (question = '', options = {}) => {
+  const getAgentContext = (question = '', options = {} as any) => {
     const filtered = getFilteredItems();
     const { items, reason } = getAgentItems(question, options);
     const lines = [
@@ -2699,7 +2698,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const getAgentImages = (question = '', options = {}) => {
+  const getAgentImages = (question = '', options = {} as any) => {
     const text = String(question || '').trim();
     const asksAboutPage = /(?:这个|当前|本|该)?(?:页面|模块|功能|系统|项目|网站|应用|平台)|做什么|是什么|用途|作用|介绍|说明|怎么用|如何使用/.test(text);
     const asksToAnalyzeMedia = /(?:分析|看看|识别|读取|提取|对比|判断).*(?:图谱|谱图|曲线|图片|图像|dsc|tga|峰|峰值|温区|失重)|(?:图谱|谱图|曲线|图片|图像).*(?:分析|识别|读取|提取|对比|判断)|分析这张|看这张|当前图/.test(text);
@@ -2809,7 +2808,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return 'query';
   };
 
-  const searchByAgent = ({ query = '', limit = null, mode = 'query' } = {}) => {
+  const searchByAgent = ({ query = '', limit = null, mode = 'query' } = {} as any) => {
     const parsedLimit = Number.parseInt(limit, 10);
     const hasExplicitLimit = Number.isFinite(parsedLimit) && parsedLimit > 0;
     const searchMode = normalizeAgentSearchMode(mode, query);
@@ -2867,7 +2866,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     maxAffected = SKILL_MUTATION_LIMIT,
     allowQueryBulk = true,
     allowFuzzySingle = false,
-  } = {}) => {
+  } = {} as any) => {
     const normalizedMode = ['selected', 'active', 'filtered', 'query', 'target'].includes(String(mode))
       ? String(mode)
       : 'query';
@@ -2987,7 +2986,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return { ok: true, targets, reason };
   };
 
-  const tagByAgent = ({ target = '', tags = [], mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {}) => {
+  const tagByAgent = ({ target = '', tags = [], mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {} as any) => {
     const normalizedTags = normalizeTags(Array.isArray(tags) ? tags.join('，') : tags);
     if (!normalizedTags.length) {
       return {
@@ -3051,7 +3050,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const categorizeByAgent = ({ target = '', category = '', mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {}) => {
+  const categorizeByAgent = ({ target = '', category = '', mode = 'query', maxAffected = SKILL_MUTATION_LIMIT } = {} as any) => {
     const nextCategory = String(category || '').trim();
     if (!nextCategory) {
       return {
@@ -3127,7 +3126,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     date = '',
     tags = [],
     note = '',
-  } = {}) => {
+  } = {} as any) => {
     const nextTitle = String(title || code || '').trim();
     if (!nextTitle) {
       return { ok: false, message: '请提供要新增的图谱名称或编号。' };
@@ -3178,7 +3177,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const normalizeUpdateInput = (input = {}) => {
+  const normalizeUpdateInput = (input = {} as any) => {
     const source = input.updates && typeof input.updates === 'object' ? { ...input.updates } : {};
     ['title', 'category', 'date', 'note'].forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(input, field)) source[field] = input[field];
@@ -3194,7 +3193,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return source;
   };
 
-  const updateByAgent = (input = {}) => {
+  const updateByAgent = (input = {} as any) => {
     const updates = normalizeUpdateInput(input);
     const hasDirectUpdate = ['title', 'category', 'date', 'note'].some((field) => Object.prototype.hasOwnProperty.call(updates, field));
     const tagsSet = Object.prototype.hasOwnProperty.call(updates, 'tagsSet')
@@ -3271,7 +3270,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const selectByAgent = ({ target = '', mode = 'query', clearExisting = true, maxAffected = 80 } = {}) => {
+  const selectByAgent = ({ target = '', mode = 'query', clearExisting = true, maxAffected = 80 } = {} as any) => {
     const resolved = resolvePreciseSkillTargets({
       target,
       mode,
@@ -3307,7 +3306,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const deleteByAgent = async ({ target = '', mode = 'target', maxAffected = 12 } = {}) => {
+  const deleteByAgent = async ({ target = '', mode = 'target', maxAffected = 12 } = {} as any) => {
     const selected = getSelectedItems();
     const resolved = resolvePreciseSkillTargets({
       target,
@@ -3492,7 +3491,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     renderImagePreview();
   };
 
-  const toggleSelected = (id, force) => {
+  const toggleSelected = (id, force = undefined) => {
     const selected = force ?? !state.selectedIds.has(id);
     if (selected) state.selectedIds.add(id);
     else state.selectedIds.delete(id);
@@ -3960,7 +3959,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
           setUploadProgress(true, `\u6b63\u5728\u4e0a\u4f20 ${completed + 1}/${files.length}\uff1a${file.name}`);
           if (existing) {
             if (!conflictAction) {
-              conflictAction = await openUploadConflictDialog(file.name);
+              conflictAction = String(await openUploadConflictDialog(file.name));
             }
             if (conflictAction === 'skip') {
               completed += 1;
@@ -4563,8 +4562,25 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     render();
   };
 
+  const cleanup = () => {
+    SPECTRUM_MOBILE_MQ.removeEventListener?.('change', syncGalleryCountText);
+    DETAIL_COMPACT_MQ.removeEventListener?.('change', syncDetailAutoCollapse);
+    closeImagePreview();
+    closeDetailModal();
+    closeExportCategoryMenu();
+    refs.uploadConflictDialog?.remove();
+    refs.uploadConflictDialog = null;
+    refs.uploadConflictResolver?.('skip');
+    refs.uploadConflictResolver = null;
+    refs.uploadIssueDialog?.remove();
+    refs.uploadIssueDialog = null;
+    refs.importProgressDialog?.remove();
+    refs.importProgressDialog = null;
+  };
+
   App.spectrumAnalysis = {
     init,
+    cleanup,
     getAiContext,
     getAiImages: () => getAiImages(getAiItems()),
     getSelectedAiImages: () => getAiImages(getSelectedAiItems()),
@@ -4579,3 +4595,4 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     categorizeByAgent,
   };
 })();
+

@@ -1,6 +1,5 @@
-// @ts-nocheck
-
-type AgentQueryRow = Record<string, unknown>;
+﻿
+type AgentQueryRow = Record<string, any>;
 type AgentQueryAliases = Record<string, string>;
 type AgentQueryFilter = {
   field?: string;
@@ -39,8 +38,8 @@ type AgentQueryInput = {
   fieldAliases?: AgentQueryAliases;
 };
 type AgentQueryResult = {
-  ok: true;
-  skillId: 'business.queryPageData';
+  ok: boolean;
+  skillId: string;
   pageId: string;
   entity: string;
   intent: string;
@@ -60,9 +59,9 @@ export const parseAgentNumber = (value) => {
   return match ? Number(match[0]) : Number.NaN;
 };
 
-const normalizeField = (field, aliases = {}) => aliases[field] || field;
+const normalizeField = (field, aliases = {} as any) => aliases[field] || field;
 
-const getValue = (row, field, aliases = {}) => row?.[normalizeField(field, aliases)];
+const getValue = (row, field, aliases = {} as any) => row?.[normalizeField(field, aliases)];
 
 const compareValues = (left, right) => {
   const leftNumber = parseAgentNumber(left);
@@ -71,7 +70,7 @@ const compareValues = (left, right) => {
   return toText(left).localeCompare(toText(right), 'zh-CN', { numeric: true });
 };
 
-export const applyAgentFilters = (rows = [], filters = [], aliases = {}) => {
+export const applyAgentFilters = (rows = [], filters = [], aliases = {} as any) => {
   const list = Array.isArray(filters) ? filters.filter(Boolean) : [];
   if (!list.length) return rows;
   return rows.filter((row) => list.every((filter) => {
@@ -104,7 +103,7 @@ export const applyAgentFilters = (rows = [], filters = [], aliases = {}) => {
   }));
 };
 
-export const sortAgentRows = (rows = [], sort = [], aliases = {}) => {
+export const sortAgentRows = (rows = [], sort = [], aliases = {} as any) => {
   const rules = Array.isArray(sort) ? sort.filter(Boolean) : [];
   if (!rules.length) return [...rows];
   return [...rows].sort((left, right) => {
@@ -127,10 +126,10 @@ export const queryAgentRows = ({
   pageId = '',
   entity = '',
   rows = [],
-  request = {},
+  request = {} as any,
   defaultFields = [],
-  fieldAliases = {},
-}: AgentQueryInput = {}): AgentQueryResult => {
+  fieldAliases = {} as any,
+}: AgentQueryInput = {} as any): AgentQueryResult => {
   const intent = toText(request.intent || 'list') || 'list';
   const requestedFields = Array.isArray(request.fields) && request.fields.length
     ? request.fields.map((field) => normalizeField(field, fieldAliases)).filter(Boolean)
@@ -139,7 +138,7 @@ export const queryAgentRows = ({
   const filteredRows = applyAgentFilters(rows, filters, fieldAliases);
   const sortRules = Array.isArray(request.sort) ? request.sort : [];
   const sortedRows = sortAgentRows(filteredRows, sortRules, fieldAliases);
-  const parsedLimit = Number.parseInt(request.limit, 10);
+  const parsedLimit = Number.parseInt(String(request.limit || ''), 10);
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : (intent === 'count' ? 0 : 20);
   const limitedRows = limit ? sortedRows.slice(0, limit) : [];
   const common = {
@@ -221,3 +220,4 @@ export const queryAgentRows = ({
     summary: `已按意图 ${intent} 从 ${pageId} / ${entity} 取回 ${limitedRows.length} 条，候选 ${filteredRows.length} 条。`,
   };
 };
+

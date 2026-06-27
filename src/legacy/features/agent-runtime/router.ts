@@ -1,4 +1,4 @@
-import type { AgentPlan, AgentSkillPlan } from './types';
+﻿import type { AgentPlan, AgentSkillPlan } from './types';
 
 const textOf = (value: unknown) => String(value || '').trim();
 const AGENT_PLAN_KINDS = ['local-tool', 'web-search', 'image-generation', 'image-analysis', 'chat'] as const;
@@ -25,7 +25,7 @@ export const COMPLEX_PROJECT_ANALYSIS_PATTERN = /(?:综合分析|联合分析|�
 export type AgentRouteClassification = {
   kind?: AgentPlan['kind'];
   skillId?: string;
-  input?: Record<string, unknown>;
+  input?: Record<string, any>;
   confidence?: number;
   reason?: string;
   useProjectContext?: boolean;
@@ -109,7 +109,7 @@ const normalizeClassifierSkillPlan = (classification: AgentRouteClassification, 
   const input = classification?.input && typeof classification.input === 'object' && !Array.isArray(classification.input)
     ? classification.input
     : {};
-  const defaults: Record<string, Record<string, unknown>> = {
+  const defaults: Record<string, Record<string, any>> = {
     'assistant.projectGuide': { question: prompt },
     'assistant.currentPage': {},
     'media.generateImage': { prompt },
@@ -192,7 +192,7 @@ export const shouldUseProjectContextForPrompt = (prompt: unknown, activePageId =
 
 export const shouldUseProjectAgentLoopForPrompt = (prompt: unknown) => COMPLEX_PROJECT_ANALYSIS_PATTERN.test(textOf(prompt));
 
-export const shouldUseWebSearchForPrompt = (prompt: unknown, options: { projectFirst?: boolean } = {}) => {
+export const shouldUseWebSearchForPrompt = (prompt: unknown, options: { projectFirst?: boolean } = {} as any) => {
   const text = textOf(prompt);
   if (!text) return false;
   if (options.projectFirst && PROJECT_DATA_PATTERN.test(text) && !/(?:联网|搜索|网上|官网|最新|新闻|政策|法规|价格|行情|汇率|天气|股价|来源|链接|引用)/i.test(text)) {
@@ -315,3 +315,4 @@ export const createAgentPlanWithAi = async (input: {
     return fallbackPlan;
   }
 };
+

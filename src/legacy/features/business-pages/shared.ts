@@ -1,5 +1,4 @@
-// @ts-nocheck
-
+﻿
 export const createBusinessPageShared = ({ App, refs, utils, render }) => {
   const esc = (value) => utils.escapeHtml(value);
   let searchRenderTimer = null;

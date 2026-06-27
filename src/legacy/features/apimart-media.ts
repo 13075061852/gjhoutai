@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { mountApimartReactBitsShowcase } from '../../components/reactbits/ApimartReactBitsShowcase';
+﻿import { mountApimartReactBitsShowcase } from '../../components/reactbits/ApimartReactBitsShowcase';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { getLegacyApp } from '../core/app-context';
@@ -205,8 +204,8 @@ import { getLegacyApp } from '../core/app-context';
     resultCleared: false,
   };
   let bound = false;
-  let tasks = [];
-  let uiState = { ...DEFAULT_UI_STATE };
+  let tasks: any[] = [];
+  let uiState: any = { ...DEFAULT_UI_STATE };
   const pollTimers = new Map();
   let previewKeydownHandler = null;
   let reactBitsShowcaseCleanup = null;
@@ -244,7 +243,7 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
-  const requestJson = async (path, options = {}) => {
+  const requestJson = async (path, options = {} as any) => {
     const config = getConfig();
     if (!config.apiKey) throw new Error('请先在配置中心填写 APIMart API Key');
     const response = await fetchWithTimeout(`${config.baseUrl}${path}`, {
@@ -290,7 +289,7 @@ import { getLegacyApp } from '../core/app-context';
     };
   };
 
-  const submitGeneration = async (type, params = {}) => {
+  const submitGeneration = async (type, params = {} as any) => {
     const config = getConfig();
     const payload = {
       ...params,
@@ -340,7 +339,7 @@ import { getLegacyApp } from '../core/app-context';
     return createdIds;
   };
 
-  const submitAndTrackGeneration = async (type, payload = {}) => {
+  const submitAndTrackGeneration = async (type, payload = {} as any) => {
     const submitted = await submitGeneration(type, payload);
     const createdIds = trackSubmittedTasks({ type, payload: { ...payload, model: payload.model || getConfig()[type === 'video' ? 'videoModel' : 'imageModel'] }, response: submitted.response });
     return { ...submitted, createdIds };
@@ -351,7 +350,7 @@ import { getLegacyApp } from '../core/app-context';
     return payload?.data || payload;
   };
 
-  const updateTask = (id, patch = {}) => {
+  const updateTask = (id, patch = {} as any) => {
     tasks = tasks.map((task) => (task.id === id ? { ...task, ...patch, updatedAt: new Date().toISOString() } : task));
     writeTasks();
     scheduleRender();
@@ -493,7 +492,7 @@ import { getLegacyApp } from '../core/app-context';
     if (!files.length) return;
 
     try {
-      const dataUrls = await Promise.all(files.map(readReferenceFileAsDataUrl));
+      const dataUrls = await Promise.all(files.map(readReferenceFileAsDataUrl)) as string[];
       const textarea = refs.apimartMediaPanel?.querySelector('#apimartReferenceUrls');
       const existingUrls = parseReferenceUrls(textarea?.value || uiState.referenceUrls);
       const nextUrls = [...existingUrls];
@@ -1396,7 +1395,7 @@ import { getLegacyApp } from '../core/app-context';
       hasApiKey: Boolean(config.apiKey),
       latestStatus: tasks[0] ? getTaskStatusLabel(tasks[0].status) : '',
       onPromptSelect: applyPrompt,
-    });
+    } as any);
     window.requestAnimationFrame?.(() => {
       App.customSelects?.enhanceAll?.(panel);
     });

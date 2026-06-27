@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
 (function () {
@@ -11,6 +10,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
   const { refs, constants, utils } = App;
   const HISTORY_KEY = 'gjh-project-skill-history-v1';
   const MAX_HISTORY = 18;
+  let eventController = null;
 
   const EXTRA_PAGE_ALIASES = {
     配置中心: 'ai-config',
@@ -215,7 +215,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     const text = String(prompt || '').trim();
     const selected = /(?:当前已选|当前选中|已选|选中)/.test(text);
     const filtered = /(?:当前筛选|筛选结果|当前列表|当前页面|当前分类)/.test(text);
-    const updates = {};
+    const updates: any = {};
     const category = text.match(/(?:分类|归类|放到|分到|改到|改成|改为)(?:为|到|成|：|:)?\s*([A-Za-z0-9._/-]+|[\u4e00-\u9fa5A-Za-z0-9._/-]{1,40})/)?.[1] || '';
     const note = text.match(/(?:备注|说明)(?:为|改为|写成|：|:)\s*([^，。,.!?！？]{1,120})/)?.[1] || '';
     const title = text.match(/(?:名称|标题)(?:为|改为|写成|：|:)\s*([^，。,.!?！？]{1,80})/)?.[1] || '';
@@ -278,7 +278,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     };
   };
 
-  const fillSpectrumSearchInputFallback = (input = {}, prompt = '') => {
+  const fillSpectrumSearchInputFallback = (input = {} as any, prompt = '') => {
     const action = String(input?.action || 'search').trim() || 'search';
     if (action !== 'search') return input;
     const explicitQuery = String(input.query || '').trim();
@@ -508,7 +508,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       infer() {
         return null;
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const pageId = String(input.pageId || '').trim();
         const inspected = App.businessPages?.inspectAgentPage?.(pageId);
         if (inspected) {
@@ -548,7 +548,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       infer() {
         return null;
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const observations = Array.isArray(input.observations) ? input.observations : [];
         return {
           ok: true,
@@ -588,7 +588,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         if (!/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|当前|现在|查看|列举|列出|展示|罗列|最低|最少|最小|最高|最多|最大|库存|配方|订单|供应商|客户|人员|账号)/.test(text)) return null;
         return { skillId: this.id, confidence: 0.66, input: { question: text } };
       },
-      async handler(input = {}, meta = {}) {
+      async handler(input = {} as any, meta = {} as any) {
         if (!App.businessPages?.queryAgentData) {
           return { ok: false, message: '业务页面尚未接入结构化取数接口。' };
         }
@@ -700,7 +700,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
         return null;
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const action = String(input.action || 'search').trim();
         const withAction = (result) => ({
           ...(result || {}),
@@ -777,7 +777,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
           },
         };
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', {
           activePageId: 'property-analysis',
           compact: true,
@@ -836,7 +836,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         if (!input) return null;
         return { skillId: this.id, confidence: 0.9, input };
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         if (!App.businessPages?.createFormulaByAgent) {
           return { ok: false, message: '配方管理模块尚未暴露创建配方技能接口。' };
         }
@@ -871,7 +871,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         if (!(explicitJointIntent || (mentionsProperty && mentionsSpectrum))) return null;
         return { skillId: this.id, confidence: 0.8, input: { question: text, forceCurrentPage: false } };
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const question = String(input.question || input.query || '');
         const activePageId = getActivePageId();
         const context = App.agentButler?.buildContext?.({
@@ -919,7 +919,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         if (!pageId) return null;
         return { skillId: this.id, confidence: 0.9, input: { pageId } };
       },
-      async handler(input = {}) {
+      async handler(input = {} as any) {
         const pageId = String(input.pageId || '').trim();
         const def = constants.PAGE_DEFS?.[pageId];
         if (!def) return { ok: false, message: `没有找到页面：${pageId}` };
@@ -943,7 +943,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     'spectrum.categorizeImages': 'categorize',
     'spectrum.searchImages': 'search',
   };
-  const normalizeSkillInvocation = (skillId, input = {}) => {
+  const normalizeSkillInvocation = (skillId, input = {} as any) => {
     const action = SPECTRUM_LEGACY_ACTIONS[skillId];
     if (!action) return { skillId, input };
     return {
@@ -996,7 +996,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     renderHistory();
   };
 
-  const executeSkill = async (skillId, input = {}, meta = {}) => {
+  const executeSkill = async (skillId, input = {} as any, meta = {} as any) => {
     const normalizedInvocation = normalizeSkillInvocation(skillId, input);
     const startedAt = nowMs();
     const inputSize = measureJsonSize(normalizedInvocation.input);
@@ -1018,7 +1018,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
     let result;
     try {
-      result = normalizeResult(await skill.handler(normalizedInvocation.input, meta));
+      result = normalizeResult(await (skill.handler as any)(normalizedInvocation.input, meta));
     } catch (error) {
       result = normalizeResult({ ok: false, message: error?.message || '技能执行失败。' });
     }
@@ -1093,7 +1093,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     return lines.filter(Boolean).join('\n');
   };
 
-  const getResultActions = ({ skill, result } = {}) => {
+  const getResultActions = ({ skill, result } = {} as any) => {
     if (
       skill?.id !== 'spectrum.manageImages'
       || result?.data?.action !== 'delete'
@@ -1125,7 +1125,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     }).filter((action) => action.input.target);
   };
 
-  const executePrompt = async (prompt = '', meta = {}) => {
+  const executePrompt = async (prompt = '', meta = {} as any) => {
     const plan = routePrompt(prompt);
     if (!plan) return null;
     return executeSkill(plan.skillId, plan.input || {}, { ...meta, prompt, source: meta.source || 'chat-natural-language' });
@@ -1215,7 +1215,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     return parseLooseSkillCall(value);
   };
 
-  const executeSkillCallFromText = async (text = '', meta = {}) => {
+  const executeSkillCallFromText = async (text = '', meta = {} as any) => {
     const call = parseSkillCallFromText(text);
     if (!call) return null;
     const normalizedCall = normalizeSkillInvocation(call.skillId, call.input);
@@ -1256,7 +1256,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     });
   };
 
-  const getAiProtocolContext = (options = {}) => {
+  const getAiProtocolContext = (options = {} as any) => {
     const kind = String(options.kind || options.plan?.kind || '').trim();
     if (kind === 'chat' || kind === 'web-search') return '';
     const requestedSkillId = String(options.skillId || options.plan?.localSkillPlan?.skillId || '').trim();
@@ -1513,6 +1513,9 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
   };
 
   const bind = () => {
+    eventController?.abort();
+    eventController = new AbortController();
+    const eventSignal = eventController.signal;
     refs.projectSkillPanel?.addEventListener('input', (event) => {
       const input = event.target;
       if (input?.id !== 'projectSkillSearch') return;
@@ -1560,6 +1563,11 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     });
   };
 
+  const cleanup = () => {
+    eventController?.abort();
+    eventController = null;
+  };
+
   const init = () => {
     bind();
     render();
@@ -1567,6 +1575,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
   App.projectSkills = {
     init,
+    cleanup,
     render,
     getSkillRegistry,
     getProjectManifest: buildProjectManifest,
@@ -1579,3 +1588,5 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     getResultActions,
   };
 })();
+
+

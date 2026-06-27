@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import {
   buildAgentRouteClassifierMessages,
   createAgentPlan,
@@ -27,6 +26,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   let chatAbortRequested = false;
   let chatSubmissionLocked = false;
   let chatEventsBound = false;
+  let chatEventController = null;
   let webSearchEnabled = true;
   const imageUploadAuthResolvers = new Map();
 
@@ -197,7 +197,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       .slice(0, SEARCH_PLAN_MAX_QUERIES);
   };
 
-  const buildFallbackSearchPlan = (prompt, config = {}) => {
+  const buildFallbackSearchPlan = (prompt, config = {} as any) => {
     const basePrompt = normalizeSearchQueryText(prompt);
     const queries = [basePrompt];
     const latinTerms = Array.from(new Set(String(prompt || '').match(/[A-Za-z][A-Za-z0-9._/-]{2,}/g) || []));
@@ -215,7 +215,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const parseSearchPlan = (content, prompt, config = {}) => {
+  const parseSearchPlan = (content, prompt, config = {} as any) => {
     const fallback = buildFallbackSearchPlan(prompt, config);
     const text = String(content || '').trim();
     if (!text) return fallback;
@@ -240,7 +240,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const createSearchPlanWithAi = async (config, model, prompt, options = {}) => {
+  const createSearchPlanWithAi = async (config, model, prompt, options = {} as any) => {
     const fallback = buildFallbackSearchPlan(prompt, config);
     const messages = [
       {
@@ -287,7 +287,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const createRouteClassifier = (config, model, options = {}) => async ({ prompt, activePageId }) => {
+  const createRouteClassifier = (config, model, options = {} as any) => async ({ prompt, activePageId }) => {
     const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
@@ -345,7 +345,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return merged.slice(0, clampSearchResultCount(limit));
   };
 
-  const decideSearchWithAi = async (config, model, prompt, options = {}) => {
+  const decideSearchWithAi = async (config, model, prompt, options = {} as any) => {
     const messages = [
       {
         role: 'system',
@@ -386,7 +386,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return parseSearchDecision(content);
   };
 
-  const searchWebForPrompt = async (config, prompt, options = {}) => {
+  const searchWebForPrompt = async (config, prompt, options = {} as any) => {
     const provider = String(config.searchProvider || 'tavily').toLowerCase();
     if (provider !== 'tavily') return { results: [], context: '' };
     const datedQuery = [
@@ -422,7 +422,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const searchWebForPromptDynamic = async (config, prompt, options = {}) => {
+  const searchWebForPromptDynamic = async (config, prompt, options = {} as any) => {
     const provider = String(config.searchProvider || 'tavily').toLowerCase();
     if (provider !== 'tavily') return { results: [], context: '', plan: null };
     const searchPlan = options.searchPlan || buildFallbackSearchPlan(prompt, config);
@@ -1035,7 +1035,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return text.trim();
   };
 
-  const renderChatMessages = (options = {}) => {
+  const renderChatMessages = (options = {} as any) => {
     if (!refs.chatMessages) return;
     const shouldStickToBottom = options.forceScroll || (options.autoScroll !== false && isChatNearBottom());
     const intro = refs.chatIntroText;
@@ -1425,7 +1425,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     meta: String(item?.meta || item?.category || item?.spectrumType || ''),
   })).filter((item) => item.image_url.url) : []);
 
-  const draftPrompt = (prompt, options = {}) => {
+  const draftPrompt = (prompt, options = {} as any) => {
     const value = String(prompt || '').trim();
     if (!value || !refs.chatInput) return;
 
@@ -1536,7 +1536,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const loadImageForCompression = (url) => new Promise((resolve, reject) => {
+  const loadImageForCompression = (url) => new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     if (shouldUseCorsForImageCompression(url)) {
       image.crossOrigin = 'anonymous';
@@ -1546,7 +1546,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     image.src = url;
   });
 
-  const canvasToDataUrl = (canvas, mimeType, quality) => new Promise((resolve) => {
+  const canvasToDataUrl = (canvas, mimeType, quality) => new Promise<string>((resolve) => {
     if (canvas.toBlob) {
       try {
         canvas.toBlob((blob) => {
@@ -1590,7 +1590,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const compressImageForAi = async (image, options = {}) => {
+  const compressImageForAi = async (image, options = {} as any) => {
     const sourceUrl = String(image?.image_url?.url || image?.url || '').trim();
     if (!sourceUrl || !/^(?:data:image\/|blob:|https?:\/\/)/i.test(sourceUrl)) return image;
 
@@ -1633,7 +1633,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const compressImagesForAi = async (images, options = {}) => {
+  const compressImagesForAi = async (images, options = {} as any) => {
     const parsedLimit = Number.parseInt(options.maxImages, 10);
     const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
     const normalizedImages = normalizeImages(images);
@@ -1703,7 +1703,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     request.resolve(Boolean(approved));
   };
 
-  const requestImageUploadAuthorization = (images, options = {}) => new Promise((resolve, reject) => {
+  const requestImageUploadAuthorization = (images, options = {} as any) => new Promise((resolve, reject) => {
     const normalizedImages = normalizeImages(images);
     const count = normalizedImages.length;
     if (!count) {
@@ -1765,7 +1765,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     });
   });
 
-  const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled(), options = {}) => {
+  const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled(), options = {} as any) => {
     const basePrompt = config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt;
     const attachedDataContext = projectContextEnabled && prompt ? getAttachedDataContext(prompt) : '';
     const currentDateTime = getCurrentDateTimeLabel();
@@ -1848,7 +1848,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   }).filter(Boolean) : []);
 
-  const toApiMessage = (message, options = {}) => {
+  const toApiMessage = (message, options = {} as any) => {
     const images = normalizeImages(options.images || message.images);
     const content = String(options.content ?? message.content ?? '');
     const files = normalizeFileAttachments(options.files);
@@ -1978,7 +1978,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const recordAiCall = (entry = {}) => {
+  const recordAiCall = (entry = {} as any) => {
     try {
       const recorded = App.aiCallAnalysis?.record?.(entry);
       if (recorded) return recorded;
@@ -1994,7 +1994,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return text.length > max ? `${text.slice(0, max)}...` : text;
   };
 
-  const recordAiCallFallback = (entry = {}, options = {}) => {
+  const recordAiCallFallback = (entry = {} as any, options = {} as any) => {
     try {
       const key = constants.AI_CALL_LOG_KEY;
       const current = utils.readJson(key, []);
@@ -2447,7 +2447,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   });
 
-  const executeProjectSkillWithRetry = async (skillId, input, meta = {}, options = {}) => {
+  const executeProjectSkillWithRetry = async (skillId, input, meta = {} as any, options = {} as any) => {
     let lastExecution = null;
     let lastError = null;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -2992,7 +2992,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const consumeChatCompletionStream = async (response, onDelta, options = {}) => {
+  const consumeChatCompletionStream = async (response, onDelta, options = {} as any) => {
     if (!response.body) return { receivedDelta: false, usage: null, finishReason: '' };
 
     const reader = response.body.getReader();
@@ -3082,7 +3082,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const buildAssistantRenderMessage = (content, options = {}) => ({
+  const buildAssistantRenderMessage = (content, options = {} as any) => ({
     role: 'assistant',
     content: content || '正在思考...',
     images: [],
@@ -3092,7 +3092,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     searchSources: normalizeMessageSearchSources(options.searchSources),
   });
 
-  const scheduleStreamRender = (pendingIndex, content, options = {}) => {
+  const scheduleStreamRender = (pendingIndex, content, options = {} as any) => {
     if (streamRenderTimer) return;
     streamRenderTimer = window.setTimeout(() => {
       streamRenderTimer = 0;
@@ -3103,7 +3103,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }, 120);
   };
 
-  const flushStreamRender = (pendingIndex, content, options = {}) => {
+  const flushStreamRender = (pendingIndex, content, options = {} as any) => {
     if (streamRenderTimer) {
       window.clearTimeout(streamRenderTimer);
       streamRenderTimer = 0;
@@ -3440,7 +3440,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         webSearchPlan = await createSearchPlanWithAi(config, model, prompt, {
           signal: chatAbortSignal,
         });
-        const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {}) => {
+        const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {} as any) => {
           const targetLabel = targetResults ? ` / 目标 ${targetResults} 条` : '';
           const status = `正在联网搜索 · 已获取 ${resultCount} 条${targetLabel}`;
           flushStreamRender(pendingIndex, status, {
@@ -3866,6 +3866,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   const bindChat = () => {
     if (chatEventsBound) return;
     chatEventsBound = true;
+    chatEventController = new AbortController();
+    const eventSignal = chatEventController.signal;
     ensureWebSearchToggleButton();
     moveClearChatButtonToHeader();
     refs.assistantDataToggleBtn?.addEventListener('click', () => {
@@ -3916,8 +3918,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       }
     });
 
-    refs.assistantNewBtn?.addEventListener('click', createNewConversation);
-    refs.assistantFullscreenNewBtn?.addEventListener('click', createNewConversation);
+    refs.assistantNewBtn?.addEventListener('click', createNewConversation, { signal: eventSignal });
+    refs.assistantFullscreenNewBtn?.addEventListener('click', createNewConversation, { signal: eventSignal });
 
     refs.assistantFullscreenSearch?.addEventListener('input', () => {
       state.conversationMenuQuery = refs.assistantFullscreenSearch?.value || '';
@@ -3925,7 +3927,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       renderFullscreenSidebar();
     });
 
-    refs.chatSendBtn?.addEventListener('click', sendChatMessage);
+    refs.chatSendBtn?.addEventListener('click', sendChatMessage, { signal: eventSignal });
     refs.chatInput?.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -3933,7 +3935,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       }
     });
 
-    document.addEventListener('click', handleImageUploadAuthClick, true);
+    document.addEventListener('click', handleImageUploadAuthClick, { capture: true, signal: eventSignal });
 
     refs.chatMessages?.addEventListener('click', (event) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -3997,11 +3999,32 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     updateHeaderState();
   };
 
+  const cleanup = () => {
+    chatEventController?.abort();
+    chatEventController = null;
+    chatEventsBound = false;
+    if (streamRenderTimer) {
+      window.clearTimeout(streamRenderTimer);
+      streamRenderTimer = 0;
+    }
+    activeChatAbortController?.abort();
+    activeChatAbortController = null;
+    closeConversationMenu();
+    closeChatImagePreview();
+    Array.from(imageUploadAuthResolvers.values()).forEach((resolver) => {
+      resolver.cleanup?.();
+      resolver.reject?.(createAbortError());
+    });
+    imageUploadAuthResolvers.clear();
+  };
+
   App.chat = {
     init,
     renderChat,
     sendChatMessage,
     renderFullscreenSidebar,
     draftPrompt,
+    cleanup,
   };
 })();
+

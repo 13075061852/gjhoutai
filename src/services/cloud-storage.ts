@@ -5,6 +5,20 @@ const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/
 
 const buildUrl = (path: string) => `${API_BASE}${path}`;
 
+const dataUrlToBlob = (dataUrl: string): Blob => {
+  const match = String(dataUrl).match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+  if (!match) throw new Error('Invalid data URL');
+  const mime = match[1] || 'application/octet-stream';
+  const isBase64 = Boolean(match[2]);
+  const payload = match[3] || '';
+  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mime });
+};
+
 const parseJson = async <T>(response: Response): Promise<T | null> => {
   if (response.status === 204 || response.status === 404) return null;
   if (!response.ok) {
@@ -71,8 +85,7 @@ export const cloudStorage = {
 
   async putDataUrl(namespace: string, key: string, dataUrl: string): Promise<boolean> {
     try {
-      const response = await fetchWithTimeout(dataUrl);
-      const blob = await response.blob();
+      const blob = dataUrlToBlob(dataUrl);
       const upload = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
         method: 'PUT',
         credentials: 'include',

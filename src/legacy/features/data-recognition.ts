@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { parseJsonMaybe } from '../../utils/json';
@@ -35,7 +34,7 @@ import { parseJsonMaybe } from '../../utils/json';
   const IMAGE_SCALE_STEP = 0.2;
   const TABLE_WINDOW_SIZE = 80;
 
-  const state = {
+  const state: any = {
     fileName: '',
     imageDataUrl: '',
     streamText: '',
@@ -62,7 +61,7 @@ import { parseJsonMaybe } from '../../utils/json';
       pointerId: null,
     },
   };
-  const refs = {};
+  const refs: any = {};
 
   const getFreshRefs = () => {
     refs.page = document.querySelector('[data-page-section="data-recognition"]');
@@ -159,22 +158,22 @@ import { parseJsonMaybe } from '../../utils/json';
             <div class="data-recognition-history-empty">暂无历史记录</div>
           </div>
         </section>
-      </div>
 
-      <section class="data-recognition-table-panel">
-        <div class="data-recognition-panel-head">
-          <div>
-            <h2>识别表格</h2>
+        <section class="data-recognition-table-panel">
+          <div class="data-recognition-panel-head">
+            <div>
+              <h2>识别表格</h2>
+            </div>
+            <button class="analysis-toolbar-btn data-recognition-copy-btn" id="dataRecognitionCopyTableBtn" type="button" disabled>
+              <i class="ti ti-copy" aria-hidden="true"></i>
+              <span>复制表格</span>
+            </button>
           </div>
-          <button class="analysis-toolbar-btn data-recognition-copy-btn" id="dataRecognitionCopyTableBtn" type="button" disabled>
-            <i class="ti ti-copy" aria-hidden="true"></i>
-            <span>复制表格</span>
-          </button>
-        </div>
-        <div class="data-recognition-table-wrap" id="dataRecognitionTableWrap">
-          <div class="data-recognition-table-empty">完成识别后生成表格</div>
-        </div>
-      </section>
+          <div class="data-recognition-table-wrap" id="dataRecognitionTableWrap">
+            <div class="data-recognition-table-empty">完成识别后生成表格</div>
+          </div>
+        </section>
+      </div>
 
       <div class="bottom-space"></div>
     `;
@@ -479,7 +478,7 @@ import { parseJsonMaybe } from '../../utils/json';
     title: getHistoryTitle(item),
   });
 
-  const searchHistoryByAgent = async (input = {}) => {
+  const searchHistoryByAgent = async (input = {} as any) => {
     const query = String(input.query || input.question || '').trim().toLowerCase();
     const limit = Math.max(1, Math.min(20, Number.parseInt(input.limit, 10) || 8));
     if (!state.history.length) {
@@ -1248,3 +1247,4 @@ import { parseJsonMaybe } from '../../utils/json';
 
   App.dataRecognition = { init, searchHistoryByAgent, inspectCurrentByAgent };
 })();
+

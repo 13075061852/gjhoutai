@@ -43,18 +43,20 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
     booted = true;
 
     const App = getLegacyApp();
-    App?.navigation?.init?.();
-    App?.themeSettings?.init?.();
-    App?.propertyAnalysis?.init?.();
-    App?.spectrumAnalysis?.init?.();
-    App?.dataRecognition?.init?.();
-    App?.inspectionReports?.init?.();
-    App?.imageCutout?.init?.();
-    await App?.config?.init?.();
-    App?.apimartMedia?.init?.();
-    App?.aiCallAnalysis?.init?.();
-    App?.projectSkills?.init?.();
-    App?.chat?.init?.();
+    await Promise.all([
+      App?.navigation?.init?.(),
+      App?.themeSettings?.init?.(),
+      App?.propertyAnalysis?.init?.(),
+      App?.spectrumAnalysis?.init?.(),
+      App?.dataRecognition?.init?.(),
+      App?.inspectionReports?.init?.(),
+      App?.imageCutout?.init?.(),
+      App?.config?.init?.(),
+      App?.apimartMedia?.init?.(),
+      App?.aiCallAnalysis?.init?.(),
+      App?.projectSkills?.init?.(),
+      App?.chat?.init?.(),
+    ]);
     return undefined;
   })();
 
@@ -65,7 +67,29 @@ export function teardownLegacyApp(): void {
   booted = false;
   bootPromise = null;
   const App = getLegacyApp();
-  App?.navigation?.cleanup?.();
-  App?.animations?.cleanup?.();
-  App?.motionEffects?.cleanup?.();
+  const modules: Array<LegacyLifecycleModule | LegacyAnimationApi | LegacyMotionEffectsApi | undefined> = [
+    App?.chat,
+    App?.projectSkills,
+    App?.aiCallAnalysis,
+    App?.apimartMedia,
+    App?.config,
+    App?.themeSettings,
+    App?.imageCutout,
+    App?.inspectionReports,
+    App?.dataRecognition,
+    App?.spectrumAnalysis,
+    App?.propertyAnalysis,
+    App?.businessPages,
+    App?.navigation,
+    App?.dialogConsentAnimation,
+    App?.animations,
+    App?.motionEffects,
+  ];
+  modules.forEach((module) => {
+    try {
+      module?.cleanup?.();
+    } catch (error) {
+      console.warn('[legacy] Failed to cleanup module.', error);
+    }
+  });
 }

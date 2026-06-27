@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+﻿import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
 
 (function () {
   'use strict';
@@ -31,9 +30,9 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
   const closeActive = (value = false) => {
     if (!activeDialog) return;
     const { overlay, cleanup, resolve } = activeDialog;
+    activeDialog = null;
     cleanup();
     overlay.remove();
-    activeDialog = null;
     resolve(value);
   };
 
@@ -44,7 +43,7 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     cancelText = '取消',
     variant = 'danger',
     icon = 'ti-alert-triangle',
-  } = {}) => new Promise((resolve) => {
+  } = {} as any) => new Promise((resolve) => {
     closeActive(false);
 
     const overlay = document.createElement('div');
@@ -85,7 +84,7 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     overlay.querySelector('[data-confirm-dialog-confirm]')?.focus({ preventScroll: true });
   });
 
-  const confirmDelete = (options = {}) => open({
+  const confirmDelete = (options = {} as any) => open({
     title: options.title || '确认删除',
     message: normalizeDeleteMessage(options.message || '删除后无法恢复，请确认是否继续。'),
     confirmText: options.confirmText || '确认删除',

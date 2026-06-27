@@ -1,5 +1,4 @@
-// @ts-nocheck
-import MarkdownIt from 'markdown-it';
+﻿import MarkdownIt from 'markdown-it';
 import { ensureLegacyApp } from './app-context';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { parseJsonOr } from '../../utils/json';

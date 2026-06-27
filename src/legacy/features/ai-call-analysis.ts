@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
@@ -11,6 +10,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const { refs, constants, utils } = App;
   const MAX_LOGS = 500;
   let bound = false;
+  let eventController = null;
   let activePeriodKey = 'week';
   let cachedLogs = null;
 
@@ -49,7 +49,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (!cachedLogs) cachedLogs = sortLogs(readLocalLogs());
     return cachedLogs;
   };
-  const writeLogs = (logs, options = {}) => {
+  const writeLogs = (logs, options = {} as any) => {
     const normalized = sortLogs(logs);
     cachedLogs = normalized;
     utils.writeJson(constants.AI_CALL_LOG_KEY, normalized);
@@ -143,7 +143,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       estimated: cost.estimated !== false,
     };
   };
-  const buildCostMeta = ({ promptTokens = 0, completionTokens = 0, model = '', cost = null } = {}) => {
+  const buildCostMeta = ({ promptTokens = 0, completionTokens = 0, model = '', cost = null } = {} as any) => {
     const normalized = normalizeCostUsage(cost);
     if (normalized) return normalized;
 
@@ -213,7 +213,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const value = Number.parseInt(option?.dataset?.contextLength || '', 10);
     return Number.isFinite(value) && value > 0 ? value : 0;
   };
-  const normalizeTokenUsage = ({ tokenUsage = null, apiUsage = null, requestMessages = [], completionText = '', model = '' } = {}) => {
+  const normalizeTokenUsage = ({ tokenUsage = null, apiUsage = null, requestMessages = [], completionText = '', model = '' } = {} as any) => {
     const existing = tokenUsage && typeof tokenUsage === 'object' ? tokenUsage : null;
     const normalizedApiUsage = normalizeApiUsage(apiUsage);
     const estimatedPromptTokens = estimateMessagesTokens(requestMessages);
@@ -261,7 +261,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     'chat-natural-language': '自然语言技能',
   }[source] || source || 'AI调用');
 
-  const record = (entry = {}) => {
+  const record = (entry = {} as any) => {
     const endedAt = entry.endedAt || nowIso();
     const model = String(entry.model || entry.tokenUsage?.model || App.config?.getResolvedModel?.() || '').trim();
     const status = entry.status === 'failed' ? 'failed' : 'success';
@@ -442,7 +442,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     const nextYear = new Date(today.getFullYear() + 1, 0, 1);
     const weekBuckets = buildDayBuckets(getPeriodLogs(logs, weekStart, addDays(weekStart, 7)), weekStart, 7);
-    const monthBuckets = buildDayBuckets(getPeriodLogs(logs, monthStart, nextMonth), monthStart, Math.ceil((nextMonth - monthStart) / 86400000));
+    const monthBuckets = buildDayBuckets(getPeriodLogs(logs, monthStart, nextMonth), monthStart, Math.ceil((nextMonth.getTime() - monthStart.getTime()) / 86400000));
     const yearBuckets = buildMonthBuckets(getPeriodLogs(logs, yearStart, nextYear), yearStart);
     return {
       week: { label: '本周', buckets: weekBuckets, total: summarizeBuckets(weekBuckets) },
@@ -577,7 +577,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     return [...groups.values()].sort((a, b) => b.tokens - a.tokens || b.calls - a.calls);
   };
 
-  const renderEmptyState = ({ icon = 'ti-database-off', title = '暂无数据', description = '', hints = [] } = {}) => `
+  const renderEmptyState = ({ icon = 'ti-database-off', title = '暂无数据', description = '', hints = [] } = {} as any) => `
     <div class="ai-call-empty-state">
       <span class="ai-call-empty-icon"><i class="ti ${esc(icon)}" aria-hidden="true"></i></span>
       <strong>${esc(title)}</strong>
@@ -1010,6 +1010,8 @@ import { cloudStorage } from '../../services/cloud-storage';
   const bind = () => {
     if (bound || !refs.aiCallAnalysisPanel) return;
     bound = true;
+    eventController = new AbortController();
+    const eventSignal = eventController.signal;
     refs.aiCallAnalysisPanel.addEventListener('click', (event) => {
       if (event.target.closest('#aiCallExportBtn')) {
         exportLogs();
@@ -1039,6 +1041,13 @@ import { cloudStorage } from '../../services/cloud-storage';
     });
   };
 
+  const cleanup = () => {
+    eventController?.abort();
+    eventController = null;
+    bound = false;
+    closeDetailModal();
+  };
+
   const init = () => {
     bind();
     render();
@@ -1053,5 +1062,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     clearLogs,
     buildUsageMeta: normalizeTokenUsage,
     formatCostLabel,
+    cleanup,
   };
 })();
+

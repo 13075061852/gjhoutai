@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { renderDashboard } from './dashboard';
+﻿import { renderDashboard } from './dashboard';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
 import { authClient } from '../../../services/auth';
 import { cloudStorage } from '../../../services/cloud-storage';
@@ -52,7 +51,7 @@ import { createBusinessPageShared } from './shared';
     renderStatStrip,
     renderTable,
     scheduleSearchRender,
-  } = createBusinessPageShared({ App, refs, utils, render: (...args) => render(...args) });
+  } = createBusinessPageShared({ App, refs, utils, render });
 
   const getOrderCustomerOptions = () => {
     try {
@@ -78,14 +77,14 @@ import { createBusinessPageShared } from './shared';
     getFormulaOptions: getOrderFormulaOptions,
   });
   const normalizeOrders = createNormalizeOrders(normalizeOrder);
-  let orderRows = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
-  let orderLogs = normalizeOrderLogs(utils.readJson(ORDER_LOG_KEY, null));
+  let orderRows: any[] = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
+  let orderLogs: any[] = normalizeOrderLogs(utils.readJson(ORDER_LOG_KEY, null));
 
   const normalizeProcurement = createNormalizeProcurement({
     getDefaultSupplierName: () => supplierRows[0]?.name || '',
   });
   const normalizeProcurements = createNormalizeProcurements(normalizeProcurement);
-  const procurementRows = normalizeProcurements(utils.readJson(PROCUREMENT_STORAGE_KEY, null));
+  const procurementRows: any[] = normalizeProcurements(utils.readJson(PROCUREMENT_STORAGE_KEY, null));
   let procurementSupplierFilter = '全部';
   let procurementSearchQuery = '';
   let procurementEditingId = '';
@@ -93,6 +92,211 @@ import { createBusinessPageShared } from './shared';
   let procurementDraftNote = '原料采购记录自动保存到云端';
   let procurementListPage = 1;
   let procurementPageSize = 10;
+  const OFFICE_RECORD_STORAGE_KEY = LOCAL_STORAGE_KEYS.officeRecords;
+  const officeRecordTypes = {
+    sampling: '送样记录',
+    coloring: '配色记录',
+  };
+  const officeRecordSections = {
+    ...officeRecordTypes,
+    ash: '灰份记录',
+  };
+  const officeFixedIndexColumn = '编号';
+  const officeDefaultTableColumns = [officeFixedIndexColumn, '', '', ''];
+  const createOfficeDefaultTableRows = (count = 3, columns = officeDefaultTableColumns) => Array.from({ length: count }, (_, rowIndex) => (
+    columns.map((_, columnIndex) => (columnIndex === 0 ? String(rowIndex + 1) : ''))
+  ));
+  const getTodayCode = () => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+  };
+  const getTimeCode = () => {
+    const now = new Date();
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    return `${hour}:${minute}`;
+  };
+  const getOfficeRecordFallbackDate = () => getTodayCode();
+  const parseOfficeTextRows = (value = '') => String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const parseOfficeComponents = (value = '') => {
+    if (Array.isArray(value)) {
+      return value.map((item) => ({
+        model: String(item.model || item.name || '').trim(),
+        batch: String(item.batch || '').trim(),
+        ratio: String(item.ratio || '').trim(),
+      })).filter((item) => item.model || item.batch);
+    }
+    return parseOfficeTextRows(value).map((line) => {
+      const parts = line.split(/\s*(?:\/|\||,|，|、|\t)\s*/).filter(Boolean);
+      return {
+        model: parts[0] || line,
+        batch: parts[1] || '',
+        ratio: parts[2] || '',
+      };
+    }).filter((item) => item.model || item.batch);
+  };
+  const parseOfficeAdditives = (value = '') => {
+    if (Array.isArray(value)) {
+      return value.map((item) => ({
+        name: String(item.name || '').trim(),
+        ratio: String(item.ratio || '').trim(),
+        note: String(item.note || '').trim(),
+      })).filter((item) => item.name);
+    }
+    return parseOfficeTextRows(value).map((line) => {
+      const parts = line.split(/\s*(?:\/|\||,|，|、|\t)\s*/).filter(Boolean);
+      return {
+        name: parts[0] || line,
+        ratio: parts[1] || '',
+        note: parts.slice(2).join(' / '),
+      };
+    }).filter((item) => item.name);
+  };
+  const formatOfficeComponents = (components = []) => components.map((item) => [item.model, item.batch, item.ratio].filter(Boolean).join(' / ')).join('\n');
+  const formatOfficeAdditives = (additives = []) => additives.map((item) => [item.name, item.ratio, item.note].filter(Boolean).join(' / ')).join('\n');
+  const normalizeOfficeTableColumns = (value) => {
+    const columns = Array.isArray(value)
+      ? value.map((column) => String(column || '').trim())
+      : [];
+    if (!columns.length) return [...officeDefaultTableColumns];
+    const customColumns = columns.filter((column, index) => index !== 0 && column !== officeFixedIndexColumn);
+    return [officeFixedIndexColumn, ...customColumns];
+  };
+  const normalizeOfficeTableRows = (record = {} as any, columns = []) => {
+    if (Array.isArray(record.tableRows) && record.tableRows.length) {
+      return record.tableRows.map((row, rowIndex) => {
+        const cells = Array.isArray(row) ? row : [];
+        return columns.map((_, index) => (index === 0 ? String(rowIndex + 1) : String(cells[index] || '').trim()));
+      });
+    }
+    const components = parseOfficeComponents(record.componentsText || record.components);
+    const additives = parseOfficeAdditives(record.additivesText || record.additives);
+    if (components.length || additives.length) {
+      const rows: any[] = [];
+      const maxLength = Math.max(components.length, additives.length, 1);
+      for (let index = 0; index < maxLength; index += 1) {
+        const component = components[index] || {} as any;
+        const additive = additives[index] || {} as any;
+        rows.push(columns.map((column, columnIndex) => {
+          const label = String(column || '');
+          if (columnIndex === 0 || /编号/.test(label)) return String(index + 1);
+          if (/型号/.test(label)) return component.model || '';
+          if (/批次/.test(label)) return component.batch || '';
+          if (/比例/.test(label)) return component.ratio || additive.ratio || '';
+          if (/添加|色粉|助剂/.test(label)) return additive.name || '';
+          if (/备注/.test(label)) return additive.note || '';
+          return '';
+        }));
+      }
+      return rows;
+    }
+    return createOfficeDefaultTableRows(3, columns);
+  };
+  const normalizeOfficeRecord = (record = {} as any, index = 0) => {
+    const type = officeRecordTypes[record.type] ? record.type : 'sampling';
+    const fallbackDate = getOfficeRecordFallbackDate();
+    const tableColumns = normalizeOfficeTableColumns(record.tableColumns);
+    return {
+      id: String(record.id || `OR-${fallbackDate.replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
+      type,
+      project: String(record.project || record.customer || '').trim(),
+      date: String(record.date || fallbackDate).trim(),
+      components: parseOfficeComponents(record.componentsText || record.components),
+      additives: parseOfficeAdditives(record.additivesText || record.additives),
+      tableColumns,
+      tableRows: normalizeOfficeTableRows(record, tableColumns),
+      target: String(record.target || '').trim(),
+      updatedAt: String(record.updatedAt || new Date().toISOString()),
+    };
+  };
+  const normalizeOfficeRecords = (value) => (Array.isArray(value) ? value : [])
+    .map(normalizeOfficeRecord)
+    .filter((record) => record.id);
+  const officeRecords = normalizeOfficeRecords(utils.readJson(OFFICE_RECORD_STORAGE_KEY, null));
+  let officeRecordActiveType = 'sampling';
+  let officeRecordSearchQuery = '';
+  let officeRecordListPage = 1;
+  let officeRecordPageSize = 10;
+  let officeRecordEditingId = '';
+  let officeRecordModalOpen = false;
+  let officeRecordDraftNote = '办事记录自动保存到云端';
+  const ASH_RECORD_STORAGE_KEY = LOCAL_STORAGE_KEYS.ashRecords;
+  const ashRecordFields = [
+    ['cupWeight', '杯重'],
+    ['materialWeight', '料重'],
+    ['residueWeight', '剩余重量'],
+    ['residueMaterialWeight', '剩余料重'],
+    ['content', '含量'],
+  ];
+  const createAshDefaultRows = (count = 2) => Array.from({ length: count }, (_, index) => ({
+    index: String(index + 1),
+    cupWeight: '',
+    materialWeight: '',
+    residueWeight: '',
+    residueMaterialWeight: '',
+    content: '',
+  }));
+  const parseAshNumber = (value = '') => {
+    const normalized = String(value || '').trim().replace(/,/g, '.').replace(/[^\d.-]/g, '');
+    if (!normalized) return NaN;
+    return Number(normalized);
+  };
+  const formatAshNumber = (value, digits = 3) => {
+    if (!Number.isFinite(value)) return '';
+    return String(Number(value.toFixed(digits)));
+  };
+  const calculateAshDerivedRow = (row = {} as any) => {
+    const cupWeight = parseAshNumber(row.cupWeight);
+    const materialWeight = parseAshNumber(row.materialWeight);
+    const residueWeight = parseAshNumber(row.residueWeight);
+    if (!Number.isFinite(cupWeight) || !Number.isFinite(materialWeight) || !Number.isFinite(residueWeight)) {
+      return row;
+    }
+    const residueMaterialWeight = residueWeight - cupWeight;
+    const content = materialWeight ? (residueMaterialWeight / materialWeight) * 100 : NaN;
+    return {
+      ...row,
+      residueMaterialWeight: formatAshNumber(residueMaterialWeight),
+      content: Number.isFinite(content) ? `${formatAshNumber(content, 2)}%` : '',
+    };
+  };
+  const normalizeAshRows = (value) => {
+    const rows = Array.isArray(value) && value.length ? value : createAshDefaultRows();
+    return rows.map((row = {} as any, index) => calculateAshDerivedRow({
+      index: String(index + 1),
+      cupWeight: String(row.cupWeight || row.cup || '').trim(),
+      materialWeight: String(row.materialWeight || row.material || '').trim(),
+      residueWeight: String(row.residueWeight || row.remainingWeight || '').trim(),
+      residueMaterialWeight: String(row.residueMaterialWeight || row.remainingMaterial || '').trim(),
+      content: String(row.content || row.ashContent || '').trim(),
+    }));
+  };
+  const normalizeAshRecord = (record = {} as any, index = 0) => {
+    const fallbackDate = getTodayCode();
+    return {
+      id: String(record.id || `ASH-${fallbackDate.replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
+      date: String(record.date || fallbackDate).trim(),
+      name: String(record.name || record.project || '').trim(),
+      batch: String(record.batch || '').trim(),
+      rows: normalizeAshRows(record.rows),
+      updatedAt: String(record.updatedAt || new Date().toISOString()),
+    };
+  };
+  const normalizeAshRecords = (value) => (Array.isArray(value) ? value : [])
+    .map(normalizeAshRecord)
+    .filter((record) => record.id);
+  const ashRecords = normalizeAshRecords(utils.readJson(ASH_RECORD_STORAGE_KEY, null));
+  let ashRecordSearchQuery = '';
+  let ashRecordListPage = 1;
+  let ashRecordPageSize = 10;
+  let ashRecordEditingId = '';
+  let ashRecordModalOpen = false;
+  let ashRecordDraftNote = '灰份记录自动保存到云端';
   const persistLogs = () => { utils.writeJson(ORDER_LOG_KEY, orderLogs); };
   const getOrderLogs = (id) => orderLogs.filter((entry) => entry.orderId === id).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const logOrderStatusChange = (id, fromStatus, toStatus) => {
@@ -129,7 +333,7 @@ import { createBusinessPageShared } from './shared';
     orderDraftNote = note;
     utils.writeJson(ORDER_STORAGE_KEY, orderRows);
   };
-  const updateOrderStatus = (id, nextStatus, notePrefix = '已更新订单状态', options = {}) => {
+  const updateOrderStatus = (id, nextStatus, notePrefix = '已更新订单状态', options = {} as any) => {
     const index = getOrderIndex(id);
     if (index < 0 || !orderStatusOptions.includes(nextStatus)) return false;
     if (nextStatus === '生产中') {
@@ -1016,7 +1220,10 @@ import { createBusinessPageShared } from './shared';
   const deleteProcurement = async (id) => {
     const procurement = procurementRows.find((p) => p.id === id);
     if (!procurement) return false;
-    const confirmed = await confirmDialog('删除采购记录', `确定要删除采购单 ${id} 吗？该操作不可恢复。`);
+    const confirmed = await App.confirmDialog?.open?.({
+      title: '删除采购记录',
+      message: `确定要删除采购单 ${id} 吗？该操作不可恢复。`,
+    });
     if (!confirmed) return false;
     const idx = procurementRows.indexOf(procurement);
     procurementRows.splice(idx, 1);
@@ -1561,8 +1768,8 @@ import { createBusinessPageShared } from './shared';
     ])}
   `;
 
-  const inventoryRows = normalizeInventoryRows(utils.readJson(INVENTORY_STORAGE_KEY, null));
-  let inventoryCategories = normalizeInventoryCategories(utils.readJson(INVENTORY_CATEGORY_STORAGE_KEY, null), inventoryRows);
+  const inventoryRows: any[] = normalizeInventoryRows(utils.readJson(INVENTORY_STORAGE_KEY, null));
+  let inventoryCategories: any[] = normalizeInventoryCategories(utils.readJson(INVENTORY_CATEGORY_STORAGE_KEY, null), inventoryRows);
   let inventoryCategory = '全部';
   let inventoryEditingMaterialName = '';
   let inventoryEditingCategory = '';
@@ -1592,7 +1799,7 @@ import { createBusinessPageShared } from './shared';
   const supplierStatusOptions = ['正常合作', '样品评估', '暂停合作'];
   const defaultSupplierRows = [];
 
-  const normalizeSupplier = (supplier = {}, index = 0) => {
+  const normalizeSupplier = (supplier = {} as any, index = 0) => {
     const source = Array.isArray(supplier)
       ? {
         code: supplier[0],
@@ -1624,7 +1831,7 @@ import { createBusinessPageShared } from './shared';
       : [];
     return rows;
   };
-  const supplierRows = normalizeSuppliers(utils.readJson(SUPPLIER_STORAGE_KEY, null));
+  const supplierRows: any[] = normalizeSuppliers(utils.readJson(SUPPLIER_STORAGE_KEY, null));
   let supplierCategoryFilter = '全部';
   let supplierSearchQuery = '';
   let supplierEditingCode = '';
@@ -1632,7 +1839,7 @@ import { createBusinessPageShared } from './shared';
   let supplierDraftNote = '供应商档案自动保存到云端';
   let supplierListPage = 1;
   let supplierPageSize = 10;
-  const normalizeArchiveRecord = (config, record = {}, index = 0) => {
+  const normalizeArchiveRecord = (config, record = {} as any, index = 0) => {
     const source = Array.isArray(record)
       ? {
         code: record[0],
@@ -1657,6 +1864,7 @@ import { createBusinessPageShared } from './shared';
       status: config.statuses.includes(status) ? status : config.statuses[0],
       address: String(source.address || '').trim(),
       note: String(source.note || '').trim(),
+      createdAt: String(source.createdAt || source.created || source.date || '').trim(),
     };
   };
   const personnelDepartments = ['系统管理员', '研发部', '测试部', '销售部', '生产部', '生产部主管'];
@@ -1691,7 +1899,7 @@ import { createBusinessPageShared } from './shared';
   const departmentPageAccess = {
     系统管理员: null,
     研发部: new Set(['dashboard', 'project-skills', 'apimart-media', 'ai-call-analysis', 'theme-settings']),
-    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'data-recognition', 'image-cutout', 'inventory-management']),
+    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'office-records', 'data-recognition', 'image-cutout', 'inventory-management']),
     销售部: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'customer-archive', 'customer-detail']),
     生产部: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
     生产部主管: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
@@ -1712,6 +1920,7 @@ import { createBusinessPageShared } from './shared';
     'personnel-archive': ['系统管理员'],
     'property-analysis': ['测试部', '系统管理员'],
     'spectrum-analysis': ['测试部', '系统管理员'],
+    'office-records': ['测试部', '系统管理员'],
     'data-recognition': ['测试部', '系统管理员'],
     'image-cutout': ['测试部', '系统管理员'],
     'project-skills': ['研发部', '系统管理员'],
@@ -1724,7 +1933,7 @@ import { createBusinessPageShared } from './shared';
   let permissionActiveDepartment = personnelDepartments[0];
   const ROLE_PAGE_PERMISSION_STORAGE_KEY = LOCAL_STORAGE_KEYS.rolePagePermissions;
   let rolePagePermissionOverrides = utils.readJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, {});
-  const getUserDepartment = (user = {}) => normalizePersonnelDepartment(user.department || legacyRoleDepartments[user.role] || '');
+  const getUserDepartment = (user = {} as any) => normalizePersonnelDepartment(user.department || legacyRoleDepartments[user.role] || '');
   const normalizePersonnelDepartment = (department) => {
     const value = String(department || '').trim();
     return personnelDepartments.includes(value) ? value : personnelDepartmentAliases[value] || personnelDepartments[0];
@@ -2214,20 +2423,6 @@ import { createBusinessPageShared } from './shared';
     if (!Number.isFinite(number)) return '0';
     return number >= 100 ? number.toFixed(0) : number.toFixed(2).replace(/\.?0+$/, '');
   };
-  const getTodayCode = () => {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${now.getFullYear()}-${month}-${day}`;
-  };
-
-  const getTimeCode = () => {
-    const now = new Date();
-    const hour = String(now.getHours()).padStart(2, '0');
-    const minute = String(now.getMinutes()).padStart(2, '0');
-    return `${hour}:${minute}`;
-  };
-
   const normalizeFormulaRecipes = (value) => {
     if (!Array.isArray(value) || !value.length) return [];
 
@@ -2302,7 +2497,7 @@ import { createBusinessPageShared } from './shared';
     formulaEditorOriginalKey = '';
   };
 
-  const beginFormulaEdit = (recipe, { isNew = false } = {}) => {
+  const beginFormulaEdit = (recipe, { isNew = false } = {} as any) => {
     formulaEditorDraft = cloneFormulaData(recipe);
     formulaEditorOriginalKey = isNew ? getFormulaDraftKey(formulaEditorDraft) : getFormulaDraftKey(recipe);
     activeFormulaId = formulaEditorDraft.id;
@@ -2312,7 +2507,7 @@ import { createBusinessPageShared } from './shared';
 
   const createEmptyFormulaRecipe = () => {
     const id = `FM-${getTodayCode().replace(/-/g, '')}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-    const recipe = {
+    const recipe: any = {
       id,
       code: '',
       name: '',
@@ -2635,7 +2830,7 @@ import { createBusinessPageShared } from './shared';
     updated: recipe.updated,
   });
 
-  const createFormulaByAgent = (input = {}) => {
+  const createFormulaByAgent = (input = {} as any) => {
     const code = String(input.code || input.id || '').trim().replace(/^FM-/i, '');
     const product = String(input.product || input.productName || input.model || '').trim();
     const name = String(input.name || input.title || input.formulaName || product || code || '').trim();
@@ -2660,7 +2855,7 @@ import { createBusinessPageShared } from './shared';
       };
     }
 
-    const recipe = createEmptyFormulaRecipe();
+    const recipe: any = createEmptyFormulaRecipe();
     recipe.code = code || product || recipe.id.replace(/^FM-/, '');
     recipe.name = name || `${recipe.code} 配方`;
     recipe.product = product || recipe.code;
@@ -2738,6 +2933,642 @@ import { createBusinessPageShared } from './shared';
     <option value="">待选择</option>
     ${materialRows.map(([name]) => `<option value="${esc(name)}" ${name === value ? 'selected' : ''}>${esc(name)}</option>`).join('')}
   `;
+
+  const getOfficeRecordIndex = (id) => officeRecords.findIndex((record) => record.id === id);
+  const getOfficeRecordLabel = (type = officeRecordActiveType) => officeRecordSections[type] || officeRecordTypes.sampling;
+  const persistOfficeRecords = (note = '办事记录已保存') => {
+    officeRecordDraftNote = note;
+    utils.writeJson(OFFICE_RECORD_STORAGE_KEY, officeRecords);
+  };
+  const getOfficeRecordFormRecord = () => {
+    const root = refs.businessPageContent;
+    const read = (field) => String(root?.querySelector(`[data-office-field="${field}"]`)?.value || '').trim();
+    const editingRecord: any = officeRecords[getOfficeRecordIndex(officeRecordEditingId)] || {};
+    const tableColumns = [officeFixedIndexColumn, ...[...(root?.querySelectorAll('[data-office-table-column]') || [])]
+      .filter((input) => input.getAttribute('data-office-table-fixed') !== 'true')
+      .map((input) => String(input.value || '').trim())];
+    const tableRows = [...(root?.querySelectorAll('[data-office-table-row]') || [])]
+      .map((row) => [...row.querySelectorAll('[data-office-table-cell]')]
+        .map((input) => String(input.value || '').trim()));
+    return normalizeOfficeRecord({
+      ...editingRecord,
+      id: editingRecord.id || `OR-${getTodayCode().replace(/-/g, '')}-${String(officeRecords.length + 1).padStart(2, '0')}`,
+      type: officeRecordActiveType,
+      project: read('project'),
+      date: read('date') || getTodayCode(),
+      target: read('target'),
+      tableColumns,
+      tableRows,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+  const saveOfficeRecord = () => {
+    const record = getOfficeRecordFormRecord();
+    const hasTableContent = record.tableRows.some((row) => row.some((cell) => String(cell || '').trim()));
+    if (!record.project || !hasTableContent) {
+      officeRecordDraftNote = '请填写客户/项目，并至少录入一行明细内容';
+      notifyAction(officeRecordDraftNote, 'warn', 'office-record-required-fields');
+      return false;
+    }
+    const index = getOfficeRecordIndex(officeRecordEditingId);
+    if (index >= 0) {
+      officeRecords[index] = record;
+      persistOfficeRecords(`已更新${getOfficeRecordLabel(record.type)} ${record.id} · ${getTimeCode()}`);
+      notifyAction(`已保存${getOfficeRecordLabel(record.type)} ${record.id}`, 'success', `office-record-save:${record.id}`);
+      return true;
+    }
+    officeRecords.unshift(record);
+    persistOfficeRecords(`已新增${getOfficeRecordLabel(record.type)} ${record.id} · ${getTimeCode()}`);
+    notifyAction(`已新增${getOfficeRecordLabel(record.type)} ${record.id}`, 'success', `office-record-save:${record.id}`);
+    return true;
+  };
+  const deleteOfficeRecord = async (id) => {
+    const index = getOfficeRecordIndex(id);
+    if (index < 0) return;
+    const record = officeRecords[index];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: `删除${getOfficeRecordLabel(record.type)}`,
+      message: `确认删除「${record.project || record.id}」？删除后无法恢复。`,
+      confirmText: '确认删除',
+    });
+    if (!confirmed) return;
+    officeRecords.splice(index, 1);
+    persistOfficeRecords(`已删除${getOfficeRecordLabel(record.type)} ${id} · ${getTimeCode()}`);
+    notifyAction(`已删除${getOfficeRecordLabel(record.type)} ${id}`, 'success', `office-record-delete:${id}`);
+  };
+  const getOfficeTableFilledRows = (record) => (record.tableRows || []).filter((row) => row.some((cell) => String(cell || '').trim()));
+  const renderOfficeTableSummary = (record) => {
+    const columns = record.tableColumns || [];
+    const rows = getOfficeTableFilledRows(record);
+    if (!columns.length && !rows.length) return '<span class="biz-office-muted">未配置明细表</span>';
+    if (!rows.length) return '<span class="biz-office-muted">未填写明细</span>';
+    const visibleColumns = columns;
+    const gridStyle = `grid-template-columns:${visibleColumns.map((_, index) => index === 0 ? '78px' : '150px').join(' ')}`;
+    return `
+      <div class="biz-office-table-summary">
+        <div class="biz-office-table-summary-head" style="${gridStyle}">${visibleColumns.map((column) => `<span>${esc(column || '未命名')}</span>`).join('')}</div>
+        ${rows.map((row) => `
+          <div class="biz-office-table-summary-row" style="${gridStyle}">
+            ${visibleColumns.map((_, index) => `<span>${esc(row[index] || '--')}</span>`).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `;
+  };
+  const renderOfficeRecordCard = (record) => {
+    return `
+      <article class="biz-office-record-card">
+        <div class="biz-office-record-top">
+          <div class="biz-office-record-title">
+            <strong>${esc(record.project || '未填写客户/项目')}</strong>
+            <div class="biz-office-record-meta">
+              <span>${esc(record.date || '--')}</span>
+            </div>
+          </div>
+          <div class="biz-office-record-actions">
+            <button type="button" data-office-edit="${esc(record.id)}" aria-label="编辑${esc(record.id)}">
+              <i class="ti ti-pencil" aria-hidden="true"></i>
+            </button>
+            <button class="is-danger" type="button" data-office-delete="${esc(record.id)}" aria-label="删除${esc(record.id)}">
+              <i class="ti ti-x" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        ${record.target ? `<p class="biz-office-record-target">${esc(record.target)}</p>` : ''}
+        ${renderOfficeTableSummary(record)}
+      </article>
+    `;
+  };
+  const renderOfficeEditableTable = (record) => {
+    const columns = record.tableColumns?.length ? record.tableColumns : [];
+    const rows = record.tableRows?.length ? record.tableRows : [];
+    return `
+      <section class="biz-office-detail-table is-wide">
+        <div class="biz-office-detail-head">
+          <div>
+            <strong>明细表</strong>
+          </div>
+          <div class="biz-office-detail-actions">
+            <button type="button" data-office-add-column><i class="ti ti-column-insert-right" aria-hidden="true"></i><span>加列</span></button>
+            <button type="button" data-office-add-row><i class="ti ti-row-insert-bottom" aria-hidden="true"></i><span>加行</span></button>
+          </div>
+        </div>
+        <div class="biz-office-detail-scroll">
+          ${columns.length ? `<table>
+            <thead>
+              <tr>
+                ${columns.map((column, index) => `
+                  <th>
+                    <div class="biz-office-column-field">
+                      ${index === 0 ? `
+                        <span class="biz-office-fixed-column" data-office-table-column="${index}" data-office-table-fixed="true">${esc(officeFixedIndexColumn)}</span>
+                      ` : `
+                        <input type="text" value="${esc(column)}" data-office-table-column="${index}" aria-label="第${index + 1}列列名">
+                        <button type="button" data-office-remove-column="${index}" aria-label="删除第${index + 1}列">
+                          <i class="ti ti-x" aria-hidden="true"></i>
+                        </button>
+                      `}
+                    </div>
+                  </th>
+                `).join('')}
+                <th class="biz-office-row-action-head">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row, rowIndex) => `
+                <tr data-office-table-row="${rowIndex}">
+                  ${columns.map((_, columnIndex) => `
+                    <td>
+                      <input type="text" value="${esc(columnIndex === 0 ? String(rowIndex + 1) : row[columnIndex] || '')}" data-office-table-cell="${columnIndex}" aria-label="第${rowIndex + 1}行第${columnIndex + 1}列" ${columnIndex === 0 ? 'readonly class="biz-office-fixed-cell"' : ''}>
+                    </td>
+                  `).join('')}
+                  <td class="biz-office-row-action-cell">
+                    <button type="button" data-office-remove-row="${rowIndex}" aria-label="删除第${rowIndex + 1}行" ${rows.length <= 1 ? 'disabled' : ''}>
+                      <i class="ti ti-trash" aria-hidden="true"></i>
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>` : `
+            <div class="biz-office-empty-table">
+              <i class="ti ti-table-plus" aria-hidden="true"></i>
+              <span>暂无列，请先点击“加列”创建你需要的参数</span>
+            </div>
+          `}
+        </div>
+      </section>
+    `;
+  };
+  const renderOfficeRecords = () => {
+    if (officeRecordActiveType === 'ash') return renderAshRecords();
+    const typeRows = officeRecords.filter((record) => record.type === officeRecordActiveType);
+    const visibleRows = typeRows.filter((record) => {
+      const haystack = [
+        record.id,
+        record.project,
+        record.target,
+        ...(record.tableColumns || []),
+        ...(record.tableRows || []).flat(),
+      ].join(' ').toLowerCase();
+      return haystack.includes(officeRecordSearchQuery.toLowerCase());
+    });
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / officeRecordPageSize));
+    officeRecordListPage = Math.min(Math.max(1, officeRecordListPage), totalPages);
+    const pageStart = (officeRecordListPage - 1) * officeRecordPageSize;
+    const pagedRows = visibleRows.slice(pageStart, pageStart + officeRecordPageSize);
+    const modalRecord = normalizeOfficeRecord(officeRecords[getOfficeRecordIndex(officeRecordEditingId)] || {
+      type: officeRecordActiveType,
+      project: '',
+      date: getTodayCode(),
+      target: '',
+      tableColumns: [...officeDefaultTableColumns],
+      tableRows: createOfficeDefaultTableRows(),
+    });
+    return `
+      <section class="biz-office-page">
+        <section class="business-panel biz-office-table-panel">
+          <div class="biz-formula-table-head biz-office-table-head">
+            <div class="biz-formula-table-actions biz-office-table-actions">
+              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块">
+                ${Object.entries(officeRecordSections).map(([type, label]) => `
+                  <button class="${type === officeRecordActiveType ? 'is-active' : ''}" type="button" data-office-type="${esc(type)}">${esc(label)}</button>
+                `).join('')}
+              </div>
+              ${renderSearchBox({
+                className: 'biz-formula-table-search biz-office-search',
+                placeholder: '搜索客户、列名、单元格内容',
+                value: officeRecordSearchQuery,
+                attributes: { 'data-office-search': '' },
+              })}
+              <button class="biz-formula-new-btn" type="button" data-office-new>
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>新建${esc(getOfficeRecordLabel())}</span>
+              </button>
+            </div>
+          </div>
+          <div class="biz-office-record-list">
+            ${pagedRows.length ? pagedRows.map(renderOfficeRecordCard).join('') : `
+              <div class="biz-office-empty-list">
+                <i class="ti ti-clipboard-list" aria-hidden="true"></i>
+                <strong>暂无办事记录</strong>
+                <span>点击右上角新建${esc(getOfficeRecordLabel())}</span>
+              </div>
+            `}
+          </div>
+          <div class="biz-formula-pagination biz-office-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-office-page-size aria-label="办事记录每页条数">${orderPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === officeRecordPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-office-page-prev ${officeRecordListPage <= 1 ? 'disabled' : ''} aria-label="办事记录上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${officeRecordListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-office-page-next ${officeRecordListPage >= totalPages ? 'disabled' : ''} aria-label="办事记录下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${officeRecordModalOpen ? `
+          <div class="biz-office-modal dialog-overlay" data-office-modal>
+            <div class="biz-inventory-material-dialog biz-office-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="officeRecordModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="officeRecordModalTitle">${officeRecordEditingId ? `编辑${esc(getOfficeRecordLabel(modalRecord.type))}` : `新建${esc(getOfficeRecordLabel())}`}</h2>
+                  <span>${esc(officeRecordDraftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭办事记录弹窗" data-office-close>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-office-editor">
+                <label>
+                  <span>客户/项目 *</span>
+                  <input type="text" value="${esc(modalRecord.project)}" placeholder="客户名称或内部项目" data-office-field="project">
+                </label>
+                <label>
+                  <span>日期</span>
+                  <input type="date" value="${esc(modalRecord.date)}" data-office-field="date">
+                </label>
+                <label class="is-wide">
+                  <span>目标/用途</span>
+                  <input type="text" value="${esc(modalRecord.target)}" placeholder="打样用途、配色目标或客户要求" data-office-field="target">
+                </label>
+                ${renderOfficeEditableTable(modalRecord)}
+                <div class="biz-inventory-modal-actions biz-office-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-office-cancel>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-office-save>保存记录</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </section>
+    `;
+  };
+  const getAshRecordIndex = (id) => ashRecords.findIndex((record) => record.id === id);
+  const persistAshRecords = (note = '灰份记录已保存') => {
+    ashRecordDraftNote = note;
+    utils.writeJson(ASH_RECORD_STORAGE_KEY, ashRecords);
+  };
+  const getAshFilledRows = (record) => (record.rows || []).filter((row) => (
+    ashRecordFields.some(([key]) => String(row[key] || '').trim())
+  ));
+  const renderAshMeasurementTable = (record, options = {} as any) => {
+    const rows = options.allRows ? (record.rows || []) : getAshFilledRows(record);
+    const visibleRows = rows.length ? rows : createAshDefaultRows();
+    return `
+      <div class="biz-ash-table-wrap">
+        <table class="biz-ash-measure-table">
+          <tbody>
+            <tr>
+              <th>日期</th>
+              <td>${esc(record.date || '--')}</td>
+              <th>编号</th>
+              <th>杯重</th>
+              <th>料重</th>
+              <th>剩余重量</th>
+              <th>剩余料重</th>
+              <th>含量</th>
+            </tr>
+            <tr>
+              <th>名称</th>
+              <td>${esc(record.name || '--')}</td>
+              <td>${esc(visibleRows[0]?.index || '1')}</td>
+              ${ashRecordFields.map(([key]) => `<td>${esc(visibleRows[0]?.[key] || '--')}</td>`).join('')}
+            </tr>
+            <tr>
+              <th>批次</th>
+              <td>${esc(record.batch || '--')}</td>
+              <td>${esc(visibleRows[1]?.index || '2')}</td>
+              ${ashRecordFields.map(([key]) => `<td>${esc(visibleRows[1]?.[key] || '--')}</td>`).join('')}
+            </tr>
+            ${visibleRows.slice(2).map((row) => `
+              <tr>
+                <th></th>
+                <td></td>
+                <td>${esc(row.index || '')}</td>
+                ${ashRecordFields.map(([key]) => `<td>${esc(row[key] || '--')}</td>`).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+  const renderAshRecordCard = (record) => `
+    <article class="biz-office-record-card biz-ash-card">
+      <div class="biz-office-record-top">
+        <div class="biz-office-record-title">
+          <strong>${esc(record.name || '未填写名称')}</strong>
+          <div class="biz-office-record-meta">
+            <span>${esc(record.date || '--')}</span>
+          </div>
+        </div>
+        <div class="biz-office-record-actions">
+          <button type="button" data-ash-edit="${esc(record.id)}" aria-label="编辑${esc(record.id)}">
+            <i class="ti ti-pencil" aria-hidden="true"></i>
+          </button>
+          <button class="is-danger" type="button" data-ash-delete="${esc(record.id)}" aria-label="删除${esc(record.id)}">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      ${renderAshMeasurementTable(record)}
+    </article>
+  `;
+  const renderAshEditableRows = (record) => `
+    <section class="biz-office-detail-table biz-ash-detail-table is-wide">
+      <div class="biz-office-detail-head">
+        <div><strong>检测明细</strong></div>
+        <div class="biz-office-detail-actions">
+          <button type="button" data-ash-add-row><i class="ti ti-row-insert-bottom" aria-hidden="true"></i><span>加行</span></button>
+        </div>
+      </div>
+      <div class="biz-office-detail-scroll biz-ash-detail-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>编号</th>
+              ${ashRecordFields.map(([, label]) => `<th>${esc(label)}</th>`).join('')}
+              <th class="biz-office-row-action-head">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(record.rows || createAshDefaultRows()).map((row, rowIndex) => `
+              <tr data-ash-row="${rowIndex}">
+                <td><input class="biz-office-fixed-cell" type="text" value="${esc(rowIndex + 1)}" readonly data-ash-row-field="index"></td>
+                ${ashRecordFields.map(([key, label]) => `
+                  <td><input type="text" value="${esc(row[key] || '')}" data-ash-row-field="${esc(key)}" aria-label="第${rowIndex + 1}行${esc(label)}" ${key === 'residueMaterialWeight' || key === 'content' ? 'readonly class="biz-office-fixed-cell"' : ''}></td>
+                `).join('')}
+                <td class="biz-office-row-action-cell">
+                  <button type="button" data-ash-remove-row="${rowIndex}" aria-label="删除第${rowIndex + 1}行" ${(record.rows || []).length <= 1 ? 'disabled' : ''}>
+                    <i class="ti ti-trash" aria-hidden="true"></i>
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+  const getAshRecordFormRecord = () => {
+    const root = refs.businessPageContent;
+    const read = (field) => String(root?.querySelector(`[data-ash-field="${field}"]`)?.value || '').trim();
+    const editingRecord: any = ashRecords[getAshRecordIndex(ashRecordEditingId)] || {};
+    const rows = [...(root?.querySelectorAll('[data-ash-row]') || [])].map((row, rowIndex) => {
+      const item = { index: String(rowIndex + 1) };
+      ashRecordFields.forEach(([key]) => {
+        item[key] = String(row.querySelector(`[data-ash-row-field="${key}"]`)?.value || '').trim();
+      });
+      return item;
+    });
+    return normalizeAshRecord({
+      ...editingRecord,
+      id: editingRecord.id || `ASH-${getTodayCode().replace(/-/g, '')}-${String(ashRecords.length + 1).padStart(2, '0')}`,
+      date: read('date') || getTodayCode(),
+      name: read('name'),
+      batch: read('batch'),
+      rows,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+  const saveAshRecord = () => {
+    const record = getAshRecordFormRecord();
+    const hasRowContent = record.rows.some((row) => ashRecordFields.some(([key]) => String(row[key] || '').trim()));
+    if (!record.name || !hasRowContent) {
+      ashRecordDraftNote = '请填写名称，并至少录入一行检测明细';
+      notifyAction(ashRecordDraftNote, 'warn', 'ash-record-required-fields');
+      return false;
+    }
+    const index = getAshRecordIndex(ashRecordEditingId);
+    if (index >= 0) {
+      ashRecords[index] = record;
+      persistAshRecords(`已更新灰份记录 ${record.id} · ${getTimeCode()}`);
+      notifyAction(`已保存灰份记录 ${record.id}`, 'success', `ash-record-save:${record.id}`);
+      return true;
+    }
+    ashRecords.unshift(record);
+    persistAshRecords(`已新增灰份记录 ${record.id} · ${getTimeCode()}`);
+    notifyAction(`已新增灰份记录 ${record.id}`, 'success', `ash-record-save:${record.id}`);
+    return true;
+  };
+  const deleteAshRecord = async (id) => {
+    const index = getAshRecordIndex(id);
+    if (index < 0) return;
+    const record = ashRecords[index];
+    const confirmed = await App.confirmDialog?.confirmDelete?.({
+      title: '删除灰份记录',
+      message: `确定删除 ${record.name || record.id} 的灰份记录？`,
+      confirmText: '删除记录',
+    });
+    if (!confirmed) return;
+    ashRecords.splice(index, 1);
+    persistAshRecords(`已删除灰份记录 ${id} · ${getTimeCode()}`);
+    notifyAction(`已删除灰份记录 ${id}`, 'success', `ash-record-delete:${id}`);
+  };
+  const renderAshRecords = () => {
+    const visibleRows = ashRecords.filter((record) => {
+      const haystack = [
+        record.id,
+        record.date,
+        record.name,
+        record.batch,
+        ...(record.rows || []).flatMap((row) => [row.index, ...ashRecordFields.map(([key]) => row[key])]),
+      ].join(' ').toLowerCase();
+      return haystack.includes(ashRecordSearchQuery.toLowerCase());
+    });
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / ashRecordPageSize));
+    ashRecordListPage = Math.min(Math.max(1, ashRecordListPage), totalPages);
+    const pageStart = (ashRecordListPage - 1) * ashRecordPageSize;
+    const pagedRows = visibleRows.slice(pageStart, pageStart + ashRecordPageSize);
+    const modalRecord = normalizeAshRecord(ashRecords[getAshRecordIndex(ashRecordEditingId)] || {
+      date: getTodayCode(),
+      name: '',
+      batch: '',
+      rows: createAshDefaultRows(),
+    });
+    return `
+      <section class="biz-office-page biz-ash-page">
+        <section class="business-panel biz-office-table-panel">
+          <div class="biz-formula-table-head biz-office-table-head">
+            <div class="biz-formula-table-actions biz-office-table-actions biz-ash-table-actions">
+              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块">
+                ${Object.entries(officeRecordSections).map(([type, label]) => `
+                  <button class="${type === officeRecordActiveType ? 'is-active' : ''}" type="button" data-office-type="${esc(type)}">${esc(label)}</button>
+                `).join('')}
+              </div>
+              ${renderSearchBox({
+                className: 'biz-formula-table-search biz-office-search',
+                placeholder: '搜索日期、名称、批次、检测数值',
+                value: ashRecordSearchQuery,
+                attributes: { 'data-ash-search': '' },
+              })}
+              <button class="biz-formula-new-btn" type="button" data-ash-new>
+                <i class="ti ti-plus" aria-hidden="true"></i>
+                <span>新建灰份记录</span>
+              </button>
+            </div>
+          </div>
+          <div class="biz-office-record-list">
+            ${pagedRows.length ? pagedRows.map(renderAshRecordCard).join('') : `
+              <div class="biz-office-empty-list">
+                <i class="ti ti-clipboard-list" aria-hidden="true"></i>
+                <strong>暂无灰份记录</strong>
+                <span>点击上方新建灰份记录</span>
+              </div>
+            `}
+          </div>
+          <div class="biz-formula-pagination biz-office-pagination">
+            <div class="biz-formula-pagination-actions">
+              <label class="biz-formula-page-size">
+                <span>每页</span>
+                <select data-ash-page-size aria-label="灰份记录每页条数">${orderPageSizeOptions.map((n) => `
+                  <option value="${n}" ${n === ashRecordPageSize ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
+                <span>条</span>
+              </label>
+              <div class="biz-formula-page-buttons">
+                <button type="button" class="biz-formula-page-btn" data-ash-page-prev ${ashRecordListPage <= 1 ? 'disabled' : ''} aria-label="灰份记录上一页">
+                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
+                </button>
+                <span class="biz-formula-page-indicator">${ashRecordListPage} / ${totalPages}</span>
+                <button type="button" class="biz-formula-page-btn" data-ash-page-next ${ashRecordListPage >= totalPages ? 'disabled' : ''} aria-label="灰份记录下一页">
+                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+        ${ashRecordModalOpen ? `
+          <div class="biz-office-modal dialog-overlay" data-ash-modal>
+            <div class="biz-inventory-material-dialog biz-office-dialog biz-ash-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="ashRecordModalTitle">
+              <div class="biz-inventory-dialog-head">
+                <div>
+                  <h2 id="ashRecordModalTitle">${ashRecordEditingId ? '编辑灰份记录' : '新建灰份记录'}</h2>
+                  <span>${esc(ashRecordDraftNote)}</span>
+                </div>
+                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭灰份记录弹窗" data-ash-close>
+                  <i class="ti ti-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="biz-office-editor biz-ash-editor">
+                <label>
+                  <span>日期</span>
+                  <input type="date" value="${esc(modalRecord.date)}" data-ash-field="date">
+                </label>
+                <label>
+                  <span>名称 *</span>
+                  <input type="text" value="${esc(modalRecord.name)}" placeholder="样品名称" data-ash-field="name">
+                </label>
+                <label class="is-wide">
+                  <span>批次</span>
+                  <input type="text" value="${esc(modalRecord.batch)}" placeholder="批次或备注批号" data-ash-field="batch">
+                </label>
+                ${renderAshEditableRows(modalRecord)}
+                <div class="biz-inventory-modal-actions biz-office-modal-actions">
+                  <button class="biz-inventory-ghost-btn" type="button" data-ash-cancel>取消</button>
+                  <button class="biz-inventory-primary-btn" type="button" data-ash-save>保存记录</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </section>
+    `;
+  };
+  const syncAshDerivedFields = (row) => {
+    if (!row) return;
+    const getInput = (field) => row.querySelector(`[data-ash-row-field="${field}"]`);
+    const next = calculateAshDerivedRow({
+      cupWeight: getInput('cupWeight')?.value || '',
+      materialWeight: getInput('materialWeight')?.value || '',
+      residueWeight: getInput('residueWeight')?.value || '',
+      residueMaterialWeight: getInput('residueMaterialWeight')?.value || '',
+      content: getInput('content')?.value || '',
+    });
+    const residueInput = getInput('residueMaterialWeight');
+    const contentInput = getInput('content');
+    if (residueInput) residueInput.value = next.residueMaterialWeight || '';
+    if (contentInput) contentInput.value = next.content || '';
+  };
+  const syncOfficeDetailTableControls = (table) => {
+    if (!table) return;
+    const columnFields = [...table.querySelectorAll('[data-office-table-column]')];
+    const rows = [...table.querySelectorAll('[data-office-table-row]')];
+    const columnCount = columnFields.length;
+    columnFields.forEach((field, index) => {
+      field.setAttribute('data-office-table-column', String(index));
+      if (index === 0) {
+        field.setAttribute('data-office-table-fixed', 'true');
+        field.textContent = officeFixedIndexColumn;
+      } else {
+        field.setAttribute('aria-label', `第${index + 1}列列名`);
+      }
+      const removeButton = field.closest('th')?.querySelector('[data-office-remove-column]');
+      if (removeButton) {
+        removeButton.setAttribute('data-office-remove-column', String(index));
+        removeButton.setAttribute('aria-label', `删除第${index + 1}列`);
+        removeButton.disabled = index === 0 || columnCount <= 1;
+      }
+    });
+    rows.forEach((row, rowIndex) => {
+      row.setAttribute('data-office-table-row', String(rowIndex));
+      [...row.querySelectorAll('[data-office-table-cell]')].forEach((input, columnIndex) => {
+        input.setAttribute('data-office-table-cell', String(columnIndex));
+        input.setAttribute('aria-label', `第${rowIndex + 1}行第${columnIndex + 1}列`);
+      });
+      const removeButton = row.querySelector('[data-office-remove-row]');
+      if (removeButton) {
+        removeButton.setAttribute('data-office-remove-row', String(rowIndex));
+        removeButton.setAttribute('aria-label', `删除第${rowIndex + 1}行`);
+        removeButton.disabled = rows.length <= 1;
+      }
+    });
+  };
+  const createOfficeTableInput = (value = '', attrs = {} as any) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = value;
+    Object.entries(attrs).forEach(([key, attrValue]) => input.setAttribute(key, String(attrValue)));
+    return input;
+  };
+  const createOfficeTableCell = (value = '', isFixedIndex = false) => {
+    const cell = document.createElement('td');
+    const input = createOfficeTableInput(value, { 'data-office-table-cell': '' });
+    if (isFixedIndex) {
+      input.readOnly = true;
+      input.className = 'biz-office-fixed-cell';
+    }
+    cell.appendChild(input);
+    return cell;
+  };
+  const createOfficeEditableTableElement = () => {
+    const table = document.createElement('table');
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>
+            <div class="biz-office-column-field">
+              <span class="biz-office-fixed-column" data-office-table-column="0" data-office-table-fixed="true">${officeFixedIndexColumn}</span>
+            </div>
+          </th>
+          <th class="biz-office-row-action-head">操作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    return table;
+  };
 
   const renderPortOptions = (currentLine, value) => feederPorts.map((port) => `
     <option value="${port}" ${port === normalizeFeederPort(value) ? 'selected' : ''}>${esc(currentLine)}${port}</option>
@@ -3507,7 +4338,7 @@ import { createBusinessPageShared } from './shared';
     const totalKg = planOrders.reduce((sum, order) => sum + Number(order.quantity || 0), 0);
     const runningCount = planOrders.filter((order) => order.status === '生产中').length;
     const doneCount = planOrders.filter((order) => order.status === '已完成').length;
-    const lineGroups = formulaLineOptions.map((line) => [
+    const lineGroups: any[] = formulaLineOptions.map((line) => [
       line,
       planOrders.filter((order) => String(getRecipeForOrder(order).line || 'A') === line),
     ]);
@@ -3739,7 +4570,7 @@ import { createBusinessPageShared } from './shared';
     user.display_name === record?.name
     || String(record?.note || '').includes(user.username)
   ));
-  const getAuthUserDeletionKeys = (user = {}) => [
+  const getAuthUserDeletionKeys = (user = {} as any) => [
     String(user.id || '').trim(),
     String(user.username || '').trim(),
   ].filter(Boolean);
@@ -3943,6 +4774,11 @@ import { createBusinessPageShared } from './shared';
       return false;
     }
     const currentIndex = state.editingCode ? state.rows.findIndex((row) => row.code === state.editingCode) : -1;
+    if (currentIndex >= 0) {
+      record.createdAt = state.rows[currentIndex]?.createdAt || record.createdAt || new Date().toISOString();
+    } else {
+      record.createdAt = record.createdAt || new Date().toISOString();
+    }
     const duplicatedCodeIndex = state.rows.findIndex((row) => row.code === record.code);
     if (duplicatedCodeIndex >= 0 && duplicatedCodeIndex !== currentIndex) {
       state.draftNote = `${config.codeLabel}已存在，请换一个编号`;
@@ -4793,14 +5629,15 @@ import { createBusinessPageShared } from './shared';
       'customer-detail': renderCustomerDetail,
       'personnel-archive': () => renderArchive('personnel'),
       'raw-material-procurement': renderRawMaterialProcurement,
+      'office-records': renderOfficeRecords,
       'permission-management': renderPermission,
     };
     return (renderers[pageId] || renderDashboardWithState)();
   };
 
-  const render = (pageId, def = {}) => {
+  function render(pageId, def = {} as any) {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement' || pageId === 'office-records';
     const usesInvoiceWorkbench = pageId === 'invoice-print';
     const usesPermissionWorkbench = pageId === 'permission-management';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
@@ -4813,7 +5650,7 @@ import { createBusinessPageShared } from './shared';
       ${renderBody(pageId)}
     `;
     App.customSelects?.enhanceAll?.(refs.businessPageContent);
-  };
+  }
 
   const focusFormulaSearch = (selectionStart = formulaSearchQuery.length, selectionEnd = selectionStart) => {
     requestAnimationFrame(() => {
@@ -4929,6 +5766,37 @@ import { createBusinessPageShared } from './shared';
       );
       return;
     }
+    if (event.target.hasAttribute('data-office-search')) {
+      officeRecordSearchQuery = event.target.value;
+      officeRecordListPage = 1;
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? officeRecordSearchQuery.length) : officeRecordSearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        'office-records',
+        () => restoreSearchInputState('[data-office-search]', officeRecordSearchQuery, selectionStart, selectionEnd),
+      );
+      return;
+    }
+    if (event.target.hasAttribute('data-ash-search')) {
+      ashRecordSearchQuery = event.target.value;
+      ashRecordListPage = 1;
+      if (event.target instanceof HTMLInputElement && event.isComposing) return;
+      const selectionStart = event.target instanceof HTMLInputElement ? (event.target.selectionStart ?? ashRecordSearchQuery.length) : ashRecordSearchQuery.length;
+      const selectionEnd = event.target instanceof HTMLInputElement ? (event.target.selectionEnd ?? selectionStart) : selectionStart;
+      scheduleSearchRender(
+        'office-records',
+        () => restoreSearchInputState('[data-ash-search]', ashRecordSearchQuery, selectionStart, selectionEnd),
+      );
+      return;
+    }
+    if (event.target.hasAttribute('data-ash-row-field')) {
+      const field = event.target.getAttribute('data-ash-row-field');
+      if (field === 'cupWeight' || field === 'materialWeight' || field === 'residueWeight') {
+        syncAshDerivedFields(event.target.closest('[data-ash-row]'));
+      }
+      return;
+    }
     if (event.target.hasAttribute('data-archive-search')) {
       const kind = event.target.getAttribute('data-archive-search');
       const config = archiveConfigs[kind];
@@ -5011,6 +5879,24 @@ import { createBusinessPageShared } from './shared';
         'production-plan',
         () => restoreSearchInputState('[data-production-search]', productionSearchQuery, selectionStart, selectionEnd),
       );
+      return;
+    }
+    if (event.target.hasAttribute('data-office-search')) {
+      officeRecordSearchQuery = event.target.value;
+      officeRecordListPage = 1;
+      const selectionStart = event.target.selectionStart ?? officeRecordSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('office-records');
+      restoreSearchInputState('[data-office-search]', officeRecordSearchQuery, selectionStart, selectionEnd);
+      return;
+    }
+    if (event.target.hasAttribute('data-ash-search')) {
+      ashRecordSearchQuery = event.target.value;
+      ashRecordListPage = 1;
+      const selectionStart = event.target.selectionStart ?? ashRecordSearchQuery.length;
+      const selectionEnd = event.target.selectionEnd ?? selectionStart;
+      render('office-records');
+      restoreSearchInputState('[data-ash-search]', ashRecordSearchQuery, selectionStart, selectionEnd);
       return;
     }
     if (event.target.hasAttribute('data-formula-search')) {
@@ -5131,6 +6017,18 @@ import { createBusinessPageShared } from './shared';
       render('raw-material-procurement');
       return;
     }
+    if (event.target.hasAttribute('data-office-page-size')) {
+      officeRecordPageSize = Number(event.target.value) || 10;
+      officeRecordListPage = 1;
+      render('office-records');
+      return;
+    }
+    if (event.target.hasAttribute('data-ash-page-size')) {
+      ashRecordPageSize = Number(event.target.value) || 10;
+      ashRecordListPage = 1;
+      render('office-records');
+      return;
+    }
     if (event.target.hasAttribute('data-archive-filter')) {
       const kind = event.target.getAttribute('data-archive-filter');
       const config = archiveConfigs[kind];
@@ -5247,6 +6145,299 @@ import { createBusinessPageShared } from './shared';
     if (orderPageNext && refs.businessPageContent.contains(orderPageNext) && !orderPageNext.disabled) {
       orderListPage += 1;
       render('order-management');
+      return;
+    }
+
+    const officeTypeButton = event.target.closest('[data-office-type]');
+    if (officeTypeButton && refs.businessPageContent.contains(officeTypeButton)) {
+      const type = officeTypeButton.getAttribute('data-office-type') || 'sampling';
+      if (officeRecordSections[type]) {
+        officeRecordActiveType = type;
+        officeRecordSearchQuery = '';
+        ashRecordSearchQuery = '';
+        officeRecordListPage = 1;
+        ashRecordListPage = 1;
+        officeRecordModalOpen = false;
+        officeRecordEditingId = '';
+        ashRecordModalOpen = false;
+        ashRecordEditingId = '';
+        render('office-records');
+      }
+      return;
+    }
+
+    const officePagePrev = event.target.closest('[data-office-page-prev]');
+    if (officePagePrev && refs.businessPageContent.contains(officePagePrev) && !officePagePrev.disabled) {
+      officeRecordListPage -= 1;
+      render('office-records');
+      return;
+    }
+
+    const officePageNext = event.target.closest('[data-office-page-next]');
+    if (officePageNext && refs.businessPageContent.contains(officePageNext) && !officePageNext.disabled) {
+      officeRecordListPage += 1;
+      render('office-records');
+      return;
+    }
+
+    const officeAddColumnButton = event.target.closest('[data-office-add-column]');
+    if (officeAddColumnButton && refs.businessPageContent.contains(officeAddColumnButton)) {
+      const detailTable = officeAddColumnButton.closest('.biz-office-detail-table');
+      const scroll = detailTable?.querySelector('.biz-office-detail-scroll');
+      let table = detailTable?.querySelector('table');
+      if (!table && scroll) {
+        scroll.innerHTML = '';
+        table = createOfficeEditableTableElement();
+        scroll.appendChild(table);
+      }
+      const headerRow = table?.querySelector('thead tr');
+      const actionHead = headerRow?.querySelector('.biz-office-row-action-head');
+      if (table && headerRow && actionHead) {
+        const columnCount = table.querySelectorAll('[data-office-table-column]').length;
+        const headerCell = document.createElement('th');
+        const field = document.createElement('div');
+        field.className = 'biz-office-column-field';
+        field.appendChild(createOfficeTableInput('', { 'data-office-table-column': columnCount, placeholder: '列名' }));
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.setAttribute('data-office-remove-column', String(columnCount));
+        removeButton.setAttribute('aria-label', `删除第${columnCount + 1}列`);
+        removeButton.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
+        field.appendChild(removeButton);
+        headerCell.appendChild(field);
+        headerRow.insertBefore(headerCell, actionHead);
+        table.querySelectorAll('tbody tr').forEach((row) => {
+          row.insertBefore(createOfficeTableCell(''), row.querySelector('.biz-office-row-action-cell'));
+        });
+        syncOfficeDetailTableControls(table);
+      }
+      return;
+    }
+
+    const officeRemoveColumnButton = event.target.closest('[data-office-remove-column]');
+    if (officeRemoveColumnButton && refs.businessPageContent.contains(officeRemoveColumnButton) && !officeRemoveColumnButton.disabled) {
+      const table = officeRemoveColumnButton.closest('table');
+      const columnIndex = Number(officeRemoveColumnButton.getAttribute('data-office-remove-column') || 0);
+      if (columnIndex === 0) return;
+      const headerCell = officeRemoveColumnButton.closest('th');
+      if (table && headerCell) {
+        headerCell.remove();
+        table.querySelectorAll('tbody tr').forEach((row) => {
+          const cells = [...row.querySelectorAll('td:not(.biz-office-row-action-cell)')];
+          cells[columnIndex]?.remove();
+        });
+        syncOfficeDetailTableControls(table);
+      }
+      return;
+    }
+
+    const officeAddRowButton = event.target.closest('[data-office-add-row]');
+    if (officeAddRowButton && refs.businessPageContent.contains(officeAddRowButton)) {
+      const table = officeAddRowButton.closest('.biz-office-detail-table')?.querySelector('table');
+      const tbody = table?.querySelector('tbody');
+      if (table && tbody) {
+        const columnCount = table.querySelectorAll('[data-office-table-column]').length;
+        if (!columnCount) {
+          notifyAction('请先添加列，再添加明细行', 'warn', 'office-table-column-required');
+          return;
+        }
+        const row = document.createElement('tr');
+        row.setAttribute('data-office-table-row', '');
+        for (let index = 0; index < columnCount; index += 1) {
+          row.appendChild(createOfficeTableCell(index === 0 ? String(tbody.querySelectorAll('tr').length + 1) : '', index === 0));
+        }
+        const actionCell = document.createElement('td');
+        actionCell.className = 'biz-office-row-action-cell';
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.setAttribute('data-office-remove-row', '');
+        removeButton.setAttribute('aria-label', '删除行');
+        removeButton.innerHTML = '<i class="ti ti-trash" aria-hidden="true"></i>';
+        actionCell.appendChild(removeButton);
+        row.appendChild(actionCell);
+        tbody.appendChild(row);
+        syncOfficeDetailTableControls(table);
+      }
+      return;
+    }
+
+    const officeRemoveRowButton = event.target.closest('[data-office-remove-row]');
+    if (officeRemoveRowButton && refs.businessPageContent.contains(officeRemoveRowButton) && !officeRemoveRowButton.disabled) {
+      const table = officeRemoveRowButton.closest('table');
+      officeRemoveRowButton.closest('tr')?.remove();
+      syncOfficeDetailTableControls(table);
+      return;
+    }
+
+    const officeNewButton = event.target.closest('[data-office-new]');
+    if (officeNewButton && refs.businessPageContent.contains(officeNewButton)) {
+      officeRecordEditingId = '';
+      officeRecordDraftNote = `正在新建${getOfficeRecordLabel()}`;
+      officeRecordModalOpen = true;
+      render('office-records');
+      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus();
+      return;
+    }
+
+    const officeEditButton = event.target.closest('[data-office-edit]');
+    if (officeEditButton && refs.businessPageContent.contains(officeEditButton)) {
+      officeRecordEditingId = officeEditButton.getAttribute('data-office-edit') || '';
+      const record = officeRecords[getOfficeRecordIndex(officeRecordEditingId)];
+      if (record?.type && officeRecordTypes[record.type]) officeRecordActiveType = record.type;
+      officeRecordDraftNote = `正在编辑${getOfficeRecordLabel(record?.type)} ${officeRecordEditingId}`;
+      officeRecordModalOpen = true;
+      render('office-records');
+      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus();
+      return;
+    }
+
+    const officeDeleteButton = event.target.closest('[data-office-delete]');
+    if (officeDeleteButton && refs.businessPageContent.contains(officeDeleteButton)) {
+      await deleteOfficeRecord(officeDeleteButton.getAttribute('data-office-delete'));
+      render('office-records');
+      return;
+    }
+
+    const officeSaveButton = event.target.closest('[data-office-save]');
+    if (officeSaveButton && refs.businessPageContent.contains(officeSaveButton)) {
+      const saved = saveOfficeRecord();
+      officeRecordModalOpen = !saved;
+      if (saved) officeRecordEditingId = '';
+      render('office-records');
+      return;
+    }
+
+    const officeCloseButton = event.target.closest('[data-office-close], [data-office-cancel]');
+    if (officeCloseButton && refs.businessPageContent.contains(officeCloseButton)) {
+      officeRecordEditingId = '';
+      officeRecordDraftNote = '已取消办事记录编辑';
+      officeRecordModalOpen = false;
+      render('office-records');
+      return;
+    }
+
+    const officeModal = event.target.closest('[data-office-modal]');
+    if (officeModal && event.target === officeModal) {
+      officeRecordEditingId = '';
+      officeRecordModalOpen = false;
+      render('office-records');
+      return;
+    }
+
+    const ashPagePrev = event.target.closest('[data-ash-page-prev]');
+    if (ashPagePrev && refs.businessPageContent.contains(ashPagePrev) && !ashPagePrev.disabled) {
+      ashRecordListPage -= 1;
+      render('office-records');
+      return;
+    }
+
+    const ashPageNext = event.target.closest('[data-ash-page-next]');
+    if (ashPageNext && refs.businessPageContent.contains(ashPageNext) && !ashPageNext.disabled) {
+      ashRecordListPage += 1;
+      render('office-records');
+      return;
+    }
+
+    const ashAddRowButton = event.target.closest('[data-ash-add-row]');
+    if (ashAddRowButton && refs.businessPageContent.contains(ashAddRowButton)) {
+      const tbody = ashAddRowButton.closest('.biz-ash-detail-table')?.querySelector('tbody');
+      if (tbody) {
+        const rowIndex = tbody.querySelectorAll('[data-ash-row]').length;
+        const row = document.createElement('tr');
+        row.setAttribute('data-ash-row', String(rowIndex));
+        row.innerHTML = `
+          <td><input class="biz-office-fixed-cell" type="text" value="${rowIndex + 1}" readonly data-ash-row-field="index"></td>
+          ${ashRecordFields.map(([key, label]) => `
+            <td><input type="text" value="" data-ash-row-field="${key}" aria-label="第${rowIndex + 1}行${label}" ${key === 'residueMaterialWeight' || key === 'content' ? 'readonly class="biz-office-fixed-cell"' : ''}></td>
+          `).join('')}
+          <td class="biz-office-row-action-cell">
+            <button type="button" data-ash-remove-row="${rowIndex}" aria-label="删除第${rowIndex + 1}行">
+              <i class="ti ti-trash" aria-hidden="true"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(row);
+        tbody.querySelectorAll('[data-ash-row]').forEach((item, index) => {
+          item.setAttribute('data-ash-row', String(index));
+          item.querySelector('[data-ash-row-field="index"]').value = String(index + 1);
+          const removeButton = item.querySelector('[data-ash-remove-row]');
+          if (removeButton) {
+            removeButton.setAttribute('data-ash-remove-row', String(index));
+            removeButton.setAttribute('aria-label', `删除第${index + 1}行`);
+            removeButton.disabled = tbody.querySelectorAll('[data-ash-row]').length <= 1;
+          }
+        });
+      }
+      return;
+    }
+
+    const ashRemoveRowButton = event.target.closest('[data-ash-remove-row]');
+    if (ashRemoveRowButton && refs.businessPageContent.contains(ashRemoveRowButton) && !ashRemoveRowButton.disabled) {
+      const tbody = ashRemoveRowButton.closest('tbody');
+      ashRemoveRowButton.closest('tr')?.remove();
+      tbody?.querySelectorAll('[data-ash-row]').forEach((item, index) => {
+        item.setAttribute('data-ash-row', String(index));
+        item.querySelector('[data-ash-row-field="index"]').value = String(index + 1);
+        const removeButton = item.querySelector('[data-ash-remove-row]');
+        if (removeButton) {
+          removeButton.setAttribute('data-ash-remove-row', String(index));
+          removeButton.setAttribute('aria-label', `删除第${index + 1}行`);
+          removeButton.disabled = tbody.querySelectorAll('[data-ash-row]').length <= 1;
+        }
+      });
+      return;
+    }
+
+    const ashNewButton = event.target.closest('[data-ash-new]');
+    if (ashNewButton && refs.businessPageContent.contains(ashNewButton)) {
+      ashRecordEditingId = '';
+      ashRecordDraftNote = '正在新建灰份记录';
+      ashRecordModalOpen = true;
+      render('office-records');
+      refs.businessPageContent?.querySelector('[data-ash-field="name"]')?.focus();
+      return;
+    }
+
+    const ashEditButton = event.target.closest('[data-ash-edit]');
+    if (ashEditButton && refs.businessPageContent.contains(ashEditButton)) {
+      ashRecordEditingId = ashEditButton.getAttribute('data-ash-edit') || '';
+      ashRecordDraftNote = `正在编辑灰份记录 ${ashRecordEditingId}`;
+      ashRecordModalOpen = true;
+      render('office-records');
+      refs.businessPageContent?.querySelector('[data-ash-field="name"]')?.focus();
+      return;
+    }
+
+    const ashDeleteButton = event.target.closest('[data-ash-delete]');
+    if (ashDeleteButton && refs.businessPageContent.contains(ashDeleteButton)) {
+      await deleteAshRecord(ashDeleteButton.getAttribute('data-ash-delete'));
+      render('office-records');
+      return;
+    }
+
+    const ashSaveButton = event.target.closest('[data-ash-save]');
+    if (ashSaveButton && refs.businessPageContent.contains(ashSaveButton)) {
+      const saved = saveAshRecord();
+      ashRecordModalOpen = !saved;
+      if (saved) ashRecordEditingId = '';
+      render('office-records');
+      return;
+    }
+
+    const ashCloseButton = event.target.closest('[data-ash-close], [data-ash-cancel]');
+    if (ashCloseButton && refs.businessPageContent.contains(ashCloseButton)) {
+      ashRecordEditingId = '';
+      ashRecordDraftNote = '已取消灰份记录编辑';
+      ashRecordModalOpen = false;
+      render('office-records');
+      return;
+    }
+
+    const ashModal = event.target.closest('[data-ash-modal]');
+    if (ashModal && event.target === ashModal) {
+      ashRecordEditingId = '';
+      ashRecordModalOpen = false;
+      render('office-records');
       return;
     }
 
@@ -6023,6 +7214,18 @@ import { createBusinessPageShared } from './shared';
       render('raw-material-procurement');
       return;
     }
+    if (event.key === 'Escape' && officeRecordModalOpen) {
+      officeRecordEditingId = '';
+      officeRecordModalOpen = false;
+      render('office-records');
+      return;
+    }
+    if (event.key === 'Escape' && ashRecordModalOpen) {
+      ashRecordEditingId = '';
+      ashRecordModalOpen = false;
+      render('office-records');
+      return;
+    }
     const openArchiveKind = Object.keys(archiveStates).find((kind) => archiveStates[kind].modalOpen);
     if (event.key === 'Escape' && openArchiveKind) {
       archiveStates[openArchiveKind].editingCode = '';
@@ -6061,14 +7264,16 @@ import { createBusinessPageShared } from './shared';
 
   const getBusinessPageHints = (question = '', activePageId = '') => {
     const text = String(question || '').toLowerCase();
-    const hints = new Set();
-    const add = (...pageIds) => pageIds.forEach((pageId) => hints.add(pageId));
+    const hints = new Set<any>();
+    const add = (...pageIds: any[]) => pageIds.forEach((pageId) => hints.add(pageId));
     if (/账号|账户|用户|人员|员工|部门|权限|角色|登录|在线/.test(text)) add('personnel-archive', 'permission-management');
     if (/订单|交付|交期|客户订单|销售单/.test(text)) add('order-management');
     if (/库存|商品|产品|材料|原料|成品|仓库|可售|锁库/.test(text)) add('inventory-management');
     if (/供应商|采购|供货|原料采购|进货/.test(text)) add('supplier-archive', 'raw-material-procurement');
     if (/客户|客群|联系人|交易|信用/.test(text)) add('customer-archive');
     if (/配方|工艺|组分|比例|版本/.test(text)) add('formula-management');
+    if (/办事|送样|配色|色粉|助剂|添加剂|打样|型号批次|混合比例/.test(text)) add('office-records');
+    if (/灰份|灰分|含量|杯重|料重|剩余重量|剩余料重/.test(text)) add('office-records');
     if (/生产|排产|产线|批次|质检|待排/.test(text)) add('production-plan');
     if (activePageId && App.constants?.PAGE_DEFS?.[activePageId]) add(activePageId);
     return [...hints];
@@ -6136,6 +7341,27 @@ import { createBusinessPageShared } from './shared';
         ...formatAgentRecords(procurementRows, [['采购单号', 'id'], ['供应商', 'supplier'], ['物料', 'material'], ['数量', 'quantity'], ['状态', 'status'], ['采购日期', 'purchaseDate']]),
       ].join('\n');
     }
+    if (pageId === 'office-records') {
+      const rows = officeRecords.map((record) => ({
+        ...record,
+        typeLabel: getOfficeRecordLabel(record.type),
+        tableColumnsText: (record.tableColumns || []).join('、'),
+        tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('；') || '无',
+      }));
+      const ashRows = ashRecords.map((record) => ({
+        ...record,
+        details: (record.rows || []).map((row) => `编号${row.index || ''}: 杯重=${row.cupWeight || '--'}；料重=${row.materialWeight || '--'}；剩余重量=${row.residueWeight || '--'}；剩余料重=${row.residueMaterialWeight || '--'}；含量=${row.content || '--'}`).join(' / '),
+      }));
+      return [
+        '【办事记录】',
+        `送样记录数：${officeRecords.filter((record) => record.type === 'sampling').length}`,
+        `配色记录数：${officeRecords.filter((record) => record.type === 'coloring').length}`,
+        `灰份记录数：${ashRecords.length}`,
+        ...formatAgentRecords(rows, [['板块', 'typeLabel'], ['编号', 'id'], ['客户/项目', 'project'], ['表头', 'tableColumnsText'], ['明细', 'tableRowsText'], ['目标', 'target'], ['日期', 'date']]),
+        ashRows.length ? '灰份记录：' : '',
+        ...formatAgentRecords(ashRows, [['编号', 'id'], ['日期', 'date'], ['名称', 'name'], ['批次', 'batch'], ['明细', 'details']]),
+      ].join('\n');
+    }
     if (pageId === 'customer-archive') {
       const rows = archiveStates['customer']?.rows || [];
       return [
@@ -6177,9 +7403,9 @@ import { createBusinessPageShared } from './shared';
     return '';
   };
 
-  const getAgentContext = (question = '', options = {}) => {
+  const getAgentContext = (question = '', options = {} as any) => {
     const activePageId = options.activePageId || localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page') || '';
-    const hints = getBusinessPageHints(question, activePageId);
+    const hints: any[] = getBusinessPageHints(question, activePageId);
     const sections = hints
       .map((pageId) => buildBusinessPageContext(pageId))
       .filter((content) => String(content || '').trim());
@@ -6315,6 +7541,33 @@ import { createBusinessPageShared } from './shared';
       rows: procurementRows.map((record) => ({ ...record })),
       defaultFields: ['id', 'supplier', 'material', 'quantity', 'unitPrice', 'purchaseDate', 'status'],
     },
+    'office-records': {
+      entity: 'officeRecord',
+      rows: [
+        ...officeRecords.map((record) => ({
+          ...record,
+          typeLabel: getOfficeRecordLabel(record.type),
+          tableColumnsText: (record.tableColumns || []).join('、'),
+          tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('\n'),
+        })),
+        ...ashRecords.map((record) => ({
+          ...record,
+          typeLabel: '灰份记录',
+          project: record.name,
+          tableColumnsText: '编号、杯重、料重、剩余重量、剩余料重、含量',
+          tableRowsText: (record.rows || []).map((row) => `编号${row.index || ''}: 杯重=${row.cupWeight || '--'}；料重=${row.materialWeight || '--'}；剩余重量=${row.residueWeight || '--'}；剩余料重=${row.residueMaterialWeight || '--'}；含量=${row.content || '--'}`).join('\n'),
+          target: record.batch,
+        })),
+      ],
+      defaultFields: ['id', 'typeLabel', 'project', 'tableColumnsText', 'tableRowsText', 'target', 'date'],
+      fieldAliases: {
+        customer: 'project',
+        columns: 'tableColumnsText',
+        rows: 'tableRowsText',
+        sample: 'project',
+        lot: 'target',
+      },
+    },
     'customer-archive': {
       entity: 'customer',
       rows: (archiveStates['customer']?.rows || []).map((record) => ({ ...record })),
@@ -6364,7 +7617,7 @@ import { createBusinessPageShared } from './shared';
     };
   };
 
-  const normalizeBusinessQueryRequest = (request = {}) => {
+  const normalizeBusinessQueryRequest = (request = {} as any) => {
     const text = String(request.question || request.query || request.originalQuestion || '').trim();
     const input = { ...request };
     if (!input.pageId) {
@@ -6389,7 +7642,7 @@ import { createBusinessPageShared } from './shared';
     return input;
   };
 
-  const queryAgentData = (request = {}) => {
+  const queryAgentData = (request = {} as any) => {
     const input = normalizeBusinessQueryRequest(request);
     const datasets = getBusinessAgentDatasets();
     const dataset = datasets[input.pageId];
@@ -6448,7 +7701,7 @@ import { createBusinessPageShared } from './shared';
     ].join('\n');
   };
 
-  const answerQuestion = (question = '', options = {}) => {
+  const answerQuestion = (question = '', options = {} as any) => {
     const text = String(question || '').trim();
     if (!/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|当前|现在|查看|列举|列出|展示|罗列|最低|最少|最小|最高|最多|最大)/.test(text)) return '';
     const wantsListPattern = /(?:有哪些|哪几个|哪几|哪四|哪.*个|列表|明细|查看|列举|列出|展示|罗列|具体|详细|分别)/;
@@ -6463,7 +7716,7 @@ import { createBusinessPageShared } from './shared';
           ['配方编号', '配方名称', '日期', '分类', '产线', '成本', '库存状态', '版本', '状态'],
           rows
         ) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/账号|账户|用户|登录/.test(text)) {
@@ -6473,7 +7726,7 @@ import { createBusinessPageShared } from './shared';
         `系统当前共有 ${authUsers.length} 个登录账号。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['序号', '姓名', '账号', '角色', '状态'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/人员|员工/.test(text)) {
@@ -6483,7 +7736,7 @@ import { createBusinessPageShared } from './shared';
         `系统当前共有 ${rows.length} 条人员档案。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['编号', '姓名', '部门', '电话', '邮箱', '状态'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/订单/.test(text)) {
@@ -6494,7 +7747,7 @@ import { createBusinessPageShared } from './shared';
         `其中待处理 ${orderRows.filter((row) => row.status === '待处理').length} 个，生产中 ${orderRows.filter((row) => row.status === '生产中').length} 个。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['订单号', '客户', '配方', '数量KG', '状态', '交货日期'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/供应商/.test(text)) {
@@ -6504,7 +7757,7 @@ import { createBusinessPageShared } from './shared';
         `系统当前共有 ${supplierRows.length} 个供应商。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['编号', '名称', '联系人', '品类', '状态'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/客户/.test(text)) {
@@ -6515,7 +7768,7 @@ import { createBusinessPageShared } from './shared';
         `系统当前共有 ${customers.length} 个客户。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['编号', '客户名称', '联系人', '等级', '状态'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     if (/库存|物料|材料|商品|产品|成品/.test(text)) {
@@ -6530,7 +7783,7 @@ import { createBusinessPageShared } from './shared';
         `系统当前共有 ${inventoryScopeRows.length} 条${scopeText}。`,
         wantsList && rows.length ? '' : '',
         wantsList && rows.length ? renderAgentMarkdownTable(['物料', '规格/批次', '分类', '供应商', '库存', '单位', '状态'], rows) : '',
-      ].filter((item) => item !== false && item != null).join('\n').trim();
+      ].filter((item) => item != null).join('\n').trim();
     }
 
     return '';
@@ -6538,6 +7791,19 @@ import { createBusinessPageShared } from './shared';
 
   App.businessPages = {
     render,
+    cleanup: () => {
+      document.querySelector('.biz-invoice-print-root')?.remove();
+      Object.values(archiveStates).forEach((state) => {
+        state.modalOpen = false;
+        state.editingCode = '';
+      });
+      inventoryMaterialModalOpen = false;
+      inventoryCategoryModalOpen = false;
+      supplierModalOpen = false;
+      procurementModalOpen = false;
+      officeRecordModalOpen = false;
+      ashRecordModalOpen = false;
+    },
     createFormulaByAgent,
     getAgentContext,
     answerQuestion,
@@ -6551,3 +7817,5 @@ import { createBusinessPageShared } from './shared';
     getCurrentUserPermissionKey: getPermissionKeyForUser,
   };
 })();
+
+

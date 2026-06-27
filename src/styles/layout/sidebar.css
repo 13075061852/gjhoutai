@@ -45,6 +45,9 @@
       padding:12px 14px 16px;
       scrollbar-width:none;
     }
+    .sidebar-mobile-actions{
+      display:none;
+    }
     .sidebar-scroll::-webkit-scrollbar{display:none}
     .sidebar-section{
       margin-bottom:8px;

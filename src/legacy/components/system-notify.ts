@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
+﻿import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-context';
 
 (function () {
   'use strict';
@@ -75,7 +74,7 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
     tone = 'info',
     key = '',
     duration = DEFAULT_DURATION,
-  } = {}) => {
+  } = {} as any) => {
     const text = String(message || '').trim();
     if (!text) return null;
     const normalizedTone = normalizeTone(tone);
@@ -122,10 +121,10 @@ import { ensureLegacyApp, ensurePublicApp, getPublicApp } from '../core/app-cont
 
   const api = {
     show,
-    success: (message, options = {}) => show({ ...options, message, tone: 'success' }),
-    warn: (message, options = {}) => show({ ...options, message, tone: 'warn' }),
-    error: (message, options = {}) => show({ ...options, message, tone: 'error' }),
-    info: (message, options = {}) => show({ ...options, message, tone: 'info' }),
+    success: (message, options = {} as any) => show({ ...options, message, tone: 'success' }),
+    warn: (message, options = {} as any) => show({ ...options, message, tone: 'warn' }),
+    error: (message, options = {} as any) => show({ ...options, message, tone: 'error' }),
+    info: (message, options = {} as any) => show({ ...options, message, tone: 'info' }),
     close: removeItem,
     clear: () => [...activeItems.keys()].forEach((key) => removeItem(key, true)),
   };

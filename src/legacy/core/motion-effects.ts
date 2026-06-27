@@ -1,4 +1,4 @@
-import { animate } from 'motion/mini';
+﻿import { animate } from 'motion/mini';
 import { ensureLegacyApp, ensurePublicApp } from './app-context';
 
 type LegacyMotionPlayback = {
@@ -7,7 +7,7 @@ type LegacyMotionPlayback = {
 };
 
 type LegacyMotionKeyframes = Record<string, string | number | Array<string | number>>;
-type LegacyMotionOptions = Record<string, unknown>;
+type LegacyMotionOptions = Record<string, any>;
 
 (function () {
   'use strict';
@@ -25,7 +25,7 @@ type LegacyMotionOptions = Record<string, unknown>;
     activeAnimations.delete(element);
   };
 
-  const run = (element: HTMLElement | SVGElement | null | undefined, keyframes: LegacyMotionKeyframes, options: LegacyMotionOptions = {}): LegacyMotionPlayback | null => {
+  const run = (element: HTMLElement | SVGElement | null | undefined, keyframes: LegacyMotionKeyframes, options: LegacyMotionOptions = {} as any): LegacyMotionPlayback | null => {
     if (!element) return null;
     stop(element);
 
@@ -49,17 +49,17 @@ type LegacyMotionOptions = Record<string, unknown>;
     return animation;
   };
 
-  const enterFromRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
+  const enterFromRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {} as any) => run(element, {
     opacity: [0, 1],
     transform: ['translateX(10px)', 'translateX(0px)'],
   }, options);
 
-  const exitToRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
+  const exitToRight = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {} as any) => run(element, {
     opacity: [1, 0],
     transform: ['translateX(0px)', 'translateX(10px)'],
   }, options);
 
-  const softSettle = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {}) => run(element, {
+  const softSettle = (element: HTMLElement | SVGElement | null | undefined, options: LegacyMotionOptions = {} as any) => run(element, {
     opacity: [0.94, 1],
     transform: ['translateY(3px)', 'translateY(0px)'],
   }, {
@@ -84,3 +84,4 @@ type LegacyMotionOptions = Record<string, unknown>;
   App.motionEffects = api;
   PublicApp.motionEffects = api;
 }());
+

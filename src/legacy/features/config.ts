@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudConfig } from '../../services/cloud-config';
 import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 import { cloneJsonValue, parseJsonMaybe } from '../../utils/json';
@@ -82,14 +81,14 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     byId: SILICONFLOW_CATALOG_BY_ID,
     byTarget: SILICONFLOW_CATALOG_BY_TARGET,
   } = buildSiliconFlowCatalogIndexes();
-  const isSiliconFlowCatalogChatOption = (model = {}) => {
+  const isSiliconFlowCatalogChatOption = (model = {} as any) => {
     const subType = String(model.subType || model.sub_type || '').toLowerCase();
     const type = String(model.type || '').toLowerCase();
     if (subType) return subType === 'chat';
     if (type && type !== 'text') return false;
     return !/(embedding|rerank|bge-|bge_|ocr|image|video|speech|tts)/i.test(String(model.id || ''));
   };
-  const makeSiliconFlowStaticModelOption = (model = {}) => ({
+  const makeSiliconFlowStaticModelOption = (model = {} as any) => ({
     id: model.id || '',
     name: SILICONFLOW_MODEL_NAMES[model.id] || model.name || model.id || '',
     category: model.subType || model.type || '',
@@ -192,7 +191,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     spectrumCustom: document.getElementById('agentSpectrumModelCustom'),
   });
 
-  const normalizeAgentModels = (agentModels = {}) => ({
+  const normalizeAgentModels = (agentModels = {} as any) => ({
     data: String(agentModels.data || '').trim(),
     spectrum: String(agentModels.spectrum || '').trim(),
   });
@@ -403,7 +402,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     `;
   };
 
-  const syncAgentModelSelects = (options = {}) => {
+  const syncAgentModelSelects = (options = {} as any) => {
     const agentRefs = getAgentModelRefs();
     const preserveCurrent = options.preserveCurrent !== false;
     const current = normalizeAgentModels(options.nextValues || (preserveCurrent
@@ -799,7 +798,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const normalizeDeepSeekModel = (item = {}) => {
+  const normalizeDeepSeekModel = (item = {} as any) => {
     const id = String(item?.id || '').trim();
     if (!id) return item;
     return {
@@ -845,7 +844,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       || null;
   };
 
-  const isSiliconFlowChatCatalogModel = (item = {}) => {
+  const isSiliconFlowChatCatalogModel = (item = {} as any) => {
     const subType = String(item.subType || item.sub_type || '').toLowerCase();
     const type = String(item.type || '').toLowerCase();
     if (subType) return subType === 'chat';
@@ -854,7 +853,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return !/(embedding|rerank|bge-|bge_|ocr|image|video|speech|tts)/i.test(id);
   };
 
-  const extractSiliconFlowPricing = (item = {}) => {
+  const extractSiliconFlowPricing = (item = {} as any) => {
     const pricing = item.pricing && typeof item.pricing === 'object' ? item.pricing : {};
     const price = item.price && typeof item.price === 'object' ? item.price : {};
     const billing = item.billing && typeof item.billing === 'object' ? item.billing : {};
@@ -956,7 +955,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const normalizeSiliconFlowModel = (item = {}) => {
+  const normalizeSiliconFlowModel = (item = {} as any) => {
     const id = String(item?.id || '').trim();
     if (!id) return item;
     const catalog = getSiliconFlowCatalogEntry(id);
@@ -1023,7 +1022,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return normalizeOpenRouterBaseUrl(value);
   };
 
-  const makeProviderDraft = (provider, config = {}) => {
+  const makeProviderDraft = (provider, config = {} as any) => {
     const normalizedProvider = normalizeProvider(provider);
     const defaults = getProviderDefaults(normalizedProvider);
     const baseUrl = config.baseUrl || defaults.baseUrl;
@@ -1056,7 +1055,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const inferProviderFromConfig = (config = {}) => {
+  const inferProviderFromConfig = (config = {} as any) => {
     if (config.aiProvider) return normalizeProvider(config.aiProvider);
     return isLocalBaseUrl(config.baseUrl)
       ? PROVIDER_LM_STUDIO
@@ -1194,7 +1193,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 
   const isRedactedValue = (value) => String(value || '').trim() === SENSITIVE_CONFIG_PLACEHOLDER;
 
-  const dropRedactedSecrets = (config = {}) => {
+  const dropRedactedSecrets = (config = {} as any) => {
     const next = { ...config };
     if (isRedactedValue(next.apiKey)) next.apiKey = '';
     if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
@@ -1219,7 +1218,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return next;
   };
 
-  const redactSensitiveConfig = (config = {}) => {
+  const redactSensitiveConfig = (config = {} as any) => {
     const next = cloneJsonValue(config || {});
     const redact = (target, key) => {
       if (!target || !String(target[key] || '').trim()) return;
@@ -1423,11 +1422,14 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
     if (refs.aiProviderHelp) {
       refs.aiProviderHelp.hidden = isLocal;
-      refs.aiProviderHelp.href = isDeepSeek
-        ? 'https://api-docs.deepseek.com/'
+      const helpMeta = isDeepSeek
+        ? { href: 'https://api-docs.deepseek.com/', label: 'DeepSeek 接入文档' }
         : isSiliconFlow
-          ? 'https://api-docs.siliconflow.cn/docs/userguide/get_started/introduction'
-        : 'https://openrouter.ai/docs/api/api-reference/models/get-models';
+          ? { href: 'https://api-docs.siliconflow.cn/docs/userguide/get_started/introduction', label: 'SiliconFlow 接入文档' }
+          : { href: 'https://openrouter.ai/docs/api/api-reference/models/get-models', label: 'OpenRouter 接入文档' };
+      refs.aiProviderHelp.href = helpMeta.href;
+      refs.aiProviderHelp.textContent = helpMeta.label;
+      refs.aiProviderHelp.title = helpMeta.label;
     }
     if (refs.openrouterBaseUrl && !refs.openrouterBaseUrl.value.trim()) {
       refs.openrouterBaseUrl.value = defaults.baseUrl;
@@ -1491,7 +1493,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return `余额：${formatBalanceAmount(value, currency)}`;
   };
 
-  const formatDeepSeekBalance = (payload = {}) => {
+  const formatDeepSeekBalance = (payload = {} as any) => {
     const balances = Array.isArray(payload.balance_infos)
       ? payload.balance_infos
       : Array.isArray(payload.data?.balance_infos)
@@ -1505,7 +1507,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     return formatProviderBalance('DeepSeek', preferred.total_balance, currency);
   };
 
-  const formatOpenRouterCredits = (payload = {}) => {
+  const formatOpenRouterCredits = (payload = {} as any) => {
     const data = payload.data || payload;
     const total = Number.parseFloat(data.total_credits);
     const usage = Number.parseFloat(data.total_usage);
@@ -1524,7 +1526,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     throw new Error('未返回余额信息');
   };
 
-  const formatSiliconFlowUserInfo = (payload = {}) => {
+  const formatSiliconFlowUserInfo = (payload = {} as any) => {
     const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
     const balance = data?.totalBalance ?? data?.chargeBalance ?? data?.balance;
     if (balance === undefined) {
@@ -1657,13 +1659,13 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const fallback = `HTTP ${response.status}`;
     const text = await response.text().catch(() => '');
     if (!text) return fallback;
-    const payload = parseJsonMaybe(text);
+    const payload: any = parseJsonMaybe(text);
     const message = payload?.error?.message || payload?.message || payload?.error;
     return message ? `${fallback}：${String(message).slice(0, 240)}` : `${fallback}：${text.slice(0, 240)}`;
   };
 
   const getRequestHeaders = (config) => {
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
@@ -2316,7 +2318,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       cache: 'no-store',
       signal,
     }, 12000);
-    if (!response.ok) throw new Error(await readApiErrorMessage(response, `HTTP ${response.status}`));
+    if (!response.ok) throw new Error(await readApiErrorMessage(response));
     return response.json();
   };
 
@@ -2629,7 +2631,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     [
       ['data', getAgentModelRefs().dataTrigger],
       ['spectrum', getAgentModelRefs().spectrumTrigger],
-    ].forEach(([role, trigger]) => {
+    ].forEach(([role, trigger]: any[]) => {
       trigger?.addEventListener('click', () => {
         const agentRefs = getAgentModelRefs();
         const isOpen = agentRefs[`${role}Dropdown`]?.classList.contains('is-open');
@@ -2909,8 +2911,16 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     configPage?.classList.add('config-ready');
   };
 
+  const cleanup = () => {
+    clearOpenRouterModelRefreshTimer();
+    closeModelDropdown();
+    closeAgentDropdown('data');
+    closeAgentDropdown('spectrum');
+  };
+
   App.config = {
     init,
+    cleanup,
     getResolvedModel,
     getFormConfig,
     setFormConfig,

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureLegacyApp, ensurePublicApp } from '../core/app-context';
+﻿import { ensureLegacyApp, ensurePublicApp } from '../core/app-context';
 
 (function () {
   'use strict';

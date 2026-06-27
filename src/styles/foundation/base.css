@@ -42,6 +42,18 @@
       --app-font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
     body[data-theme="dark"]{
+      --bg:#0f172a;
+      --surface:#111827;
+      --surface-2:#182235;
+      --surface-3:#202c42;
+      --border:#2b3a52;
+      --border-2:#3b4c66;
+      --text:#e5edf7;
+      --text-2:#cbd5e1;
+      --muted:#94a3b8;
+      --muted-2:#7f8fa6;
+      --accent:#22d3ee;
+      --accent-soft:rgba(34,211,238,.14);
       --control-bg:#0f172a;
       --control-bg-hover:#111c31;
       --control-border:#24324a;
@@ -107,10 +119,6 @@
       min-height:0;
       position:relative;
       overflow:hidden;
-    }
-    .shell.legacy-shell-booting{
-      visibility:hidden;
-      pointer-events:none;
     }
     .shell::before{
       content:'';

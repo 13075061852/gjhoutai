@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   build: {
+    cssCodeSplit: true,
+    cssMinify: 'lightningcss',
+    reportCompressedSize: true,
     rollupOptions: {
       output: {
         manualChunks(id: string) {
@@ -20,7 +23,7 @@ export default defineConfig({
     include: ['motion/mini'],
   },
   server: {
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: 5001,
     proxy: {
       '/api': 'http://127.0.0.1:8787',

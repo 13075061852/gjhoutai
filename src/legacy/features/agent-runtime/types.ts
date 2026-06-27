@@ -1,4 +1,4 @@
-export type AgentPlanKind =
+﻿export type AgentPlanKind =
   | 'local-tool'
   | 'web-search'
   | 'image-generation'
@@ -7,7 +7,7 @@ export type AgentPlanKind =
 
 export type AgentSkillPlan = {
   skillId: string;
-  input: Record<string, unknown>;
+  input: Record<string, any>;
   confidence?: number;
   reason?: string;
 };
@@ -38,6 +38,7 @@ export type AgentToolResult = {
   ok: boolean;
   message: string;
   details?: string[];
-  data?: Record<string, unknown>;
-  candidates?: unknown[];
+  data?: Record<string, any>;
+  candidates?: any[];
 };
+

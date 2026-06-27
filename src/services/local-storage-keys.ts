@@ -21,6 +21,8 @@ export const LOCAL_STORAGE_KEY_DEFINITIONS = {
   inventoryMaterials: defineKey('gjh-inventory-materials-v1', 'clear-local'),
   inventoryCategories: defineKey('gjh-inventory-categories-v1', 'clear-local'),
   formulaRecipes: defineKey('gjh-formula-recipes-v1', 'clear-local'),
+  officeRecords: defineKey('gjh-office-records-v1', 'clear-local'),
+  ashRecords: defineKey('gjh-ash-records-v1', 'clear-local'),
   procurements: defineKey('gjh-procurements-v1', 'clear-local'),
   suppliers: defineKey('gjh-suppliers-v1', 'clear-local'),
   customers: defineKey('gjh-customers-v1', 'clear-local'),

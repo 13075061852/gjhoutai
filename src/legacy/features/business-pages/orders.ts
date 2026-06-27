@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
+﻿import { LOCAL_STORAGE_KEYS } from '../../../services/local-storage-keys';
 
 export const ORDER_STORAGE_KEY = LOCAL_STORAGE_KEYS.orders;
 export const ORDER_LOG_KEY = LOCAL_STORAGE_KEYS.orderLogs;
@@ -17,7 +16,7 @@ export const getOrderFallbackDate = () => {
   return `${now.getFullYear()}-${month}-${day}`;
 };
 
-export const createNormalizeOrder = ({ getCustomerOptions, getFormulaOptions }) => (order = {}, index = 0) => {
+export const createNormalizeOrder = ({ getCustomerOptions, getFormulaOptions }) => (order = {} as any, index = 0) => {
   const status = orderStatusOptions.includes(order.status) ? order.status : orderStatusOptions[0];
   const deliveryDate = String(order.deliveryDate || getOrderFallbackDate()).trim();
   return {
@@ -34,14 +33,14 @@ export const createNormalizeOrder = ({ getCustomerOptions, getFormulaOptions }) 
   };
 };
 
-export const createNormalizeOrders = (normalizeOrder) => (value) => {
+export const createNormalizeOrders = (normalizeOrder) => (value: any) => {
   const rows = Array.isArray(value)
-    ? value.map(normalizeOrder).filter((order) => order.id)
+    ? value.map(normalizeOrder).filter((order: any) => order.id)
     : [];
   return rows;
 };
 
-export const normalizeOrderLogs = (value) => (value || []).map((entry) => ({
+export const normalizeOrderLogs = (value: any) => (value || []).map((entry: any) => ({
   orderId: String(entry.orderId || ''),
   fromStatus: String(entry.fromStatus || ''),
   toStatus: String(entry.toStatus || ''),

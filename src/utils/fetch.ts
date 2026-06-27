@@ -45,7 +45,7 @@ export const fetchWithTimeout = async (
     }
   }, timeoutMs);
 
-  parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  parentSignal?.addEventListener('abort', abortFromParent, { once: true, signal: controller.signal });
 
   try {
     return await fetch(input, {

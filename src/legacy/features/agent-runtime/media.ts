@@ -1,8 +1,8 @@
-import type { AgentImage } from './types';
+﻿import type { AgentImage } from './types';
 
 const readUrl = (image: AgentImage) => String(image?.image_url?.url || image?.url || '').trim();
 
-export const normalizeAgentImages = (images: unknown, options: { maxImages?: number } = {}) => {
+export const normalizeAgentImages = (images: unknown, options: { maxImages?: number } = {} as any) => {
   const parsedLimit = Number.parseInt(String(options.maxImages || ''), 10);
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
   const list = Array.isArray(images) ? images : [];
@@ -29,7 +29,7 @@ export const normalizeAgentImages = (images: unknown, options: { maxImages?: num
   return limit ? normalized.slice(0, limit) : normalized;
 };
 
-export const mapImageGenerationParams = (input: Record<string, unknown> = {}) => {
+export const mapImageGenerationParams = (input: Record<string, any> = {} as any) => {
   const prompt = String(input.prompt || input.question || '').trim();
   const size = String(input.size || input.aspectRatio || '16:9').trim();
   const resolution = String(input.resolution || '1k').trim();
@@ -58,3 +58,4 @@ export const buildImageUploadAuthSummary = (images: unknown, source = '本次消
     })),
   };
 };
+

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
@@ -18,7 +17,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
   const REPORT_COMPANY_TEL = '0574-63072712';
   const REPORT_COMPANY_FAX = '0574-63805667';
-  const REPORT_SEAL_SRC = '/inspection-seal.png';
+  const REPORT_SEAL_SRC = '/inspection-seal.webp';
   const REPORT_SEAL_POSITION_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportSealPosition;
   const REPORT_SEAL_DEFAULT = { x: 428, y: 760, size: 150, rotation: 0 };
   let reportSealImagePromise = null;
@@ -160,7 +159,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     pageSizeSelect: document.getElementById('analysisPageSizeSelect'),
   };
 
-  const state = {
+  const state: any = {
     data: null,
     activeSheet: '',
     query: '',
@@ -410,7 +409,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
   const getWorksheetRows = (worksheet) => {
     const range = window.XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
-    const rows = [];
+    const rows: any[] = [];
 
     for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
       const row = [];
@@ -434,7 +433,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
   };
 
   const compactParsedRow = (row) => {
-    const next = {};
+    const next: any = {};
     Object.entries(row).forEach(([key, value]) => {
       if (Array.isArray(value)) {
         if (!value.length) return;
@@ -452,8 +451,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
     if (!Array.isArray(rows) || !rows.length) return [];
 
     const headers = (rows[0] || []).map((value, index) => normalizeHeaderName(value, index));
-    const records = [];
-    let current = null;
+    const records: any[] = [];
+    let current: any = null;
 
     const flush = () => {
       if (!current) return;
@@ -724,7 +723,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     formData.append('Content-Type', contentType);
     formData.append('file', body);
 
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `https://${config.bucket}.${config.endpoint}`);
 
@@ -911,6 +910,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       key: metricKey,
       item: formatHeader(metricKey),
       unit: '',
+      required: true,
     }
   );
 
@@ -1122,7 +1122,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     return { min: numbers[0], max: numbers[0] };
   };
 
-  const getReportMetricValidation = (metric = {}) => {
+  const getReportMetricValidation = (metric = {} as any) => {
     const value = parseNumericValue(metric.value);
     const isRequired = isRequiredReportMetric(metric.key);
     if (!isRequired && (!normalizeReportText(metric.range) || value == null)) return { status: 'pass', text: '选填' };
@@ -1137,7 +1137,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const getReportDraftValidation = (draft = {}) => {
+  const getReportDraftValidation = (draft = {} as any) => {
     const metrics = draft.metrics || [];
     const results = metrics.map((metric) => ({
       ...getReportMetricValidation(metric),
@@ -1263,7 +1263,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     });
   };
 
-  const drawCenteredText = (ctx, text, x, y, options = {}) => {
+  const drawCenteredText = (ctx, text, x, y, options = {} as any) => {
     ctx.save();
     ctx.font = options.font || '32px sans-serif';
     ctx.fillStyle = options.color || '#111827';
@@ -1284,7 +1284,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     return reportSealImagePromise;
   };
 
-  const normalizeReportSealPosition = (value = {}) => ({
+  const normalizeReportSealPosition = (value = {} as any) => ({
     x: Math.max(0, Number.isFinite(Number(value.x)) ? Number(value.x) : REPORT_SEAL_DEFAULT.x),
     y: Math.max(0, Number.isFinite(Number(value.y)) ? Number(value.y) : REPORT_SEAL_DEFAULT.y),
     size: Math.max(40, Math.min(360, Number.isFinite(Number(value.size)) ? Number(value.size) : REPORT_SEAL_DEFAULT.size)),
@@ -1398,7 +1398,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     notify('报告参数已保存', 'success', 'property-report-params-saved');
   };
 
-  const drawReportCanvas = async (canvas, draft, options = {}) => {
+  const drawReportCanvas = async (canvas, draft, options = {} as any) => {
     if (!canvas || !draft) return;
     const scale = 2;
     const width = 794;
@@ -1544,7 +1544,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     syncReportValidationUi();
   };
 
-  const canvasToBlob = (canvas, type = 'image/png', quality) => new Promise((resolve, reject) => {
+  const canvasToBlob = (canvas, type = 'image/png', quality = undefined) => new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error('报告预览生成失败'));
@@ -1911,7 +1911,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     document.querySelector('[data-report-close]')?.focus({ preventScroll: true });
   };
 
-  const createRangeDraft = (overrides = {}) => {
+  const createRangeDraft = (overrides = {} as any) => {
     const metricKey = overrides.metricKey || REPORT_METRICS[0].key;
     const metric = getReportMetricConfig(metricKey);
     return {
@@ -2071,7 +2071,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     updateRangeEditorPanel();
   };
 
-  const setRangeWordImportStatus = ({ active = false, current = 0, total = 0, success = 0, failed = 0, fileName = '', message = '' } = {}) => {
+  const setRangeWordImportStatus = ({ active = false, current = 0, total = 0, success = 0, failed = 0, fileName = '', message = '' } = {} as any) => {
     const dialog = document.querySelector('.analysis-range-dialog');
     const dropzone = dialog?.querySelector('[data-range-word-upload]');
     const progress = dialog?.querySelector('[data-range-word-progress]');
@@ -2150,7 +2150,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
   `;
   };
 
-  const fillRangeForm = (range = {}) => {
+  const fillRangeForm = (range = {} as any) => {
     const dialog = document.querySelector('.analysis-range-dialog');
     const form = dialog?.querySelector('[data-range-form]');
     if (!form) return;
@@ -2611,7 +2611,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
 
-  const formatRowsCsvForAi = (rows, columns, options = {}) => {
+  const formatRowsCsvForAi = (rows, columns, options = {} as any) => {
     const visibleColumns = (columns || []).filter((column) => column !== '__rowKey');
     const includeIndex = options.includeIndex !== false;
     const tableRows = options.limit == null ? rows : rows.slice(0, options.limit);
@@ -2752,7 +2752,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     `;
   };
 
-  const createCompareImageBlob = async (rows, options = {}) => {
+  const createCompareImageBlob = async (rows, options = {} as any) => {
     const tableView = options.tableView === 'vertical' ? 'vertical' : 'horizontal';
     const allColumns = getCompareColumns(rows);
     const columns = normalizeCompareColumns(options.columns, allColumns);
@@ -2858,7 +2858,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       context.font = activeFont;
       context.fillStyle = color;
       context.textBaseline = 'middle';
-      context.textAlign = align;
+      context.textAlign = align as CanvasTextAlign;
 
       const safeText = String(text || '--');
       const maxTextWidth = Math.max(20, width - horizontalPadding * 2);
@@ -2991,7 +2991,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     context.textBaseline = 'middle';
     context.fillText(footerText, horizontalPadding, y + footerHeight / 2);
 
-    return new Promise((resolve, reject) => {
+    return new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
         else reject(new Error('图片生成失败。'));
@@ -2999,7 +2999,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     });
   };
 
-  const copyCompareImage = async (button, options = {}) => {
+  const copyCompareImage = async (button, options = {} as any) => {
     const rows = getSelectedRowsForAllSheets();
     if (rows.length < 2) return;
     if (!navigator.clipboard?.write || !window.ClipboardItem) {
@@ -3513,7 +3513,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     return values;
   };
 
-  const getAgentContext = (question = '', options = {}) => {
+  const getAgentContext = (question = '', options = {} as any) => {
     if (!state.data) {
       return {
         title: '物性分析',
@@ -3736,12 +3736,12 @@ import { fetchWithTimeout } from '../../utils/fetch';
     `;
   };
 
-  const getPaginationItems = (currentPage, totalPages) => {
+  const getPaginationItems = (currentPage, totalPages): any[] => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
     }
 
-    const items = [1];
+    const items: any[] = [1];
 
     if (currentPage > 3) items.push('ellipsis-left');
 
@@ -3864,7 +3864,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     );
   };
 
-  const setAnalysisData = (data, options = {}) => {
+  const setAnalysisData = (data, options = {} as any) => {
     state.data = data;
     state.dataSource = options.source || 'default';
     state.sourceFileName = options.fileName || data?.project?.file?.name || '';
@@ -4003,7 +4003,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     openCompareDialog();
   };
 
-  const loadData = async (options = {}) => {
+  const loadData = async (options = {} as any) => {
     const requestId = state.loadRequestId + 1;
     state.loadRequestId = requestId;
     state.loadingStartedAt = performance.now();
@@ -4290,8 +4290,16 @@ import { fetchWithTimeout } from '../../utils/fetch';
     }, 8500);
   };
 
+  const cleanup = () => {
+    closeReportDialog();
+    closeRangeManagerDialog();
+    closeCompareDialog();
+    setMobileActionMenuOpen(false);
+  };
+
   App.propertyAnalysis = {
     init,
+    cleanup,
     loadData,
     ensureLoaded,
     render,
@@ -4303,3 +4311,5 @@ import { fetchWithTimeout } from '../../utils/fetch';
     getAgentContext,
   };
 })();
+
+

@@ -16,6 +16,9 @@ const currentDepartment = () => (typeof window === 'undefined' ? '' : String(win
 const canManageUsers = () => currentDepartment() === '系统管理员';
 const SESSION_MARKER_COOKIE = 'gjh_session_present';
 const SESSION_MARKER_STORAGE_KEY = 'gjh-auth-session-present';
+const AUTH_ME_CACHE_TTL_MS = 30_000;
+let authMeCache: { user: AppUser | null; expiresAt: number } | null = null;
+let authMeRequest: Promise<AppUser | null> | null = null;
 const isSameOriginApi = () => {
   if (typeof window === 'undefined' || !API_BASE) return true;
   try {
@@ -35,6 +38,14 @@ const rememberSessionMarker = () => {
 };
 const clearSessionMarker = () => {
   if (typeof window !== 'undefined') localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
+};
+const clearAuthMeCache = () => {
+  authMeCache = null;
+  authMeRequest = null;
+};
+const cacheAuthMe = (user: AppUser | null) => {
+  authMeCache = { user, expiresAt: Date.now() + AUTH_ME_CACHE_TTL_MS };
+  return user;
 };
 
 async function requestAuthMe(): Promise<AppUser | null> {
@@ -65,9 +76,18 @@ export const authClient = {
   hasSessionMarker,
   async me(): Promise<AppUser | null> {
     if (!hasSessionMarker()) return null;
-    const user = await requestAuthMe();
-    if (!user) clearSessionMarker();
-    return user;
+    if (authMeCache && authMeCache.expiresAt > Date.now()) return authMeCache.user;
+    if (!authMeRequest) {
+      authMeRequest = requestAuthMe()
+        .then((user) => {
+          if (!user) clearSessionMarker();
+          return cacheAuthMe(user);
+        })
+        .finally(() => {
+          authMeRequest = null;
+        });
+    }
+    return authMeRequest;
   },
   async login(username: string, password: string): Promise<AppUser | null> {
     const payload = await request<{ user: AppUser }>('/api/auth/login', {
@@ -75,12 +95,16 @@ export const authClient = {
       body: JSON.stringify({ username, password }),
     });
     const user = payload?.user ?? null;
-    if (user) rememberSessionMarker();
+    if (user) {
+      rememberSessionMarker();
+      cacheAuthMe(user);
+    }
     return user;
   },
   async logout(): Promise<boolean> {
     const payload = await request<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' });
     clearSessionMarker();
+    clearAuthMeCache();
     return Boolean(payload?.ok);
   },
   async changePassword(currentPassword: string, nextPassword: string): Promise<boolean> {
@@ -88,6 +112,7 @@ export const authClient = {
       method: 'POST',
       body: JSON.stringify({ currentPassword, nextPassword }),
     });
+    clearAuthMeCache();
     return Boolean(payload?.ok);
   },
   async getAvatarUrl(): Promise<string | null> {

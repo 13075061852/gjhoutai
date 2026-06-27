@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp, getPublicApp } from '../core/app-context';
+﻿import { getLegacyApp, getPublicApp } from '../core/app-context';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { parseJsonOr } from '../../utils/json';
 
@@ -76,7 +75,7 @@ import { parseJsonOr } from '../../utils/json';
   };
 
   const saveExpandedGroups = () => {
-    const state = {};
+    const state: any = {};
     document.querySelectorAll('.nav-group').forEach((group) => {
       const key = getNavGroupKey(group);
       if (key) state[key] = group.classList.contains('expanded');
@@ -105,7 +104,7 @@ import { parseJsonOr } from '../../utils/json';
     || DEFAULT_PAGE_ID
   );
 
-  const refreshNavAccess = (options = {}) => {
+  const refreshNavAccess = (options = {} as any) => {
     const { redirect = true } = options;
     getNavPageButtons().forEach((button) => {
       const pageId = button.dataset.page || button.getAttribute('data-page') || '';
@@ -709,7 +708,7 @@ import { parseJsonOr } from '../../utils/json';
     }
   };
 
-  const showPage = async (pageId, options = {}) => {
+  const showPage = async (pageId, options = {} as any) => {
     const renderSeq = ++pageRenderSeq;
     pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
     if (!isPageVisible(pageId)) pageId = getFallbackPageId();
@@ -817,7 +816,18 @@ import { parseJsonOr } from '../../utils/json';
   };
 
   const handleNavigationKeydown = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      refs.sidebarSearchInput?.focus();
+      refs.sidebarSearchInput?.select?.();
+      setMobileSidebarOpen(true);
+      return;
+    }
     if (event.key === 'Escape') {
+      if (document.activeElement === refs.sidebarSearchInput) {
+        refs.sidebarSearchInput.value = '';
+        refs.sidebarSearchInput.blur();
+      }
       removeCollapsedNavFlyout();
       setMobileSidebarOpen(false);
     }
@@ -1006,3 +1016,4 @@ import { parseJsonOr } from '../../utils/json';
     updateAssistantToggle,
   };
 })();
+

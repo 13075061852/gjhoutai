@@ -1,4 +1,4 @@
-import { ensureLegacyApp, ensurePublicApp } from './app-context';
+﻿import { ensureLegacyApp, ensurePublicApp } from './app-context';
 
 (function () {
   const App = ensureLegacyApp();
@@ -70,7 +70,7 @@ import { ensureLegacyApp, ensurePublicApp } from './app-context';
     type = 'transition',
     propertyName = '',
     timeout = 0,
-  }: LegacyWaitForMotionOptions = {}): Promise<boolean> => new Promise((resolve) => {
+  }: LegacyWaitForMotionOptions = {} as any): Promise<boolean> => new Promise((resolve) => {
     if (!element || prefersReducedMotion()) {
       resolve(false);
       return;
@@ -120,7 +120,7 @@ import { ensureLegacyApp, ensurePublicApp } from './app-context';
     type = 'animation',
     hideFromAT = false,
     cleanup = false,
-  }: LegacyRunClassAnimationOptions = {}): Promise<boolean> => {
+  }: LegacyRunClassAnimationOptions = {} as any): Promise<boolean> => {
     if (!element || !className) return false;
     if (hideFromAT) element.setAttribute('aria-hidden', 'true');
     addClass(element, className);

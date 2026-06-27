@@ -131,6 +131,11 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
         eyebrow: '当前可用',
         desc: '图谱分析页面用于管理图谱图片、分类标签、图谱查看、多图对比，并可把图片上下文发送到右侧 Gjun AI。',
       },
+      'office-records': {
+        title: '办事记录',
+        eyebrow: '数据分析',
+        desc: '分板块记录送样、配色和灰份检测过程中的型号批次组合、检测明细和含量数据。',
+      },
       'inspection-reports': {
         title: '检测报告',
         eyebrow: '当前可用',

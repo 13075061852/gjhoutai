@@ -4791,7 +4791,7 @@
       display:flex;
       flex-direction:column;
       gap:12px;
-      padding:16px;
+      padding:0;
     }
     .biz-line-board-head{
       margin-bottom:2px;
@@ -6238,4 +6238,713 @@
     body[data-theme="dark"] .biz-procurement-dialog .biz-supplier-editor select,
     body[data-theme="dark"] .biz-procurement-dialog .biz-supplier-editor textarea{
       background:var(--surface-2);
+    }
+
+    .biz-office-page{
+      height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      overflow:hidden;
+    }
+    .biz-office-table-panel{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-office-table-head{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr);
+      align-items:center;
+      gap:14px;
+      padding:12px 16px;
+    }
+    .biz-office-table-actions{
+      width:100%;
+      display:grid;
+      grid-template-columns:max-content minmax(220px, 340px) max-content;
+      align-items:center;
+      justify-content:start;
+      gap:10px;
+      flex:initial;
+    }
+    .biz-office-tabs{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      padding:3px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-office-tabs button{
+      min-height:28px;
+      padding:0 10px;
+      border:none;
+      border-radius:6px;
+      background:transparent;
+      color:var(--text-2);
+      font:inherit;
+      font-size:13px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-office-tabs button.is-active{
+      background:var(--surface);
+      color:var(--accent);
+      box-shadow:0 1px 4px rgba(15,23,42,.08);
+    }
+    .biz-office-search{
+      width:100%;
+      min-height:34px;
+    }
+    .biz-office-table-actions > select,
+    .biz-office-table-actions > .custom-select{
+      width:136px;
+      min-width:136px;
+      max-width:136px;
+      flex:0 0 136px;
+    }
+    .biz-office-table-actions .custom-select-trigger{
+      min-height:34px;
+      padding:0 11px;
+      font-size:13px;
+      font-weight:850;
+    }
+    .biz-office-table-actions .biz-formula-new-btn{
+      min-width:116px;
+      padding:0 12px;
+      white-space:nowrap;
+    }
+    .biz-office-table-wrap{
+      flex:1 1 auto;
+      min-height:0;
+      overflow:auto;
+    }
+    .biz-office-pagination{
+      padding:6px 14px;
+    }
+    .biz-office-pagination .biz-formula-pagination-actions{
+      gap:12px;
+    }
+    .biz-office-pagination .biz-formula-page-size{
+      gap:6px;
+    }
+    .biz-office-pagination .biz-formula-page-size .custom-select{
+      width:58px;
+    }
+    .biz-office-pagination .biz-formula-page-size .custom-select-trigger{
+      min-height:26px;
+      height:26px;
+      padding:0 8px;
+      border-radius:7px;
+      font-size:12px;
+    }
+    .biz-office-pagination .biz-formula-page-size select{
+      min-height:26px;
+      padding:0 8px;
+      border-radius:7px;
+      font-size:12px;
+    }
+    .biz-office-pagination .biz-formula-page-buttons{
+      min-height:26px;
+    }
+    .biz-office-pagination .biz-formula-page-btn{
+      width:26px;
+      min-width:26px;
+      height:26px;
+      border-radius:7px;
+    }
+    .biz-office-record-list{
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      align-content:start;
+      gap:0;
+      padding:0;
+      overflow-y:auto;
+      overflow-x:hidden;
+      background:var(--surface);
+    }
+    .biz-office-record-card{
+      min-width:0;
+      display:grid;
+      gap:12px;
+      padding:14px 16px 16px;
+      border:0;
+      border-bottom:1px solid var(--border);
+      border-radius:0;
+      background:var(--surface);
+      box-shadow:none;
+    }
+    .biz-office-record-top{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .biz-office-record-title{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .biz-office-record-title strong{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:var(--text);
+      font-size:16px;
+      line-height:20px;
+      font-weight:950;
+    }
+    .biz-office-record-meta{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+    .biz-office-record-meta span{
+      min-height:20px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--text-3);
+      font-size:12px;
+      line-height:20px;
+      font-weight:850;
+    }
+    .biz-office-record-target{
+      margin:0;
+      padding:7px 9px;
+      border-left:3px solid var(--accent);
+      border-radius:6px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:13px;
+      line-height:1.5;
+      font-weight:800;
+    }
+    .biz-office-record-actions{
+      flex:0 0 auto;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .biz-office-record-actions button{
+      width:30px;
+      height:30px;
+      display:grid;
+      place-items:center;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      cursor:pointer;
+    }
+    .biz-office-record-actions button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--accent-soft);
+    }
+    .biz-office-record-actions button.is-danger:hover{
+      border-color:var(--danger);
+      color:var(--danger);
+      background:#fef2f2;
+    }
+    .biz-ash-table-actions{
+      grid-template-columns:max-content minmax(220px, 340px) max-content;
+    }
+    .biz-ash-table-wrap{
+      width:fit-content;
+      max-width:100%;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
+    .biz-ash-measure-table{
+      width:max-content;
+      border-collapse:collapse;
+      color:var(--text);
+      font-size:13px;
+      font-weight:850;
+      text-align:center;
+    }
+    .biz-ash-measure-table th,
+    .biz-ash-measure-table td{
+      min-width:104px;
+      height:34px;
+      padding:7px 10px;
+      border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+      white-space:nowrap;
+    }
+    .biz-ash-measure-table th{
+      background:var(--surface-2);
+      font-weight:950;
+    }
+    .biz-ash-measure-table th:first-child,
+    .biz-ash-measure-table td:nth-child(3){
+      min-width:64px;
+    }
+    .biz-ash-measure-table td:nth-child(2){
+      min-width:126px;
+    }
+    .biz-ash-measure-table tr:last-child th,
+    .biz-ash-measure-table tr:last-child td{
+      border-bottom:none;
+    }
+    .biz-ash-measure-table th:last-child,
+    .biz-ash-measure-table td:last-child{
+      border-right:none;
+    }
+    .biz-ash-detail-scroll table{
+      width:max-content;
+      min-width:0;
+    }
+    .biz-ash-detail-scroll th,
+    .biz-ash-detail-scroll td{
+      width:128px;
+      min-width:128px;
+      text-align:center;
+    }
+    .biz-ash-detail-scroll th:first-child,
+    .biz-ash-detail-scroll td:first-child{
+      width:72px;
+      min-width:72px;
+      max-width:72px;
+    }
+    .biz-office-empty-list{
+      min-height:240px;
+      display:grid;
+      place-items:center;
+      align-content:center;
+      gap:8px;
+      border:1px dashed var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text-3);
+      text-align:center;
+    }
+    .biz-office-empty-list i{
+      color:var(--accent);
+      font-size:28px;
+    }
+    .biz-office-empty-list strong{
+      color:var(--text);
+      font-size:15px;
+      font-weight:950;
+    }
+    .biz-office-empty-list span{
+      font-size:13px;
+      font-weight:800;
+    }
+    .biz-office-table-summary{
+      width:max-content;
+      max-width:100%;
+      min-width:0;
+      display:grid;
+      gap:0;
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
+    .biz-office-table-summary-head,
+    .biz-office-table-summary-row{
+      display:grid;
+      gap:0;
+      background:var(--surface);
+    }
+    .biz-office-table-summary-row{
+      border-top:1px solid var(--border);
+    }
+    .biz-office-table-summary span{
+      min-width:0;
+      min-height:32px;
+      display:grid;
+      place-items:center;
+      padding:7px 8px;
+      border-right:1px solid var(--border);
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:800;
+      color:var(--text-2);
+      text-align:center;
+    }
+    .biz-office-table-summary span:last-child{
+      border-right:none;
+    }
+    .biz-office-table-summary-head span{
+      background:var(--surface-2);
+      color:var(--text);
+      font-weight:950;
+    }
+    .biz-office-table-summary em{
+      display:block;
+      padding:7px 8px;
+      border-top:1px solid var(--border);
+      color:var(--text-3);
+      font-size:12px;
+      font-style:normal;
+      font-weight:800;
+      text-align:center;
+    }
+    .biz-office-muted{
+      color:var(--text-3);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-office-dialog{
+      width:fit-content;
+      min-width:min(720px, calc(100vw - 32px));
+      max-width:calc(100vw - 32px);
+      max-height:calc(100vh - 28px);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .biz-office-dialog .biz-inventory-dialog-head{
+      flex:0 0 auto;
+    }
+    .biz-office-editor{
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      align-content:start;
+      gap:12px;
+      padding:20px;
+      overflow-y:auto;
+      overscroll-behavior:contain;
+      scrollbar-width:thin;
+    }
+    .biz-office-editor label{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      color:var(--text-dim);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-office-editor label.is-wide{
+      grid-column:1 / -1;
+    }
+    .biz-office-editor input,
+    .biz-office-editor select,
+    .biz-office-editor textarea{
+      width:100%;
+      padding:9px 12px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      outline:none;
+    }
+    .biz-office-editor textarea{
+      min-height:78px;
+      resize:vertical;
+      line-height:1.5;
+    }
+    .biz-office-detail-table{
+      grid-column:1 / -1;
+      display:grid;
+      gap:10px;
+      min-width:0;
+    }
+    .biz-office-detail-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .biz-office-detail-head > div:first-child{
+      display:grid;
+      gap:2px;
+    }
+    .biz-office-detail-head strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+    }
+    .biz-office-detail-head span{
+      color:var(--text-3);
+      font-size:12px;
+      font-weight:800;
+    }
+    .biz-office-detail-actions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .biz-office-detail-actions button,
+    .biz-office-column-field button,
+    .biz-office-row-action-cell button{
+      min-height:30px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-office-detail-actions button{
+      padding:0 10px;
+    }
+    .biz-office-column-field button,
+    .biz-office-row-action-cell button{
+      width:30px;
+      padding:0;
+    }
+    .biz-office-detail-actions button:hover,
+    .biz-office-column-field button:hover:not(:disabled),
+    .biz-office-row-action-cell button:hover:not(:disabled){
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--accent-soft);
+    }
+    .biz-office-column-field button:disabled,
+    .biz-office-row-action-cell button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
+    .biz-office-detail-scroll{
+      width:max-content;
+      max-width:100%;
+      max-height:min(460px, calc(100vh - 300px));
+      overflow:auto;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
+    .biz-office-empty-table{
+      min-height:120px;
+      display:grid;
+      place-items:center;
+      gap:8px;
+      padding:24px;
+      color:var(--text-3);
+      text-align:center;
+      font-size:13px;
+      font-weight:850;
+    }
+    .biz-office-empty-table i{
+      color:var(--accent);
+      font-size:24px;
+    }
+    .biz-office-detail-scroll table{
+      width:max-content;
+      min-width:0;
+      border-collapse:collapse;
+    }
+    .biz-office-detail-scroll th,
+    .biz-office-detail-scroll td{
+      width:150px;
+      min-width:150px;
+      padding:6px;
+      border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-office-detail-scroll th{
+      position:sticky;
+      top:0;
+      z-index:3;
+      background:var(--surface-2);
+      box-shadow:0 1px 0 var(--border);
+    }
+    .biz-office-detail-scroll tr:last-child td{
+      border-bottom:none;
+    }
+    .biz-office-row-action-head,
+    .biz-office-row-action-cell{
+      width:54px;
+      min-width:54px !important;
+      max-width:54px;
+      text-align:center;
+    }
+    .biz-office-column-field{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+    }
+    .biz-office-fixed-column{
+      min-height:32px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+      padding:0 8px;
+      color:var(--text);
+      font-size:13px;
+      font-weight:950;
+      white-space:nowrap;
+    }
+    .biz-office-column-field input,
+    .biz-office-detail-scroll td input{
+      width:100%;
+      min-width:0;
+      height:32px;
+      padding:0 8px;
+      border:1px solid transparent;
+      border-radius:6px;
+      background:transparent;
+      font-size:13px;
+      font-weight:850;
+      text-align:center;
+    }
+    .biz-office-column-field button{
+      position:absolute;
+      right:2px;
+      top:50%;
+      transform:translateY(-50%);
+      z-index:1;
+    }
+    .biz-office-detail-scroll td input{
+      font-weight:700;
+    }
+    .biz-office-detail-scroll td input.biz-office-fixed-cell{
+      color:var(--text);
+      background:transparent;
+      font-weight:950;
+      cursor:default;
+    }
+    .biz-office-detail-scroll td:first-child,
+    .biz-office-detail-scroll th:first-child{
+      min-width:78px;
+      width:78px;
+      max-width:78px;
+    }
+    .biz-office-column-field input:focus,
+    .biz-office-detail-scroll td input:focus{
+      background:var(--surface);
+    }
+    .biz-office-editor input:focus,
+    .biz-office-editor select:focus,
+    .biz-office-editor textarea:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    .biz-office-modal-actions{
+      grid-column:1 / -1;
+      position:sticky;
+      bottom:-20px;
+      z-index:2;
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin:4px -20px -20px;
+      padding:12px 20px 16px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    body[data-theme="dark"] .biz-office-tabs,
+    body[data-theme="dark"] .biz-office-editor input,
+    body[data-theme="dark"] .biz-office-editor select,
+    body[data-theme="dark"] .biz-office-editor textarea,
+    body[data-theme="dark"] .biz-office-record-list,
+    body[data-theme="dark"] .biz-office-record-actions button,
+    body[data-theme="dark"] .biz-office-detail-scroll,
+    body[data-theme="dark"] .biz-office-detail-scroll th,
+    body[data-theme="dark"] .biz-office-detail-actions button,
+    body[data-theme="dark"] .biz-office-column-field button,
+    body[data-theme="dark"] .biz-office-row-action-cell button{
+      background:var(--surface-2);
+    }
+
+    @media(max-width:900px){
+      .biz-office-table-head{
+        grid-template-columns:1fr;
+        padding:10px 14px;
+      }
+      .biz-office-table-actions{
+        grid-template-columns:minmax(0, 1fr) max-content;
+        justify-content:flex-start;
+        gap:8px;
+      }
+      .biz-office-tabs{
+        width:100%;
+        grid-column:1 / -1;
+      }
+      .biz-office-tabs{
+        justify-content:stretch;
+      }
+      .biz-office-tabs button{
+        flex:1 1 0;
+      }
+      .biz-office-search{
+        width:100%;
+      }
+      .biz-office-table-actions .biz-formula-new-btn{
+        width:auto;
+        min-width:118px;
+      }
+      .biz-office-table-actions > select,
+      .biz-office-table-actions > .custom-select{
+        width:100%;
+        min-width:0;
+        max-width:none;
+        flex:initial;
+      }
+      .biz-office-editor{
+        grid-template-columns:1fr;
+      }
+      .biz-office-dialog{
+        width:calc(100vw - 16px);
+        max-height:calc(100vh - 16px);
+      }
+      .biz-office-record-card{
+        grid-template-columns:1fr;
+        gap:10px;
+        padding:14px;
+      }
+      .biz-office-record-top{
+        gap:8px;
+      }
+      .biz-office-record-title{
+        flex:1 1 auto;
+        gap:8px;
+      }
+      .biz-office-record-title strong{
+        font-size:15px;
+      }
+      .biz-office-record-actions{
+        justify-content:flex-end;
+      }
+      .biz-ash-table-actions{
+        grid-template-columns:minmax(0, 1fr) max-content;
+      }
+      .biz-ash-table-wrap{
+        width:100%;
+      }
+      .biz-ash-measure-table th,
+      .biz-ash-measure-table td{
+        min-width:92px;
+        padding:7px 8px;
+        font-size:12px;
+      }
+      .biz-office-table-summary{
+        width:100%;
+        max-width:100%;
+        overflow-x:auto;
+      }
     }

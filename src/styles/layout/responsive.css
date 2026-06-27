@@ -133,6 +133,28 @@
       .biz-formula-new-btn{
         flex:1 1 180px;
       }
+      .biz-office-table-head.biz-formula-table-head{
+        display:grid;
+        grid-template-columns:1fr;
+        align-items:stretch;
+        min-height:auto;
+      }
+      .biz-office-table-actions.biz-formula-table-actions{
+        display:grid;
+        grid-template-columns:minmax(0, 1fr) max-content;
+        align-items:center;
+        gap:8px;
+      }
+      .biz-office-table-actions .biz-office-tabs{
+        grid-column:1 / -1;
+      }
+      .biz-office-table-actions .biz-formula-table-search{
+        min-width:0;
+        flex:initial;
+      }
+      .biz-office-table-actions .biz-formula-new-btn{
+        flex:0 0 auto;
+      }
       .biz-formula-table{
         min-width:900px;
         font-size:13px;
@@ -498,8 +520,44 @@
         transform:translateY(0);
         pointer-events:auto;
       }
+      .shell.sidebar-open .sidebar-mobile-actions{
+        display:block;
+        padding:12px 14px 14px;
+        border-top:1px solid var(--border);
+        background:var(--surface);
+      }
+      .shell.sidebar-open .sidebar-mobile-actions .top-actions{
+        width:100%;
+        margin:0;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) 40px;
+        gap:8px;
+        padding:8px;
+        border:1px solid var(--border);
+        border-radius:14px;
+        background:var(--surface-2);
+      }
+      .shell.sidebar-open .sidebar-mobile-actions .pill-btn{
+        width:100%;
+        height:40px;
+        justify-content:center;
+        border-radius:10px;
+        box-shadow:none;
+      }
+      .shell.sidebar-open .sidebar-mobile-actions .top-auth-menu,
+      .shell.sidebar-open .sidebar-mobile-actions .top-auth-trigger{
+        width:40px;
+        height:40px;
+        border-radius:10px;
+      }
+      .shell.sidebar-open .sidebar-mobile-actions .top-auth-panel{
+        left:auto;
+        right:-8px;
+        bottom:calc(100% + 10px);
+        top:auto;
+      }
       .shell.sidebar-open .sidebar-footer{
-        display:none;
+        display:flex;
       }
       .mobile-menu-btn{display:grid}
       .assistant{display:none}
@@ -1741,21 +1799,21 @@
       }
     }
     @media (max-width: 520px){
-      #spectrumGallery.spectrum-gallery{
+      .spectrum-gallery{
         padding:10px;
       }
-      #spectrumGallery.spectrum-gallery.is-grid{
+      .spectrum-gallery.is-grid{
         grid-auto-rows:156px;
       }
-      #spectrumGallery.spectrum-gallery.is-grid .spectrum-card{
+      .spectrum-gallery.is-grid .spectrum-card{
         height:156px;
         min-height:0;
       }
-      #spectrumGallery.spectrum-gallery.is-grid .spectrum-card-image{
+      .spectrum-gallery.is-grid .spectrum-card-image{
         flex-basis:88px;
         height:88px;
       }
-      #spectrumGallery.spectrum-gallery.is-grid .spectrum-card-body{
+      .spectrum-gallery.is-grid .spectrum-card-body{
         padding:6px 7px;
         gap:2px;
       }

@@ -1,6 +1,22 @@
 export {};
 
 declare global {
+  interface Object {
+    [key: string]: any;
+  }
+
+  interface Event {
+    key?: string;
+    deltaY?: number;
+    button?: number;
+    clientX?: number;
+    clientY?: number;
+    pointerId?: number;
+    dataTransfer?: DataTransfer | null;
+    isComposing?: boolean;
+    target: any;
+  }
+
   type LegacyPageId =
     | 'dashboard'
     | 'order-management'
@@ -17,6 +33,7 @@ declare global {
     | 'personnel-archive'
     | 'property-analysis'
     | 'spectrum-analysis'
+    | 'office-records'
     | 'inspection-reports'
     | 'image-cutout'
     | 'project-skills'
@@ -32,7 +49,7 @@ declare global {
   type LegacySearchTopic = 'general' | 'news' | 'finance';
   type LegacyMotionType = 'animation' | 'transition';
 
-  type LegacyLifecycleModule = {
+  type LegacyLifecycleModule = Record<string, any> & {
     init?: () => void | Promise<void>;
     cleanup?: () => void;
   };
@@ -97,15 +114,15 @@ declare global {
     PAGE_DEFS: Record<LegacyPageId, LegacyPageDefinition>;
   };
 
-  type LegacyRefs = Record<string, Element | NodeListOf<Element> | null> & {
+  type LegacyRefs = Record<string, any> & {
     shell: HTMLElement | null;
     navPageButtons: NodeListOf<HTMLElement>;
     groupToggles: NodeListOf<HTMLElement>;
   };
 
   type LegacyState = {
-    chatHistory: unknown[];
-    chatSessions: unknown[];
+    chatHistory: any[];
+    chatSessions: any[];
     chatSessionId: string;
     conversationMenuQuery: string;
     chatBusy: boolean;
@@ -161,11 +178,12 @@ declare global {
     cleanup: () => void;
   };
 
-  interface LegacyAppNamespace extends Record<string, unknown> {
+  interface LegacyAppNamespace extends Record<string, any> {
     currentUser?: {
       id: string;
       username: string;
       displayName: string;
+      display_name?: string;
       department: string;
       mustChangePassword: boolean;
     };
@@ -176,23 +194,73 @@ declare global {
     aiCallAnalysis?: LegacyLifecycleModule;
     apimartMedia?: LegacyLifecycleModule;
     animations?: LegacyAnimationApi;
+    businessPages?: LegacyLifecycleModule;
     chat?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;
     dataRecognition?: LegacyLifecycleModule;
+    dialogConsentAnimation?: LegacyLifecycleModule;
+    confirmDialog?: Record<string, any>;
     imageCutout?: LegacyLifecycleModule;
     inspectionReports?: LegacyLifecycleModule;
     motionEffects?: LegacyMotionEffectsApi;
     navigation?: LegacyLifecycleModule;
+    notify?: Record<string, any>;
     projectSkills?: LegacyLifecycleModule;
     propertyAnalysis?: LegacyLifecycleModule;
     spectrumAnalysis?: LegacyLifecycleModule;
     themeSettings?: LegacyLifecycleModule;
   }
 
+  interface EventTarget {
+    closest?: (selectors: string) => Element | null;
+    matches?: (selectors: string) => boolean;
+    getAttribute?: (qualifiedName: string) => string | null;
+    value?: any;
+    checked?: boolean;
+    files?: FileList | null;
+    dataset?: DOMStringMap;
+  }
+
+  interface Element {
+    style?: CSSStyleDeclaration;
+    value?: any;
+    checked?: boolean;
+    disabled?: boolean;
+    hidden: boolean;
+    files?: FileList | null;
+    options?: any;
+    selected?: boolean;
+    offsetParent?: Element | null;
+    offsetWidth?: number;
+    offsetHeight?: number;
+    complete?: boolean;
+    naturalWidth?: number;
+    naturalHeight?: number;
+    width?: number;
+    height?: number;
+    focus?: (options?: FocusOptions) => void;
+    select?: () => void;
+    blur?: () => void;
+  }
+
+  interface HTMLElement {
+    type?: string;
+  }
+
+  interface ObjectConstructor {
+    entries(o: any): [string, any][];
+    values(o: any): any[];
+    keys(o: any): string[];
+  }
+
+  interface ArrayConstructor {
+    from(arrayLike: any, mapfn?: (value: any, index: number) => any, thisArg?: any): any[];
+  }
+
   interface Window {
     GJHApp: LegacyAppNamespace;
     App: LegacyAppNamespace;
-    XLSX?: unknown;
-    JSZip?: unknown;
+    XLSX?: any;
+    JSZip?: any;
   }
 }

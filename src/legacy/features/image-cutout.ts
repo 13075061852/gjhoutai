@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { getLegacyApp } from '../core/app-context';
+﻿import { getLegacyApp } from '../core/app-context';
 import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
@@ -15,7 +14,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const IMAGE_STORE_NAME = 'images';
   const LAST_IMAGE_KEY = 'last-upload';
 
-  const state = {
+  const state: any = {
     fileName: '',
     sourceImage: null,
     imageStored: false,
@@ -39,7 +38,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     renderTimer: 0,
     renderSeq: 0,
   };
-  const refs = {};
+  const refs: any = {};
   let imageDbPromise = null;
 
   const initRefs = () => {
@@ -69,7 +68,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.previewSubtitle = document.getElementById('cutoutPreviewSubtitle');
   };
 
-  const setStatus = () => {};
+  const setStatus = (..._args: any[]) => {};
 
   const setBusy = (busy) => {
     refs.autoCropBtn?.toggleAttribute('disabled', busy || !hasCutout());
@@ -147,7 +146,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     protection: refs.protection ? refs.protection.checked : true,
   });
 
-  const saveSession = (extra = {}) => {
+  const saveSession = (extra = {} as any) => {
     cloudStorage.putJson(STORAGE_KEY, {
       fileName: state.fileName || '',
       imageStored: state.imageStored,
@@ -196,7 +195,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (refs.featherValue) refs.featherValue.textContent = refs.feather?.value || '10';
   };
 
-  const applySavedControls = (controls = {}) => {
+  const applySavedControls = (controls = {} as any) => {
     if (refs.tolerance && controls.tolerance !== undefined) {
       refs.tolerance.value = clamp(controls.tolerance, Number(refs.tolerance.min || 0), Number(refs.tolerance.max || 100));
     }
@@ -279,7 +278,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     syncCropInputs();
   };
 
-  const loadImageData = (dataUrl, fileName, options = {}) => {
+  const loadImageData = (dataUrl, fileName, options = {} as any) => {
     if (!dataUrl) return;
     const image = new Image();
     image.addEventListener('load', () => {
@@ -1012,7 +1011,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     restoreStoredSession();
   };
 
-  const getAgentContext = (question = '', options = {}) => {
+  const getAgentContext = (question = '', options = {} as any) => {
     const saved = utils.readJson(STORAGE_KEY, {}) || {};
     const controls = getControlSnapshot();
     const hasImage = Boolean(state.sourceImage || saved.imageStored || hasOutput());
@@ -1053,7 +1052,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     };
   };
 
-  const getAgentImages = (question = '', options = {}) => {
+  const getAgentImages = (question = '', options = {} as any) => {
     const wantsImage = options.forceCurrentPage || /(?:分析这张|看这张|当前图|图片|图像|抠图结果|透明图|裁剪结果)/.test(String(question || ''));
     if (!wantsImage || !hasOutput()) return [];
     return [{
@@ -1066,3 +1065,5 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   App.imageCutout = { init, getAgentContext, getAgentImages };
 })();
+
+

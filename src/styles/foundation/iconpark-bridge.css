@@ -49,6 +49,7 @@
   --ip-alert:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 7 43 40H5L24 7Z' fill='none' stroke='black' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M24 18v10M24 35h.1' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
   --ip-arrow-left:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M29 12 17 24l12 12' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ip-arrow-right:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m19 12 12 12-12 12' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --ip-arrows-diff:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 15h18M30 15l-6-6M30 15l-6 6M36 33H18M18 33l6-6M18 33l6 6' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ip-back:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 16 8 26l10 10' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 26h22c6 0 9-3 9-8' fill='none' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
   --ip-bar-chart:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M9 39h30M14 32V20M24 32V10M34 32V16' fill='none' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
   --ip-braces:url("data:image/svg+xml,%3Csvg viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M18 8c-5 0-7 3-7 7v4c0 3-2 5-5 5 3 0 5 2 5 5v4c0 4 2 7 7 7M30 8c5 0 7 3 7 7v4c0 3 2 5 5 5-3 0-5 2-5 5v4c0 4-2 7-7 7' fill='none' stroke='black' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -212,6 +213,7 @@
 .ti-adjustments,.ti-adjustments-horizontal{--ip-icon:var(--ip-adjustment)}
 .ti-arrow-left{--ip-icon:var(--ip-arrow-left)}
 .ti-arrow-right{--ip-icon:var(--ip-arrow-right)}
+.ti-arrows-diff{--ip-icon:var(--ip-arrows-diff)}
 .ti-armchair{--ip-icon:var(--ip-package)}
 .ti-assembly{--ip-icon:var(--ip-assembly)}
 .ti-bolt{--ip-icon:var(--ip-bolt)}

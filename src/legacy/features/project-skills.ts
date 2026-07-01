@@ -90,7 +90,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 
   const stripCommandNoise = (value) => String(value || '')
     .replace(/^(请|帮我|麻烦|能不能|可以)\s*/, '')
-    .replace(/(一下|吧|谢谢|请处理|帮忙处理)$/g, '')
+    .replace(/(一下|吧|呢|吗|啊|呀|谢谢|请处理|帮忙处理)[？?。！!]*$/g, '')
     .trim();
 
   const extractQuotedText = (text) => {
@@ -411,6 +411,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       entity: '',
       fields: [],
       skills: ['project.inspectPage'],
+      rowCount: undefined as number | undefined,
     }));
     const businessPages = App.businessPages?.getAgentManifestPages?.() || [];
     const byId = new Map(pages.map((page) => [page.pageId, page]));
@@ -420,11 +421,18 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         ...page,
       });
     });
+    const resolvedPages = [...byId.values()];
     return {
       ok: true,
       systemName: '广俊塑料科技后台管理系统',
       strategy: '先读取页面能力地图，再按用户问题选择必要页面、字段、筛选和技能；不要默认读取全量数据。',
-      pages: [...byId.values()],
+      pages: resolvedPages,
+      dataSources: ['本地业务数据', 'OSS 云端同步', '物性分析表格', '图谱图片库'],
+      currentData: Object.fromEntries(
+        resolvedPages
+          .filter((page) => Number.isFinite(Number(page.rowCount)))
+          .map((page) => [page.pageId, Number(page.rowCount)])
+      ),
       relations: [
         { from: 'formula-management', to: 'inventory-management', desc: '配方组分来自库存材料，库存状态影响配方可排产风险。' },
         { from: 'order-management', to: 'production-plan', desc: '订单交期和状态驱动生产计划。' },
@@ -438,6 +446,9 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         'project.finalAnswerCheck',
         'business.queryPageData',
         'property.searchRows',
+        'property.summarizeMetrics',
+        'property.compareRows',
+        'property.validateRanges',
         'spectrum.manageImages',
         'analysis.buildJointPackage',
         'formula.createRecipe',
@@ -449,6 +460,35 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         'media.analyzeImages',
         'assistant.openPage',
       ],
+    };
+  };
+
+  const executePropertyAnalysisSkill = async (input = {} as any, operation = 'search') => {
+    const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', {
+      activePageId: 'property-analysis',
+      compact: true,
+      operation,
+      mode: input.mode || '',
+      selectedOnly: input.mode === 'selected',
+      filteredOnly: input.mode === 'filtered',
+      fullCurrentTable: input.mode === 'filtered' && operation !== 'search',
+    });
+    if (!context?.content) return { ok: false, message: '物性分析数据尚未加载，暂时无法分析。' };
+    return {
+      ok: true,
+      message: `已完成物性数据${operation === 'compare' ? '对比' : operation === 'summarize' ? '统计' : operation === 'validate' ? '检测范围判定' : '检索'}。`,
+      details: [
+        context.reason || '已返回物性分析上下文。',
+        context.stats?.uploadedRows ? `已上传匹配明细：${context.stats.uploadedRows} 行` : '',
+        context.stats?.contextChars ? `上下文长度：${context.stats.contextChars} 字符` : '',
+      ].filter(Boolean),
+      data: {
+        context: context.content,
+        displayTable: context.displayTable || '',
+        stats: context.stats || {},
+        fullContext: Boolean(context.fullContext),
+        operation,
+      },
     };
   };
 
@@ -746,7 +786,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       module: '物性分析',
       icon: 'ti-search',
       level: '查询型',
-      summary: '按型号、批次或指标关键词检索物性数据，返回强匹配、相近匹配和指标摘要。',
+      summary: '按分类工作表、型号、批次或指标关键词检索物性数据，返回分类目录、强匹配、相近匹配和指标摘要。',
       inputSpec: '{ "query": "型号/批次/指标关键词", "mode": "query | selected | filtered" }',
       outputSpec: '{ "ok": true, "context": "物性分析检索结果..." }',
       paramDocs: [
@@ -764,7 +804,8 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         const activeOnPropertyPage = getActivePageId() === 'property-analysis';
         const selected = /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(text);
         const filtered = /(?:当前筛选|筛选结果|当前列表|当前页面|本页)/.test(text);
-        const hasPropertyIntent = /(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度|材料|测试数据|检测数据|数据|PBT|PET|PET胶|PBT胶)/i.test(text);
+        const hasPropertyModel = /(?:^|[^A-Z0-9])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]+)+(?:$|[^A-Z0-9])/i.test(text);
+        const hasPropertyIntent = hasPropertyModel || /(?:物性|分类|工作表|页签|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度|材料|无卤|阻燃|尼龙|竞品|原料|测试数据|检测数据|数据|PBT|PET|PET胶|PBT胶)/i.test(text);
         const hasAnalyzeIntent = /(?:分析|对比|比较|判断|看看|看一下|评价|怎么样|如何|建议|结论)/.test(text);
         const hasSearchIntent = /(?:查找|搜索|检索|查一下|找)/.test(text);
         if (!(hasPropertyIntent && (hasSearchIntent || hasAnalyzeIntent || selected || filtered || activeOnPropertyPage))) return null;
@@ -778,30 +819,61 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         };
       },
       async handler(input = {} as any) {
-        const context = App.propertyAnalysis?.getAgentContext?.(input.query || input.question || '', {
-          activePageId: 'property-analysis',
-          compact: true,
-          mode: input.mode || '',
-          selectedOnly: input.mode === 'selected',
-          filteredOnly: input.mode === 'filtered',
-        });
-        if (!context?.content) return { ok: false, message: '物性分析数据尚未加载，暂时无法检索。' };
-        return {
-          ok: true,
-          message: '已完成物性数据检索。',
-          details: [
-            context.reason || '已返回物性分析上下文。',
-            context.stats?.uploadedRows ? `已上传匹配明细：${context.stats.uploadedRows} 行` : '',
-            context.stats?.contextChars ? `上下文长度：${context.stats.contextChars} 字符` : '',
-          ].filter(Boolean),
-          data: {
-            context: context.content,
-            displayTable: context.displayTable || '',
-            stats: context.stats || {},
-            fullContext: Boolean(context.fullContext),
-          },
-        };
+        return executePropertyAnalysisSkill(input, 'search');
       },
+    },
+    {
+      id: 'property.summarizeMetrics',
+      title: '统计物性指标',
+      module: '物性分析',
+      icon: 'ti-chart-bar',
+      level: '分析型',
+      summary: '统计指定型号、批次、已选行或筛选结果的样本数、指标均值、最小值、最大值和波动范围。',
+      inputSpec: '{ "query": "型号/批次/指标", "mode": "query | selected | filtered" }',
+      outputSpec: '{ "ok": true, "context": "物性指标统计上下文", "stats": {} }',
+      examples: ['统计 320G5-B21 各项指标', '汇总当前筛选结果的熔指和拉伸强度'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        if (!/(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度|材料|[A-Z0-9]{2,}-[A-Z0-9-]+)/i.test(text)
+          || !/(?:统计|汇总|均值|平均|最大|最小|范围|波动|稳定|趋势|离散)/.test(text)) return null;
+        return { skillId: this.id, confidence: 0.9, input: { query: stripCommandNoise(text), mode: /(?:已选|选中)/.test(text) ? 'selected' : /(?:筛选|本页|当前列表)/.test(text) ? 'filtered' : 'query' } };
+      },
+      async handler(input = {} as any) { return executePropertyAnalysisSkill(input, 'summarize'); },
+    },
+    {
+      id: 'property.compareRows',
+      title: '对比物性型号与批次',
+      module: '物性分析',
+      icon: 'ti-arrows-diff',
+      level: '分析型',
+      summary: '对比多个型号或批次的共同指标、重复测试值、均值、差异、极值、波动与缺失项。',
+      inputSpec: '{ "query": "要对比的型号/批次", "mode": "query | selected | filtered" }',
+      outputSpec: '{ "ok": true, "context": "物性对比上下文", "displayTable": "..." }',
+      examples: ['对比 320G5-B21 和 320G6-B21', '比较当前选中批次的稳定性'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        if (!/(?:对比|比较|差异|哪个更|哪.*高|哪.*低|批次间|型号间)/.test(text)
+          || !/(?:物性|型号|批次|熔指|拉伸|弯曲|冲击|灰份|强度|材料|[A-Z0-9]{2,}-[A-Z0-9-]+)/i.test(text)) return null;
+        return { skillId: this.id, confidence: 0.94, input: { query: stripCommandNoise(text), mode: /(?:已选|选中)/.test(text) ? 'selected' : /(?:筛选|本页|当前列表)/.test(text) ? 'filtered' : 'query' } };
+      },
+      async handler(input = {} as any) { return executePropertyAnalysisSkill(input, 'compare'); },
+    },
+    {
+      id: 'property.validateRanges',
+      title: '判定物性检测范围',
+      module: '物性分析',
+      icon: 'ti-shield-check',
+      level: '分析型',
+      summary: '复用检验报告的型号检测范围，判定各指标通过、异常、未设置范围或检验值无效。',
+      inputSpec: '{ "query": "型号/批次", "mode": "query | selected | filtered" }',
+      outputSpec: '{ "ok": true, "context": "检测范围判定上下文", "stats": { "validation": {} } }',
+      examples: ['判断 320G5-B21 是否合格', '检查当前选中批次有没有超出检测范围'],
+      infer(prompt) {
+        const text = String(prompt || '');
+        if (!/(?:合格|不合格|达标|超标|异常|检测范围|检验范围|规格范围|上下限|判定)/.test(text)) return null;
+        return { skillId: this.id, confidence: 0.95, input: { query: stripCommandNoise(text), mode: /(?:已选|选中)/.test(text) ? 'selected' : /(?:筛选|本页|当前列表)/.test(text) ? 'filtered' : 'query' } };
+      },
+      async handler(input = {} as any) { return executePropertyAnalysisSkill(input, 'validate'); },
     },
     {
       id: 'formula.createRecipe',
@@ -1285,11 +1357,11 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       '用户询问“几个、多少、有哪些、哪几个、列表、明细、统计、当前、现在”等数据问题时，不要调用 assistant.openPage，应直接回答或调取数据上下文。',
       '用户提到“当前、选中、本页、筛选结果”时，必须保留这个范围意图；需要联合当前页面上下文时优先使用 analysis.buildJointPackage，并设置 forceCurrentPage=true。',
       '用户在同一句里同时提到物性和图谱，或要求“结合/联合/综合”物性与图谱分析时，必须优先使用 analysis.buildJointPackage；联合意图优先于下面的单独物性或单独图谱规则。',
-      '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，优先调用 property.searchRows，不要调用 analysis.buildJointPackage。',
+      '物性技能分工：查分类目录、工作表、型号、批次或明细用 property.searchRows；均值/极值/波动/趋势用 property.summarizeMetrics；型号或批次差异用 property.compareRows；合格/超标/检测范围用 property.validateRanges。物性分类由页面工作表/页签表达，不要求数据行里存在“分类”字段。物性问题禁止调用 business.queryPageData。',
       '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用 spectrum.manageImages，并用 action=search 检索；不要因为问题里有型号或系列号就改调 property.searchRows。',
       '只有用户明确要求联合物性+图谱、跨模块分析、当前页完整上下文时才用 analysis.buildJointPackage。',
       '物性数据默认上传所有符合条件的匹配行；只有用户明确说“前 N 条/只要 N 行/显示 N 个”等数量限制时，才限制上传数量。',
-      '凡是调用 property.searchRows 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
+      '凡是调用 property.* 查找并上传数据，前端会先展示完整匹配数据表格；AI 后续只需要继续输出分析结果，不要重复生成表格。',
     ];
     const spectrumRules = [
       '凡是调用 spectrum.manageImages 且 action=search 检索图谱，前端会在用户二次授权确认后把全部匹配图谱图片作为视觉输入交给 AI；AI 后续必须基于曲线/峰形/标注做图谱对比分析，不要只总结标题、分类、标签。',
@@ -1309,7 +1381,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     ];
     const rules = [
       ...commonRules,
-      ...(fullProtocol || ['business.queryPageData', 'assistant.openPage', 'property.searchRows', 'analysis.buildJointPackage'].includes(requestedSkillId) ? localRules : []),
+      ...(fullProtocol || ['business.queryPageData', 'assistant.openPage', 'analysis.buildJointPackage'].includes(requestedSkillId) || requestedSkillId.startsWith('property.') ? localRules : []),
       ...(fullProtocol || kind === 'image-analysis' || requestedSkillId === 'spectrum.manageImages' || requestedSkillId === 'media.analyzeImages' ? spectrumRules : []),
       ...(fullProtocol || requestedSkillId === 'formula.createRecipe' ? formulaRules : []),
       ...(kind === 'image-generation' || kind === 'image-analysis' || requestedSkillId?.startsWith('media.') ? imageRules : []),

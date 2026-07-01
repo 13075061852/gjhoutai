@@ -281,6 +281,18 @@
     .analysis-toolbar-btn-primary.is-active:hover:not(:disabled) i{
       color:#fff;
     }
+    .analysis-filter-card .analysis-action-group .analysis-toolbar-btn,
+    .analysis-filter-card .analysis-action-group .analysis-toolbar-btn-primary{
+      height:32px;
+      padding:0 12px;
+      border-radius:9px;
+      gap:6px;
+      font-size:12px;
+    }
+    .analysis-filter-card .analysis-action-group .analysis-toolbar-btn i,
+    .analysis-filter-card .analysis-action-group .analysis-toolbar-btn-primary i{
+      font-size:14px;
+    }
 
     /* ===== Sheet tabs (filter tags) ===== */
     .analysis-sheet-tabs{
@@ -510,9 +522,6 @@
     #analysisSortSelect{
       width:78px;
     }
-    #analysisPageSizeSelect{
-      width:86px;
-    }
     .analysis-select-field select{
       min-width:0;
       height:32px;
@@ -542,9 +551,6 @@
     #analysisSortSelect{
       width:78px;
     }
-    #analysisPageSizeSelect{
-      width:86px;
-    }
     .analysis-select-field .custom-select{
       width:max-content;
       min-width:96px;
@@ -564,10 +570,6 @@
     }
     .analysis-select-field .custom-select-option{
       white-space:nowrap;
-    }
-    #analysisPageSizeSelect + .custom-select,
-    #analysisPageSizeSelect + .custom-select .custom-select-trigger{
-      min-width:108px;
     }
 
     /* ===== Data table ===== */

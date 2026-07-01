@@ -162,6 +162,12 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const getReportTitle = (item) => String(item?.title || item?.file_name || '未命名检测报告').trim();
 
+  const getReportFileName = (item) => {
+    const rawName = String(item?.file_name || `${getReportTitle(item)}.pdf`).trim() || '检测报告.pdf';
+    const safeName = rawName.replace(/[\\/:*?"<>|]+/g, '-');
+    return /\.pdf$/i.test(safeName) ? safeName : `${safeName}.pdf`;
+  };
+
   const getComparableReportName = (value) => String(value || '')
     .trim()
     .replace(/\.pdf$/i, '')
@@ -202,6 +208,28 @@ import { cloudStorage } from '../../services/cloud-storage';
     if (fileName && element === refs.previewDownload) element.setAttribute('download', fileName);
   };
 
+  const downloadBlob = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadReportFile = async (id) => {
+    const item = state.reports.find((report) => report.id === id) || getActiveReport();
+    if (!item?.id) return;
+    const blob = await cloudStorage.getInspectionReportFileBlob(item.id);
+    if (!blob) {
+      App.notify?.error?.('检测报告下载失败。', { key: 'inspection-report-download-failed' });
+      return;
+    }
+    downloadBlob(blob, getReportFileName(item));
+  };
+
   const getPdfPreviewUrl = (url) => url ? `${url}#zoom=85` : '';
 
   const renderPreview = () => {
@@ -218,8 +246,8 @@ import { cloudStorage } from '../../services/cloud-storage';
       refs.previewFrame.hidden = false;
       if (refs.previewFrame.getAttribute('src') !== previewUrl) refs.previewFrame.setAttribute('src', previewUrl);
     }
-    setPreviewLinkState(refs.previewOpen, url, item.file_name || '');
-    setPreviewLinkState(refs.previewDownload, url, item.file_name || '');
+    setPreviewLinkState(refs.previewOpen, url, getReportFileName(item));
+    setPreviewLinkState(refs.previewDownload, url, getReportFileName(item));
   };
 
   const isSmallScreen = () => window.innerWidth <= 768;
@@ -265,7 +293,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.list.innerHTML = items.map((item) => {
       const id = utils.escapeHtml(item.id || '');
       const title = utils.escapeHtml(getReportTitle(item));
-      const fileName = utils.escapeHtml(item.file_name || '');
+      const fileName = utils.escapeHtml(getReportFileName(item));
       const fileNameHtml = shouldShowReportFileName(item) ? `<div class="inspection-report-file">${fileName}</div>` : '';
       const notes = String(item.notes || '').trim();
       const fileUrl = utils.escapeHtml(cloudStorage.getInspectionReportFileUrl(item.id || ''));
@@ -288,9 +316,9 @@ import { cloudStorage } from '../../services/cloud-storage';
             <a class="analysis-toolbar-btn" href="${fileUrl}" target="_blank" rel="noopener" title="在新窗口中打开">
               <i class="ti ti-external-link" aria-hidden="true"></i>
             </a>
-            <a class="analysis-toolbar-btn" href="${fileUrl}" download="${fileName}" title="下载文件">
+            <button class="analysis-toolbar-btn" type="button" data-report-download="${id}" title="下载文件">
               <i class="ti ti-download" aria-hidden="true"></i>
-            </a>
+            </button>
             <button class="analysis-toolbar-btn inspection-report-delete" type="button" data-report-delete="${id}" title="删除报告">
               <i class="ti ti-trash" aria-hidden="true"></i>
             </button>
@@ -407,7 +435,10 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (!getActiveReport()) event.preventDefault();
     });
     refs.previewDownload?.addEventListener('click', (event) => {
-      if (!getActiveReport()) event.preventDefault();
+      event.preventDefault();
+      const item = getActiveReport();
+      if (!item?.id) return;
+      downloadReportFile(item.id);
     });
     refs.searchInput?.addEventListener('input', () => {
       state.search = refs.searchInput.value || '';
@@ -422,6 +453,12 @@ import { cloudStorage } from '../../services/cloud-storage';
       if (deleteButton) {
         event.stopPropagation();
         deleteReport(deleteButton.dataset.reportDelete || '');
+        return;
+      }
+      const downloadButton = event.target.closest('[data-report-download]');
+      if (downloadButton) {
+        event.stopPropagation();
+        downloadReportFile(downloadButton.dataset.reportDownload || '');
         return;
       }
       const previewButton = event.target.closest('[data-report-preview]');

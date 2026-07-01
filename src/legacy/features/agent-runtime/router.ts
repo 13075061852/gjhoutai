@@ -10,6 +10,10 @@ const ROUTABLE_LOCAL_SKILL_IDS = [
   'dataRecognition.searchHistory',
   'dataRecognition.inspectCurrent',
   'business.queryPageData',
+  'property.searchRows',
+  'property.summarizeMetrics',
+  'property.compareRows',
+  'property.validateRanges',
 ] as const;
 
 export const PROJECT_DATA_PATTERN = /(?:这个系统|这个项目|这个网站|后台|当前页面|当前|现在|几个|多少|数量|总数|有哪些|哪几个|列表|明细|最低|最少|最小|最高|最多|最大|库存|配方|订单|供应商|客户|人员|账号|账户|权限|物性|型号|批次|熔指|拉伸|弯曲|冲击|阻燃|灰份|强度|图谱|谱图|曲线|dsc|tga|抠图|识别历史|识别记录|数据识别)/i;
@@ -21,6 +25,8 @@ export const CURRENT_PAGE_PATTERN = /(?:我)?(?:当前|现在|目前)?(?:在|处
 export const PAGE_GUIDE_PATTERN = /(?:这个|当前|本|该)?(?:页面|模块|功能|系统|项目|网站|应用|平台).*(?:做什么|是什么|用途|作用|介绍|说明|怎么用|如何使用|有什么|包含|能干嘛)|(?:你是谁|你是什么|你能做什么|你会什么|介绍一下你自己|这个后台能做什么)/;
 export const BUSINESS_QUERY_PATTERN = /(?:查看|看一下|查询|统计|列出|列举|展示|罗列|了解|汇总|看看|查一下).*(?:订单|库存|配方|供应商|客户|人员|员工|账号|账户|生产|采购|权限|情况|状态)|(?:订单|库存|配方|供应商|客户|人员|员工|账号|账户|生产|采购|权限).*(?:情况|状态|几个|多少|数量|总数|有哪些|哪几个|列表|明细|当前|现在|最低|最少|最小|最高|最多|最大|怎么样|如何)/;
 export const COMPLEX_PROJECT_ANALYSIS_PATTERN = /(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断).*(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据)|(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据).*(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断)/;
+export const PROPERTY_MODEL_PATTERN = /(?:^|[^A-Z0-9])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]+)+(?:$|[^A-Z0-9])/i;
+export const PROPERTY_DATA_PATTERN = /(?:物性|型号|批次|分类情况|材料分类|无卤|阻燃|尼龙|竞品|原料|熔指|熔融指数|拉伸|断裂伸长|弯曲|冲击|灼热丝|CTI|漏电起痕|灰份|灰分|测试温度|检测范围|检验范围|材料性能|PBT|PET)/i;
 
 export type AgentRouteClassification = {
   kind?: AgentPlan['kind'];
@@ -30,6 +36,10 @@ export type AgentRouteClassification = {
   reason?: string;
   useProjectContext?: boolean;
   needsWebSearch?: boolean;
+  searchQueries?: string[];
+  searchDepth?: 'basic' | 'advanced';
+  maxResults?: number;
+  topic?: 'general' | 'news';
 };
 
 export type AgentRouteClassifier = (input: {
@@ -38,7 +48,7 @@ export type AgentRouteClassifier = (input: {
   fallbackPlan: AgentPlan;
 }) => Promise<AgentRouteClassification | null>;
 
-export const buildLocalSkillPlan = (prompt: string): AgentSkillPlan | null => {
+export const buildLocalSkillPlan = (prompt: string, activePageId = ''): AgentSkillPlan | null => {
   if (PAGE_GUIDE_PATTERN.test(prompt)) {
     return {
       skillId: 'assistant.projectGuide',
@@ -79,6 +89,32 @@ export const buildLocalSkillPlan = (prompt: string): AgentSkillPlan | null => {
       reason: '用户询问当前识别结果',
     };
   }
+  const hasPropertyModel = PROPERTY_MODEL_PATTERN.test(prompt);
+  const hasPropertyIntent = PROPERTY_DATA_PATTERN.test(prompt)
+    || (activePageId === 'property-analysis' && (hasPropertyModel || /(?:质量|性能|指标|数据|材料|强度)/i.test(prompt)));
+  if (hasPropertyIntent) {
+    const skillId = /(?:合格|不合格|达标|超标|异常|检测范围|检验范围|规格范围|上下限|判定)/.test(prompt)
+      ? 'property.validateRanges'
+      : /(?:对比|比较|差异|哪个更|哪.*高|哪.*低|批次间|型号间)/.test(prompt)
+        ? 'property.compareRows'
+        : /(?:统计|汇总|均值|平均|最大|最小|范围|波动|稳定|趋势|离散)/.test(prompt)
+          ? 'property.summarizeMetrics'
+          : 'property.searchRows';
+    return {
+      skillId,
+      input: { query: prompt },
+      confidence: hasPropertyModel ? 0.94 : 0.84,
+      reason: '识别到物性数据意图，调用物性表结构化分析技能',
+    };
+  }
+  if (activePageId === 'spectrum-analysis' && /(?:分析|谱图|图谱|曲线|峰)/i.test(prompt)) {
+    return {
+      skillId: 'media.analyzeImages',
+      input: { question: prompt },
+      confidence: 0.82,
+      reason: '结合当前图谱分析页面，将分析请求路由到图谱视觉分析',
+    };
+  }
   if (BUSINESS_QUERY_PATTERN.test(prompt)) {
     return {
       skillId: 'business.queryPageData',
@@ -117,6 +153,10 @@ const normalizeClassifierSkillPlan = (classification: AgentRouteClassification, 
     'dataRecognition.searchHistory': { query: prompt, limit: 8 },
     'dataRecognition.inspectCurrent': {},
     'business.queryPageData': { question: prompt },
+    'property.searchRows': { query: prompt },
+    'property.summarizeMetrics': { query: prompt },
+    'property.compareRows': { query: prompt },
+    'property.validateRanges': { query: prompt },
   };
   return {
     skillId,
@@ -128,7 +168,7 @@ const normalizeClassifierSkillPlan = (classification: AgentRouteClassification, 
 
 const isConfidentRegexPlan = (plan: AgentPlan) => {
   if (plan.localSkillPlan?.confidence && plan.localSkillPlan.confidence >= 0.8) return true;
-  return plan.kind === 'image-generation' || plan.kind === 'image-analysis' || plan.needsWebSearch;
+  return plan.kind === 'image-generation' || plan.kind === 'image-analysis';
 };
 
 export const parseAgentRouteClassification = (content: unknown): AgentRouteClassification | null => {
@@ -147,6 +187,10 @@ export const parseAgentRouteClassification = (content: unknown): AgentRouteClass
       reason: String(parsed?.reason || '').trim(),
       useProjectContext: typeof parsed?.useProjectContext === 'boolean' ? parsed.useProjectContext : undefined,
       needsWebSearch: typeof parsed?.needsWebSearch === 'boolean' ? parsed.needsWebSearch : undefined,
+      searchQueries: Array.isArray(parsed?.searchQueries) ? parsed.searchQueries.map(textOf).filter(Boolean).slice(0, 3) : [],
+      searchDepth: parsed?.searchDepth === 'advanced' ? 'advanced' : parsed?.searchDepth === 'basic' ? 'basic' : undefined,
+      maxResults: Number.isFinite(Number(parsed?.maxResults)) ? Math.max(3, Math.min(20, Number(parsed.maxResults))) : undefined,
+      topic: parsed?.topic === 'news' ? 'news' : parsed?.topic === 'general' ? 'general' : undefined,
     };
   } catch {
     return null;
@@ -163,15 +207,17 @@ export const buildAgentRouteClassifierMessages = ({
   {
     role: 'system',
     content: [
-      '你是 Gjun AI 的轻量意图路由分类器，只输出严格 JSON。',
+      '你是 Gjun AI 的轻量意图理解与搜索规划器，只输出严格 JSON。',
       '判断用户问题应该进入哪类处理：local-tool、web-search、image-generation、image-analysis、chat。',
       'web-search：最新、最近、今天、价格、行情、政策、新闻、官网、资料来源、需要外部验证。',
-      'local-tool：查询或操作本后台数据、当前页面、项目说明、订单/库存/配方/客户/供应商/人员/权限、数据识别历史。',
+      'local-tool：查询或操作本后台数据、当前页面、项目说明、订单/库存/配方/客户/供应商/人员/权限、物性数据、数据识别历史。物性问题必须使用 property.*，禁止使用 business.queryPageData。',
       'image-generation：用户要生成图片、海报、封面、插图。',
       'image-analysis：用户要分析已上传或项目内图谱/图片。',
       'chat：普通闲聊、写作、解释，不需要项目技能或联网。',
       `local-tool 可选 skillId：${ROUTABLE_LOCAL_SKILL_IDS.join(', ')}`,
-      '只输出：{"kind":"local-tool|web-search|image-generation|image-analysis|chat","skillId":"","input":{},"confidence":0.0,"reason":"一句话"}',
+      '若 needsWebSearch=true，同时生成 1-3 个高质量搜索词；简单查询 maxResults=5，宽泛比较为 8-12，searchDepth 取 basic 或 advanced，topic 取 general 或 news。',
+      '生成搜索词时必须保留用户问题中的专有名词、年份、机构、产品、赛事、型号、地点和名单/价格/政策/版本/财报等关键限定词；禁止泛化成宽泛新闻或宽泛行业词。',
+      '只输出：{"kind":"local-tool|web-search|image-generation|image-analysis|chat","skillId":"","input":{},"needsWebSearch":false,"searchQueries":[],"searchDepth":"basic","maxResults":5,"topic":"general","confidence":0.0,"reason":"一句话"}',
     ].join('\n'),
   },
   {
@@ -213,7 +259,7 @@ export const createAgentPlan = ({
   webSearchEnabled?: boolean;
 }): AgentPlan => {
   const text = textOf(prompt);
-  const localSkillPlan = buildLocalSkillPlan(text);
+  const localSkillPlan = buildLocalSkillPlan(text, activePageId);
   const useProjectContext = projectAccessEnabled && shouldUseProjectContextForPrompt(text, activePageId);
   const wantsImageGeneration = IMAGE_GENERATION_PATTERN.test(text);
   const wantsImageAnalysis = IMAGE_ANALYSIS_PATTERN.test(text);
@@ -255,18 +301,43 @@ export const createAgentPlanWithAi = async (input: {
     const kind = normalizeClassifierKind(classification.kind);
     if (!kind) return fallbackPlan;
 
+    if (fallbackPlan.needsWebSearch) {
+      const queries = Array.isArray(classification.searchQueries) ? classification.searchQueries.filter(Boolean).slice(0, 3) : [];
+      return {
+        ...fallbackPlan,
+        kind: 'web-search',
+        needsWebSearch: Boolean(input.webSearchEnabled),
+        searchPlan: queries.length ? {
+          queries,
+          maxResults: classification.maxResults,
+          searchDepth: classification.searchDepth,
+          topic: classification.topic,
+          reason: classification.reason,
+        } : null,
+        reason: classification.reason || fallbackPlan.reason,
+      };
+    }
+
     const localSkillPlan = normalizeClassifierSkillPlan(classification, text);
     if ((kind === 'local-tool' || kind === 'image-generation' || kind === 'image-analysis') && !localSkillPlan) {
       return fallbackPlan;
     }
 
     if (kind === 'web-search') {
+      const queries = Array.isArray(classification.searchQueries) ? classification.searchQueries.filter(Boolean).slice(0, 3) : [];
       return {
         ...fallbackPlan,
         kind: 'web-search',
         needsWebSearch: Boolean(input.webSearchEnabled),
         useProjectContext: Boolean(input.projectAccessEnabled && (classification.useProjectContext ?? fallbackPlan.useProjectContext)),
         localSkillPlan: null,
+        searchPlan: queries.length ? {
+          queries,
+          maxResults: classification.maxResults,
+          searchDepth: classification.searchDepth,
+          topic: classification.topic,
+          reason: classification.reason,
+        } : null,
         reason: classification.reason || 'AI 辅助路由判断需要联网搜索',
       };
     }

@@ -241,6 +241,18 @@ export const cloudStorage = {
     return buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}/file`);
   },
 
+  async getInspectionReportFileBlob(id: string): Promise<Blob | null> {
+    try {
+      const response = await fetchWithTimeout(this.getInspectionReportFileUrl(id), {
+        credentials: 'include',
+      });
+      if (!response.ok) return null;
+      return await response.blob();
+    } catch {
+      return null;
+    }
+  },
+
   async deleteInspectionReport(id: string): Promise<boolean> {
     try {
       const response = await fetchWithTimeout(buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}`), {

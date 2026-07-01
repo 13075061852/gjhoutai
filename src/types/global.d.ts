@@ -75,6 +75,7 @@ declare global {
     temperature: number;
     maxTokens: number;
     streamEnabled: boolean;
+    autoImageUpload: boolean;
     jsonMode: boolean;
     logEnabled: boolean;
     searchProvider: LegacySearchProvider;
@@ -103,6 +104,8 @@ declare global {
     CONFIG_LOG_KEY: string;
     CHAT_STORAGE_KEY: string;
     CHAT_SESSIONS_KEY: string;
+    CHAT_SESSION_INDEX_KEY: string;
+    CHAT_SESSION_PREFIX: string;
     CHAT_ACTIVE_SESSION_KEY: string;
     CHAT_DATA_ATTACHMENT_KEY: string;
     CHAT_SEARCH_ENABLED_KEY: string;

@@ -1,8 +1,9 @@
 ﻿import { mapImageGenerationParams } from './media';
 
 const normalizeText = (value: unknown) => String(value || '').trim();
+const runtimeSkillDefinitionCache = new WeakMap<object, any[]>();
 
-export const createRuntimeSkillDefinitions = (App: any) => [
+const buildRuntimeSkillDefinitions = (App: any) => [
   {
     id: 'assistant.currentPage',
     title: '读取当前页面',
@@ -61,9 +62,15 @@ export const createRuntimeSkillDefinitions = (App: any) => [
         .slice(0, 12)
         .map(([id, def]: [string, any]) => `${def?.title || id}`)
         .join('、');
+      const manifest = App?.projectSkills?.getProjectManifest?.() || App?.agentButler?.getProjectManifest?.() || {};
+      const manifestPages = Array.isArray(manifest.pages) ? manifest.pages : [];
+      const manifestSkills = Array.isArray(manifest.skills) ? manifest.skills : [];
+      const dataSources = Array.isArray(manifest.dataSources) ? manifest.dataSources : [];
+      const currentData = manifest.currentData && typeof manifest.currentData === 'object' ? manifest.currentData : {};
+      const currentRecordCount = Object.values(currentData).reduce((total: number, count) => total + (Number(count) || 0), 0);
       const asksAssistant = /你是谁|你是什么|你能做什么|你会什么|介绍一下你自己/.test(question);
       const message = asksAssistant
-        ? `我是 ${systemName} 的项目级 AI 助手，主要负责读取本后台的页面、业务数据和 AI 工具能力，帮助你查询订单、库存、配方、物性、图谱、客户、供应商等信息，并在需要时调用本地项目技能。`
+        ? `我是 ${systemName} 的项目级 AI 助手。当前可读取 ${manifestPages.length || Object.keys(App?.constants?.PAGE_DEFS || {}).length} 个页面、调用 ${manifestSkills.length || '已注册'} 项项目技能，并结合后台现有数据回答问题。`
         : `当前页面是「${title}」。${pageDef.desc ? `它的用途是：${pageDef.desc}` : '该页面已注册在后台导航中。'}`;
       return {
         ok: true,
@@ -72,6 +79,8 @@ export const createRuntimeSkillDefinitions = (App: any) => [
           `当前页面 ID：${pageId}`,
           pageDef.eyebrow ? `所属模块：${pageDef.eyebrow}` : '',
           pages ? `已注册页面示例：${pages}` : '',
+          dataSources.length ? `可用数据源：${dataSources.join('、')}` : '',
+          currentRecordCount ? `当前已接入结构化记录：${currentRecordCount} 条` : '',
         ].filter(Boolean),
         data: {
           systemName,
@@ -79,6 +88,7 @@ export const createRuntimeSkillDefinitions = (App: any) => [
           title,
           eyebrow: String(pageDef.eyebrow || ''),
           desc: String(pageDef.desc || ''),
+          manifest,
         },
       };
     },
@@ -198,4 +208,13 @@ export const createRuntimeSkillDefinitions = (App: any) => [
     },
   },
 ];
+
+export const createRuntimeSkillDefinitions = (App: any) => {
+  if (!App || (typeof App !== 'object' && typeof App !== 'function')) return buildRuntimeSkillDefinitions(App);
+  const cached = runtimeSkillDefinitionCache.get(App);
+  if (cached) return cached;
+  const definitions = buildRuntimeSkillDefinitions(App);
+  runtimeSkillDefinitionCache.set(App, definitions);
+  return definitions;
+};
 

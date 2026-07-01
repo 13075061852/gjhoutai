@@ -156,7 +156,6 @@ import { fetchWithTimeout } from '../../utils/fetch';
     selectionMeta: document.getElementById('analysisSelectionMeta'),
     statusRow: document.getElementById('analysisSelectionMeta')?.closest('.analysis-status-row'),
     sortSelect: document.getElementById('analysisSortSelect'),
-    pageSizeSelect: document.getElementById('analysisPageSizeSelect'),
   };
 
   const state: any = {
@@ -1137,8 +1136,14 @@ import { fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
+  const hasReportMetricValue = (metric = {} as any) => hasMeaningfulValue(metric.value);
+
+  const getRenderableReportMetrics = (draft = {} as any) => (
+    Array.isArray(draft.metrics) ? draft.metrics.filter(hasReportMetricValue) : []
+  );
+
   const getReportDraftValidation = (draft = {} as any) => {
-    const metrics = draft.metrics || [];
+    const metrics = getRenderableReportMetrics(draft);
     const results = metrics.map((metric) => ({
       ...getReportMetricValidation(metric),
       required: isRequiredReportMetric(metric.key),
@@ -1402,7 +1407,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     if (!canvas || !draft) return;
     const scale = 2;
     const width = 794;
-    const rows = draft.metrics || [];
+    const rows = getRenderableReportMetrics(draft);
     const rowH = 48;
     const tableY = 485;
     const tableH = rowH * (rows.length + 1);
@@ -1667,8 +1672,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
               <label class="analysis-report-export-scope">
                 <span>导出范围</span>
                 <select data-report-export-scope>
-                  <option value="active" selected>当前选中</option>
-                  <option value="all">列表全部</option>
+                  <option value="active">当前选中</option>
+                  <option value="all" selected>列表全部</option>
                 </select>
               </label>
               <button class="analysis-report-btn" type="button" data-report-export-image>
@@ -1735,7 +1740,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
   };
 
   const getReportExportDrafts = () => {
-    const scope = document.querySelector('[data-report-export-scope]')?.value || 'active';
+    const scope = document.querySelector('[data-report-export-scope]')?.value || 'all';
     if (scope === 'all') return state.reportDrafts.filter(Boolean);
     return [getActiveReportDraft()].filter(Boolean);
   };
@@ -3485,6 +3490,44 @@ import { fetchWithTimeout } from '../../utils/fetch';
     '灰份',
   ].map((key) => summarizeMetric(rows, key)).filter(Boolean);
 
+  const PROPERTY_AGENT_CAPABILITIES = [
+    '读取全部物性分类/工作表及各分类记录数，并按分类名称直接查询材料',
+    '精确查询型号、批次以及跨工作表的相近型号',
+    '统计熔指、拉伸强度、断裂伸长率、弯曲强度、弯曲模量、冲击强度、灰份等指标的均值和范围',
+    '对比多个型号或批次的重复测试值、均值、差异、波动和极值',
+    '读取测试温度、灼热丝、CTI、阻燃厚度 T1/T2 等扩展字段',
+    '按照已配置的型号检测范围判断检验通过、异常、未设置范围或检验值无效',
+    '按当前筛选结果、当前已选行、全表或用户指定行数组织分析数据',
+    '为 JSON 导出、横纵向对比和检验报告提供分析结论',
+  ];
+
+  const inferPropertyAgentOperation = (question = '', requestedOperation = '') => {
+    if (requestedOperation) return requestedOperation;
+    const text = String(question || '');
+    if (/(?:分类情况|有哪些分类|哪些分类|有什么分类|分类有哪些|工作表|页签)/.test(text)) return 'categories';
+    if (/(?:合格|不合格|达标|超标|异常|检测范围|检验范围|规格范围|上下限|判定)/.test(text)) return 'validate';
+    if (/(?:对比|比较|差异|哪个更|哪.*高|哪.*低|批次间|型号间)/.test(text)) return 'compare';
+    if (/(?:统计|汇总|均值|平均|范围|最大|最小|极值|波动|稳定|趋势|离散)/.test(text)) return 'summarize';
+    return 'search';
+  };
+
+  const getRangeValidationSummaryForAgent = (rows) => {
+    const summary = { pass: 0, fail: 0, missing: 0, details: [] as string[] };
+    rows.forEach((row) => {
+      const model = getRowModel(row) || '未知型号';
+      const batch = getRowBatch(row) || '未知批次';
+      const draft = createReportDraft(row);
+      draft.metrics.forEach((metric) => {
+        const validation = getReportMetricValidation(metric);
+        summary[validation.status] += 1;
+        if (validation.status !== 'pass') {
+          summary.details.push(`${model}/${batch}：${metric.item}=${metric.value || '-'}，范围=${metric.range || '未设置'}，${validation.text}`);
+        }
+      });
+    });
+    return summary;
+  };
+
   const wantsFullCurrentPropertyTable = (question = '') => {
     const text = String(question || '');
     const asksCurrentTable = /(?:当前|现在|本页|筛选|表格|物性表|物性数据)/.test(text);
@@ -3525,6 +3568,15 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
     const activeSheet = getActiveSheet(state.data);
     const sheetNames = getSheetNames(state.data);
+    const normalizedQuestion = normalizeAgentText(question);
+    const matchedSheetNames = sheetNames.filter((sheetName) => {
+      const normalizedSheetName = normalizeAgentText(sheetName);
+      return normalizedSheetName && normalizedQuestion.includes(normalizedSheetName);
+    });
+    const categoryCatalog = sheetNames.map((sheetName) => ({
+      name: sheetName,
+      rowCount: getRowsForSheet(sheetName).length,
+    }));
     const visible = getVisibleRows();
     const selectedRows = getSelectedRowsForAllSheets();
     const terms = extractAgentTerms(question);
@@ -3534,12 +3586,14 @@ import { fetchWithTimeout } from '../../utils/fetch';
     const requestedRowLimit = rowWindow.limit;
     const selectedOnly = Boolean(options.selectedOnly || options.mode === 'selected' || /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(String(question || '')));
     const fullCurrentTable = Boolean(options.fullCurrentTable || wantsFullCurrentPropertyTable(question));
+    const operation = inferPropertyAgentOperation(question, options.operation);
 
     if (selectedOnly && selectedRows.length) {
       const selectedColumns = getAgentDetailColumns(getColumns(selectedRows));
       const selectedRowWindow = rowWindow.limit == null ? { limit: null, mode: 'all' } : rowWindow;
       const selectedForUpload = sliceAgentRowsByWindow(selectedRows, selectedRowWindow);
       const metrics = getMetricSummaryForAgent(selectedForUpload);
+      const validationSummary = operation === 'validate' ? getRangeValidationSummaryForAgent(selectedForUpload) : null;
       const displayTable = formatRowsMarkdownTableForAi(selectedForUpload, selectedColumns, null);
       const csvTable = formatRowsCsvForAi(selectedForUpload, selectedColumns);
       const content = [
@@ -3554,6 +3608,11 @@ import { fetchWithTimeout } from '../../utils/fetch';
         '```',
         metrics.length ? '表格之后再输出的分析摘要：' : '',
         ...metrics.map((item) => `- ${item}`),
+        `本次分析任务：${operation}。`,
+        `Agent 可用物性能力：${PROPERTY_AGENT_CAPABILITIES.join('；')}。`,
+        operation === 'compare' ? '对比要求：逐项比较共同指标，指出均值、范围、差异、波动和缺失字段；不要只复述数据。' : '',
+        validationSummary ? `检测范围判定汇总：通过 ${validationSummary.pass} 项，异常 ${validationSummary.fail} 项，待完善 ${validationSummary.missing} 项。` : '',
+        validationSummary?.details.length ? `异常或待完善明细：\n- ${validationSummary.details.slice(0, 30).join('\n- ')}` : '',
       ].filter(Boolean).join('\n');
 
       return {
@@ -3571,6 +3630,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
           rowWindowMode: rowWindow.mode,
           uploadedRows: selectedForUpload.length,
           selectedOnly: true,
+          operation,
+          validation: validationSummary || undefined,
           contextChars: content.length,
         },
         displayTable: displayTable ? `### 当前已选数据（${selectedForUpload.length} / ${selectedRows.length} 行）\n${displayTable}` : '',
@@ -3579,6 +3640,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     }
 
     const exactMatches = [];
+    const categoryMatches = [];
     const scoredRows = [];
 
     sheetNames.forEach((sheetName) => {
@@ -3589,14 +3651,26 @@ import { fetchWithTimeout } from '../../utils/fetch';
           exactMatches.push({ sheetName, row, columns, score: 100 });
           return;
         }
+        if (matchedSheetNames.includes(sheetName)) {
+          categoryMatches.push({ sheetName, row, columns, score: 90 });
+          return;
+        }
         const score = scoreAgentRow(row, terms);
         if (score > 0) scoredRows.push({ sheetName, row, columns, score });
       });
     });
 
     scoredRows.sort((a, b) => b.score - a.score);
-    const strongMatches = exactOnly ? exactMatches : (exactMatches.length ? exactMatches : scoredRows.filter((item) => item.score >= 3));
-    const similarMatches = exactOnly ? [] : (exactMatches.length ? [] : scoredRows.filter((item) => item.score > 0 && item.score < 3));
+    const strongMatches = exactOnly
+      ? exactMatches
+      : exactMatches.length
+        ? exactMatches
+        : categoryMatches.length
+          ? categoryMatches
+          : scoredRows.filter((item) => item.score >= 3);
+    const similarMatches = exactOnly || exactMatches.length || categoryMatches.length
+      ? []
+      : scoredRows.filter((item) => item.score > 0 && item.score < 3);
     const fallbackRows = selectedRows.length
       ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
       : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
@@ -3607,6 +3681,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
         ? sliceAgentRowsByWindow(selectedRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow)
         : sliceAgentRowsByWindow(visible.filteredRows, fullCurrentTable ? rowWindow : (rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow));
     const metrics = getMetricSummaryForAgent(rowsForSummary);
+    const validationSummary = operation === 'validate' ? getRangeValidationSummaryForAgent(rowsForSummary) : null;
     const currentModelValues = fullCurrentTable ? getUniqueColumnValues(visible.filteredRows, ['型号']) : [];
     const sections = [
       '【物性分析检索结果】',
@@ -3614,9 +3689,18 @@ import { fetchWithTimeout } from '../../utils/fetch';
       identifierTerms.length ? `精确型号/批次关键词：${identifierTerms.join('、')}；精确命中 ${exactMatches.length} 行。` : '',
       getAgentRowWindowDescription(rowWindow),
       `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
+      `物性分类目录（${categoryCatalog.length} 个）：${categoryCatalog.map((item) => `${item.name} ${item.rowCount} 条`).join('；') || '无'}。`,
+      matchedSheetNames.length ? `用户指定分类：${matchedSheetNames.join('、')}；已从对应工作表读取 ${categoryMatches.length} 行，不受当前激活工作表影响。` : '',
       `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
       '展示策略：前端会先展示全部匹配数据表格，AI 只需要继续输出表格后的分析。',
+      `本次分析任务：${operation}。`,
+      `Agent 可用物性能力：${PROPERTY_AGENT_CAPABILITIES.join('；')}。`,
+      operation === 'compare' ? '对比要求：逐项比较共同指标，指出均值、范围、差异、波动和缺失字段；不要只复述数据。' : '',
+      operation === 'summarize' ? '统计要求：说明样本数量，并按指标给出均值、最小值、最大值和可见波动；禁止把缺失值当作 0。' : '',
+      validationSummary ? `检测范围判定汇总：通过 ${validationSummary.pass} 项，异常 ${validationSummary.fail} 项，待完善 ${validationSummary.missing} 项。` : '',
+      validationSummary?.details.length ? `异常或待完善明细：\n- ${validationSummary.details.slice(0, 30).join('\n- ')}` : '',
       fullCurrentTable ? `当前筛选表格中的唯一型号（${currentModelValues.length} 个）：${currentModelValues.join('、') || '无'}` : '',
+      operation === 'categories' ? '分类回答要求：直接列出分类名称、各分类记录数和总量；不要声称分类字段缺失，因为分类由工作表/页签表达。' : '',
     ].filter(Boolean);
     const displayTableSections = [];
 
@@ -3682,6 +3766,9 @@ import { fetchWithTimeout } from '../../utils/fetch';
       score: fullCurrentTable ? 12 : options.forceCurrentPage ? 9 : 7,
       stats: {
         exactMatches: exactMatches.length,
+        categoryMatches: categoryMatches.length,
+        matchedCategories: matchedSheetNames,
+        categoryCatalog,
         strongMatches: strongMatches.length,
         similarMatches: similarMatches.length,
         selectedRows: selectedRows.length,
@@ -3690,6 +3777,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
         rowWindowMode: rowWindow.mode,
         uploadedRows,
         fullCurrentTable,
+        operation,
+        validation: validationSummary || undefined,
         uniqueModels: currentModelValues.length,
         fullMatchedRowsUploaded: requestedRowLimit == null && strongMatches.length > 0,
         contextChars: content.length,
@@ -4059,9 +4148,6 @@ import { fetchWithTimeout } from '../../utils/fetch';
   const bind = () => {
     ensureReportToolbar();
     ensureMobileActionMenu();
-    if (refs.pageSizeSelect?.parentElement) {
-      refs.pageSizeSelect.parentElement.hidden = false;
-    }
 
     refs.sheetTabs?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-sheet-name]');
@@ -4145,13 +4231,6 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
     refs.sortSelect?.addEventListener('change', (event) => {
       state.sort = event.target.value === 'backward' ? 'backward' : 'forward';
-      state.page = 1;
-      render();
-    });
-
-    refs.pageSizeSelect?.addEventListener('change', (event) => {
-      const nextSize = Number.parseInt(event.target.value, 10);
-      state.pageSize = Number.isFinite(nextSize) && nextSize > 0 ? nextSize : PAGE_SIZE_DEFAULT;
       state.page = 1;
       render();
     });
@@ -4309,6 +4388,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
     getSelectedAiContext,
     getAiDataFile,
     getAgentContext,
+    getAgentCapabilities: () => [...PROPERTY_AGENT_CAPABILITIES],
   };
 })();
 

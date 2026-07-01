@@ -21,13 +21,22 @@
       entity: '',
       fields: [],
       skills: ['project.inspectPage'],
+      rowCount: undefined as number | undefined,
     }));
     const businessPages = App.businessPages?.getAgentManifestPages?.() || [];
     const byId = new Map(pages.map((page) => [page.pageId, page]));
     businessPages.forEach((page) => byId.set(page.pageId, { ...(byId.get(page.pageId) || {}), ...page }));
+    const resolvedPages = [...byId.values()];
     return {
       systemName: '广俊塑料科技后台管理系统',
-      pages: [...byId.values()],
+      pages: resolvedPages,
+      skills: (App.projectSkills?.getSkillRegistry?.() || []).map((skill) => skill.id).filter(Boolean),
+      dataSources: ['本地业务数据', 'OSS 云端同步', '物性分析表格', '图谱图片库'],
+      currentData: Object.fromEntries(
+        resolvedPages
+          .filter((page) => Number.isFinite(Number(page.rowCount)))
+          .map((page) => [page.pageId, Number(page.rowCount)])
+      ),
       relations: [
         { from: 'formula-management', to: 'inventory-management', desc: '配方组分和库存材料联动。' },
         { from: 'order-management', to: 'production-plan', desc: '订单驱动生产计划。' },

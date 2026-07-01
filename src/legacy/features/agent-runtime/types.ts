@@ -19,6 +19,13 @@ export type AgentPlan = {
   wantsImageGeneration: boolean;
   wantsImageAnalysis: boolean;
   localSkillPlan: AgentSkillPlan | null;
+  searchPlan?: {
+    queries: string[];
+    maxResults?: number;
+    searchDepth?: 'basic' | 'advanced';
+    topic?: 'general' | 'news';
+    reason?: string;
+  } | null;
   reason: string;
 };
 

@@ -136,6 +136,43 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     apiKeyIcon: document.querySelector('#searchApiKeyToggle .search-key-toggle-icon'),
   });
 
+  const getAssistantBehaviorRefs = () => ({
+    autoImageUpload: document.getElementById('autoImageUpload'),
+  });
+
+  const setSelectValue = (select, value, fallback = '') => {
+    if (!select) return;
+    const nextValue = String(value || fallback || '');
+    select.value = Array.from(select.options || []).some((option) => option.value === nextValue)
+      ? nextValue
+      : String(fallback || '');
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  const mountAssistantBehaviorControls = () => {
+    if (document.getElementById('autoImageUpload')) return;
+    const grid = refs.aiConfigForm?.querySelector('.config-module-assistant .form-grid');
+    if (!grid) return;
+    const field = document.createElement('div');
+    field.className = 'field full';
+    field.innerHTML = `
+      <label>
+        <span class="field-label-main">
+          <i class="field-label-icon ti ti-photo-up" aria-hidden="true"></i>
+          <span>图片上传策略</span>
+        </span>
+      </label>
+      <div class="switches">
+        <label class="switch">
+          <input id="autoImageUpload" name="autoImageUpload" type="checkbox" checked />
+          自动上传对话所需图片
+        </label>
+      </div>
+      <span class="field-label-note">开启后不再逐次请求授权；关闭后每次上传前仍需手动确认。</span>
+    `;
+    grid.appendChild(field);
+  };
+
   const getApimartRefs = () => ({
     apiKey: document.getElementById('apimartApiKey'),
     apiKeyToggle: document.getElementById('apimartApiKeyToggle'),
@@ -1171,6 +1208,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         constants.DEFAULT_CONFIG.maxTokens
       ),
       streamEnabled: Boolean(refs.streamEnabled?.checked),
+      autoImageUpload: Boolean(getAssistantBehaviorRefs().autoImageUpload?.checked),
       jsonMode: Boolean(refs.jsonMode?.checked),
       logEnabled: Boolean(refs.logEnabled?.checked),
       searchProvider: getSearchRefs().provider?.value || constants.DEFAULT_CONFIG.searchProvider,
@@ -1286,14 +1324,17 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     if (refs.temperature) refs.temperature.value = String(next.temperature ?? constants.DEFAULT_CONFIG.temperature);
     if (refs.maxTokens) refs.maxTokens.value = String(next.maxTokens ?? constants.DEFAULT_CONFIG.maxTokens);
     if (refs.streamEnabled) refs.streamEnabled.checked = Boolean(next.streamEnabled);
+    if (getAssistantBehaviorRefs().autoImageUpload) {
+      getAssistantBehaviorRefs().autoImageUpload.checked = next.autoImageUpload !== false;
+    }
     if (refs.jsonMode) refs.jsonMode.checked = Boolean(next.jsonMode);
     if (refs.logEnabled) refs.logEnabled.checked = Boolean(next.logEnabled);
     const searchRefs = getSearchRefs();
-    if (searchRefs.provider) searchRefs.provider.value = next.searchProvider || constants.DEFAULT_CONFIG.searchProvider;
+    setSelectValue(searchRefs.provider, next.searchProvider, constants.DEFAULT_CONFIG.searchProvider);
     if (searchRefs.apiKey) searchRefs.apiKey.value = next.searchApiKey || '';
-    if (searchRefs.depth) searchRefs.depth.value = next.searchDepth || constants.DEFAULT_CONFIG.searchDepth;
+    setSelectValue(searchRefs.depth, next.searchDepth, constants.DEFAULT_CONFIG.searchDepth);
     if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
-    if (searchRefs.topic) searchRefs.topic.value = next.searchTopic || constants.DEFAULT_CONFIG.searchTopic;
+    setSelectValue(searchRefs.topic, next.searchTopic, constants.DEFAULT_CONFIG.searchTopic);
     const apimartRefs = getApimartRefs();
     if (apimartRefs.apiKey) apimartRefs.apiKey.value = next.apimartApiKey || '';
     if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = next.apimartBaseUrl || constants.DEFAULT_APIMART_BASE_URL;
@@ -2685,7 +2726,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       fetchModels();
     });
 
-    [refs.streamEnabled, refs.jsonMode, refs.logEnabled]
+    [refs.streamEnabled, getAssistantBehaviorRefs().autoImageUpload, refs.jsonMode, refs.logEnabled]
       .filter(Boolean)
       .forEach((input) => input.addEventListener('change', syncPreview));
 
@@ -2703,9 +2744,10 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
       const hasApimartConfig = Boolean(config.apimartApiKey);
-      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig) {
-        setStatus('请先填写模型 API 密钥、APIMart API Key 或 OSS 配置', 'warn');
-        App.notify?.warn?.('请先填写模型 API 密钥、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
+      const hasSearchConfig = Boolean(config.searchApiKey || config.searchDepth !== constants.DEFAULT_CONFIG.searchDepth || config.searchTopic !== constants.DEFAULT_CONFIG.searchTopic || Number(config.searchMaxResults) !== Number(constants.DEFAULT_CONFIG.searchMaxResults));
+      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig && !hasSearchConfig) {
+        setStatus('请先填写模型 API 密钥、Tavily API Key、APIMart API Key 或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写模型 API 密钥、Tavily API Key、APIMart API Key 或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       try {
@@ -2876,6 +2918,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     mountSearchConfigSection();
     mountApimartConfigSection();
     mountAgentRoutingConfigSection();
+    mountAssistantBehaviorControls();
     mountDeepSeekProviderOption();
     mountSiliconFlowProviderOption();
     mountBalanceControl();

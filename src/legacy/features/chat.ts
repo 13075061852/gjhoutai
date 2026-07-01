@@ -6,6 +6,17 @@ import {
   parseAgentRouteClassification,
 } from './agent-runtime/router';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
+import {
+  buildFallbackSearchPlan,
+  buildSearchUnavailableAnswer,
+  createChatSearchRuntime,
+  normalizeSearchSources,
+  promptRequiresEntityLookupSearch,
+  promptRequiresWebSearch,
+} from './chat/chat-search';
+import { createStreamRenderScheduler } from './chat/chat-render';
+import { canRunLocalSkillDirectly, selectRecentHistory } from './chat/chat-agent';
+import { createChatSessionStore } from './chat/chat-core';
 
 (function () {
   'use strict';
@@ -20,7 +31,6 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   const PROJECT_AGENT_LOOP_TIMEOUT_MS = 90000;
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
-  let streamRenderTimer = 0;
   let activeChatAbortController = null;
   let activeChatRequestId = 0;
   let chatAbortRequested = false;
@@ -55,6 +65,11 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     hour12: false,
   }).format(new Date());
 
+  const { searchWebForPromptDynamic } = createChatSearchRuntime({
+    getCurrentDateTimeLabel,
+    createAbortError,
+  });
+
   const shouldAnswerCurrentDateLocally = (prompt) => {
     const text = String(prompt || '').trim();
     if (!text || text.length > 30) return false;
@@ -76,216 +91,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     '用户说“今天”“当前”“现在”等相对日期时，必须以上面的当前日期时间为准；不要把搜索结果中的旧日期或模型训练日期当作今天。',
   ].join('\n');
 
-  const normalizeSearchResults = (payload) => {
-    const results = Array.isArray(payload?.results) ? payload.results : [];
-    return results.map((item, index) => {
-      const title = String(item?.title || item?.url || `搜索结果 ${index + 1}`).trim();
-      const url = String(item?.url || '').trim();
-      const content = String(item?.content || item?.raw_content || '').trim();
-      const publishedDate = String(item?.published_date || item?.publishedDate || '').trim();
-      if (!title && !url && !content) return null;
-      return {
-        title,
-        url,
-        content: content.slice(0, 1200),
-        publishedDate,
-      };
-    }).filter(Boolean);
-  };
-
-  const normalizeSearchSources = (results) => normalizeSearchResults({ results })
-    .slice(0, 10)
-    .map((item, index) => ({
-      id: index + 1,
-      title: item.title,
-      url: item.url,
-      publishedDate: item.publishedDate,
-    }));
-
-  const formatSearchContext = (results) => {
-    const items = normalizeSearchResults({ results }).slice(0, 10);
-    if (!items.length) return '';
-    return [
-      '【联网搜索资料，用户不可见】',
-      `【当前日期时间】${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
-      '以下资料来自实时搜索结果。回答时必须优先使用这些资料；涉及事实、新闻、价格、政策、版本或时效信息时，请注明信息可能随时间变化。',
-      '凡是引用搜索结果中的事实、数据、发布时间、政策、价格、产品或机构信息，必须在对应句子末尾标注 [来源 N]，N 必须对应下面的来源编号。',
-      '答案末尾可以列出简短来源标题，但不要单独输出 URL，也不要把 URL 放在括号里追加到标题后面。',
-      '如果搜索结果没有覆盖今天，请明确说“未检索到今天的结果”，但仍必须把上面的当前日期当作今天；禁止把旧结果日期改写为今天。',
-      '禁止编造未出现在搜索资料中的事件、时间、机构、产品、价格或链接；资料不足时必须说明“搜索资料不足，无法确认”。',
-      ...items.map((item, index) => [
-        `【来源 ${index + 1}】${item.title}`,
-        item.url ? `URL：${item.url}` : '',
-        item.publishedDate ? `日期：${item.publishedDate}` : '',
-        item.content ? `摘要：${item.content}` : '',
-      ].filter(Boolean).join('\n')),
-    ].join('\n\n');
-  };
-
-  const promptRequiresWebSearch = (prompt) => {
-    const text = String(prompt || '').trim();
-    if (!text) return false;
-    return /(?:搜索|联网|网上|查一下|查找|最新|最近|今天|今日|昨日|昨天|明天|新闻|价格|报价|油价|汇率|天气|股价|行情|政策|法规|官网|资料|来源|链接|引用|现在|当前|版本|发布|趋势|市场)/i.test(text);
-  };
-
-  const buildSearchUnavailableAnswer = (reason) => [
-    '这个问题涉及最新或实时信息，必须先联网搜索才能可靠回答。',
-    '',
-    `当前无法完成搜索：${reason}`,
-    '',
-    '我不会在没有搜索资料的情况下编造答案。请开启“联网搜索”并在配置中心填写 Tavily API Key 后再试。',
-  ].join('\n');
-
-  const parseSearchDecision = (content) => {
-    const text = String(content || '').trim();
-    if (!text) return null;
-    const jsonText = text.match(/\{[\s\S]*\}/)?.[0] || text;
-    try {
-      const parsed = JSON.parse(jsonText);
-      if (typeof parsed?.needsSearch === 'boolean') {
-        return {
-          needsSearch: parsed.needsSearch,
-          reason: String(parsed.reason || '').trim(),
-        };
-      }
-    } catch {
-      // Fall through to a conservative text parse.
-    }
-    if (/needsSearch\s*[:：]\s*true|需要搜索|需要联网|yes|true/i.test(text)) {
-      return { needsSearch: true, reason: 'AI 判断需要联网搜索' };
-    }
-    if (/needsSearch\s*[:：]\s*false|不需要搜索|不需要联网|no|false/i.test(text)) {
-      return { needsSearch: false, reason: 'AI 判断不需要联网搜索' };
-    }
-    return null;
-  };
-
-  const promptRequiresEntityLookupSearch = (prompt) => {
-    const text = String(prompt || '').trim();
-    if (!text) return false;
-    return /(?:\bAI\b|\bLLM\b|\bmodel\b|模型|Claude|GPT|Gemini|Fable|Mythos|Opus|Sonnet|Haiku|OpenRouter|Anthropic|DeepSeek|Qwen|GLM)/i.test(text)
-      && /(?:知道|了解|是什么|有没有|发布|官网|最新|模型|查|搜索|\bmodel\b|\bAI\b|\bLLM\b)/i.test(text);
-  };
-
-  const SEARCH_PLAN_MAX_QUERIES = 3;
-  const SEARCH_PLAN_MIN_RESULTS = 3;
-  const SEARCH_PLAN_MAX_RESULTS = 20;
-
-  const clampSearchResultCount = (value, fallback = 8) => {
-    const parsed = Number.parseInt(value, 10);
-    const safeFallback = Number.isFinite(Number(fallback)) ? Number(fallback) : 8;
-    const next = Number.isFinite(parsed) ? parsed : safeFallback;
-    return Math.max(SEARCH_PLAN_MIN_RESULTS, Math.min(SEARCH_PLAN_MAX_RESULTS, next));
-  };
-
-  const normalizeSearchQueryText = (value) => String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 180);
-
-  const dedupeSearchQueries = (queries) => {
-    const seen = new Set();
-    return (Array.isArray(queries) ? queries : [])
-      .map(normalizeSearchQueryText)
-      .filter((query) => {
-        if (!query) return false;
-        const key = query.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, SEARCH_PLAN_MAX_QUERIES);
-  };
-
-  const buildFallbackSearchPlan = (prompt, config = {} as any) => {
-    const basePrompt = normalizeSearchQueryText(prompt);
-    const queries = [basePrompt];
-    const latinTerms = Array.from(new Set(String(prompt || '').match(/[A-Za-z][A-Za-z0-9._/-]{2,}/g) || []));
-    latinTerms.slice(0, 2).forEach((term) => {
-      queries.push(term);
-      const spaced = term.replace(/([A-Za-z])([0-9]+)/g, '$1 $2').replace(/([0-9]+)([A-Za-z])/g, '$1 $2');
-      if (spaced !== term) queries.push(spaced);
-    });
-    return {
-      queries: dedupeSearchQueries(queries),
-      maxResults: clampSearchResultCount(Math.max(Number(config.searchMaxResults || 0), 8)),
-      searchDepth: String(config.searchDepth || 'basic'),
-      topic: String(config.searchTopic || 'general'),
-      reason: 'fallback',
-    };
-  };
-
-  const parseSearchPlan = (content, prompt, config = {} as any) => {
-    const fallback = buildFallbackSearchPlan(prompt, config);
-    const text = String(content || '').trim();
-    if (!text) return fallback;
-    const jsonText = text.match(/\{[\s\S]*\}/)?.[0] || text;
-    try {
-      const parsed = JSON.parse(jsonText);
-      const configuredMinimum = Number(config.searchMaxResults || 0);
-      const queries = dedupeSearchQueries(parsed?.queries || parsed?.query || []);
-      return {
-        queries: queries.length ? queries : fallback.queries,
-        maxResults: clampSearchResultCount(Math.max(Number(parsed?.maxResults || parsed?.max_results || 0), configuredMinimum, 5), fallback.maxResults),
-        searchDepth: ['basic', 'advanced'].includes(String(parsed?.searchDepth || parsed?.search_depth || '').toLowerCase())
-          ? String(parsed?.searchDepth || parsed?.search_depth).toLowerCase()
-          : fallback.searchDepth,
-        topic: ['general', 'news'].includes(String(parsed?.topic || '').toLowerCase())
-          ? String(parsed.topic).toLowerCase()
-          : fallback.topic,
-        reason: String(parsed?.reason || '').trim() || fallback.reason,
-      };
-    } catch {
-      return fallback;
-    }
-  };
-
-  const createSearchPlanWithAi = async (config, model, prompt, options = {} as any) => {
-    const fallback = buildFallbackSearchPlan(prompt, config);
-    const messages = [
-      {
-        role: 'system',
-        content: [
-          'You are a web-search planning module. Return strict JSON only.',
-          'Create the most useful search keywords for the user question.',
-          'Prefer exact entity names, official product/model names, company names, release names, aliases, English variants, and the missing facts needed to answer.',
-          'Choose maxResults dynamically: 5 for simple lookups, 8-12 for ambiguous or new topics, 15-20 for broad comparisons or unclear names.',
-          'Return 1 to 3 queries. Do not explain outside JSON.',
-          '{"queries":["query 1","query 2"],"maxResults":8,"searchDepth":"basic","topic":"general","reason":"short reason"}',
-        ].join('\n'),
-      },
-      {
-        role: 'user',
-        content: [
-          `Current date/time: ${getCurrentDateTimeLabel()} Asia/Shanghai`,
-          `Configured minimum result count: ${config.searchMaxResults || 5}`,
-          `Question: ${prompt}`,
-        ].join('\n'),
-      },
-    ];
-    try {
-      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: App.config.getRequestHeaders(config),
-        signal: options.signal,
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0,
-          max_tokens: 220,
-          stream: false,
-        }),
-      }, AI_FETCH_TIMEOUT_MS);
-      if (!response.ok) return fallback;
-      const payload = await response.json();
-      const content = payload?.choices?.[0]?.message?.content || '';
-      return parseSearchPlan(content, prompt, config);
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      console.warn('[chat] Search planning failed, fallback to prompt query:', error);
-      return fallback;
-    }
-  };
+  let projectPageCatalogCache = '';
 
   const createRouteClassifier = (config, model, options = {} as any) => async ({ prompt, activePageId }) => {
     const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
@@ -296,196 +102,13 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         model,
         messages: buildAgentRouteClassifierMessages({ prompt, activePageId }),
         temperature: 0,
-        max_tokens: 220,
+        max_tokens: 320,
         stream: false,
       }),
     }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) return null;
     const payload = await response.json();
     return parseAgentRouteClassification(payload?.choices?.[0]?.message?.content || '');
-  };
-
-  const mergeSearchResults = (groups, limit) => {
-    const seen = new Set();
-    const merged = [];
-    const normalizeUrlKey = (value) => String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, '')
-      .replace(/^www\./, '')
-      .replace(/[?#].*$/, '')
-      .replace(/\/+$/, '');
-    const tokenize = (value) => new Set(String(value || '')
-      .toLowerCase()
-      .replace(/https?:\/\/\S+/g, ' ')
-      .replace(/[^\p{L}\p{N}\u4e00-\u9fa5]+/gu, ' ')
-      .split(/\s+/)
-      .map((word) => word.trim())
-      .filter((word) => word.length >= 2));
-    const jaccardSimilarity = (left, right) => {
-      if (!left.size || !right.size) return 0;
-      let intersection = 0;
-      left.forEach((word) => {
-        if (right.has(word)) intersection += 1;
-      });
-      return intersection / (left.size + right.size - intersection);
-    };
-    const seenFingerprints = [];
-    (Array.isArray(groups) ? groups : []).flat().forEach((item) => {
-      const url = normalizeUrlKey(item?.url);
-      const title = String(item?.title || '').trim().toLowerCase();
-      const key = url || title;
-      if (!key || seen.has(key)) return;
-      const fingerprint = tokenize(`${item?.title || ''} ${item?.content || ''}`);
-      if (seenFingerprints.some((existing) => jaccardSimilarity(existing, fingerprint) >= 0.82)) return;
-      seen.add(key);
-      if (fingerprint.size) seenFingerprints.push(fingerprint);
-      merged.push(item);
-    });
-    return merged.slice(0, clampSearchResultCount(limit));
-  };
-
-  const decideSearchWithAi = async (config, model, prompt, options = {} as any) => {
-    const messages = [
-      {
-        role: 'system',
-        content: [
-          '你是“联网搜索技能路由器”，只判断用户问题是否必须先调用联网搜索。',
-          '如果问题涉及今天/最新/当前/最近、新闻、价格、油价、汇率、天气、股价、政策、法规、版本、官网资料、来源引用、实时行情或可能变化的信息，needsSearch 必须为 true。',
-          '如果问题只需要常识、写作、翻译、代码、固定历史知识、本地项目数据或用户已提供的资料，needsSearch 为 false。',
-          '只输出严格 JSON，不要解释，不要 Markdown。',
-          '格式：{"needsSearch":true,"reason":"一句话原因"}',
-        ].join('\n'),
-      },
-      {
-        role: 'user',
-        content: [
-          `当前日期时间：${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）`,
-          `用户问题：${prompt}`,
-        ].join('\n'),
-      },
-    ];
-    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: App.config.getRequestHeaders(config),
-      signal: options.signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0,
-        max_tokens: 120,
-        stream: false,
-      }),
-    }, AI_FETCH_TIMEOUT_MS);
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`搜索决策失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 180)}` : ''}`);
-    }
-    const payload = await response.json();
-    const content = payload?.choices?.[0]?.message?.content || '';
-    return parseSearchDecision(content);
-  };
-
-  const searchWebForPrompt = async (config, prompt, options = {} as any) => {
-    const provider = String(config.searchProvider || 'tavily').toLowerCase();
-    if (provider !== 'tavily') return { results: [], context: '' };
-    const datedQuery = [
-      prompt,
-      `当前日期：${getCurrentDateTimeLabel()}（北京时间）。`,
-      '优先查找今天或最近发布的资料。',
-    ].join(' ');
-    const response = await fetchWithTimeout('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.searchApiKey}`,
-      },
-      signal: options.signal,
-      body: JSON.stringify({
-        query: datedQuery,
-        topic: config.searchTopic || 'general',
-        search_depth: config.searchDepth || 'basic',
-        max_results: Math.max(1, Math.min(10, Number(config.searchMaxResults || 5))),
-        include_answer: false,
-        include_raw_content: false,
-      }),
-    });
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`联网搜索失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 220)}` : ''}`);
-    }
-    const payload = await response.json();
-    const results = normalizeSearchResults(payload);
-    return {
-      results,
-      context: formatSearchContext(results),
-    };
-  };
-
-  const searchWebForPromptDynamic = async (config, prompt, options = {} as any) => {
-    const provider = String(config.searchProvider || 'tavily').toLowerCase();
-    if (provider !== 'tavily') return { results: [], context: '', plan: null };
-    const searchPlan = options.searchPlan || buildFallbackSearchPlan(prompt, config);
-    const fallbackPlan = buildFallbackSearchPlan(prompt, config);
-    const queries = dedupeSearchQueries(searchPlan.queries).length ? dedupeSearchQueries(searchPlan.queries) : fallbackPlan.queries;
-    const targetResults = clampSearchResultCount(searchPlan.maxResults, config.searchMaxResults || 8);
-    const perQueryResults = clampSearchResultCount(Math.ceil(targetResults / Math.max(1, queries.length)) + 2, targetResults);
-    const resultGroups = [];
-    const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
-
-    reportProgress?.({
-      completedQueries: 0,
-      totalQueries: queries.length,
-      resultCount: 0,
-      targetResults,
-    });
-
-    for (const [queryIndex, query] of queries.entries()) {
-      if (options.signal?.aborted) throw createAbortError();
-      const datedQuery = [
-        query,
-        query !== prompt ? `Original question: ${prompt}` : '',
-        `Current date: ${getCurrentDateTimeLabel()} Asia/Shanghai.`,
-        'Prefer official, recent, primary, or highly relevant sources.',
-      ].filter(Boolean).join(' ');
-    const response = await fetchWithTimeout('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.searchApiKey}`,
-        },
-        signal: options.signal,
-        body: JSON.stringify({
-          query: datedQuery,
-          topic: searchPlan.topic || config.searchTopic || 'general',
-          search_depth: searchPlan.searchDepth || config.searchDepth || 'basic',
-          max_results: perQueryResults,
-          include_answer: false,
-          include_raw_content: false,
-        }),
-      });
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`Web search failed: HTTP ${response.status}${errorText ? `: ${errorText.slice(0, 220)}` : ''}`);
-      }
-      const payload = await response.json();
-      resultGroups.push(normalizeSearchResults(payload));
-      const mergedCount = mergeSearchResults(resultGroups, targetResults).length;
-      reportProgress?.({
-        completedQueries: queryIndex + 1,
-        totalQueries: queries.length,
-        resultCount: mergedCount,
-        targetResults,
-      });
-      if (mergedCount >= targetResults) break;
-    }
-
-    const results = mergeSearchResults(resultGroups, targetResults);
-    return {
-      results,
-      context: formatSearchContext(results),
-      plan: searchPlan,
-    };
   };
 
   const makeSessionId = () => {
@@ -678,67 +301,41 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }, {});
   };
 
-  const saveChatState = () => {
-    const activeSession = getActiveSession();
-    const stripPersistedImages = (message) => {
-      const images = Array.isArray(message.images) ? message.images : [];
-      if (!images.length) return [];
-      return [{
+  const buildPersistedSession = (session) => ({
+    id: session.id,
+    title: session.title,
+    messages: session.messages.map((item) => ({
+      ...item,
+      images: Array.isArray(item.images) && item.images.length ? [{
         type: 'image_note',
         image_url: { url: '' },
-        label: `已附带 ${images.length} 张图片（仅本轮发送，不保存原图）`,
-      }];
-    };
-    const sessionsToSave = state.chatSessions.map((session) => ({
-      id: session.id,
-      title: session.title,
-      messages: session.messages.map((item) => ({
-        ...item,
-        images: stripPersistedImages(item),
-        tokenUsage: item.tokenUsage || null,
-        actions: normalizeSkillActions(item.actions),
-        searchSources: normalizeMessageSearchSources(item.searchSources),
-      })),
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    }));
+        label: `已附带 ${item.images.length} 张图片（仅本轮发送，不保存原图）`,
+      }] : [],
+      tokenUsage: item.tokenUsage || null,
+      actions: normalizeSkillActions(item.actions),
+      searchSources: normalizeMessageSearchSources(item.searchSources),
+    })),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  });
 
-    utils.writeJson(constants.CHAT_SESSIONS_KEY, sessionsToSave);
-    utils.writeJson(constants.CHAT_ACTIVE_SESSION_KEY, activeSession?.id || '');
-    utils.writeJson(constants.CHAT_STORAGE_KEY, sessionsToSave.find((session) => session.id === activeSession?.id)?.messages || []);
+  const chatSessionStore = createChatSessionStore({
+    constants,
+    utils,
+    normalizeSession,
+    serializeSession: buildPersistedSession,
+    makeSessionId,
+    deriveSessionTitle,
+    nowIso,
+    newConversationTitle: NEW_CONVERSATION_TITLE,
+  });
+
+  const saveChatState = () => {
+    const activeSession = getActiveSession();
+    chatSessionStore.save(state.chatSessions, activeSession?.id || '');
   };
 
-  const loadChatState = () => {
-    const storedSessions = utils.readJson(constants.CHAT_SESSIONS_KEY, null);
-    const storedActiveId = utils.readJson(constants.CHAT_ACTIVE_SESSION_KEY, '');
-
-    if (Array.isArray(storedSessions) && storedSessions.length) {
-      const sessions = storedSessions.map(normalizeSession);
-      const activeSession = sessions.find((session) => session.id === storedActiveId) || sessions[0];
-      return { sessions, activeId: activeSession?.id || sessions[0].id };
-    }
-
-    const legacyHistory = utils.readJson(constants.CHAT_STORAGE_KEY, []);
-    if (Array.isArray(legacyHistory) && legacyHistory.length) {
-      const session = normalizeSession({
-        id: makeSessionId(),
-        title: deriveSessionTitle(legacyHistory),
-        messages: legacyHistory,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      });
-      return { sessions: [session], activeId: session.id };
-    }
-
-    const session = normalizeSession({
-      id: makeSessionId(),
-      title: NEW_CONVERSATION_TITLE,
-      messages: [],
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    });
-    return { sessions: [session], activeId: session.id };
-  };
+  const loadChatState = () => chatSessionStore.load();
 
   const isVisibleScrollElement = (element) => {
     if (!element?.isConnected) return false;
@@ -1462,15 +1059,17 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   const getProjectContext = () => {
     const activePageId = getActivePageId();
     const activePageTitle = constants.PAGE_DEFS?.[activePageId]?.title || activePageId || '未知页面';
-    const pageCatalog = Object.entries(constants.PAGE_DEFS || {})
-      .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
-      .join('；');
+    if (!projectPageCatalogCache) {
+      projectPageCatalogCache = Object.entries(constants.PAGE_DEFS || {})
+        .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
+        .join('；');
+    }
     return [
       '【项目背景】',
       '你正在广俊塑料科技后台管理系统中工作。',
       '当用户说“这个项目”“这个网站”“本站”“这个系统”或“这个应用”时，均指广俊塑料科技后台管理系统本身，而不是外部互联网页面。',
       '当用户追问“详细说明一下”“展开说说”“继续”“具体点”等承接性问题时，必须沿用上一轮项目主题继续回答，不要重新要求用户提供背景。',
-      `项目当前已注册页面：${pageCatalog}`,
+      `项目当前已注册页面：${projectPageCatalogCache}`,
       `当前页面：${activePageTitle}`,
       '默认流程：先判断是否需要项目技能；需要数据或页面操作时输出技能调用 JSON，由前端获取数据或执行操作后再交给 AI 分析。',
       '回答时优先结合当前页面上下文、已选数据、筛选条件和业务字段；涉及材料数据时给出结论、风险和下一步建议。',
@@ -1710,6 +1309,11 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       resolve(true);
       return;
     }
+    const autoImageUpload = App.config?.getFormConfig?.().autoImageUpload !== false;
+    if (autoImageUpload) {
+      resolve(true);
+      return;
+    }
     const pendingIndex = Number.parseInt(options.pendingIndex, 10);
     if (!Number.isFinite(pendingIndex) || pendingIndex < 0) {
       resolve(true);
@@ -1789,7 +1393,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
           '你负责理解用户意图并决定是否调用项目技能。不要依赖前端本地规则替你判断；当用户要求修改、整理、删除、跳转、查询项目数据或执行页面操作时，优先输出项目技能调用 JSON。只有在不需要执行技能时，才直接自然语言回答。',
           '用户要求分析、查询、对比、总结当前项目数据、当前页数据或选中数据时，不要直接强答，必须先输出项目技能调用 JSON。',
           '用户在同一句里同时提到物性和图谱，或要求“结合/联合/综合”物性与图谱分析时，必须优先调用 analysis.buildJointPackage，不要只调用 property.searchRows 或 spectrum.manageImages。',
-          '用户明确询问物性、参数、批次、指标、熔指、拉伸、弯曲、冲击、阻燃或灰份时，调用 property.searchRows 获取物性数据后再分析。',
+          '用户明确询问物性数据时必须调用 property.*，禁止调用 business.queryPageData：查分类/工作表/明细用 property.searchRows，统计用 property.summarizeMetrics，对比用 property.compareRows，合格/超标/检测范围判定用 property.validateRanges。物性分类由工作表页签表达，不要因数据行没有“分类”字段而声称无法读取分类。',
           '用户明确提到图谱、谱图、图片、DSC/TGA 曲线或图谱库时，优先调用图谱相关技能 spectrum.manageImages，并用 action 参数区分查询、新增、更新、删除等动作；不要因为问题里有型号就改调用物性表。',
           '如果要调用技能，本次回复只能输出严格 JSON，不要附带解释、Markdown 或多余文本。技能执行结果会由前端回写给用户。',
           skillProtocolContext,
@@ -2087,7 +1691,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     if (result.candidates?.length) return false;
     return Boolean(result.data?.context)
       || skillId === 'analysis.buildJointPackage'
-      || skillId === 'property.searchRows';
+      || skillId.startsWith('property.');
   };
 
   const getSkillResultImages = (execution) => normalizeImages(execution?.result?.data?.images || []);
@@ -2905,11 +2509,18 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const runLocalSkillPlan = async (prompt, plan) => {
+  const runLocalSkillPlan = async (prompt, plan, options = {} as any) => {
+    const pendingIndex = Number.parseInt(options.pendingIndex, 10);
+    const hasPendingMessage = Number.isFinite(pendingIndex) && pendingIndex >= 0;
     setChatBusyState(true);
 
-    pushChatMessage('user', prompt);
-    if (refs.chatInput) refs.chatInput.value = '';
+    if (!hasPendingMessage) {
+      pushChatMessage('user', prompt);
+      if (refs.chatInput) refs.chatInput.value = '';
+      pushChatMessage('assistant', '正在读取项目数据...');
+    }
+    const targetIndex = hasPendingMessage ? pendingIndex : state.chatHistory.length - 1;
+    flushStreamRender(targetIndex, '正在读取项目数据...', { pending: true, pendingStatus: '正在读取项目数据' });
 
     try {
       const steps = Array.isArray(plan.steps) && plan.steps.length
@@ -2929,14 +2540,27 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       const content = executions.length > 1
         ? executions.map((item, index) => `步骤 ${index + 1}/${executions.length}\n${App.projectSkills.formatSkillMessage(item)}`).join('\n\n')
         : App.projectSkills.formatSkillMessage(execution);
-      pushChatMessage(
-        'assistant',
+      state.chatHistory[targetIndex] = {
+        role: 'assistant',
         content,
-        [],
-        App.projectSkills.getResultActions?.(execution) || []
-      );
+        images: [],
+        actions: normalizeSkillActions(App.projectSkills.getResultActions?.(execution) || []),
+      };
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
+      renderChat();
     } catch (error) {
-      pushChatMessage('assistant', `项目技能执行失败：${error?.message || '未知错误'}`);
+      state.chatHistory[targetIndex] = {
+        role: 'assistant',
+        content: `项目技能执行失败：${error?.message || '未知错误'}`,
+        images: [],
+        pending: false,
+      };
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
+      renderChat();
     } finally {
       setChatBusyState(false);
       if (refs.chatInput) {
@@ -2945,12 +2569,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
-  const shouldRunLocalPlanDirectly = (plan) => {
-    const skillId = String(plan?.skillId || '');
-    return Boolean(
-      skillId === 'assistant.openPage'
-      || skillId === 'media.generateImage'
-    );
+  const shouldRunLocalPlanDirectly = (plan, prompt = '') => {
+    return canRunLocalSkillDirectly(plan, prompt, App.projectSkills?.getSkillRegistry?.() || []);
   };
 
   const runChatSkillAction = async (messageIndex, actionIndex) => {
@@ -3092,22 +2712,21 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     searchSources: normalizeMessageSearchSources(options.searchSources),
   });
 
+  const streamRenderScheduler = createStreamRenderScheduler(({ pendingIndex, content, options }) => {
+    state.chatHistory[pendingIndex] = buildAssistantRenderMessage(content, options);
+    const session = getActiveSession();
+    if (session) session.updatedAt = nowIso();
+    renderChatMessages({ autoScroll: true });
+  });
+
+  const cancelScheduledStreamRender = () => streamRenderScheduler.cancel();
+
   const scheduleStreamRender = (pendingIndex, content, options = {} as any) => {
-    if (streamRenderTimer) return;
-    streamRenderTimer = window.setTimeout(() => {
-      streamRenderTimer = 0;
-      state.chatHistory[pendingIndex] = buildAssistantRenderMessage(content, options);
-      const session = getActiveSession();
-      if (session) session.updatedAt = nowIso();
-      renderChatMessages({ autoScroll: true });
-    }, 120);
+    streamRenderScheduler.schedule({ pendingIndex, content, options });
   };
 
   const flushStreamRender = (pendingIndex, content, options = {} as any) => {
-    if (streamRenderTimer) {
-      window.clearTimeout(streamRenderTimer);
-      streamRenderTimer = 0;
-    }
+    cancelScheduledStreamRender();
     state.chatHistory[pendingIndex] = buildAssistantRenderMessage(content, options);
     const session = getActiveSession();
     if (session) session.updatedAt = nowIso();
@@ -3229,10 +2848,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   };
 
   const cancelActiveChatRequest = () => {
-    if (streamRenderTimer) {
-      window.clearTimeout(streamRenderTimer);
-      streamRenderTimer = 0;
-    }
+    cancelScheduledStreamRender();
     if (activeChatAbortController && !activeChatAbortController.signal?.aborted) {
       activeChatAbortController.abort();
     }
@@ -3309,38 +2925,70 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     }
 
     let localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
-    if (shouldRunLocalPlanDirectly(localPlan)) {
-      chatSubmissionLocked = false;
-      await runLocalSkillPlan(prompt, localPlan);
+    const {
+      signal: chatAbortSignal,
+      requestId: chatRequestId,
+    } = beginChatRequest();
+    setChatBusyState(true);
+    chatSubmissionLocked = false;
+
+    pushChatMessage('user', prompt);
+    if (refs.chatInput) refs.chatInput.value = '';
+    pushChatMessage('assistant', '正在思考...');
+    const pendingIndex = state.chatHistory.length - 1;
+    flushStreamRender(pendingIndex, '正在理解问题...', { pending: true, pendingStatus: '正在理解问题' });
+
+    if (shouldRunLocalPlanDirectly(localPlan, prompt)) {
+      pendingDraftImages = [];
+      await runLocalSkillPlan(prompt, localPlan, { pendingIndex });
       return;
     }
 
     const config = App.config.getFormConfig();
     if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
-      pushChatMessage('assistant', '请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。');
-      chatSubmissionLocked = false;
+      state.chatHistory[pendingIndex] = {
+        role: 'assistant',
+        content: '请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。',
+        images: [],
+        pending: false,
+      };
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
+      renderChat();
+      setChatBusyState(false);
       return;
     }
 
     const model = App.config.getResolvedModel();
     if (!model) {
-      pushChatMessage('assistant', '请先选择一个模型。');
-      chatSubmissionLocked = false;
+      state.chatHistory[pendingIndex] = {
+        role: 'assistant',
+        content: '请先选择一个模型。',
+        images: [],
+        pending: false,
+      };
+      const session = getActiveSession();
+      if (session) session.updatedAt = nowIso();
+      saveChatState();
+      renderChat();
+      setChatBusyState(false);
       return;
     }
 
+    flushStreamRender(pendingIndex, '正在规划分析方式...', { pending: true, pendingStatus: '正在规划分析方式' });
     agentPlan = await createAgentPlanWithAi({
       prompt,
       activePageId,
       projectAccessEnabled,
       webSearchEnabled,
-      classifier: createRouteClassifier(config, model),
+      classifier: createRouteClassifier(config, model, { signal: chatAbortSignal }),
     });
     projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
     localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
-    if (shouldRunLocalPlanDirectly(localPlan)) {
-      chatSubmissionLocked = false;
-      await runLocalSkillPlan(prompt, localPlan);
+    if (shouldRunLocalPlanDirectly(localPlan, prompt)) {
+      pendingDraftImages = [];
+      await runLocalSkillPlan(prompt, localPlan, { pendingIndex });
       return;
     }
 
@@ -3361,19 +3009,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       : [];
     let attachedImages = [];
     let wantsImages = false;
-
-    const {
-      signal: chatAbortSignal,
-      requestId: chatRequestId,
-    } = beginChatRequest();
-    setChatBusyState(true);
-    chatSubmissionLocked = false;
-
-    pushChatMessage('user', prompt);
     pendingDraftImages = [];
-    if (refs.chatInput) refs.chatInput.value = '';
-    pushChatMessage('assistant', '正在思考...');
-    const pendingIndex = state.chatHistory.length - 1;
     flushStreamRender(pendingIndex, '正在思考...', { pending: true, pendingStatus: '正在思考' });
     const isLmStudioProvider = config.aiProvider === 'lmstudio';
     const streamEnabled = isLmStudioProvider || Boolean(config.streamEnabled);
@@ -3404,20 +3040,10 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       attachedDataFile = projectContextEnabled ? getAttachedDataFile(prompt) : null;
       attachedDataContext = projectContextEnabled ? getAttachedDataContext(prompt) : '';
       if (webSearchEnabled) {
-        flushStreamRender(pendingIndex, '正在判断是否需要联网搜索...', { pending: true, pendingStatus: '正在判断搜索需求' });
-        if (agentPlan.useProjectContext && !agentPlan.needsWebSearch) {
-          searchDecision = { needsSearch: false, reason: agentPlan.reason || '项目本地数据优先' };
-        } else {
-          try {
-            searchDecision = await decideSearchWithAi(config, model, prompt, {
-              signal: chatAbortSignal,
-            });
-          } catch (error) {
-            if (isAbortError(error)) throw error;
-            searchDecision = null;
-            console.warn('[chat] Search decision failed, fallback to local rules:', error);
-          }
-        }
+        searchDecision = {
+          needsSearch: Boolean(agentPlan.needsWebSearch),
+          reason: agentPlan.reason || (agentPlan.useProjectContext ? '项目本地数据优先' : '统一意图规划结果'),
+        };
         const localSearchRequired = agentPlan.needsWebSearch || (!agentPlan.useProjectContext && (promptRequiresWebSearch(prompt) || promptRequiresEntityLookupSearch(prompt)));
         needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
       } else {
@@ -3437,9 +3063,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         flushStreamRender(pendingIndex, streamedContent);
       } else if (needsWebSearch) {
         flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
-        webSearchPlan = await createSearchPlanWithAi(config, model, prompt, {
-          signal: chatAbortSignal,
-        });
+        webSearchPlan = agentPlan.searchPlan || buildFallbackSearchPlan(prompt, config);
         const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {} as any) => {
           const targetLabel = targetResults ? ` / 目标 ${targetResults} 条` : '';
           const status = `正在联网搜索 · 已获取 ${resultCount} 条${targetLabel}`;
@@ -3547,10 +3171,9 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         apiMessages = compositeResult.messages || apiMessages;
         usedStream = usedStream || Boolean(compositeResult.usedStream);
       } else {
-      const requestMessages = state.chatHistory
+      const requestMessages = selectRecentHistory(state.chatHistory
         .slice(0, pendingIndex)
-        .filter((item) => item.role === 'user' || item.role === 'assistant')
-        .slice(-12)
+        .filter((item) => item.role === 'user' || item.role === 'assistant'))
         .map((item, index, items) => {
           const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
           return toApiMessage(item, {
@@ -3795,10 +3418,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
       });
     } catch (error) {
       if (!isCurrentChatRequest()) return;
-      if (streamRenderTimer) {
-        window.clearTimeout(streamRenderTimer);
-        streamRenderTimer = 0;
-      }
+      cancelScheduledStreamRender();
       const wasStopped = chatAbortRequested || isAbortError(error);
       const currentMessage = state.chatHistory[pendingIndex] || {};
       const currentContent = stripPendingStatus(String(currentMessage.content || '').trim(), currentMessage.pendingStatus);
@@ -3991,6 +3611,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     state.chatSessionId = loaded.activeId;
     const activeSession = getActiveSession();
     state.chatHistory = activeSession?.messages || [];
+    if (loaded.needsMigration) saveChatState();
     bindChat();
     renderChat();
     renderDataAttachmentState();
@@ -4000,13 +3621,11 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
   };
 
   const cleanup = () => {
+    chatSessionStore.flush();
     chatEventController?.abort();
     chatEventController = null;
     chatEventsBound = false;
-    if (streamRenderTimer) {
-      window.clearTimeout(streamRenderTimer);
-      streamRenderTimer = 0;
-    }
+    cancelScheduledStreamRender();
     activeChatAbortController?.abort();
     activeChatAbortController = null;
     closeConversationMenu();

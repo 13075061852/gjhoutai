@@ -12,6 +12,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
   const { constants, utils } = App;
   const PAGE_SIZE_DEFAULT = 20;
+  const ALL_PROPERTY_SHEETS_KEY = '__all_property_sheets__';
+  const ALL_PROPERTY_SHEETS_LABEL = '全部分类';
   const REPORT_RANGE_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportRanges;
   const REPORT_COMPANY_NAME = '宁波广俊塑料科技有限公司';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
@@ -2329,12 +2331,21 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
   const getActiveSheet = (data) => {
     const names = getSheetNames(data);
+    if (state.activeSheet === ALL_PROPERTY_SHEETS_KEY && names.length) return ALL_PROPERTY_SHEETS_KEY;
     if (state.activeSheet && names.includes(state.activeSheet)) return state.activeSheet;
     if (names.includes(data?.project?.activeSheetName)) return data.project.activeSheetName;
-    return names[0] || '';
+    return names.length ? ALL_PROPERTY_SHEETS_KEY : '';
   };
 
+  const getSheetLabel = (sheetName) => (
+    sheetName === ALL_PROPERTY_SHEETS_KEY ? ALL_PROPERTY_SHEETS_LABEL : sheetName
+  );
+
   const getRowsForSheet = (sheetName) => {
+    if (sheetName === ALL_PROPERTY_SHEETS_KEY) {
+      return getSheetNames(state.data).flatMap((name) => getRowsForSheet(name));
+    }
+
     const rows = normalizeRows(state.data?.sheets?.raw?.[sheetName]);
     return rows.map((row, index) => ({
       ...row,
@@ -3336,7 +3347,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       '【已后台接入：物性分析完整表格数据】',
       '以下数据来自物性分析页面加载的整张表，包含全部工作表/分类和全部行。请优先基于这些数据回答用户问题，不要要求用户重新粘贴表格。',
       '重要规则：如果用户问题里出现型号或批次，必须先在下方表格字段中匹配。没有完全匹配时，要明确说明“未找到完全匹配”，再列出相近匹配；不要按外部常识解释为服务器、网络设备或其他无关产品。',
-      `当前页面状态：工作表=${getActiveSheet(state.data) || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
+      `当前页面状态：工作表=${getSheetLabel(getActiveSheet(state.data)) || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
       questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
       matchedLines.length ? `问题相关匹配行（优先参考）：\n${matchedLines.join('\n')}` : '问题相关匹配行：未匹配到完全或相近行，请基于完整表格继续查找并说明。',
       activeRows.length ? `当前工作表前 ${Math.min(30, activeRows.length)} 行预览：\n${formatRowsForAi(activeRows, activeColumns, 30).join('\n')}` : '',
@@ -3599,7 +3610,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       const content = [
         '【物性分析已选数据】',
         '以下数据来自物性分析页面当前高亮/选中的表格行。用户询问“选中、已选、选择的、这些数据”时，必须优先基于这些行回答，不要要求用户重新提供数据，也不要改用全表检索结果。',
-        `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
+        `当前工作表：${getSheetLabel(activeSheet) || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
         terms.length ? `用户问题关键词：${terms.join('、')}` : '',
         getAgentRowWindowDescription(rowWindow),
         '【用于分析的已选数据表】',
@@ -3688,7 +3699,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       `命中原因：${fullCurrentTable ? '用户要求汇总当前物性表格，使用当前筛选后的全量表格数据' : terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
       identifierTerms.length ? `精确型号/批次关键词：${identifierTerms.join('、')}；精确命中 ${exactMatches.length} 行。` : '',
       getAgentRowWindowDescription(rowWindow),
-      `当前工作表：${activeSheet || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
+      `当前工作表：${getSheetLabel(activeSheet) || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
       `物性分类目录（${categoryCatalog.length} 个）：${categoryCatalog.map((item) => `${item.name} ${item.rowCount} 条`).join('；') || '无'}。`,
       matchedSheetNames.length ? `用户指定分类：${matchedSheetNames.join('、')}；已从对应工作表读取 ${categoryMatches.length} 行，不受当前激活工作表影响。` : '',
       `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
@@ -3872,7 +3883,8 @@ import { fetchWithTimeout } from '../../utils/fetch';
   const renderTabs = () => {
     if (!refs.sheetTabs || !state.data) return;
 
-    const names = getSheetNames(state.data);
+    const sheetNames = getSheetNames(state.data);
+    const names = sheetNames.length ? [ALL_PROPERTY_SHEETS_KEY, ...sheetNames] : [];
     const activeSheet = getActiveSheet(state.data);
     const selectedCounts = new Map(names.map((name) => [
       name,
@@ -3886,7 +3898,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
           type="button"
           class="analysis-sheet-tab${name === activeSheet ? ' is-active' : ''}"
           data-sheet-name="${escapeHtml(name)}">
-          <span>${escapeHtml(name.trim() || '未命名')}</span>
+          <span>${escapeHtml(getSheetLabel(name).trim() || '未命名')}</span>
           ${selectedCount ? `<span class="analysis-sheet-tab-count">${selectedCount}</span>` : ''}
         </button>
       `;
@@ -4145,9 +4157,20 @@ import { fetchWithTimeout } from '../../utils/fetch';
     }
   };
 
+  const disableNativeSearchAutocomplete = () => {
+    if (!refs.searchInput) return;
+
+    refs.searchInput.setAttribute('autocomplete', 'off');
+    refs.searchInput.setAttribute('autocorrect', 'off');
+    refs.searchInput.setAttribute('autocapitalize', 'off');
+    refs.searchInput.setAttribute('spellcheck', 'false');
+    refs.searchInput.setAttribute('name', 'gjh-property-analysis-search');
+  };
+
   const bind = () => {
     ensureReportToolbar();
     ensureMobileActionMenu();
+    disableNativeSearchAutocomplete();
 
     refs.sheetTabs?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-sheet-name]');

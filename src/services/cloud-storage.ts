@@ -237,6 +237,54 @@ export const cloudStorage = {
     }
   },
 
+  async replaceInspectionReport(id: string, payload: {
+    file: File;
+    title?: string;
+    category?: string;
+    notes?: string;
+  }): Promise<boolean> {
+    let replacementId = '';
+    try {
+      const form = new FormData();
+      form.append('file', payload.file);
+      form.append('title', payload.title || '');
+      form.append('category', payload.category || '');
+      form.append('notes', payload.notes || '');
+      const createResponse = await fetchWithTimeout(buildUrl('/api/inspection-reports'), {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      }, UPLOAD_FETCH_TIMEOUT_MS);
+      const created = await parseJson<{ id: string }>(createResponse);
+      if (!created?.id) return false;
+      replacementId = created.id;
+
+      const deleteResponse = await fetchWithTimeout(buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (deleteResponse.ok) return true;
+
+      await fetchWithTimeout(buildUrl(`/api/inspection-reports/${encodeURIComponent(created.id)}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      return false;
+    } catch {
+      if (replacementId) {
+        try {
+          await fetchWithTimeout(buildUrl(`/api/inspection-reports/${encodeURIComponent(replacementId)}`), {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        } catch {
+          // The refresh path will expose any replacement file that could not be rolled back.
+        }
+      }
+      return false;
+    }
+  },
+
   getInspectionReportFileUrl(id: string): string {
     return buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}/file`);
   },

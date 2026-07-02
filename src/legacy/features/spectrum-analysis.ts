@@ -1321,9 +1321,9 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     state.galleryCountTotal = total;
     state.galleryCountSelected = selected;
     if (!refs.galleryCount) return;
-    refs.galleryCount.textContent = isSpectrumMobileLayout()
-      ? `${total}/${selected}`
-      : `共 ${total} 张，已选 ${selected} 张`;
+    const compact = isSpectrumMobileLayout();
+    refs.galleryCount.hidden = compact;
+    refs.galleryCount.textContent = compact ? '' : `共 ${total} 张，已选 ${selected} 张`;
   };
 
   const syncGalleryCountText = () => {
@@ -3514,6 +3514,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const filtered = getFilteredItems();
     setGalleryCountText(filtered.length, state.selectedIds.size);
 
+    renderFilters();
     renderDetail();
     renderSelectedList();
     updateActions();
@@ -4417,6 +4418,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
         }
         const filtered = getFilteredItems();
         setGalleryCountText(filtered.length, state.selectedIds.size);
+        renderFilters();
         renderSelectedList();
         renderDetail();
         updateActions();

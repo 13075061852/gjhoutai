@@ -6272,7 +6272,12 @@
       flex:initial;
     }
     .biz-office-tabs{
-      display:inline-flex;
+      position:relative;
+      isolation:isolate;
+      width:330px;
+      max-width:100%;
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
       align-items:center;
       gap:4px;
       padding:3px;
@@ -6280,7 +6285,29 @@
       border-radius:8px;
       background:var(--surface-2);
     }
+    .biz-office-tabs::before{
+      content:'';
+      position:absolute;
+      inset:3px auto 3px 3px;
+      z-index:0;
+      width:calc((100% - 14px) / 3);
+      border-radius:6px;
+      background:var(--surface);
+      box-shadow:0 1px 4px rgba(15,23,42,.08);
+      transform:translateX(0);
+      transition:transform .22s cubic-bezier(.22,.8,.3,1);
+      pointer-events:none;
+    }
+    .biz-office-tabs[data-office-active-type="coloring"]::before{
+      transform:translateX(calc(100% + 4px));
+    }
+    .biz-office-tabs[data-office-active-type="ash"]::before{
+      transform:translateX(calc(200% + 8px));
+    }
     .biz-office-tabs button{
+      position:relative;
+      z-index:1;
+      min-width:0;
       min-height:28px;
       padding:0 10px;
       border:none;
@@ -6293,9 +6320,9 @@
       cursor:pointer;
     }
     .biz-office-tabs button.is-active{
-      background:var(--surface);
+      background:transparent;
       color:var(--accent);
-      box-shadow:0 1px 4px rgba(15,23,42,.08);
+      box-shadow:none;
     }
     .biz-office-search{
       width:100%;
@@ -6419,16 +6446,19 @@
       line-height:20px;
       font-weight:850;
     }
-    .biz-office-record-target{
-      margin:0;
-      padding:7px 9px;
-      border-left:3px solid var(--accent);
-      border-radius:6px;
+    .biz-office-record-meta .biz-office-approval-badge{
+      padding:0 7px;
+      border:1px solid var(--border);
+      border-radius:999px;
       background:var(--surface-2);
-      color:var(--text-2);
-      font-size:13px;
-      line-height:1.5;
-      font-weight:800;
+      color:var(--text-3);
+      font-size:11px;
+      font-weight:900;
+    }
+    .biz-office-record-meta .biz-office-approval-badge.is-approved{
+      border-color:#86efac;
+      background:#f0fdf4;
+      color:#15803d;
     }
     .biz-office-record-actions{
       flex:0 0 auto;
@@ -6457,70 +6487,6 @@
       color:var(--danger);
       background:#fef2f2;
     }
-    .biz-ash-table-actions{
-      grid-template-columns:max-content minmax(220px, 340px) max-content;
-    }
-    .biz-ash-table-wrap{
-      width:fit-content;
-      max-width:100%;
-      overflow:auto;
-      border:1px solid var(--border);
-      border-radius:8px;
-      background:var(--surface);
-    }
-    .biz-ash-measure-table{
-      width:max-content;
-      border-collapse:collapse;
-      color:var(--text);
-      font-size:13px;
-      font-weight:850;
-      text-align:center;
-    }
-    .biz-ash-measure-table th,
-    .biz-ash-measure-table td{
-      min-width:104px;
-      height:34px;
-      padding:7px 10px;
-      border-right:1px solid var(--border);
-      border-bottom:1px solid var(--border);
-      background:var(--surface);
-      white-space:nowrap;
-    }
-    .biz-ash-measure-table th{
-      background:var(--surface-2);
-      font-weight:950;
-    }
-    .biz-ash-measure-table th:first-child,
-    .biz-ash-measure-table td:nth-child(3){
-      min-width:64px;
-    }
-    .biz-ash-measure-table td:nth-child(2){
-      min-width:126px;
-    }
-    .biz-ash-measure-table tr:last-child th,
-    .biz-ash-measure-table tr:last-child td{
-      border-bottom:none;
-    }
-    .biz-ash-measure-table th:last-child,
-    .biz-ash-measure-table td:last-child{
-      border-right:none;
-    }
-    .biz-ash-detail-scroll table{
-      width:max-content;
-      min-width:0;
-    }
-    .biz-ash-detail-scroll th,
-    .biz-ash-detail-scroll td{
-      width:128px;
-      min-width:128px;
-      text-align:center;
-    }
-    .biz-ash-detail-scroll th:first-child,
-    .biz-ash-detail-scroll td:first-child{
-      width:72px;
-      min-width:72px;
-      max-width:72px;
-    }
     .biz-office-empty-list{
       min-height:240px;
       display:grid;
@@ -6547,47 +6513,67 @@
       font-weight:800;
     }
     .biz-office-table-summary{
-      width:max-content;
+      width:100%;
       max-width:100%;
       min-width:0;
-      display:grid;
-      gap:0;
-      overflow:auto;
+      overflow-x:auto;
+      overflow-y:hidden;
+      overscroll-behavior-inline:contain;
+      touch-action:pan-x pan-y;
+      -webkit-overflow-scrolling:touch;
+    }
+    .biz-office-table-summary table{
+      width:max-content;
+      max-width:none;
       border:1px solid var(--border);
+      border-collapse:separate;
+      border-spacing:0;
       border-radius:8px;
+      table-layout:auto;
       background:var(--surface);
     }
-    .biz-office-table-summary-head,
-    .biz-office-table-summary-row{
-      display:grid;
-      gap:0;
-      background:var(--surface);
-    }
-    .biz-office-table-summary-row{
-      border-top:1px solid var(--border);
-    }
-    .biz-office-table-summary span{
-      min-width:0;
-      min-height:32px;
-      display:grid;
-      place-items:center;
+    .biz-office-table-summary th,
+    .biz-office-table-summary td{
+      min-width:48px;
+      height:32px;
       padding:7px 8px;
       border-right:1px solid var(--border);
-      overflow:hidden;
-      text-overflow:ellipsis;
+      border-bottom:1px solid var(--border);
       white-space:nowrap;
       font-size:12px;
       font-weight:800;
       color:var(--text-2);
       text-align:center;
     }
-    .biz-office-table-summary span:last-child{
+    .biz-office-table-summary th:last-child,
+    .biz-office-table-summary td:last-child{
       border-right:none;
     }
-    .biz-office-table-summary-head span{
+    .biz-office-table-summary tbody tr:last-child td{
+      border-bottom:none;
+    }
+    .biz-office-table-summary th{
       background:var(--surface-2);
       color:var(--text);
       font-weight:950;
+    }
+    .biz-office-row-approval{
+      min-width:68px;
+      min-height:24px;
+      padding:0 8px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      background:var(--surface-2);
+      color:var(--text-3);
+      font:inherit;
+      font-size:11px;
+      font-weight:900;
+      cursor:pointer;
+    }
+    .biz-office-row-approval.is-approved{
+      border-color:#86efac;
+      background:#f0fdf4;
+      color:#15803d;
     }
     .biz-office-table-summary em{
       display:block;
@@ -6621,12 +6607,12 @@
       min-height:0;
       display:grid;
       grid-template-columns:repeat(2, minmax(0, 1fr));
+      grid-template-rows:auto auto minmax(140px, 1fr) auto;
       align-content:start;
       gap:12px;
       padding:20px;
-      overflow-y:auto;
+      overflow:hidden;
       overscroll-behavior:contain;
-      scrollbar-width:thin;
     }
     .biz-office-editor label{
       display:flex;
@@ -6659,9 +6645,12 @@
     }
     .biz-office-detail-table{
       grid-column:1 / -1;
-      display:grid;
+      display:flex;
+      flex-direction:column;
       gap:10px;
       min-width:0;
+      min-height:0;
+      overflow:hidden;
     }
     .biz-office-detail-head{
       display:flex;
@@ -6713,6 +6702,28 @@
       width:30px;
       padding:0;
     }
+    .biz-office-row-action-cell{
+      white-space:nowrap;
+    }
+    .biz-office-row-approval-field{
+      display:inline-flex !important;
+      flex-direction:row !important;
+      align-items:center;
+      gap:4px !important;
+      margin:0;
+      color:var(--text-2) !important;
+      font-size:11px !important;
+      font-weight:900 !important;
+      cursor:pointer;
+    }
+    .biz-office-row-approval-field input{
+      width:15px !important;
+      height:15px !important;
+      min-width:15px;
+      padding:0 !important;
+      accent-color:var(--accent);
+      cursor:pointer;
+    }
     .biz-office-detail-actions button:hover,
     .biz-office-column-field button:hover:not(:disabled),
     .biz-office-row-action-cell button:hover:not(:disabled){
@@ -6726,10 +6737,15 @@
       cursor:not-allowed;
     }
     .biz-office-detail-scroll{
-      width:max-content;
+      flex:1 1 auto;
+      width:100%;
       max-width:100%;
-      max-height:min(460px, calc(100vh - 300px));
+      min-height:0;
+      max-height:none;
       overflow:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:thin;
       border:1px solid var(--border);
       border-radius:8px;
       background:var(--surface);
@@ -6778,6 +6794,14 @@
       width:54px;
       min-width:54px !important;
       max-width:54px;
+      text-align:center;
+    }
+    .biz-office-row-approval-head,
+    .biz-office-row-approval-cell{
+      width:78px;
+      min-width:78px !important;
+      max-width:78px;
+      white-space:nowrap;
       text-align:center;
     }
     .biz-office-column-field{
@@ -6846,8 +6870,7 @@
     }
     .biz-office-modal-actions{
       grid-column:1 / -1;
-      position:sticky;
-      bottom:-20px;
+      position:static;
       z-index:2;
       display:flex;
       justify-content:flex-end;
@@ -6907,6 +6930,7 @@
       }
       .biz-office-editor{
         grid-template-columns:1fr;
+        grid-template-rows:auto auto auto minmax(120px, 1fr) auto;
       }
       .biz-office-dialog{
         width:calc(100vw - 16px);
@@ -6930,21 +6954,36 @@
       .biz-office-record-actions{
         justify-content:flex-end;
       }
-      .biz-ash-table-actions{
-        grid-template-columns:minmax(0, 1fr) max-content;
-      }
-      .biz-ash-table-wrap{
-        width:100%;
-      }
-      .biz-ash-measure-table th,
-      .biz-ash-measure-table td{
-        min-width:92px;
-        padding:7px 8px;
-        font-size:12px;
-      }
       .biz-office-table-summary{
         width:100%;
         max-width:100%;
         overflow-x:auto;
       }
+    }
+    @media(max-width:640px){
+      .biz-office-dialog .biz-inventory-dialog-head{padding:12px 14px}
+      .biz-office-dialog .biz-inventory-dialog-head h2{font-size:16px}
+      .biz-office-dialog .biz-inventory-dialog-head span{font-size:11px}
+      .biz-office-editor{gap:8px;padding:12px 14px}
+      .biz-office-editor label{gap:3px;font-size:11px}
+      .biz-office-editor input,
+      .biz-office-editor select,
+      .biz-office-editor textarea{padding:7px 9px;font-size:12px}
+      .biz-office-detail-table{gap:6px}
+      .biz-office-detail-head strong{font-size:12px}
+      .biz-office-detail-actions{gap:6px}
+      .biz-office-detail-actions button{min-height:28px;padding:0 8px;font-size:11px}
+      .biz-office-detail-scroll th,
+      .biz-office-detail-scroll td{width:108px;min-width:108px;padding:4px}
+      .biz-office-detail-scroll th{font-size:11px;line-height:1.2;font-weight:900}
+      .biz-office-detail-scroll td:first-child,
+      .biz-office-detail-scroll th:first-child{width:54px;min-width:54px;max-width:54px}
+      .biz-office-column-field input,
+      .biz-office-detail-scroll td input{height:28px;padding:0 5px;font-size:11px}
+      .biz-office-row-approval-head,
+      .biz-office-row-approval-cell{width:68px;min-width:68px !important;max-width:68px;font-size:11px}
+      .biz-office-row-action-head,
+      .biz-office-row-action-cell{width:44px;min-width:44px !important;max-width:44px;font-size:11px}
+      .biz-office-row-approval-field{font-size:10px !important}
+      .biz-office-modal-actions{gap:8px;margin:4px -14px -12px;padding:10px 14px}
     }

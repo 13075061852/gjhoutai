@@ -201,15 +201,31 @@ import { createBusinessPageShared } from './shared';
     const type = officeRecordTypes[record.type] ? record.type : 'sampling';
     const fallbackDate = getOfficeRecordFallbackDate();
     const tableColumns = normalizeOfficeTableColumns(record.tableColumns);
+    const tableRows = normalizeOfficeTableRows(record, tableColumns);
+    const legacyCustomerApproved = type === 'sampling' && (
+      record.customerApproved === true
+      || record.customerAccepted === true
+      || record.approved === true
+      || String(record.customerApproved || '').trim() === 'true'
+    );
+    const customerApprovedRows = type === 'sampling'
+      ? [...new Set((Array.isArray(record.customerApprovedRows)
+        ? record.customerApprovedRows
+        : legacyCustomerApproved ? tableRows.map((_, rowIndex) => rowIndex) : [])
+        .map(Number)
+        .filter((rowIndex) => Number.isInteger(rowIndex) && rowIndex >= 0 && rowIndex < tableRows.length))]
+      : [];
     return {
       id: String(record.id || `OR-${fallbackDate.replace(/-/g, '')}-${String(index + 1).padStart(2, '0')}`).trim(),
       type,
       project: String(record.project || record.customer || '').trim(),
       date: String(record.date || fallbackDate).trim(),
+      customerApproved: customerApprovedRows.length > 0,
+      customerApprovedRows,
       components: parseOfficeComponents(record.componentsText || record.components),
       additives: parseOfficeAdditives(record.additivesText || record.additives),
       tableColumns,
-      tableRows: normalizeOfficeTableRows(record, tableColumns),
+      tableRows,
       target: String(record.target || '').trim(),
       updatedAt: String(record.updatedAt || new Date().toISOString()),
     };
@@ -2950,12 +2966,16 @@ import { createBusinessPageShared } from './shared';
     const tableRows = [...(root?.querySelectorAll('[data-office-table-row]') || [])]
       .map((row) => [...row.querySelectorAll('[data-office-table-cell]')]
         .map((input) => String(input.value || '').trim()));
+    const customerApprovedRows = [...(root?.querySelectorAll('[data-office-table-row]') || [])]
+      .map((row, rowIndex) => row.querySelector('[data-office-row-approved]')?.checked ? rowIndex : -1)
+      .filter((rowIndex) => rowIndex >= 0);
     return normalizeOfficeRecord({
       ...editingRecord,
       id: editingRecord.id || `OR-${getTodayCode().replace(/-/g, '')}-${String(officeRecords.length + 1).padStart(2, '0')}`,
       type: officeRecordActiveType,
       project: read('project'),
       date: read('date') || getTodayCode(),
+      customerApprovedRows,
       target: read('target'),
       tableColumns,
       tableRows,
@@ -2996,26 +3016,51 @@ import { createBusinessPageShared } from './shared';
     persistOfficeRecords(`已删除${getOfficeRecordLabel(record.type)} ${id} · ${getTimeCode()}`);
     notifyAction(`已删除${getOfficeRecordLabel(record.type)} ${id}`, 'success', `office-record-delete:${id}`);
   };
+  const toggleOfficeRecordRowApproval = (id, rowIndex) => {
+    const index = getOfficeRecordIndex(id);
+    if (index < 0) return null;
+    const record = officeRecords[index];
+    if (record.type !== 'sampling' || rowIndex < 0 || rowIndex >= record.tableRows.length) return null;
+    const approvedRows = new Set(record.customerApprovedRows || []);
+    const nextApproved = !approvedRows.has(rowIndex);
+    if (nextApproved) approvedRows.add(rowIndex);
+    else approvedRows.delete(rowIndex);
+    officeRecords[index] = normalizeOfficeRecord({
+      ...record,
+      customerApproved: false,
+      customerApprovedRows: [...approvedRows],
+      updatedAt: new Date().toISOString(),
+    }, index);
+    persistOfficeRecords(`${nextApproved ? '已标记' : '已取消'}第 ${rowIndex + 1} 条客户认可 ${record.id} · ${getTimeCode()}`);
+    return nextApproved;
+  };
   const getOfficeTableFilledRows = (record) => (record.tableRows || []).filter((row) => row.some((cell) => String(cell || '').trim()));
   const renderOfficeTableSummary = (record) => {
     const columns = record.tableColumns || [];
-    const rows = getOfficeTableFilledRows(record);
+    const rows = (record.tableRows || [])
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter(({ row }) => row.some((cell) => String(cell || '').trim()));
     if (!columns.length && !rows.length) return '<span class="biz-office-muted">未配置明细表</span>';
     if (!rows.length) return '<span class="biz-office-muted">未填写明细</span>';
     const visibleColumns = columns;
-    const gridStyle = `grid-template-columns:${visibleColumns.map((_, index) => index === 0 ? '78px' : '150px').join(' ')}`;
+    const hasRowApproval = record.type === 'sampling';
     return `
       <div class="biz-office-table-summary">
-        <div class="biz-office-table-summary-head" style="${gridStyle}">${visibleColumns.map((column) => `<span>${esc(column || '未命名')}</span>`).join('')}</div>
-        ${rows.map((row) => `
-          <div class="biz-office-table-summary-row" style="${gridStyle}">
-            ${visibleColumns.map((_, index) => `<span>${esc(row[index] || '--')}</span>`).join('')}
-          </div>
-        `).join('')}
+        <table>
+          <thead><tr>${visibleColumns.map((column) => `<th>${esc(column || '未命名')}</th>`).join('')}${hasRowApproval ? '<th>客户认可</th>' : ''}</tr></thead>
+          <tbody>${rows.map(({ row, rowIndex }) => `
+            <tr>
+              ${visibleColumns.map((_, index) => `<td>${esc(row[index] || '--')}</td>`).join('')}
+              ${hasRowApproval ? `<td><button class="biz-office-row-approval ${record.customerApprovedRows.includes(rowIndex) ? 'is-approved' : ''}" type="button" data-office-toggle-row-approval="${esc(record.id)}" data-office-row-index="${rowIndex}">${record.customerApprovedRows.includes(rowIndex) ? '已认可' : '待确认'}</button></td>` : ''}
+            </tr>
+          `).join('')}</tbody>
+        </table>
       </div>
     `;
   };
   const renderOfficeRecordCard = (record) => {
+    const approvedCount = record.customerApprovedRows?.length || 0;
+    const detailCount = getOfficeTableFilledRows(record).length;
     return `
       <article class="biz-office-record-card">
         <div class="biz-office-record-top">
@@ -3023,6 +3068,7 @@ import { createBusinessPageShared } from './shared';
             <strong>${esc(record.project || '未填写客户/项目')}</strong>
             <div class="biz-office-record-meta">
               <span>${esc(record.date || '--')}</span>
+              ${record.type === 'sampling' ? `<span class="biz-office-approval-badge ${approvedCount ? 'is-approved' : 'is-pending'}">已认可 ${approvedCount}/${detailCount}</span>` : ''}
             </div>
           </div>
           <div class="biz-office-record-actions">
@@ -3034,7 +3080,6 @@ import { createBusinessPageShared } from './shared';
             </button>
           </div>
         </div>
-        ${record.target ? `<p class="biz-office-record-target">${esc(record.target)}</p>` : ''}
         ${renderOfficeTableSummary(record)}
       </article>
     `;
@@ -3043,7 +3088,7 @@ import { createBusinessPageShared } from './shared';
     const columns = record.tableColumns?.length ? record.tableColumns : [];
     const rows = record.tableRows?.length ? record.tableRows : [];
     return `
-      <section class="biz-office-detail-table is-wide">
+      <section class="biz-office-detail-table is-wide ${record.type === 'sampling' ? 'has-row-approval' : ''}">
         <div class="biz-office-detail-head">
           <div>
             <strong>明细表</strong>
@@ -3071,6 +3116,7 @@ import { createBusinessPageShared } from './shared';
                     </div>
                   </th>
                 `).join('')}
+                ${record.type === 'sampling' ? '<th class="biz-office-row-approval-head">客户认可</th>' : ''}
                 <th class="biz-office-row-action-head">操作</th>
               </tr>
             </thead>
@@ -3082,6 +3128,7 @@ import { createBusinessPageShared } from './shared';
                       <input type="text" value="${esc(columnIndex === 0 ? String(rowIndex + 1) : row[columnIndex] || '')}" data-office-table-cell="${columnIndex}" aria-label="第${rowIndex + 1}行第${columnIndex + 1}列" ${columnIndex === 0 ? 'readonly class="biz-office-fixed-cell"' : ''}>
                     </td>
                   `).join('')}
+                  ${record.type === 'sampling' ? `<td class="biz-office-row-approval-cell"><label class="biz-office-row-approval-field" title="客户认可第${rowIndex + 1}条送样"><input type="checkbox" data-office-row-approved="${rowIndex}" ${record.customerApprovedRows.includes(rowIndex) ? 'checked' : ''}><span>认可</span></label></td>` : ''}
                   <td class="biz-office-row-action-cell">
                     <button type="button" data-office-remove-row="${rowIndex}" aria-label="删除第${rowIndex + 1}行" ${rows.length <= 1 ? 'disabled' : ''}>
                       <i class="ti ti-trash" aria-hidden="true"></i>
@@ -3108,6 +3155,7 @@ import { createBusinessPageShared } from './shared';
         record.id,
         record.project,
         record.target,
+        record.type === 'sampling' ? `客户认可 ${(record.customerApprovedRows || []).length}/${(record.tableRows || []).length}` : '',
         ...(record.tableColumns || []),
         ...(record.tableRows || []).flat(),
       ].join(' ').toLowerCase();
@@ -3130,7 +3178,7 @@ import { createBusinessPageShared } from './shared';
         <section class="business-panel biz-office-table-panel">
           <div class="biz-formula-table-head biz-office-table-head">
             <div class="biz-formula-table-actions biz-office-table-actions">
-              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块">
+              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块" data-office-active-type="${esc(officeRecordActiveType)}">
                 ${Object.entries(officeRecordSections).map(([type, label]) => `
                   <button class="${type === officeRecordActiveType ? 'is-active' : ''}" type="button" data-office-type="${esc(type)}">${esc(label)}</button>
                 `).join('')}
@@ -3222,48 +3270,16 @@ import { createBusinessPageShared } from './shared';
   const getAshFilledRows = (record) => (record.rows || []).filter((row) => (
     ashRecordFields.some(([key]) => String(row[key] || '').trim())
   ));
-  const renderAshMeasurementTable = (record, options = {} as any) => {
-    const rows = options.allRows ? (record.rows || []) : getAshFilledRows(record);
-    const visibleRows = rows.length ? rows : createAshDefaultRows();
-    return `
-      <div class="biz-ash-table-wrap">
-        <table class="biz-ash-measure-table">
-          <tbody>
-            <tr>
-              <th>日期</th>
-              <td>${esc(record.date || '--')}</td>
-              <th>编号</th>
-              <th>杯重</th>
-              <th>料重</th>
-              <th>剩余重量</th>
-              <th>剩余料重</th>
-              <th>含量</th>
-            </tr>
-            <tr>
-              <th>名称</th>
-              <td>${esc(record.name || '--')}</td>
-              <td>${esc(visibleRows[0]?.index || '1')}</td>
-              ${ashRecordFields.map(([key]) => `<td>${esc(visibleRows[0]?.[key] || '--')}</td>`).join('')}
-            </tr>
-            <tr>
-              <th>批次</th>
-              <td>${esc(record.batch || '--')}</td>
-              <td>${esc(visibleRows[1]?.index || '2')}</td>
-              ${ashRecordFields.map(([key]) => `<td>${esc(visibleRows[1]?.[key] || '--')}</td>`).join('')}
-            </tr>
-            ${visibleRows.slice(2).map((row) => `
-              <tr>
-                <th></th>
-                <td></td>
-                <td>${esc(row.index || '')}</td>
-                ${ashRecordFields.map(([key]) => `<td>${esc(row[key] || '--')}</td>`).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  };
+  const renderAshMeasurementTable = (record) => renderOfficeTableSummary({
+    id: record.id,
+    type: 'ash',
+    tableColumns: [officeFixedIndexColumn, ...ashRecordFields.map(([, label]) => label)],
+    tableRows: getAshFilledRows(record).map((row, rowIndex) => [
+      String(rowIndex + 1),
+      ...ashRecordFields.map(([key]) => row[key]),
+    ]),
+    customerApprovedRows: [],
+  });
   const renderAshRecordCard = (record) => `
     <article class="biz-office-record-card biz-ash-card">
       <div class="biz-office-record-top">
@@ -3271,6 +3287,7 @@ import { createBusinessPageShared } from './shared';
           <strong>${esc(record.name || '未填写名称')}</strong>
           <div class="biz-office-record-meta">
             <span>${esc(record.date || '--')}</span>
+            ${record.batch ? `<span>${esc(record.batch)}</span>` : ''}
           </div>
         </div>
         <div class="biz-office-record-actions">
@@ -3293,7 +3310,7 @@ import { createBusinessPageShared } from './shared';
           <button type="button" data-ash-add-row><i class="ti ti-row-insert-bottom" aria-hidden="true"></i><span>加行</span></button>
         </div>
       </div>
-      <div class="biz-office-detail-scroll biz-ash-detail-scroll">
+      <div class="biz-office-detail-scroll">
         <table>
           <thead>
             <tr>
@@ -3401,8 +3418,8 @@ import { createBusinessPageShared } from './shared';
       <section class="biz-office-page biz-ash-page">
         <section class="business-panel biz-office-table-panel">
           <div class="biz-formula-table-head biz-office-table-head">
-            <div class="biz-formula-table-actions biz-office-table-actions biz-ash-table-actions">
-              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块">
+            <div class="biz-formula-table-actions biz-office-table-actions">
+              <div class="biz-office-tabs" role="tablist" aria-label="办事记录板块" data-office-active-type="${esc(officeRecordActiveType)}">
                 ${Object.entries(officeRecordSections).map(([type, label]) => `
                   <button class="${type === officeRecordActiveType ? 'is-active' : ''}" type="button" data-office-type="${esc(type)}">${esc(label)}</button>
                 `).join('')}
@@ -3451,7 +3468,7 @@ import { createBusinessPageShared } from './shared';
         </section>
         ${ashRecordModalOpen ? `
           <div class="biz-office-modal dialog-overlay" data-ash-modal>
-            <div class="biz-inventory-material-dialog biz-office-dialog biz-ash-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="ashRecordModalTitle">
+            <div class="biz-inventory-material-dialog biz-office-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="ashRecordModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="ashRecordModalTitle">${ashRecordEditingId ? '编辑灰份记录' : '新建灰份记录'}</h2>
@@ -3461,14 +3478,14 @@ import { createBusinessPageShared } from './shared';
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
-              <div class="biz-office-editor biz-ash-editor">
-                <label>
-                  <span>日期</span>
-                  <input type="date" value="${esc(modalRecord.date)}" data-ash-field="date">
-                </label>
+              <div class="biz-office-editor">
                 <label>
                   <span>名称 *</span>
                   <input type="text" value="${esc(modalRecord.name)}" placeholder="样品名称" data-ash-field="name">
+                </label>
+                <label>
+                  <span>日期</span>
+                  <input type="date" value="${esc(modalRecord.date)}" data-ash-field="date">
                 </label>
                 <label class="is-wide">
                   <span>批次</span>
@@ -3533,6 +3550,11 @@ import { createBusinessPageShared } from './shared';
         removeButton.setAttribute('aria-label', `删除第${rowIndex + 1}行`);
         removeButton.disabled = rows.length <= 1;
       }
+      const approvalInput = row.querySelector('[data-office-row-approved]');
+      if (approvalInput) {
+        approvalInput.setAttribute('data-office-row-approved', String(rowIndex));
+        approvalInput.closest('label')?.setAttribute('title', `客户认可第${rowIndex + 1}条送样`);
+      }
     });
   };
   const createOfficeTableInput = (value = '', attrs = {} as any) => {
@@ -3562,6 +3584,7 @@ import { createBusinessPageShared } from './shared';
               <span class="biz-office-fixed-column" data-office-table-column="0" data-office-table-fixed="true">${officeFixedIndexColumn}</span>
             </div>
           </th>
+          ${officeRecordActiveType === 'sampling' ? '<th class="biz-office-row-approval-head">客户认可</th>' : ''}
           <th class="biz-office-row-action-head">操作</th>
         </tr>
       </thead>
@@ -6152,6 +6175,7 @@ import { createBusinessPageShared } from './shared';
     if (officeTypeButton && refs.businessPageContent.contains(officeTypeButton)) {
       const type = officeTypeButton.getAttribute('data-office-type') || 'sampling';
       if (officeRecordSections[type]) {
+        if (type === officeRecordActiveType) return;
         officeRecordActiveType = type;
         officeRecordSearchQuery = '';
         ashRecordSearchQuery = '';
@@ -6161,7 +6185,12 @@ import { createBusinessPageShared } from './shared';
         officeRecordEditingId = '';
         ashRecordModalOpen = false;
         ashRecordEditingId = '';
-        render('office-records');
+        const tabs = officeTypeButton.closest('.biz-office-tabs');
+        tabs?.setAttribute('data-office-active-type', type);
+        tabs?.querySelectorAll('[data-office-type]').forEach((button) => {
+          button.classList.toggle('is-active', button.getAttribute('data-office-type') === type);
+        });
+        window.setTimeout(() => render('office-records'), 220);
       }
       return;
     }
@@ -6205,9 +6234,11 @@ import { createBusinessPageShared } from './shared';
         removeButton.innerHTML = '<i class="ti ti-x" aria-hidden="true"></i>';
         field.appendChild(removeButton);
         headerCell.appendChild(field);
-        headerRow.insertBefore(headerCell, actionHead);
+        const trailingHead = headerRow.querySelector('.biz-office-row-approval-head') || actionHead;
+        headerRow.insertBefore(headerCell, trailingHead);
         table.querySelectorAll('tbody tr').forEach((row) => {
-          row.insertBefore(createOfficeTableCell(''), row.querySelector('.biz-office-row-action-cell'));
+          const trailingCell = row.querySelector('.biz-office-row-approval-cell') || row.querySelector('.biz-office-row-action-cell');
+          row.insertBefore(createOfficeTableCell(''), trailingCell);
         });
         syncOfficeDetailTableControls(table);
       }
@@ -6223,7 +6254,7 @@ import { createBusinessPageShared } from './shared';
       if (table && headerCell) {
         headerCell.remove();
         table.querySelectorAll('tbody tr').forEach((row) => {
-          const cells = [...row.querySelectorAll('td:not(.biz-office-row-action-cell)')];
+          const cells = [...row.querySelectorAll('td:not(.biz-office-row-action-cell):not(.biz-office-row-approval-cell)')];
           cells[columnIndex]?.remove();
         });
         syncOfficeDetailTableControls(table);
@@ -6245,6 +6276,16 @@ import { createBusinessPageShared } from './shared';
         row.setAttribute('data-office-table-row', '');
         for (let index = 0; index < columnCount; index += 1) {
           row.appendChild(createOfficeTableCell(index === 0 ? String(tbody.querySelectorAll('tr').length + 1) : '', index === 0));
+        }
+        if (officeRecordActiveType === 'sampling') {
+          const approvalCell = document.createElement('td');
+          approvalCell.className = 'biz-office-row-approval-cell';
+          const approvalField = document.createElement('label');
+          approvalField.className = 'biz-office-row-approval-field';
+          approvalField.title = '客户认可该条送样';
+          approvalField.innerHTML = '<input type="checkbox" data-office-row-approved><span>认可</span>';
+          approvalCell.appendChild(approvalField);
+          row.appendChild(approvalCell);
         }
         const actionCell = document.createElement('td');
         actionCell.className = 'biz-office-row-action-cell';
@@ -6295,6 +6336,25 @@ import { createBusinessPageShared } from './shared';
     if (officeDeleteButton && refs.businessPageContent.contains(officeDeleteButton)) {
       await deleteOfficeRecord(officeDeleteButton.getAttribute('data-office-delete'));
       render('office-records');
+      return;
+    }
+
+    const officeToggleRowApprovalButton = event.target.closest('[data-office-toggle-row-approval]');
+    if (officeToggleRowApprovalButton && refs.businessPageContent.contains(officeToggleRowApprovalButton)) {
+      const recordId = officeToggleRowApprovalButton.getAttribute('data-office-toggle-row-approval');
+      const rowIndex = Number(officeToggleRowApprovalButton.getAttribute('data-office-row-index'));
+      const nextApproved = toggleOfficeRecordRowApproval(recordId, rowIndex);
+      if (typeof nextApproved !== 'boolean') return;
+      officeToggleRowApprovalButton.classList.toggle('is-approved', nextApproved);
+      officeToggleRowApprovalButton.textContent = nextApproved ? '已认可' : '待确认';
+      const record = officeRecords[getOfficeRecordIndex(recordId)];
+      const approvalBadge = officeToggleRowApprovalButton.closest('.biz-office-record-card')?.querySelector('.biz-office-approval-badge');
+      if (record && approvalBadge) {
+        const approvedCount = record.customerApprovedRows?.length || 0;
+        approvalBadge.textContent = `已认可 ${approvedCount}/${getOfficeTableFilledRows(record).length}`;
+        approvalBadge.classList.toggle('is-approved', approvedCount > 0);
+        approvalBadge.classList.toggle('is-pending', approvedCount === 0);
+      }
       return;
     }
 
@@ -7345,6 +7405,7 @@ import { createBusinessPageShared } from './shared';
       const rows = officeRecords.map((record) => ({
         ...record,
         typeLabel: getOfficeRecordLabel(record.type),
+        customerApprovalText: record.type === 'sampling' ? `已认可 ${(record.customerApprovedRows || []).length}/${(record.tableRows || []).length} 条` : '',
         tableColumnsText: (record.tableColumns || []).join('、'),
         tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('；') || '无',
       }));
@@ -7357,7 +7418,7 @@ import { createBusinessPageShared } from './shared';
         `送样记录数：${officeRecords.filter((record) => record.type === 'sampling').length}`,
         `配色记录数：${officeRecords.filter((record) => record.type === 'coloring').length}`,
         `灰份记录数：${ashRecords.length}`,
-        ...formatAgentRecords(rows, [['板块', 'typeLabel'], ['编号', 'id'], ['客户/项目', 'project'], ['表头', 'tableColumnsText'], ['明细', 'tableRowsText'], ['目标', 'target'], ['日期', 'date']]),
+        ...formatAgentRecords(rows, [['板块', 'typeLabel'], ['编号', 'id'], ['客户/项目', 'project'], ['客户认可', 'customerApprovalText'], ['表头', 'tableColumnsText'], ['明细', 'tableRowsText'], ['目标', 'target'], ['日期', 'date']]),
         ashRows.length ? '灰份记录：' : '',
         ...formatAgentRecords(ashRows, [['编号', 'id'], ['日期', 'date'], ['名称', 'name'], ['批次', 'batch'], ['明细', 'details']]),
       ].join('\n');
@@ -7547,6 +7608,7 @@ import { createBusinessPageShared } from './shared';
         ...officeRecords.map((record) => ({
           ...record,
           typeLabel: getOfficeRecordLabel(record.type),
+          customerApprovalText: record.type === 'sampling' ? `已认可 ${(record.customerApprovedRows || []).length}/${(record.tableRows || []).length} 条` : '',
           tableColumnsText: (record.tableColumns || []).join('、'),
           tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('\n'),
         })),
@@ -7559,9 +7621,11 @@ import { createBusinessPageShared } from './shared';
           target: record.batch,
         })),
       ],
-      defaultFields: ['id', 'typeLabel', 'project', 'tableColumnsText', 'tableRowsText', 'target', 'date'],
+      defaultFields: ['id', 'typeLabel', 'project', 'customerApprovalText', 'tableColumnsText', 'tableRowsText', 'target', 'date'],
       fieldAliases: {
         customer: 'project',
+        approval: 'customerApprovalText',
+        approved: 'customerApprovalText',
         columns: 'tableColumnsText',
         rows: 'tableRowsText',
         sample: 'project',

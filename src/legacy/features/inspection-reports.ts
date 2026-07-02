@@ -19,6 +19,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     activeReportId: '',
   };
   const refs: any = {};
+  let eventController: AbortController | null = null;
 
   const getFreshRefs = () => {
     refs.page = document.querySelector(`[data-page-section="${PAGE_ID}"]`);
@@ -349,6 +350,26 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const normalizeTitle = (fileName) => String(fileName || '检测报告').replace(/\.pdf$/i, '').trim() || '检测报告';
 
+  const findReportWithSameName = (fileName) => {
+    const comparableName = getComparableReportName(fileName);
+    return state.reports.find((item) => [getReportTitle(item), item?.file_name]
+      .some((value) => getComparableReportName(value) === comparableName)) || null;
+  };
+
+  const confirmReportOverwrite = (fileNames, isBatchUpload = false) => {
+    const names = Array.isArray(fileNames) ? fileNames : [fileNames];
+    return App.confirmDialog?.open?.({
+      title: '检测报告名称重复',
+      message: isBatchUpload
+        ? `本次上传中有 ${names.length} 份检测报告名称重复，是否一次性覆盖全部原文件？`
+        : `已存在名为“${normalizeTitle(names[0])}”的检测报告，是否覆盖原文件？`,
+      confirmText: isBatchUpload ? '全部覆盖' : '覆盖',
+      cancelText: '取消',
+      variant: 'danger',
+      icon: 'ti-files',
+    });
+  };
+
   const setUploadProgress = ({ current = 0, total = 0, fileName = '' } = {} as any) => {
     const safeTotal = Math.max(0, Number(total) || 0);
     const safeCurrent = Math.min(Math.max(0, Number(current) || 0), safeTotal);
@@ -382,24 +403,57 @@ import { cloudStorage } from '../../services/cloud-storage';
     state.uploading = true;
     refs.uploadBtn?.setAttribute('disabled', '');
     setUploadProgress({ current: 0, total: pdfFiles.length });
+    const duplicateFiles = pdfFiles.filter((file) => findReportWithSameName(file.name));
+    const shouldOverwriteDuplicates = duplicateFiles.length
+      ? await confirmReportOverwrite(duplicateFiles.map((file) => file.name), pdfFiles.length > 1)
+      : true;
     let successCount = 0;
+    let skippedCount = 0;
     for (const [index, file] of pdfFiles.entries()) {
       setUploadProgress({ current: index, total: pdfFiles.length, fileName: file.name });
-      const created = await cloudStorage.createInspectionReport({
-        file,
-        title: normalizeTitle(file.name),
-        category: '检测报告',
-        notes: '',
-      });
-      if (created?.id) successCount += 1;
+      const existingReport = findReportWithSameName(file.name);
+      if (existingReport && !shouldOverwriteDuplicates) {
+        skippedCount += 1;
+        setUploadProgress({ current: index + 1, total: pdfFiles.length });
+        continue;
+      }
+      const title = normalizeTitle(file.name);
+      let savedReportId = existingReport?.id || '';
+      const saved = savedReportId
+        ? await cloudStorage.replaceInspectionReport(savedReportId, {
+          file,
+          title,
+          category: '检测报告',
+          notes: '',
+        })
+        : await (async () => {
+          const created = await cloudStorage.createInspectionReport({
+            file,
+            title,
+            category: '检测报告',
+            notes: '',
+          });
+          savedReportId = created?.id || '';
+          return Boolean(savedReportId);
+        })();
+      if (saved) {
+        successCount += 1;
+        if (!existingReport) {
+          state.reports.push({ id: savedReportId, title, file_name: file.name });
+        }
+      }
       setUploadProgress({ current: index + 1, total: pdfFiles.length });
     }
     state.uploading = false;
     refs.uploadBtn?.removeAttribute('disabled');
     setUploadProgress();
     if (successCount) {
-      App.notify?.success?.(`已上传 ${successCount} 份检测报告。`, { key: 'inspection-report-uploaded' });
+      const skippedText = skippedCount ? `，已取消 ${skippedCount} 份` : '';
+      App.notify?.success?.(`已保存 ${successCount} 份检测报告${skippedText}。`, { key: 'inspection-report-uploaded' });
       await refreshReports();
+    } else if (skippedCount) {
+      App.notify?.info?.(`已取消 ${skippedCount} 份检测报告。`, { key: 'inspection-report-upload-cancelled' });
+      renderReports();
     } else {
       App.notify?.error?.('检测报告上传失败。', { key: 'inspection-report-upload-failed' });
       renderReports();
@@ -428,26 +482,29 @@ import { cloudStorage } from '../../services/cloud-storage';
   const isFileDragEvent = (event) => Array.from(event.dataTransfer?.types || []).includes('Files');
 
   const bindEvents = () => {
-    refs.uploadBtn?.addEventListener('click', () => refs.input?.click());
-    refs.refreshBtn?.addEventListener('click', refreshReports);
-    refs.backBtn?.addEventListener('click', showList);
+    eventController?.abort();
+    eventController = new AbortController();
+    const options = { signal: eventController.signal };
+    refs.uploadBtn?.addEventListener('click', () => refs.input?.click(), options);
+    refs.refreshBtn?.addEventListener('click', refreshReports, options);
+    refs.backBtn?.addEventListener('click', showList, options);
     refs.previewOpen?.addEventListener('click', (event) => {
       if (!getActiveReport()) event.preventDefault();
-    });
+    }, options);
     refs.previewDownload?.addEventListener('click', (event) => {
       event.preventDefault();
       const item = getActiveReport();
       if (!item?.id) return;
       downloadReportFile(item.id);
-    });
+    }, options);
     refs.searchInput?.addEventListener('input', () => {
       state.search = refs.searchInput.value || '';
       renderReports();
-    });
+    }, options);
     refs.input?.addEventListener('change', () => {
       uploadFiles(refs.input.files);
       refs.input.value = '';
-    });
+    }, options);
     refs.list?.addEventListener('click', (event) => {
       const deleteButton = event.target.closest('[data-report-delete]');
       if (deleteButton) {
@@ -467,23 +524,29 @@ import { cloudStorage } from '../../services/cloud-storage';
         renderReports();
         showPreview();
       }
-    });
+    }, options);
     refs.listView?.addEventListener('dragover', (event) => {
       if (!isFileDragEvent(event)) return;
       event.preventDefault();
       if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
       refs.listView.classList.add('is-drag-over');
-    });
+    }, options);
     refs.listView?.addEventListener('dragleave', (event) => {
       if (refs.listView.contains(event.relatedTarget)) return;
       refs.listView.classList.remove('is-drag-over');
-    });
+    }, options);
     refs.listView?.addEventListener('drop', (event) => {
       if (!isFileDragEvent(event)) return;
       event.preventDefault();
       refs.listView.classList.remove('is-drag-over');
       uploadFiles(event.dataTransfer?.files);
-    });
+    }, options);
+  };
+
+  const cleanup = () => {
+    eventController?.abort();
+    eventController = null;
+    refs.listView?.classList.remove('is-drag-over', 'is-uploading');
   };
 
   const init = () => {
@@ -496,6 +559,6 @@ import { cloudStorage } from '../../services/cloud-storage';
   installPageDefinition();
   installMarkup();
 
-  App.inspectionReports = { init, refresh: refreshReports };
+  App.inspectionReports = { init, refresh: refreshReports, cleanup };
 })();
 

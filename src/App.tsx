@@ -170,13 +170,6 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
 
       <section className="auth-panel-wrap">
         <section className="auth-card">
-          <div className="auth-card-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M7 10V8a5 5 0 0 1 10 0v2" />
-              <rect x="5" y="10" width="14" height="10" rx="2" />
-              <path d="M12 14v2" />
-            </svg>
-          </div>
           <div className="auth-card-heading">
             <h2>欢迎回来</h2>
             <p>仅限已授权成员访问</p>
@@ -227,13 +220,6 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
 
       <section className="auth-panel-wrap">
         <section className="auth-card">
-          <div className="auth-card-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 3a5 5 0 0 0-5 5v2" />
-              <rect x="5" y="10" width="14" height="10" rx="2" />
-              <path d="M12 14v2" />
-            </svg>
-          </div>
           <div className="auth-card-heading">
             <h2>请先修改初始密码</h2>
             <p>首次登录需要完成安全设置</p>

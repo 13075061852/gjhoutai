@@ -161,6 +161,7 @@
 .ti-external-link{--ip-icon:var(--ip-external)}
 .ti-file-alert{--ip-icon:var(--ip-alert)}
 .ti-file-description,.ti-file-text,.ti-file-type-docx{--ip-icon:var(--ip-file)}
+.ti-files{--ip-icon:var(--ip-copy)}
 .ti-file-plus{--ip-icon:var(--ip-add)}
 .ti-file-search,.ti-photo-search{--ip-icon:var(--ip-search)}
 .ti-file-spreadsheet,.ti-table,.ti-table-import,.ti-table-options,.ti-table-search{--ip-icon:var(--ip-table)}

@@ -195,6 +195,7 @@ const iconMap: Record<string, IconRenderer> = {
   'ti-external-link': LinkOut,
   'ti-file-alert': FileFailed,
   'ti-file-description': DocDetail,
+  'ti-files': Copy,
   'ti-file-plus': FileAddition,
   'ti-file-search': FileSearch,
   'ti-file-spreadsheet': Excel,

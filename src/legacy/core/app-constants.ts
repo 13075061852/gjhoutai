@@ -134,6 +134,11 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
         eyebrow: '当前可用',
         desc: '图谱分析页面用于管理图谱图片、分类标签、图谱查看、多图对比，并可把图片上下文发送到右侧 Gjun AI。',
       },
+      'data-recognition': {
+        title: '数据识别',
+        eyebrow: '当前可用',
+        desc: '上传检测图片后调用视觉模型识别结构化数据，支持历史记录、结果编辑和表格复制。',
+      },
       'office-records': {
         title: '办事记录',
         eyebrow: '数据分析',

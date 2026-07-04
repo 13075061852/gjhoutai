@@ -860,8 +860,8 @@
       color:var(--text-2);
     }
     .analysis-compare-view-btn.is-active{
-      background:var(--accent-soft);
-      color:var(--accent);
+      background:transparent;
+      color:var(--muted);
     }
     .analysis-compare-view-btn i{
       font-size:14px;
@@ -1047,6 +1047,18 @@
       color:var(--text-2);
       font-size:12px;
       font-weight:700;
+    }
+    .analysis-compare-empty{
+      min-width:320px;
+      min-height:120px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      color:var(--muted);
+      font-size:13px;
+      font-weight:800;
+      background:var(--surface);
     }
     .analysis-compare-table th,
     .analysis-compare-table td{

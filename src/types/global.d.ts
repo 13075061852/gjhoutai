@@ -33,6 +33,7 @@ declare global {
     | 'personnel-archive'
     | 'property-analysis'
     | 'spectrum-analysis'
+    | 'data-recognition'
     | 'office-records'
     | 'inspection-reports'
     | 'image-cutout'

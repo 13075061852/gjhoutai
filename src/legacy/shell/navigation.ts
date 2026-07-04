@@ -19,6 +19,8 @@ import { parseJsonOr } from '../../utils/json';
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
   let businessPagesPromise = null;
+  let dataRecognitionPromise = null;
+  let inspectionReportsPromise = null;
   let pageRenderSeq = 0;
 
   const loadBusinessPages = async () => {
@@ -27,6 +29,28 @@ import { parseJsonOr } from '../../utils/json';
       businessPagesPromise = import('../features/business-pages');
     }
     await businessPagesPromise;
+  };
+  const loadDataRecognitionPage = async () => {
+    if (!App.dataRecognition) {
+      if (!dataRecognitionPromise) {
+        dataRecognitionPromise = import('../features/data-recognition');
+      }
+      await dataRecognitionPromise;
+    }
+    refs.dataRecognitionPageSection = document.querySelector('[data-page-section="data-recognition"]');
+    refs.navPageButtons = document.querySelectorAll('[data-page]');
+    App.dataRecognition?.init?.();
+  };
+  const loadInspectionReportsPage = async () => {
+    if (!App.inspectionReports) {
+      if (!inspectionReportsPromise) {
+        inspectionReportsPromise = import('../features/inspection-reports');
+      }
+      await inspectionReportsPromise;
+    }
+    refs.inspectionReportsPageSection = document.querySelector('[data-page-section="inspection-reports"]');
+    refs.navPageButtons = document.querySelectorAll('[data-page]');
+    App.inspectionReports?.init?.();
   };
   let navigationBound = false;
   let navigationGlobalListenersBound = false;
@@ -723,6 +747,14 @@ import { parseJsonOr } from '../../utils/json';
     const isProjectSkillPage = pageId === 'project-skills';
     const isApimartMediaPage = pageId === 'apimart-media';
     const isAiCallAnalysisPage = pageId === 'ai-call-analysis';
+    if (isDataRecognitionPage) {
+      await loadDataRecognitionPage();
+    }
+    if (isInspectionReportsPage) {
+      await loadInspectionReportsPage();
+    }
+    if (renderSeq !== pageRenderSeq) return;
+
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
     const def = getPageDefinition(pageId, label);
@@ -745,6 +777,7 @@ import { parseJsonOr } from '../../utils/json';
 
     if (isBusinessPage) {
       await loadBusinessPages();
+      refreshNavAccess({ redirect: false });
     }
     if (isBusinessPage && renderSeq === pageRenderSeq) {
       App.businessPages?.render?.(pageId, def);
@@ -834,6 +867,16 @@ import { parseJsonOr } from '../../utils/json';
   };
 
   const handleNavigationDocumentClick = (event) => {
+    const navButton = event.target.closest('.sidebar [data-page]');
+    if (navButton) {
+      const pageId = navButton.dataset.page || navButton.getAttribute('data-page') || '';
+      if (pageId && isPageVisible(pageId)) {
+        event.preventDefault();
+        showPage(pageId);
+        setMobileSidebarOpen(false);
+      }
+    }
+
     if (refs.shell?.classList.contains('sidebar-open')) {
       const target = event.target;
       if (!target.closest('.sidebar') && !target.closest('#mobileMenuBtn')) {
@@ -872,7 +915,7 @@ import { parseJsonOr } from '../../utils/json';
     removeCollapsedNavFlyout();
   };
 
-  const bindNavigation = () => {
+  const bindNavigation = async () => {
     if (navigationBound) return;
     navigationBound = true;
 
@@ -966,16 +1009,6 @@ import { parseJsonOr } from '../../utils/json';
       setAssistantCollapsed(true);
     });
 
-    refs.navPageButtons.forEach((button) => {
-      button.addEventListener('click', () => {
-        const pageId = button.dataset.page;
-        if (pageId && isPageVisible(pageId)) {
-          showPage(pageId);
-          setMobileSidebarOpen(false);
-        }
-      });
-    });
-
     bindTopVisitedDragging();
     refs.topVisitedPages?.addEventListener('click', (event) => {
       if (suppressVisitedClick) return;
@@ -999,7 +1032,7 @@ import { parseJsonOr } from '../../utils/json';
     restoreExpandedGroups();
     refreshNavAccess({ redirect: false });
     const savedPage = localStorage.getItem(constants.NAV_PAGE_KEY) || getFallbackPageId();
-    showPage(savedPage, { scrollTop: false });
+    await showPage(savedPage, { scrollTop: false });
     restoreLayoutState();
 
     bindNavigationGlobals();

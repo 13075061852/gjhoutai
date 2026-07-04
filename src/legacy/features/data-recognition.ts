@@ -62,6 +62,7 @@ import { parseJsonMaybe } from '../../utils/json';
     },
   };
   const refs: any = {};
+  let initialized = false;
 
   const getFreshRefs = () => {
     refs.page = document.querySelector('[data-page-section="data-recognition"]');
@@ -1237,6 +1238,8 @@ import { parseJsonMaybe } from '../../utils/json';
   const init = () => {
     getFreshRefs();
     if (!refs.page) return;
+    if (initialized) return;
+    initialized = true;
     bindEvents();
     restoreSession();
     refreshHistory();

@@ -241,6 +241,7 @@ function App() {
   const [user, setUser] = useState<AuthUserState>(undefined);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const avatarUrlRef = useRef<string | null>(null);
+  const accountAvatarRendererRef = useRef<((url: string | null) => void) | null>(null);
   const [hasSessionOnLoad] = useState(() => authClient.hasSessionMarker());
   const setManagedAvatarUrl = useCallback((nextUrl: string | null) => {
     const previousUrl = avatarUrlRef.current;
@@ -299,6 +300,9 @@ function App() {
     };
   }, [user, setManagedAvatarUrl]);
   useEffect(() => {
+    accountAvatarRendererRef.current?.(avatarUrl);
+  }, [avatarUrl]);
+  useEffect(() => {
     if (!user || user.mustChangePassword) return;
     let cleanup: (() => void) | undefined;
     let cleanupTopActionsPlacement: (() => void) | undefined;
@@ -306,11 +310,14 @@ function App() {
     const cleanupIcons = mountIconParkAdapter();
     window.GJHApp = window.GJHApp || {};
     window.GJHApp.currentUser = user;
+    void hydrateCloudBackedLocalStorage().then((result) => {
+      if (disposed || !result.changedKeys.length) return;
+      window.GJHApp?.businessPages?.refreshFromLocalStorage?.(result.changedKeys);
+    }).catch((error) => {
+      console.warn('[startup] Cloud-backed localStorage hydration failed.', error);
+    });
     void (async () => {
-      const [legacyModule] = await Promise.all([
-        import('./legacy/bootstrap'),
-        hydrateCloudBackedLocalStorage(),
-      ]);
+      const legacyModule = await import('./legacy/bootstrap');
       if (disposed) return;
       const { bootLegacyApp, teardownLegacyApp } = legacyModule;
       cleanup = await bootLegacyApp();
@@ -366,7 +373,8 @@ function App() {
         const renderAccountAvatar = (url: string | null) => {
           accountButton.replaceChildren(createAccountAvatar(url));
         };
-        renderAccountAvatar(avatarUrl);
+        accountAvatarRendererRef.current = renderAccountAvatar;
+        renderAccountAvatar(avatarUrlRef.current);
         const menu = document.createElement('div');
         menu.className = 'top-auth-panel';
         menu.setAttribute('role', 'menu');
@@ -444,12 +452,13 @@ function App() {
     })();
     return () => {
       disposed = true;
+      accountAvatarRendererRef.current = null;
       cleanupTopActionsPlacement?.();
       cleanupIcons();
       cleanup?.();
       void import('./legacy/bootstrap').then(({ teardownLegacyApp }) => teardownLegacyApp());
     };
-  }, [user, avatarUrl, setManagedAvatarUrl]);
+  }, [user, setManagedAvatarUrl]);
 
   if (user === undefined && hasSessionOnLoad) return <LegacyShell booting />;
   if (user === undefined) return (

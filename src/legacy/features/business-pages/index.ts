@@ -1788,6 +1788,7 @@ import { createBusinessPageShared } from './shared';
   let inventoryCategories: any[] = normalizeInventoryCategories(utils.readJson(INVENTORY_CATEGORY_STORAGE_KEY, null), inventoryRows);
   let inventoryCategory = '全部';
   let inventoryEditingMaterialName = '';
+  let inventoryDetailMaterialName = '';
   let inventoryEditingCategory = '';
   let inventorySearchQuery = '';
   let inventoryDraftNote = '库存数据自动保存到云端';
@@ -1915,10 +1916,10 @@ import { createBusinessPageShared } from './shared';
   const departmentPageAccess = {
     系统管理员: null,
     研发部: new Set(['dashboard', 'project-skills', 'apimart-media', 'ai-call-analysis', 'theme-settings']),
-    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'office-records', 'data-recognition', 'image-cutout', 'inventory-management']),
+    测试部: new Set(['dashboard', 'formula-management', 'property-analysis', 'spectrum-analysis', 'office-records', 'data-recognition', 'image-cutout', 'inventory-management', 'inventory-material-detail']),
     销售部: new Set(['dashboard', 'order-management', 'order-detail', 'invoice-print', 'customer-archive', 'customer-detail']),
-    生产部: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
-    生产部主管: new Set(['dashboard', 'inventory-management', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
+    生产部: new Set(['dashboard', 'inventory-management', 'inventory-material-detail', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
+    生产部主管: new Set(['dashboard', 'inventory-management', 'inventory-material-detail', 'supplier-archive', 'supplier-detail', 'raw-material-procurement', 'production-plan', 'invoice-print']),
   };
   const pageEditAccess = {
     dashboard: [],
@@ -1930,6 +1931,7 @@ import { createBusinessPageShared } from './shared';
     'formula-management': ['测试部', '系统管理员'],
     'production-plan': ['生产部', '生产部主管', '系统管理员'],
     'inventory-management': ['生产部', '生产部主管', '测试部', '系统管理员'],
+    'inventory-material-detail': ['生产部', '生产部主管', '测试部', '系统管理员'],
     'supplier-archive': ['生产部', '生产部主管', '系统管理员'],
     'raw-material-procurement': ['生产部', '生产部主管', '系统管理员'],
     'customer-archive': ['销售部', '系统管理员'],
@@ -1945,6 +1947,11 @@ import { createBusinessPageShared } from './shared';
     'permission-management': ['系统管理员'],
     'theme-settings': ['研发部', '系统管理员'],
     'ai-config': ['系统管理员'],
+  };
+  App.constants.PAGE_DEFS['inventory-material-detail'] = {
+    title: '材料详情',
+    eyebrow: '库存材料',
+    desc: '查看材料库存、供应商、批次、规格和状态等完整信息。',
   };
   let permissionActiveDepartment = personnelDepartments[0];
   const ROLE_PAGE_PERMISSION_STORAGE_KEY = LOCAL_STORAGE_KEYS.rolePagePermissions;
@@ -1997,6 +2004,149 @@ import { createBusinessPageShared } from './shared';
   };
 
   const getInventoryMaterialIndex = (name) => inventoryRows.findIndex((row) => row[0] === name);
+
+  const getInventoryMaterialRow = (name) => normalizeInventoryRow(inventoryRows[getInventoryMaterialIndex(name)] || []);
+
+  const renderInventoryValue = (value, fallback = '--') => {
+    const text = String(value || '').trim();
+    return text || fallback;
+  };
+
+  const parseInventoryDetailQuantity = (value) => {
+    const text = String(value || '').replace(/,/g, '').trim();
+    const match = text.match(/-?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : NaN;
+  };
+
+  const renderInventoryDetail = () => {
+    const row = getInventoryMaterialRow(inventoryDetailMaterialName);
+    if (!row[0]) {
+      return `
+        <section class="business-panel biz-inventory-detail-empty">
+          <button class="biz-inventory-back-btn" type="button" data-inventory-detail-back>
+            <i class="ti ti-arrow-left" aria-hidden="true"></i>
+            <span>返回库存列表</span>
+          </button>
+          <div>
+            <span>Material not found</span>
+            <h2>未找到材料详情</h2>
+            <p>该材料可能已被删除，返回库存列表后可以重新选择。</p>
+          </div>
+        </section>
+      `;
+    }
+
+    const [
+      name,
+      type,
+      category,
+      supplier,
+      quantity,
+      state,
+      model,
+      batch,
+      unitPrice,
+      safetyStock,
+      spec,
+    ] = row;
+    const stockQuantity = parseInventoryDetailQuantity(quantity);
+    const safetyQuantity = parseInventoryDetailQuantity(safetyStock);
+    const stockTone = Number.isFinite(stockQuantity) && Number.isFinite(safetyQuantity) && safetyQuantity > 0 && stockQuantity <= safetyQuantity
+      ? 'is-warn'
+      : getInventoryStateClass(state);
+    const profileRows = [
+      ['产品类别', category],
+      ['材料类型', type],
+      ['供应商', supplier],
+      ['批次', batch],
+    ];
+    const metricRows = [
+      ['当前库存', quantity],
+      ['安全库存', safetyStock],
+      ['单价', unitPrice ? `¥ ${unitPrice}` : '未录入'],
+      ['库存状态', state],
+    ];
+    const processRows = [
+      ['规格参数', spec || '未录入规格，建议补充粒径、颜色、阻燃等级或增强比例。'],
+      ['供应策略', supplier ? `由 ${supplier} 供应，适合纳入稳定供货追踪。` : '暂未关联供应商，建议补充供应来源。'],
+      ['批次追踪', batch ? `当前批次 ${batch}，可用于采购与质检记录关联。` : '暂无批次信息，建议补充最近入库批次。'],
+    ];
+
+    return `
+      <div class="biz-inventory-detail-page">
+        <section class="biz-inventory-product-hero">
+          <div class="biz-inventory-detail-nav">
+            <button class="biz-inventory-back-btn" type="button" data-inventory-detail-back>
+              <i class="ti ti-arrow-left" aria-hidden="true"></i>
+              <span>库存列表</span>
+            </button>
+            <div>
+              <button class="biz-inventory-ghost-btn" type="button" data-inventory-detail-edit="${esc(name)}">
+                <i class="ti ti-pencil" aria-hidden="true"></i>
+                <span>编辑材料</span>
+              </button>
+              <button class="biz-inventory-danger-btn" type="button" data-inventory-detail-delete="${esc(name)}">
+                <i class="ti ti-trash" aria-hidden="true"></i>
+                <span>删除</span>
+              </button>
+            </div>
+          </div>
+          <div class="biz-inventory-hero-grid">
+            <div class="biz-inventory-hero-copy">
+              <span>${esc(model || category || 'Material')}</span>
+              <h1>${esc(name)}</h1>
+              <p>${esc(spec || `${renderInventoryValue(category)} / ${renderInventoryValue(type)} / ${renderInventoryValue(supplier, '未关联供应商')}`)}</p>
+              <div class="biz-inventory-hero-tags">
+                ${[type, category, state].filter(Boolean).map((item) => `<em>${esc(item)}</em>`).join('')}
+              </div>
+            </div>
+            <div class="biz-inventory-product-stage" aria-hidden="true">
+              <div class="biz-inventory-material-slab">
+                <strong>${esc((model || name).slice(0, 2).toUpperCase())}</strong>
+                <span>${esc(category || type)}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="biz-inventory-detail-metrics" aria-label="库存关键指标">
+          ${metricRows.map(([label, value]) => `
+            <article class="${label === '库存状态' ? stockTone : ''}">
+              <span>${esc(label)}</span>
+              <strong>${esc(renderInventoryValue(value))}</strong>
+            </article>
+          `).join('')}
+        </section>
+
+        <section class="biz-inventory-detail-content">
+          <article class="biz-inventory-detail-card is-large">
+            <span>Profile</span>
+            <h2>材料档案</h2>
+            <div class="biz-inventory-profile-grid">
+              ${profileRows.map(([label, value]) => `
+                <div>
+                  <small>${esc(label)}</small>
+                  <strong>${esc(renderInventoryValue(value))}</strong>
+                </div>
+              `).join('')}
+            </div>
+          </article>
+          <article class="biz-inventory-detail-card">
+            <span>Traceability</span>
+            <h2>生产可追踪信息</h2>
+            <div class="biz-inventory-flow-list">
+              ${processRows.map(([label, value]) => `
+                <div>
+                  <i class="ti ti-circle-check" aria-hidden="true"></i>
+                  <p><strong>${esc(label)}</strong>${esc(value)}</p>
+                </div>
+              `).join('')}
+            </div>
+          </article>
+        </section>
+      </div>
+    `;
+  };
 
   const syncFormulaMaterialName = (oldName, nextName) => {
     if (!oldName || oldName === nextName) return;
@@ -2079,6 +2229,7 @@ import { createBusinessPageShared } from './shared';
     if (!confirmed) return false;
     inventoryRows.splice(index, 1);
     if (inventoryEditingMaterialName === name) inventoryEditingMaterialName = '';
+    if (inventoryDetailMaterialName === name) inventoryDetailMaterialName = '';
     removeFormulaMaterialName(name);
     persistInventory(`已删除材料 ${name} · ${getTimeCode()}`);
     notifyAction(`已删除材料 ${name}`, 'success', `inventory-material-delete:${name}`);
@@ -2196,7 +2347,12 @@ import { createBusinessPageShared } from './shared';
               <tbody>
                 ${pagedRows.map((row) => `
                   <tr>
-                    <td class="biz-inventory-material-cell">${esc(row[0])}</td>
+                    <td class="biz-inventory-material-cell">
+                      <button type="button" data-inventory-detail="${esc(row[0])}">
+                        <strong>${esc(row[0])}</strong>
+                        <span>${esc(row[6] || row[10] || row[2] || '查看详情')}</span>
+                      </button>
+                    </td>
                     <td><span class="biz-formula-chip">${esc(row[1])}</span></td>
                     <td><span class="biz-formula-chip">${esc(row[2])}</span></td>
                     <td>${esc(row[3])}</td>
@@ -3173,6 +3329,9 @@ import { createBusinessPageShared } from './shared';
       tableColumns: [...officeDefaultTableColumns],
       tableRows: createOfficeDefaultTableRows(),
     });
+    const modalDataColumnCount = Math.max(0, modalRecord.tableColumns.length - 1);
+    const modalAuxiliaryColumnWidth = modalRecord.type === 'sampling' ? 78 + 54 : 54;
+    const modalDialogContentWidth = Math.max(560, 40 + 78 + (modalDataColumnCount * 150) + modalAuxiliaryColumnWidth);
     return `
       <section class="biz-office-page">
         <section class="business-panel biz-office-table-panel">
@@ -3227,7 +3386,7 @@ import { createBusinessPageShared } from './shared';
         </section>
         ${officeRecordModalOpen ? `
           <div class="biz-office-modal dialog-overlay" data-office-modal>
-            <div class="biz-inventory-material-dialog biz-office-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="officeRecordModalTitle">
+            <div class="biz-inventory-material-dialog biz-office-dialog dialog-card" style="--biz-office-dialog-content-width:${modalDialogContentWidth}px" role="dialog" aria-modal="true" aria-labelledby="officeRecordModalTitle">
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="officeRecordModalTitle">${officeRecordEditingId ? `编辑${esc(getOfficeRecordLabel(modalRecord.type))}` : `新建${esc(getOfficeRecordLabel())}`}</h2>
@@ -5646,6 +5805,7 @@ import { createBusinessPageShared } from './shared';
       'formula-management': renderFormula,
       'production-plan': renderProduction,
       'inventory-management': renderInventory,
+      'inventory-material-detail': renderInventoryDetail,
       'supplier-archive': renderSupplierArchive,
       'supplier-detail': renderSupplierDetail,
       'customer-archive': () => renderArchive('customer'),
@@ -5660,7 +5820,7 @@ import { createBusinessPageShared } from './shared';
 
   function render(pageId, def = {} as any) {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement' || pageId === 'office-records';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'inventory-material-detail' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement' || pageId === 'office-records';
     const usesInvoiceWorkbench = pageId === 'invoice-print';
     const usesPermissionWorkbench = pageId === 'permission-management';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);
@@ -5674,6 +5834,58 @@ import { createBusinessPageShared } from './shared';
     `;
     App.customSelects?.enhanceAll?.(refs.businessPageContent);
   }
+
+  const replaceArrayRows = (target, next) => {
+    target.splice(0, target.length, ...next);
+  };
+
+  const BUSINESS_HYDRATION_KEYS = new Set([
+    ORDER_STORAGE_KEY,
+    ORDER_LOG_KEY,
+    PROCUREMENT_STORAGE_KEY,
+    OFFICE_RECORD_STORAGE_KEY,
+    ASH_RECORD_STORAGE_KEY,
+    INVENTORY_STORAGE_KEY,
+    INVENTORY_CATEGORY_STORAGE_KEY,
+    FORMULA_STORAGE_KEY,
+    SUPPLIER_STORAGE_KEY,
+    CUSTOMER_STORAGE_KEY,
+    ROLE_PAGE_PERMISSION_STORAGE_KEY,
+  ]);
+
+  const refreshFromLocalStorage = (changedKeys = []) => {
+    if (changedKeys.length && !changedKeys.some((key) => BUSINESS_HYDRATION_KEYS.has(key))) return;
+
+    orderRows = normalizeOrders(utils.readJson(ORDER_STORAGE_KEY, null));
+    orderLogs = normalizeOrderLogs(utils.readJson(ORDER_LOG_KEY, null));
+    replaceArrayRows(procurementRows, normalizeProcurements(utils.readJson(PROCUREMENT_STORAGE_KEY, null)));
+    replaceArrayRows(officeRecords, normalizeOfficeRecords(utils.readJson(OFFICE_RECORD_STORAGE_KEY, null)));
+    replaceArrayRows(ashRecords, normalizeAshRecords(utils.readJson(ASH_RECORD_STORAGE_KEY, null)));
+    replaceArrayRows(inventoryRows, normalizeInventoryRows(utils.readJson(INVENTORY_STORAGE_KEY, null)));
+    inventoryCategories = normalizeInventoryCategories(utils.readJson(INVENTORY_CATEGORY_STORAGE_KEY, null), inventoryRows);
+    replaceArrayRows(supplierRows, normalizeSuppliers(utils.readJson(SUPPLIER_STORAGE_KEY, null)));
+    formulaRecipes = normalizeFormulaRecipes(utils.readJson(FORMULA_STORAGE_KEY, null));
+    if (!formulaRecipes.some((recipe) => recipe.id === activeFormulaId)) {
+      activeFormulaId = formulaRecipes[0]?.id || '';
+    }
+
+    Object.entries(archiveConfigs).forEach(([kind, config]) => {
+      if (config.storageKey === PERSONNEL_STORAGE_KEY) return;
+      const state = archiveStates[kind];
+      if (!state) return;
+      state.rows = normalizeArchiveRows(config, utils.readJson(config.storageKey, null));
+    });
+    const nextRolePermissions = utils.readJson(ROLE_PAGE_PERMISSION_STORAGE_KEY, {});
+    rolePagePermissionOverrides = nextRolePermissions && typeof nextRolePermissions === 'object' && !Array.isArray(nextRolePermissions)
+      ? nextRolePermissions
+      : {};
+
+    App.navigation?.refreshAccess?.({ redirect: false });
+    const activePageId = localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page') || 'dashboard';
+    if (refs.placeholderPageSection?.classList.contains('active')) {
+      render(activePageId, App.constants?.PAGE_DEFS?.[activePageId] || {});
+    }
+  };
 
   const focusFormulaSearch = (selectionStart = formulaSearchQuery.length, selectionEnd = selectionStart) => {
     requestAnimationFrame(() => {
@@ -6694,6 +6906,42 @@ import { createBusinessPageShared } from './shared';
     if (inventoryPageNext && refs.businessPageContent.contains(inventoryPageNext) && !inventoryPageNext.disabled) {
       inventoryListPage += 1;
       render('inventory-management');
+      return;
+    }
+
+    const inventoryDetailButton = event.target.closest('[data-inventory-detail]');
+    if (inventoryDetailButton && refs.businessPageContent.contains(inventoryDetailButton)) {
+      inventoryDetailMaterialName = inventoryDetailButton.getAttribute('data-inventory-detail') || '';
+      App.navigation.showPage('inventory-material-detail', { scrollTop: true });
+      return;
+    }
+
+    const inventoryDetailBackButton = event.target.closest('[data-inventory-detail-back]');
+    if (inventoryDetailBackButton && refs.businessPageContent.contains(inventoryDetailBackButton)) {
+      inventoryDetailMaterialName = '';
+      App.navigation.showPage('inventory-management', { scrollTop: true });
+      return;
+    }
+
+    const inventoryDetailEditButton = event.target.closest('[data-inventory-detail-edit]');
+    if (inventoryDetailEditButton && refs.businessPageContent.contains(inventoryDetailEditButton)) {
+      inventoryEditingMaterialName = inventoryDetailEditButton.getAttribute('data-inventory-detail-edit') || '';
+      inventoryDraftNote = `正在编辑材料 ${inventoryEditingMaterialName}`;
+      inventoryMaterialModalOpen = true;
+      App.navigation.showPage('inventory-management', { scrollTop: true });
+      requestAnimationFrame(() => refs.businessPageContent?.querySelector('[data-inventory-material-field="name"]')?.focus());
+      return;
+    }
+
+    const inventoryDetailDeleteButton = event.target.closest('[data-inventory-detail-delete]');
+    if (inventoryDetailDeleteButton && refs.businessPageContent.contains(inventoryDetailDeleteButton)) {
+      const deleted = await deleteInventoryMaterial(inventoryDetailDeleteButton.getAttribute('data-inventory-detail-delete') || '');
+      if (deleted) {
+        inventoryDetailMaterialName = '';
+        App.navigation.showPage('inventory-management', { scrollTop: true });
+      } else {
+        render('inventory-material-detail');
+      }
       return;
     }
 
@@ -7855,6 +8103,7 @@ import { createBusinessPageShared } from './shared';
 
   App.businessPages = {
     render,
+    refreshFromLocalStorage,
     cleanup: () => {
       document.querySelector('.biz-invoice-print-root')?.remove();
       Object.values(archiveStates).forEach((state) => {

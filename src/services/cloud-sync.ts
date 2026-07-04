@@ -11,6 +11,9 @@ const CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET = new Set<string>(CLEAR_LOCAL_WHEN_R
 const HYDRATION_CONCURRENCY = 6;
 
 type CloudSyncOperation = 'put' | 'delete' | 'seed';
+type CloudHydrationResult = {
+  changedKeys: string[];
+};
 
 const reportCloudSyncFailure = (operation: CloudSyncOperation, key: string): void => {
   console.warn(`Failed to ${operation} cloud-backed localStorage key "${key}".`);
@@ -41,7 +44,8 @@ export function removeCloudBackedLocalStorageItem(key: string): void {
   }
 }
 
-export async function hydrateCloudBackedLocalStorage(): Promise<void> {
+export async function hydrateCloudBackedLocalStorage(): Promise<CloudHydrationResult> {
+  const changedKeys = new Set<string>();
   let nextKeyIndex = 0;
   const hydrateKey = async (key: string): Promise<void> => {
     let remoteValue: string | null = null;
@@ -51,10 +55,13 @@ export async function hydrateCloudBackedLocalStorage(): Promise<void> {
       console.error(`Failed to hydrate cloud-backed localStorage key "${key}".`, error);
     }
     if (remoteValue != null) {
-      localStorage.setItem(key, typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue));
+      const nextValue = typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue);
+      if (localStorage.getItem(key) !== nextValue) changedKeys.add(key);
+      localStorage.setItem(key, nextValue);
       return;
     }
     if (CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET.has(key)) {
+      if (localStorage.getItem(key) != null) changedKeys.add(key);
       localStorage.removeItem(key);
       return;
     }
@@ -81,4 +88,5 @@ export async function hydrateCloudBackedLocalStorage(): Promise<void> {
       () => hydrateNextKeys(),
     ),
   );
+  return { changedKeys: [...changedKeys] };
 }

@@ -2701,16 +2701,23 @@ import { fetchWithTimeout } from '../../utils/fetch';
     return normalized.length ? normalized : fallbackColumns;
   };
 
-  const getCompareCellText = (row, column) => {
-    const cell = getCompareCellParts(row, column);
+  const getCompareCellText = (row, column, valueMode = 'all') => {
+    const cell = getCompareCellParts(row, column, valueMode);
     return `${cell.main}${cell.average}`;
   };
 
-  const getCompareCellParts = (row, column) => {
+  const getCompareCellParts = (row, column, valueMode = 'all') => {
     const value = row?.[column];
     if (Array.isArray(value)) {
-      const main = value.map((item) => `[${valueToText(item)}]`).join(' ');
       const averageText = getAverageText(value);
+      if (valueMode === 'average') {
+        return {
+          main: averageText || '--',
+          average: '',
+        };
+      }
+
+      const main = value.map((item) => `[${valueToText(item)}]`).join(' ');
       return {
         main,
         average: averageText ? ` (${averageText})` : '',
@@ -2722,13 +2729,30 @@ import { fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
+  const getCompareCellDisplay = (row, column, valueMode = 'all') => {
+    const value = row?.[column];
+    if (Array.isArray(value) && valueMode === 'average') {
+      const averageText = getAverageText(value);
+      return {
+        html: `<span class="analysis-cell-main analysis-cell-avg-only">${escapeHtml(averageText || '--')}</span>`,
+        title: `${formatHeader(column)}: ${averageText ? `均值 ${averageText}` : '--'}`,
+      };
+    }
+
+    return getCellDisplay(value, column);
+  };
+
   const getCompareRowLabel = (row, index) => {
     const model = valueToText(row?.型号).trim();
     const batch = valueToText(row?.批次).trim();
     return [model, batch].filter(Boolean).join(' / ') || `样本 ${index + 1}`;
   };
 
-  const buildCompareTableHtml = (rows, columns, viewMode = 'horizontal') => {
+  const buildCompareTableHtml = (rows, columns, viewMode = 'horizontal', valueMode = 'all') => {
+    if (!columns.length) {
+      return '<div class="analysis-compare-empty">未选择对比参数</div>';
+    }
+
     if (viewMode === 'vertical') {
       return `
         <table class="analysis-compare-table analysis-compare-table-vertical">
@@ -2737,7 +2761,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
               <tr>
                 <th>${escapeHtml(formatHeader(column))}</th>
                 ${rows.map((row) => {
-                  const cell = getCellDisplay(row[column], column);
+                  const cell = getCompareCellDisplay(row, column, valueMode);
                   return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
                 }).join('')}
               </tr>
@@ -2758,7 +2782,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
           ${rows.map((row) => `
             <tr>
               ${columns.map((column) => {
-                const cell = getCellDisplay(row[column], column);
+                const cell = getCompareCellDisplay(row, column, valueMode);
                 return `<td title="${escapeHtml(cell.title)}">${cell.html}</td>`;
               }).join('')}
             </tr>
@@ -2770,6 +2794,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
 
   const createCompareImageBlob = async (rows, options = {} as any) => {
     const tableView = options.tableView === 'vertical' ? 'vertical' : 'horizontal';
+    const valueMode = options.valueMode === 'average' ? 'average' : 'all';
     const allColumns = getCompareColumns(rows);
     const columns = normalizeCompareColumns(options.columns, allColumns);
     const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -2840,15 +2865,15 @@ import { fetchWithTimeout } from '../../utils/fetch';
     };
     const columnWidths = tableView === 'vertical'
       ? [
-        getColumnWidth('项目', columns.map(formatHeader)),
+          getColumnWidth('项目', columns.map(formatHeader)),
         ...rows.map((row, rowIndex) => getColumnWidth(
           getCompareRowLabel(row, rowIndex),
-          columns.map((column) => getCompareCellText(row, column))
+          columns.map((column) => getCompareCellText(row, column, valueMode))
         )),
       ]
       : columns.map((column) => getColumnWidth(
         formatHeader(column),
-        rows.map((row) => getCompareCellText(row, column))
+        rows.map((row) => getCompareCellText(row, column, valueMode))
       ));
 
     const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
@@ -2891,7 +2916,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
       context.lineWidth = 1;
       context.strokeRect(x + .5, y + .5, width, height);
 
-      const { main, average } = getCompareCellParts(row, column);
+      const { main, average } = getCompareCellParts(row, column, valueMode);
       const maxTextWidth = Math.max(20, width - horizontalPadding * 2);
       context.font = font;
       context.textBaseline = 'middle';
@@ -3055,14 +3080,16 @@ import { fetchWithTimeout } from '../../utils/fetch';
           <div class="analysis-compare-head">
             <div class="analysis-compare-title">广俊数据对比</div>
             <div class="analysis-compare-actions">
-              <div class="analysis-compare-view-toggle" role="group" aria-label="表格显示方式">
-                <button class="analysis-compare-view-btn" type="button" data-analysis-compare-view="horizontal" aria-pressed="false">
-                  <i class="ti ti-layout-columns" aria-hidden="true"></i>
-                  <span>横向</span>
-                </button>
-                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-view="vertical" aria-pressed="true">
+              <div class="analysis-compare-view-toggle" aria-label="表格显示方式">
+                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-view-toggle aria-label="当前纵向，点击切换横向">
                   <i class="ti ti-table" aria-hidden="true"></i>
                   <span>纵向</span>
+                </button>
+              </div>
+              <div class="analysis-compare-view-toggle analysis-compare-data-toggle" aria-label="数据显示范围">
+                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-value-toggle aria-label="当前全部数据，点击切换平均数">
+                  <i class="ti ti-list-details" aria-hidden="true"></i>
+                  <span>全部数据</span>
                 </button>
               </div>
               <div class="analysis-compare-param-settings">
@@ -3127,10 +3154,49 @@ import { fetchWithTimeout } from '../../utils/fetch';
     const dialog = document.querySelector('.analysis-compare-dialog');
     const columns = getCompareColumns(rows);
     let tableView = 'vertical';
+    let valueMode = 'all';
     let tableSwitchTimer = null;
-    const getCopyColumns = () => Array.from(dialog.querySelectorAll('[data-analysis-compare-param]:checked'))
+    const getSelectedCompareColumns = () => Array.from(dialog.querySelectorAll('[data-analysis-compare-param]:checked'))
       .map((input) => input.value)
       .filter((column) => columns.includes(column));
+    const refreshCompareToggleButtons = () => {
+      const viewToggle = dialog.querySelector('[data-analysis-compare-view-toggle]');
+      if (viewToggle) {
+        const isVertical = tableView === 'vertical';
+        viewToggle.setAttribute('aria-label', isVertical ? '当前纵向，点击切换横向' : '当前横向，点击切换纵向');
+        const icon = viewToggle.querySelector('i');
+        if (icon) icon.className = `ti ${isVertical ? 'ti-table' : 'ti-layout-columns'}`;
+        const label = viewToggle.querySelector('span');
+        if (label) label.textContent = isVertical ? '纵向' : '横向';
+      }
+
+      const valueToggle = dialog.querySelector('[data-analysis-compare-value-toggle]');
+      if (valueToggle) {
+        const isAverage = valueMode === 'average';
+        valueToggle.setAttribute('aria-label', isAverage ? '当前平均数，点击切换全部数据' : '当前全部数据，点击切换平均数');
+        const icon = valueToggle.querySelector('i');
+        if (icon) icon.className = `ti ${isAverage ? 'ti-percentage' : 'ti-list-details'}`;
+        const label = valueToggle.querySelector('span');
+        if (label) label.textContent = isAverage ? '平均数' : '全部数据';
+      }
+    };
+    const renderCompareTable = () => {
+      const tableHost = dialog.querySelector('[data-analysis-compare-table-host]');
+      if (!tableHost) return;
+      if (tableSwitchTimer) window.clearTimeout(tableSwitchTimer);
+      tableHost.style.minHeight = `${tableHost.offsetHeight}px`;
+      tableHost.classList.remove('is-switching-in');
+      tableHost.classList.add('is-switching-out');
+      tableSwitchTimer = window.setTimeout(() => {
+        tableHost.style.minHeight = '';
+        tableHost.innerHTML = buildCompareTableHtml(rows, getSelectedCompareColumns(), tableView, valueMode);
+        tableHost.classList.remove('is-switching-out');
+        tableHost.classList.add('is-switching-in');
+        window.requestAnimationFrame(() => {
+          tableHost.classList.remove('is-switching-in');
+        });
+      }, 80);
+    };
     dialog?.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -3146,52 +3212,45 @@ import { fetchWithTimeout } from '../../utils/fetch';
         dialog.querySelectorAll('[data-analysis-compare-param]').forEach((input) => {
           input.checked = true;
         });
+        renderCompareTable();
         return;
       }
       if (target.closest('[data-analysis-compare-param-clear]')) {
         dialog.querySelectorAll('[data-analysis-compare-param]').forEach((input) => {
           input.checked = false;
         });
+        renderCompareTable();
         return;
       }
       if (settingsPanel && !settingsPanel.hidden && !target.closest('.analysis-compare-param-settings')) {
         settingsPanel.hidden = true;
         dialog.querySelector('[data-analysis-compare-settings]')?.setAttribute('aria-expanded', 'false');
       }
-      const viewButton = target.closest('[data-analysis-compare-view]');
+      const viewButton = target.closest('[data-analysis-compare-view-toggle]');
       if (viewButton) {
-        const nextTableView = viewButton.getAttribute('data-analysis-compare-view') === 'vertical' ? 'vertical' : 'horizontal';
-        if (nextTableView === tableView) return;
-        tableView = nextTableView;
-        dialog.querySelectorAll('[data-analysis-compare-view]').forEach((button) => {
-          const isActive = button === viewButton;
-          button.classList.toggle('is-active', isActive);
-          button.setAttribute('aria-pressed', String(isActive));
-        });
-        const tableHost = dialog.querySelector('[data-analysis-compare-table-host]');
-        if (tableHost) {
-          if (tableSwitchTimer) window.clearTimeout(tableSwitchTimer);
-          tableHost.style.minHeight = `${tableHost.offsetHeight}px`;
-          tableHost.classList.remove('is-switching-in');
-          tableHost.classList.add('is-switching-out');
-          tableSwitchTimer = window.setTimeout(() => {
-            tableHost.style.minHeight = '';
-            tableHost.innerHTML = buildCompareTableHtml(rows, columns, tableView);
-            tableHost.classList.remove('is-switching-out');
-            tableHost.classList.add('is-switching-in');
-            window.requestAnimationFrame(() => {
-              tableHost.classList.remove('is-switching-in');
-            });
-          }, 80);
-        }
+        tableView = tableView === 'vertical' ? 'horizontal' : 'vertical';
+        refreshCompareToggleButtons();
+        renderCompareTable();
+        return;
+      }
+      const valueModeButton = target.closest('[data-analysis-compare-value-toggle]');
+      if (valueModeButton) {
+        valueMode = valueMode === 'average' ? 'all' : 'average';
+        refreshCompareToggleButtons();
+        renderCompareTable();
         return;
       }
       const copyButton = target.closest('[data-analysis-compare-copy]');
       if (copyButton && !copyButton.hasAttribute('data-analysis-compare-settings')) {
-        copyCompareImage(copyButton, { tableView, columns: getCopyColumns() });
+        copyCompareImage(copyButton, { tableView, valueMode, columns: getSelectedCompareColumns() });
         return;
       }
       if (target.closest('[data-analysis-compare-close]') || target === dialog) closeCompareDialog();
+    });
+    dialog?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.matches('[data-analysis-compare-param]')) return;
+      renderCompareTable();
     });
     document.addEventListener('keydown', handleCompareDialogKeydown);
     dialog?.querySelector('[data-analysis-compare-close]')?.focus({ preventScroll: true });

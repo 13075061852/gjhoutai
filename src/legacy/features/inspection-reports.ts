@@ -20,6 +20,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   };
   const refs: any = {};
   let eventController: AbortController | null = null;
+  let initialized = false;
 
   const getFreshRefs = () => {
     refs.page = document.querySelector(`[data-page-section="${PAGE_ID}"]`);
@@ -546,12 +547,18 @@ import { cloudStorage } from '../../services/cloud-storage';
   const cleanup = () => {
     eventController?.abort();
     eventController = null;
+    initialized = false;
     refs.listView?.classList.remove('is-drag-over', 'is-uploading');
   };
 
   const init = () => {
     getFreshRefs();
     if (!refs.page) return;
+    if (initialized) {
+      refreshReports();
+      return;
+    }
+    initialized = true;
     bindEvents();
     refreshReports();
   };

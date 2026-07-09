@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { findIconClasses } from './icon-class-pattern.mjs';
 
 const ROOT = path.resolve(__dirname, '..');
 const ADAPTER = path.join(ROOT, 'src/utils/iconParkAdapter.ts');
@@ -34,8 +35,8 @@ const usedIcons = new Set<string>();
 for (const file of walk(path.join(ROOT, 'src'))) {
   if (file === ADAPTER || file === BRIDGE) continue;
   const content = fs.readFileSync(file, 'utf-8');
-  for (const m of content.matchAll(/ti-[a-z0-9-]+/g)) {
-    usedIcons.add(m[0]);
+  for (const iconClass of findIconClasses(content)) {
+    usedIcons.add(iconClass);
   }
 }
 

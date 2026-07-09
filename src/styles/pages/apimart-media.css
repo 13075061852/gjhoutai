@@ -505,6 +505,36 @@
   box-shadow:0 0 0 3px rgba(0,87,255,.08);
 }
 
+.apimart-reference-url-editor{
+  display:grid;
+  gap:10px;
+}
+
+.apimart-reference-url-editor textarea{
+  width:100%;
+  min-height:76px;
+  padding:10px 12px;
+  resize:vertical;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface-2);
+  color:var(--text);
+  font:inherit;
+  font-size:12px;
+  line-height:1.55;
+  box-sizing:border-box;
+}
+
+.apimart-reference-url-editor textarea:focus{
+  outline:none;
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(0,87,255,.08);
+}
+
+.apimart-reference-url-editor .apimart-reference-file-names{
+  grid-column:auto;
+}
+
 .apimart-reference-icon{
   width:40px;
   height:40px;

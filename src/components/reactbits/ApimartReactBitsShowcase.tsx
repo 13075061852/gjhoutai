@@ -73,7 +73,7 @@ function ModelPicker({
       <div className="apimart-rb-model-main">
         <select
           id="apimartModel"
-          aria-label="选择 APIMart 生成模型"
+          aria-label="选择 LiblibAI 生成模型"
           defaultValue={selectedModelIsCustom ? 'custom' : selectedModel}
         >
           {models.map(([value, label]) => (

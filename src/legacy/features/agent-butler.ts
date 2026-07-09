@@ -1,5 +1,14 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 
+export const shouldAttachAgentSkillImages = ({
+  activePageId = '',
+  forceCurrentPage = false,
+  skillPageId = '',
+} = {} as any) => {
+  if (!forceCurrentPage || !activePageId || !skillPageId) return true;
+  return skillPageId === activePageId;
+};
+
 (function () {
   'use strict';
 
@@ -171,7 +180,7 @@
       id: 'cutout',
       label: '抠图处理',
       pages: ['image-cutout'],
-      patterns: [/抠图|去背|去除背景|透明|裁剪|图片|图像|png|背景|主体保护/],
+      patterns: [/抠图|去背|去除背景|透明|裁剪|png|背景|主体保护/],
     },
     {
       id: 'project',
@@ -370,7 +379,11 @@
         forceCurrentPage: forceCurrentPage && skill.pageId === activePageId,
         intent,
       });
-      if (!isPageGuideQuestion(question) && skill.getImages) {
+      if (!isPageGuideQuestion(question) && skill.getImages && shouldAttachAgentSkillImages({
+        activePageId,
+        forceCurrentPage,
+        skillPageId: skill.pageId,
+      })) {
         images.push(...skill.getImages(question, {
           activePageId,
           forceCurrentPage: forceCurrentPage && skill.pageId === activePageId,

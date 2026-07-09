@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import worker from './index';
 
 const encoder = new TextEncoder();
@@ -214,6 +214,10 @@ const authedRequest = (path: string, token: string, init: RequestInit = {}) => n
     cookie: `gjh_session=${token}`,
     ...(init.headers || {}),
   },
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('worker security controls', () => {
@@ -516,4 +520,96 @@ describe('worker security controls', () => {
     expect(imageResponse.headers.get('content-type')).toBe('image/png');
   });
 
+  it('proxies signed LiblibAI requests through the authenticated worker route', async () => {
+    const env = createEnv();
+    env.DB.addUser({
+      id: 'lab-1',
+      username: 'lab',
+      display_name: 'Lab',
+      role: 'lab_engineer',
+      department: '测试部',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    await env.DB.addSession('lab-1', 'lab-token');
+    const upstreamFetch = vi.fn(async () => jsonResponse({
+      code: 0,
+      data: { generateUuid: 'task-1' },
+    }));
+    vi.stubGlobal('fetch', upstreamFetch);
+
+    const response = await worker.fetch(authedRequest('/api/liblibai/request', 'lab-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://openapi.liblibai.cloud',
+        path: '/api/generate/seedreamV4',
+        accessKey: 'test-access',
+        secretKey: 'test-secret',
+        payload: { templateUuid: 'template-1' },
+      }),
+    }), env as any);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      code: 0,
+      data: { generateUuid: 'task-1' },
+    });
+    expect(upstreamFetch).toHaveBeenCalledOnce();
+    const [target, init] = upstreamFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const targetUrl = new URL(target);
+    expect(targetUrl.origin).toBe('https://openapi.liblibai.cloud');
+    expect(targetUrl.pathname).toBe('/api/generate/seedreamV4');
+    expect(targetUrl.searchParams.get('AccessKey')).toBe('test-access');
+    expect(targetUrl.searchParams.get('Signature')).toBeTruthy();
+    expect(init).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ templateUuid: 'template-1' }),
+    });
+  });
+
+  it('rejects LiblibAI proxy paths outside the explicit allowlist', async () => {
+    const env = createEnv();
+    env.DB.addUser({
+      id: 'lab-1',
+      username: 'lab',
+      display_name: 'Lab',
+      role: 'lab_engineer',
+      department: '测试部',
+      password_hash: 'unused',
+      password_salt: 'unused',
+      must_change_password: 0,
+      is_active: 1,
+    });
+    await env.DB.addSession('lab-1', 'lab-token');
+    const upstreamFetch = vi.fn();
+    vi.stubGlobal('fetch', upstreamFetch);
+
+    const response = await worker.fetch(authedRequest('/api/liblibai/request', 'lab-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://openapi.liblibai.cloud',
+        path: '/api/admin/secrets',
+        accessKey: 'test-access',
+        secretKey: 'test-secret',
+        payload: {},
+      }),
+    }), env as any);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'invalid_liblib_path' });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+});
+
+const jsonResponse = (value: unknown, init: ResponseInit = {}) => new Response(JSON.stringify(value), {
+  ...init,
+  headers: {
+    'content-type': 'application/json',
+    ...(init.headers || {}),
+  },
 });

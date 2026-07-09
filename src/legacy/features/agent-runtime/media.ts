@@ -32,7 +32,7 @@ export const normalizeAgentImages = (images: unknown, options: { maxImages?: num
 export const mapImageGenerationParams = (input: Record<string, any> = {} as any) => {
   const prompt = String(input.prompt || input.question || '').trim();
   const size = String(input.size || input.aspectRatio || '16:9').trim();
-  const resolution = String(input.resolution || '1k').trim();
+  const resolution = String(input.resolution || '2k').trim();
   const parsedCount = Number.parseInt(String(input.count || input.n || 1), 10);
   const n = Math.max(1, Math.min(4, Number.isFinite(parsedCount) ? parsedCount : 1));
   const referenceUrls = Array.isArray(input.referenceUrls)

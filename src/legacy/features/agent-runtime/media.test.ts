@@ -17,7 +17,7 @@ describe('agent runtime media', () => {
     const params = mapImageGenerationParams({ prompt: '产品海报', count: 9, referenceUrls: ['https://example.com/a.png'] });
     expect(params.prompt).toBe('产品海报');
     expect(params.size).toBe('16:9');
-    expect(params.resolution).toBe('1k');
+    expect(params.resolution).toBe('2k');
     expect(params.n).toBe(4);
     expect(params.image_urls).toEqual(['https://example.com/a.png']);
   });

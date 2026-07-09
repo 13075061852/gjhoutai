@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { findIconClasses } from './icon-class-pattern.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -36,8 +37,8 @@ const usedIcons = new Set();
 for (const file of walk(path.join(ROOT, 'src'))) {
   if (file === ADAPTER || file === BRIDGE) continue;
   const content = fs.readFileSync(file, 'utf-8');
-  for (const m of content.matchAll(/ti-[a-z0-9-]+/g)) {
-    usedIcons.add(m[0]);
+  for (const iconClass of findIconClasses(content)) {
+    usedIcons.add(iconClass);
   }
 }
 

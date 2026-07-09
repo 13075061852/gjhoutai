@@ -23,7 +23,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     AI_CALL_LOG_KEY: LOCAL_STORAGE_KEYS.aiCallLog,
     DEFAULT_BASE_URL: 'https://openrouter.ai/api/v1',
     DEFAULT_LM_STUDIO_BASE_URL: 'http://127.0.0.1:1234/v1',
-    DEFAULT_APIMART_BASE_URL: 'https://api.apimart.ai',
+    DEFAULT_LIBLIB_BASE_URL: 'https://openapi.liblibai.cloud',
     DEFAULT_CONFIG: {
       apiKey: '',
       aiProvider: 'openrouter',
@@ -47,10 +47,11 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
       searchDepth: 'basic',
       searchMaxResults: 5,
       searchTopic: 'general',
-      apimartApiKey: '',
-      apimartBaseUrl: 'https://api.apimart.ai',
-      apimartImageModel: 'gpt-image-2',
-      apimartVideoModel: 'sora-2',
+      liblibAccessKey: '',
+      liblibSecretKey: '',
+      liblibBaseUrl: 'https://openapi.liblibai.cloud',
+      liblibImageModel: 'doubao-seedream-4-5-251128',
+      liblibVideoModel: 'kling-v2-6',
       ossBucket: 'gjhoutai',
       ossEndpoint: 'oss-cn-shanghai.aliyuncs.com',
       ossObjectKey: '测试数据.json',
@@ -162,7 +163,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
       'apimart-media': {
         title: 'AI绘图',
         eyebrow: 'AI 创作',
-        desc: '通过 APIMart 异步生成图片和视频，提交任务后轮询任务状态并展示结果链接。',
+        desc: '通过 LiblibAI 异步生成图片和视频，提交任务后轮询任务状态并展示结果链接。',
       },
       'ai-call-analysis': {
         title: 'AI调用分析',

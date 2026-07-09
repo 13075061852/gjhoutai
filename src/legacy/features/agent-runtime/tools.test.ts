@@ -29,7 +29,7 @@ describe('agent runtime tools', () => {
     expect(result?.data.manifest.skills).toEqual(['business.queryPageData']);
   });
 
-  it('submits image generation through APIMart', async () => {
+  it('submits image generation through LiblibAI', async () => {
     const generateImage = vi.fn().mockResolvedValue({ taskId: 'task-1' });
     const skill = getSkill({ apimartMedia: { generateImage } }, 'media.generateImage');
     const result = await skill?.handler({ prompt: '产品海报', count: 2 });

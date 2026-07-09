@@ -521,7 +521,7 @@ import { createBusinessPageShared } from './shared';
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr><td colspan="9"><div class="biz-formula-empty">暂无匹配订单</div></td></tr>'}
+                `).join('') || '<tr class="biz-order-empty-row"><td class="biz-order-empty-cell" colspan="9"><div class="biz-formula-empty">暂无匹配订单</div></td></tr>'}
               </tbody>
             </table>
           </div>
@@ -1296,7 +1296,7 @@ import { createBusinessPageShared } from './shared';
               </button>
             </div>
           </div>
-          <div class="ui-table-wrap biz-supplier-table-wrap">
+          <div class="ui-table-wrap biz-supplier-table-wrap biz-procurement-table-wrap">
             <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table biz-procurement-table">
               <thead>
                 <tr>${['采购单号', '供应商', '原料名称', '数量 (KG)', '单价 (¥)', '金额 (¥)', '采购日期', '状态', '操作'].map((c) => `<th>${esc(c)}</th>`).join('')}</tr>
@@ -1323,7 +1323,7 @@ import { createBusinessPageShared } from './shared';
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr><td colspan="9"><div class="biz-formula-empty">暂无匹配采购记录</div></td></tr>'}
+                `).join('') || '<tr class="biz-procurement-empty-row"><td class="biz-procurement-empty-cell" colspan="9"><div class="biz-formula-empty">暂无匹配采购记录</div></td></tr>'}
               </tbody>
             </table>
           </div>
@@ -2371,7 +2371,7 @@ import { createBusinessPageShared } from './shared';
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr><td colspan="7"><div class="biz-formula-empty">暂无匹配材料</div></td></tr>'}
+                `).join('') || '<tr class="biz-inventory-empty-row"><td class="biz-inventory-empty-cell" colspan="7"><div class="biz-formula-empty">暂无匹配材料</div></td></tr>'}
               </tbody>
             </table>
           </div>
@@ -4114,8 +4114,10 @@ import { createBusinessPageShared } from './shared';
               label: '搜索配方',
               attributes: { 'data-formula-search': '' },
             })}
-            <select data-formula-list-category aria-label="配方分类筛选">${renderFormulaFilterOptions(categories, formulaListCategory, '全部分类')}</select>
-            <select data-formula-list-status aria-label="配方状态筛选">${renderFormulaFilterOptions(statuses, formulaListStatus, '全部状态')}</select>
+            <div class="biz-formula-filter-group">
+              <select data-formula-list-category aria-label="配方分类筛选">${renderFormulaFilterOptions(categories, formulaListCategory, '全部分类')}</select>
+              <select data-formula-list-status aria-label="配方状态筛选">${renderFormulaFilterOptions(statuses, formulaListStatus, '全部状态')}</select>
+            </div>
             <button class="biz-formula-new-btn" type="button" data-formula-new>
               <i class="ti ti-plus" aria-hidden="true"></i>
               <span>新建配方</span>
@@ -4175,8 +4177,8 @@ import { createBusinessPageShared } from './shared';
                   </tr>
                 `;
               }).join('') || `
-                <tr>
-                  <td colspan="10"><div class="biz-formula-empty">没有匹配的配方</div></td>
+                <tr class="biz-formula-empty-row">
+                  <td class="biz-formula-empty-cell" colspan="10"><div class="biz-formula-empty">没有匹配的配方</div></td>
                 </tr>
               `}
             </tbody>
@@ -4563,6 +4565,7 @@ import { createBusinessPageShared } from './shared';
             <div class="business-panel-head biz-line-board-head">
               <div class="biz-line-board-title">
                 <h2>当天生产计划</h2>
+                <span>${esc(productionPlanDate)} · ${planOrders.length} 单 · ${esc(formatKgValue(totalKg))} kg</span>
               </div>
               <label class="biz-production-date">
                 <span>生产日期</span>
@@ -4586,21 +4589,26 @@ import { createBusinessPageShared } from './shared';
           <div class="business-panel-head biz-production-table-head">
             <div class="biz-production-table-title">
               <i class="ti ti-list-details" aria-hidden="true"></i>
-              <h2>排产明细</h2>
+              <div>
+                <h2>排产明细</h2>
+                <span>${hasProductionFilters ? `筛选 ${productionFilteredCount} 条` : `当天 ${productionFilteredCount} 条`}</span>
+              </div>
             </div>
             <div class="biz-formula-table-actions biz-production-table-actions">
-              <select data-production-line-filter aria-label="排产产线筛选">
-                ${renderOptions(['全部', ...formulaLineOptions.map((line) => `${line}号线`)], productionLineFilter === '全部' ? '全部' : `${productionLineFilter}号线`)}
-              </select>
-              <select data-production-status-filter aria-label="排产状态筛选">
-                ${renderOptions(['全部', ...productionQueueStatuses], productionStatusFilter)}
-              </select>
               ${renderSearchBox({
                 className: 'biz-formula-table-search biz-production-search',
                 placeholder: '搜索排产号 / 订单号 / 产品',
                 value: productionSearchQuery,
                 attributes: { 'data-production-search': 'true' },
               })}
+              <div class="biz-production-filter-group">
+                <select data-production-line-filter aria-label="排产产线筛选">
+                  ${renderOptions(['全部', ...formulaLineOptions.map((line) => `${line}号线`)], productionLineFilter === '全部' ? '全部' : `${productionLineFilter}号线`)}
+                </select>
+                <select data-production-status-filter aria-label="排产状态筛选">
+                  ${renderOptions(['全部', ...productionQueueStatuses], productionStatusFilter)}
+                </select>
+              </div>
             </div>
           </div>
           <div class="ui-table-wrap biz-production-table-wrap">
@@ -4639,7 +4647,7 @@ import { createBusinessPageShared } from './shared';
                       </td>
                     </tr>
                   `;
-                }).join('') || `<tr><td colspan="8"><div class="biz-formula-empty">${hasProductionFilters ? '暂无匹配生产计划' : '当天暂无生产计划'}</div></td></tr>`}
+                }).join('') || `<tr class="biz-production-empty-row"><td class="biz-production-empty-cell" colspan="8"><div class="biz-formula-empty">${hasProductionFilters ? '暂无匹配生产计划' : '当天暂无生产计划'}</div></td></tr>`}
               </tbody>
             </table>
           </div>
@@ -5222,7 +5230,7 @@ import { createBusinessPageShared } from './shared';
 
     return `
       <div class="biz-supplier-page">
-        <section class="business-panel biz-supplier-table-panel">
+        <section class="business-panel biz-supplier-table-panel biz-supplier-archive-table-panel">
           <div class="biz-formula-table-head biz-supplier-table-head">
             <div class="biz-formula-table-title">
               <i class="ti ti-building-factory-2" aria-hidden="true"></i>
@@ -5249,7 +5257,7 @@ import { createBusinessPageShared } from './shared';
               </button>
             </div>
           </div>
-          <div class="ui-table-wrap biz-supplier-table-wrap">
+          <div class="ui-table-wrap biz-supplier-table-wrap biz-supplier-archive-table-wrap">
             <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table">
               <thead>
                 <tr>${['编号', '供应商名称', '联系人', '电话', '邮箱', '供应类别', '状态', '操作'].map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
@@ -5275,7 +5283,7 @@ import { createBusinessPageShared } from './shared';
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr><td colspan="8"><div class="biz-formula-empty">暂无匹配供应商</div></td></tr>'}
+                `).join('') || '<tr class="biz-supplier-empty-row"><td class="biz-supplier-empty-cell" colspan="8"><div class="biz-formula-empty">暂无匹配供应商</div></td></tr>'}
               </tbody>
             </table>
           </div>
@@ -5392,7 +5400,7 @@ import { createBusinessPageShared } from './shared';
 
     return `
       <div class="biz-supplier-page biz-archive-table-page">
-        <section class="business-panel biz-supplier-table-panel biz-archive-table-panel">
+        <section class="business-panel biz-supplier-table-panel biz-archive-table-panel biz-${esc(kind)}-archive-table-panel">
           <div class="biz-formula-table-head biz-supplier-table-head">
             <div class="biz-formula-table-title">
               <i class="ti ${esc(config.icon)}" aria-hidden="true"></i>
@@ -5400,7 +5408,7 @@ import { createBusinessPageShared } from './shared';
                 <h2>${esc(config.title)}</h2>
               </div>
             </div>
-            <div class="biz-formula-table-actions biz-supplier-table-actions">
+            <div class="biz-formula-table-actions biz-supplier-table-actions biz-archive-table-actions">
               ${renderSearchBox({
                 className: 'biz-supplier-search',
                 value: state.search,
@@ -5426,7 +5434,7 @@ import { createBusinessPageShared } from './shared';
               </button>
             </div>
           </div>
-          <div class="ui-table-wrap biz-supplier-table-wrap">
+          <div class="ui-table-wrap biz-supplier-table-wrap biz-archive-table-wrap">
             <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table biz-archive-table">
               <thead>
                 <tr>${config.columns.map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
@@ -5458,7 +5466,7 @@ import { createBusinessPageShared } from './shared';
                       </div>
                     </td>
                   </tr>
-                `).join('') || `<tr><td colspan="${config.columns.length}"><div class="biz-formula-empty">${esc(config.emptyText)}</div></td></tr>`}
+                `).join('') || `<tr class="biz-archive-empty-row"><td class="biz-archive-empty-cell" colspan="${config.columns.length}"><div class="biz-formula-empty">${esc(config.emptyText)}</div></td></tr>`}
               </tbody>
             </table>
           </div>
@@ -5820,7 +5828,7 @@ import { createBusinessPageShared } from './shared';
 
   function render(pageId, def = {} as any) {
     if (!refs.businessPageContent) return;
-    const usesFullHeightTable = pageId === 'order-management' || pageId === 'inventory-management' || pageId === 'inventory-material-detail' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement' || pageId === 'office-records';
+    const usesFullHeightTable = pageId === 'order-management' || pageId === 'formula-management' || pageId === 'inventory-management' || pageId === 'inventory-material-detail' || pageId === 'production-plan' || pageId === 'supplier-archive' || pageId === 'customer-archive' || pageId === 'personnel-archive' || pageId === 'raw-material-procurement' || pageId === 'office-records';
     const usesInvoiceWorkbench = pageId === 'invoice-print';
     const usesPermissionWorkbench = pageId === 'permission-management';
     refs.businessPageContent.classList.toggle('biz-inventory-shell', usesFullHeightTable);

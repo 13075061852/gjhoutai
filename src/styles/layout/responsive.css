@@ -133,6 +133,27 @@
       .biz-formula-new-btn{
         flex:1 1 180px;
       }
+      .biz-order-table-head.biz-formula-table-head{
+        display:grid;
+        grid-template-columns:1fr;
+        align-items:stretch;
+        gap:16px;
+      }
+      .biz-order-table-actions.biz-formula-table-actions{
+        width:100%;
+        display:grid;
+        grid-template-columns:minmax(132px,150px) minmax(150px,170px) max-content;
+        align-items:center;
+        justify-content:start;
+        gap:8px;
+      }
+      .biz-order-table-actions .custom-select,
+      .biz-order-table-actions input[type="date"],
+      .biz-order-table-actions .biz-formula-new-btn{
+        width:100%;
+        min-height:36px;
+        flex:initial;
+      }
       .biz-office-table-head.biz-formula-table-head{
         display:grid;
         grid-template-columns:1fr;
@@ -728,9 +749,6 @@
       }
       .biz-inventory-table-head{
         align-items:center;
-        flex-direction:row;
-        justify-content:space-between;
-        flex-wrap:wrap;
       }
       .biz-inventory-category-head{
         flex-direction:row;
@@ -744,26 +762,25 @@
         align-self:center;
       }
       .biz-inventory-table-actions{
-        width:auto;
+        width:100%;
         margin-left:auto;
-        justify-content:flex-end;
-        flex-wrap:nowrap;
-        gap:12px;
+        justify-content:stretch;
+        gap:8px;
       }
       .biz-inventory-search{
-        width:clamp(220px, 34vw, 320px);
+        width:100%;
       }
       .biz-inventory-table-head.biz-formula-table-head{
-        align-items:center;
-        flex-direction:row;
-        justify-content:space-between;
-        flex-wrap:nowrap;
+        display:grid;
+        grid-template-columns:1fr;
+        align-items:stretch;
       }
       .biz-inventory-table-head .biz-formula-table-title{
-        flex:0 0 auto;
+        flex:initial;
       }
       .biz-inventory-table-head .biz-inventory-table-actions{
-        flex:0 1 auto;
+        grid-template-columns:minmax(220px,1fr) minmax(132px,160px) max-content;
+        flex:initial;
       }
       .biz-inventory-category-editor,
       .biz-inventory-material-editor{

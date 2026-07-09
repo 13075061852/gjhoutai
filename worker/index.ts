@@ -42,6 +42,25 @@ const SAFE_BLOB_CONTENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'
 const DATA_RECOGNITION_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const DATA_RECOGNITION_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const INSPECTION_REPORT_MAX_PDF_BYTES = 50 * 1024 * 1024;
+const LIBLIBAI_ORIGIN = 'https://openapi.liblibai.cloud';
+const LIBLIBAI_MAX_PAYLOAD_BYTES = 2 * 1024 * 1024;
+const LIBLIBAI_ALLOWED_PATHS = new Set([
+  '/api/generate/status',
+  '/api/generate/seedreamV4',
+  '/api/generate/kontext/text2img',
+  '/api/generate/kontext/img2img',
+  '/api/generate/smart-img1/generate',
+  '/api/generate/libDream',
+  '/api/generate/libEdit',
+  '/api/generate/libEditV2',
+  '/api/generate/webui/text2img/ultra',
+  '/api/generate/webui/img2img/ultra',
+  '/api/generate/webui/text2img',
+  '/api/generate/video/kling/text2video',
+  '/api/generate/video/kling/img2video',
+  '/api/generate/video/kling/multiImg2video',
+  '/api/generate/video/kling/omni-video',
+]);
 
 const LEGACY_ROLE_DEPARTMENTS: Record<LegacyRole, Department> = {
   system_admin: '系统管理员',
@@ -218,7 +237,44 @@ const bytesToBase64 = (bytes: Uint8Array) => {
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
   return btoa(binary);
 };
+const bytesToBase64Url = (bytes: Uint8Array) => bytesToBase64(bytes)
+  .replace(/\+/g, '-')
+  .replace(/\//g, '_')
+  .replace(/=+$/, '');
 const base64ToBytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+const createLiblibSignature = async (
+  path: string,
+  secretKey: string,
+  timestamp: string,
+  nonce: string,
+) => {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secretKey),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    encoder.encode(`${path}&${timestamp}&${nonce}`),
+  );
+  return bytesToBase64Url(new Uint8Array(signature));
+};
+const createLiblibSignedUrl = async (path: string, accessKey: string, secretKey: string) => {
+  const timestamp = String(Date.now());
+  const nonce = randomHex(8);
+  const signature = await createLiblibSignature(path, secretKey, timestamp, nonce);
+  const query = new URLSearchParams({
+    AccessKey: accessKey,
+    Signature: signature,
+    Timestamp: timestamp,
+    SignatureNonce: nonce,
+  });
+  return `${LIBLIBAI_ORIGIN}${path}?${query.toString()}`;
+};
 const getConfigKey = async (env: Env) => {
   if (!env.CONFIG_ENCRYPTION_KEY) throw new Error('missing_config_encryption_key');
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.CONFIG_ENCRYPTION_KEY));
@@ -601,6 +657,61 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   return notFound();
 }
 
+async function handleLiblibAiProxy(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname !== '/api/liblibai/request') return null;
+  if (request.method !== 'POST') return notFound();
+
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
+
+  let payload: {
+    baseUrl?: unknown;
+    path?: unknown;
+    accessKey?: unknown;
+    secretKey?: unknown;
+    payload?: unknown;
+  };
+  try {
+    payload = await request.json();
+  } catch {
+    return badRequest('invalid_liblib_payload');
+  }
+
+  const baseUrl = String(payload.baseUrl || '').replace(/\/+$/, '');
+  const path = String(payload.path || '');
+  const accessKey = String(payload.accessKey || '').trim();
+  const secretKey = String(payload.secretKey || '').trim();
+  if (baseUrl !== LIBLIBAI_ORIGIN) return badRequest('invalid_liblib_origin');
+  if (!LIBLIBAI_ALLOWED_PATHS.has(path)) return badRequest('invalid_liblib_path');
+  if (!accessKey || accessKey.length > 256 || !secretKey || secretKey.length > 512) {
+    return badRequest('invalid_liblib_credentials');
+  }
+  if (!payload.payload || typeof payload.payload !== 'object' || Array.isArray(payload.payload)) {
+    return badRequest('invalid_liblib_payload');
+  }
+
+  const upstreamBody = JSON.stringify(payload.payload);
+  if (new TextEncoder().encode(upstreamBody).byteLength > LIBLIBAI_MAX_PAYLOAD_BYTES) {
+    return badRequest('liblib_payload_too_large');
+  }
+
+  const upstream = await fetch(await createLiblibSignedUrl(path, accessKey, secretKey), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: upstreamBody,
+  });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      'content-type': upstream.headers.get('content-type') || 'application/json;charset=utf-8',
+    },
+  });
+}
+
 async function handleDataRecognitionHistory(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/data-recognition/history')) return null;
   const user = await getSessionUser(request, env);
@@ -889,6 +1000,8 @@ export default {
     if (profileResponse) return withCors(request, env, profileResponse);
     const configResponse = await handleConfig(request, env, url);
     if (configResponse) return withCors(request, env, configResponse);
+    const liblibAiResponse = await handleLiblibAiProxy(request, env, url);
+    if (liblibAiResponse) return withCors(request, env, liblibAiResponse);
     const dataRecognitionHistoryResponse = await handleDataRecognitionHistory(request, env, url);
     if (dataRecognitionHistoryResponse) return withCors(request, env, dataRecognitionHistoryResponse);
     const inspectionReportsResponse = await handleInspectionReports(request, env, url);

@@ -2,6 +2,17 @@
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { getLegacyApp } from '../core/app-context';
+import {
+  buildLiblibImageRequest,
+  buildLiblibVideoRequest,
+  LIBLIB_IMAGE_MODELS,
+  LIBLIB_SEEDREAM_45_MODEL,
+  LIBLIB_STATUS_PATH,
+  LIBLIB_VIDEO_MODELS,
+  normalizeLiblibTaskStatus,
+  unwrapLiblibPayload,
+} from '../../services/liblibai';
+import { requestLiblibAi } from '../../services/liblibai-proxy';
 
 (function () {
   'use strict';
@@ -13,42 +24,14 @@ import { getLegacyApp } from '../core/app-context';
   const PAGE_ID = 'apimart-media';
   const STORAGE_KEY = LOCAL_STORAGE_KEYS.apimartMediaTasks;
   const MAX_TASKS = 30;
-  const IMAGE_MODELS = [
-    ['gpt-image-2', 'GPT-Image-2'],
-    ['gpt-image-2-official', 'GPT-Image-2 Official'],
-    ['gpt-image-1-official', 'GPT-Image-1 Official'],
-    ['gpt-image-1.5-official', 'GPT-Image-1.5 Official'],
-    ['flux-2-flex', 'Flux 2 Flex'],
-    ['flux-2-pro', 'Flux 2 Pro'],
-    ['flux-kontext-pro', 'Flux Kontext Pro'],
-    ['wan2.7-image-pro', 'Wan2.7 Image Pro'],
-    ['seedream-4.0', 'Seedream 4.0'],
-    ['seedream-4.5', 'Seedream 4.5'],
-    ['grok-imagine-1.0-apimart', 'Grok Imagine 1.0'],
-  ];
-  const VIDEO_MODELS = [
-    ['sora-2', 'Sora 2'],
-    ['sora-2-preview', 'Sora 2 Preview'],
-    ['veo3.1-fast', 'VEO3.1 Fast'],
-    ['veo3.1-quality', 'VEO3.1 Quality'],
-    ['veo3.1-lite', 'VEO3.1 Lite'],
-    ['veo3.1-fast-official', 'VEO3.1 Fast Official'],
-    ['wan2.6', 'Wan2.6'],
-    ['doubao-seedance-2.0', 'Doubao Seedance 2.0'],
-    ['doubao-seedance-1-5-pro', 'Doubao Seedance 1.5 Pro'],
-    ['MiniMax-Hailuo-02', 'MiniMax Hailuo 02'],
-    ['grok-imagine-1.0-video-apimart', 'Grok Imagine Video'],
-    ['kling-v2-6-motion-control', 'Kling 2.6 Motion Control'],
-  ];
+  const IMAGE_MODELS = LIBLIB_IMAGE_MODELS;
+  const VIDEO_MODELS = LIBLIB_VIDEO_MODELS;
   const IMAGE_RESOLUTIONS = [
-    ['1k', '1K (1024 × 576)'],
-    ['2k', '2K (2048 × 1152)'],
-    ['4k', '4K (4096 × 2304)'],
+    ['2k', '2K'],
+    ['4k', '4K'],
   ];
   const VIDEO_RESOLUTIONS = [
-    ['720p', '720p'],
-    ['1080p', '1080p'],
-    ['4k', '4K'],
+    ['pro', '高品质'],
   ];
   const ASPECT_RATIOS = [
     ['16:9', '16:9'],
@@ -191,14 +174,14 @@ import { getLegacyApp } from '../core/app-context';
     prompt: '',
     referenceUrls: '',
     size: '16:9',
-    resolution: '1k',
+    resolution: '2k',
     count: 1,
     duration: 5,
     resultPage: 0,
     imageModel: '',
     videoModel: '',
-    imageResolution: '1k',
-    videoResolution: '720p',
+    imageResolution: '2k',
+    videoResolution: 'pro',
     imageCount: 1,
     videoDuration: 5,
     resultCleared: false,
@@ -214,10 +197,11 @@ import { getLegacyApp } from '../core/app-context';
   const getConfig = () => {
     const saved = App.config?.getFormConfig?.() || App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG;
     return {
-      apiKey: String(saved.apimartApiKey || '').trim(),
-      baseUrl: utils.normalizeBaseUrl(saved.apimartBaseUrl || constants.DEFAULT_APIMART_BASE_URL),
-      imageModel: String(saved.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel || 'gpt-image-2').trim(),
-      videoModel: String(saved.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel || 'sora-2').trim(),
+      accessKey: String(saved.liblibAccessKey || '').trim(),
+      secretKey: String(saved.liblibSecretKey || '').trim(),
+      baseUrl: utils.normalizeBaseUrl(saved.liblibBaseUrl || constants.DEFAULT_LIBLIB_BASE_URL),
+      imageModel: String(saved.liblibImageModel || constants.DEFAULT_CONFIG.liblibImageModel || LIBLIB_SEEDREAM_45_MODEL).trim(),
+      videoModel: String(saved.liblibVideoModel || constants.DEFAULT_CONFIG.liblibVideoModel || 'kling-v2-6').trim(),
     };
   };
 
@@ -243,65 +227,74 @@ import { getLegacyApp } from '../core/app-context';
     }
   };
 
-  const requestJson = async (path, options = {} as any) => {
+  const requestJson = async (path, payload = {} as any) => {
     const config = getConfig();
-    if (!config.apiKey) throw new Error('请先在配置中心填写 APIMart API Key');
-    const response = await fetchWithTimeout(`${config.baseUrl}${path}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(options.headers || {}),
-      },
-    });
+    if (!config.accessKey || !config.secretKey) throw new Error('请先在配置中心填写 LiblibAI AccessKey 和 SecretKey');
+    const response = await requestLiblibAi({
+      baseUrl: config.baseUrl,
+      path,
+      accessKey: config.accessKey,
+      secretKey: config.secretKey,
+      payload,
+    }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) throw new Error(await readApiError(response));
-    return response.json();
+    return unwrapLiblibPayload(await response.json());
   };
 
   const normalizeTaskId = (payload) => {
-    const data = payload?.data;
-    if (Array.isArray(data)) return data[0]?.task_id || data[0]?.id || '';
-    return data?.task_id || data?.id || payload?.task_id || payload?.id || '';
+    return payload?.generateUuid || payload?.task_id || payload?.id || '';
   };
 
   const normalizeAllTaskIds = (payload) => {
-    const data = payload?.data;
-    if (Array.isArray(data)) return data.map((item) => item?.task_id || item?.id || '').filter(Boolean);
-    const single = data?.task_id || data?.id || payload?.task_id || payload?.id || '';
+    const single = normalizeTaskId(payload);
     return single ? [single] : [];
   };
 
   const extractResultUrls = (task) => {
-    const result = task?.result || {};
+    const result = task?.result || task || {};
     const collectOne = (value) => {
       if (Array.isArray(value)) return value.filter(Boolean);
       return value ? [value] : [];
     };
     const collect = (items) => (Array.isArray(items) ? items.flatMap((item) => {
-      const url = item?.url ?? item?.urls ?? item?.video_url ?? item?.image_url;
+      const url = item?.url ?? item?.urls ?? item?.videoUrl ?? item?.imageUrl ?? item?.video_url ?? item?.image_url;
       if (Array.isArray(url)) return url;
       return url ? [url] : [];
     }) : []);
     return {
       images: [...collect(result.images), ...collectOne(result.image_url)],
       videos: [...collect(result.videos), ...collectOne(result.video_url)],
-      thumbnail: result.thumbnail_url || result.cover_url || '',
+      thumbnail: result.thumbnailUrl
+        || result.coverPath
+        || result.videos?.[0]?.coverPath
+        || result.thumbnail_url
+        || result.cover_url
+        || '',
     };
   };
 
   const submitGeneration = async (type, params = {} as any) => {
     const config = getConfig();
-    const payload = {
-      ...params,
-      model: params.model || (type === 'video' ? config.videoModel : config.imageModel),
-    };
-    const path = type === 'video' ? '/v1/videos/generations' : '/v1/images/generations';
-    const response = await requestJson(path, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    const model = params.model || (type === 'video' ? config.videoModel : config.imageModel);
+    const request = type === 'video'
+      ? buildLiblibVideoRequest({
+        prompt: params.prompt,
+        model,
+        duration: params.duration,
+        aspectRatio: params.aspect_ratio,
+        referenceImages: params.image_urls,
+      })
+      : buildLiblibImageRequest({
+        prompt: params.prompt,
+        model,
+        aspectRatio: params.size,
+        resolution: params.resolution,
+        count: params.n,
+        referenceImages: params.image_urls,
+      });
+    const response = await requestJson(request.path, request.body);
     const taskId = normalizeTaskId(response);
-    if (!taskId) throw new Error('APIMart 未返回 task_id');
+    if (!taskId) throw new Error('LiblibAI 未返回 generateUuid');
     return { taskId, response };
   };
 
@@ -312,12 +305,13 @@ import { getLegacyApp } from '../core/app-context';
       if (tasks.some((t) => t.id === id)) continue;
       const task = {
         id,
+        provider: 'liblibai',
         type,
         model: payload.model,
         prompt: payload.prompt,
         size: payload.size || payload.aspect_ratio || uiState.size,
         resolution: payload.resolution || uiState.resolution,
-        cost: Number(response?.data?.cost || response?.cost || 0) / (allIds.length || 1),
+        cost: Number(response?.pointsCost || response?.cost || 0) / (allIds.length || 1),
         status: 'submitted',
         progress: 0,
         images: [],
@@ -345,9 +339,8 @@ import { getLegacyApp } from '../core/app-context';
     return { ...submitted, createdIds };
   };
 
-  const getTaskStatus = async (taskId, language = 'zh') => {
-    const payload = await requestJson(`/v1/tasks/${encodeURIComponent(taskId)}?language=${encodeURIComponent(language)}`);
-    return payload?.data || payload;
+  const getTaskStatus = async (taskId) => {
+    return requestJson(LIBLIB_STATUS_PATH, { generateUuid: taskId });
   };
 
   const updateTask = (id, patch = {} as any) => {
@@ -385,18 +378,20 @@ import { getLegacyApp } from '../core/app-context';
     try {
       const data = await getTaskStatus(id);
       const urls = extractResultUrls(data);
+      const status = normalizeLiblibTaskStatus(data.generateStatus);
       updateTask(id, {
-        status: data.status || task.status,
-        progress: Number(data.progress ?? task.progress ?? 0),
-        cost: Number(data.cost ?? task.cost ?? 0),
-        result: data.result || task.result || null,
+        status,
+        progress: Number(data.percentCompleted ?? task.progress ?? 0),
+        cost: Number(data.pointsCost ?? task.cost ?? 0),
+        accountBalance: Number(data.accountBalance ?? task.accountBalance ?? 0),
+        result: data,
         images: urls.images,
         videos: urls.videos,
         thumbnail: urls.thumbnail,
-        error: data.error?.message || '',
+        error: status === 'failed' ? (data.generateMsg || '生成失败') : '',
         raw: data,
       });
-      if (!['completed', 'failed', 'cancelled'].includes(data.status)) {
+      if (!['completed', 'failed', 'cancelled'].includes(status)) {
         const timer = window.setTimeout(() => pollTask(id), 5000);
         pollTimers.set(id, timer);
       } else {
@@ -516,7 +511,7 @@ import { getLegacyApp } from '../core/app-context';
   };
 
   const renderResolutionOptions = (type = 'image', selectedValue = '') => {
-    const fallback = type === 'video' ? '720p' : '1k';
+    const fallback = type === 'video' ? 'pro' : '2k';
     const selected = String(selectedValue || fallback).toLowerCase();
     const options = type === 'video' ? VIDEO_RESOLUTIONS : IMAGE_RESOLUTIONS;
     return options.map(([value, label]) => `
@@ -562,9 +557,9 @@ import { getLegacyApp } from '../core/app-context';
       prompt: panel.querySelector('#apimartPrompt')?.value || '',
       referenceUrls: panel.querySelector('#apimartReferenceUrls')?.value || '',
       size: panel.querySelector('[name="apimartSize"]:checked')?.value || uiState.size || '16:9',
-      resolution: panel.querySelector('#apimartResolution')?.value || uiState.resolution || (type === 'video' ? '720p' : '1k'),
+      resolution: panel.querySelector('#apimartResolution')?.value || uiState.resolution || (type === 'video' ? 'pro' : '2k'),
       count: clampNumber(panel.querySelector('#apimartCount')?.value, 1, 4, uiState.count || 1),
-      duration: clampNumber(panel.querySelector('#apimartDuration')?.value, 1, 16, uiState.duration || 5),
+      duration: clampNumber(panel.querySelector('#apimartDuration')?.value, 5, 10, uiState.duration || 5),
     };
   };
 
@@ -1048,7 +1043,15 @@ import { getLegacyApp } from '../core/app-context';
     return `$${numeric.toFixed(5).replace(/0+$/, '').replace(/\.$/, '')}`;
   };
 
-  const renderAspectButtons = () => ASPECT_RATIOS.map(([value, label]) => {
+  const formatTaskCost = (task) => {
+    if (!task?.cost) return task?.resolution || '-';
+    if (task.provider === 'liblibai') return `${Math.round(Number(task.cost))} 积分`;
+    return formatUsd(task.cost);
+  };
+
+  const renderAspectButtons = () => ASPECT_RATIOS
+    .filter(([value]) => uiState.type !== 'video' || ['16:9', '1:1', '9:16'].includes(value))
+    .map(([value, label]) => {
     const active = uiState.size === value;
     return `
       <label class="apimart-ratio-option ${active ? 'is-active' : ''}">
@@ -1057,7 +1060,7 @@ import { getLegacyApp } from '../core/app-context';
         <span>${esc(label)}</span>
       </label>
     `;
-  }).join('');
+    }).join('');
 
   const renderResultMedia = (task) => {
     const items = getTaskMediaItems(task);
@@ -1069,7 +1072,7 @@ import { getLegacyApp } from '../core/app-context';
       ? `
         <div class="apimart-result-media">
           <button class="apimart-result-preview-btn" type="button" data-apimart-preview-task="${esc(task.id)}" data-apimart-preview-url="${esc(item.url)}" aria-label="放大查看生成图片">
-            <img src="${esc(item.url)}" alt="APIMart generated image" loading="lazy" data-apimart-size-image data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}" />
+            <img src="${esc(item.url)}" alt="LiblibAI 生成图片" loading="lazy" data-apimart-size-image data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}" />
             <span class="apimart-image-size-badge" data-apimart-size-label data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}">${esc(getImageSizeLabel(task, item.url))}</span>
           </button>
           <button class="apimart-add-reference-btn" type="button" data-apimart-add-reference="${esc(item.url)}">
@@ -1156,7 +1159,7 @@ import { getLegacyApp } from '../core/app-context';
         ${hasClickableImage || hasClickableVideo ? '</button>' : '</div>'}
         <div class="apimart-history-foot">
           <span><i class="ti ti-photo-up" aria-hidden="true"></i>${esc(task.size || task.aspect_ratio || (task.type === 'video' ? '16:9' : '1:1'))}</span>
-          <span><i class="ti ti-table" aria-hidden="true"></i>${esc(task.cost ? formatUsd(task.cost) : (task.resolution || '-'))}</span>
+          <span><i class="ti ti-table" aria-hidden="true"></i>${esc(formatTaskCost(task))}</span>
           <strong>${esc(formatGenerationDuration(task))}</strong>
         </div>
         <div class="apimart-history-actions">
@@ -1203,19 +1206,23 @@ import { getLegacyApp } from '../core/app-context';
     const referenceUrls = parseReferenceUrls(panel?.querySelector('#apimartReferenceUrls')?.value || '');
     const size = panel?.querySelector('[name="apimartSize"]:checked')?.value || uiState.size || '16:9';
     const resolution = panel?.querySelector('#apimartResolution')?.value || '';
-    const duration = Number(panel?.querySelector('#apimartDuration')?.value || 5);
+    const duration = Number(panel?.querySelector('#apimartDuration')?.value || 5) >= 10 ? 10 : 5;
     const model = getSelectedModel();
     if (!prompt) throw new Error('请先输入生成提示词');
     if (!model) throw new Error('请先选择生成模型');
+    if (referenceUrls.some((url) => !/^https?:\/\//i.test(url))) {
+      throw new Error('LiblibAI 参考图必须使用可公开访问的 HTTP(S) 地址');
+    }
 
     if (type === 'video') {
+      const videoAspectRatio = ['16:9', '1:1', '9:16'].includes(size) ? size : '16:9';
       return {
         type,
         payload: {
           model,
           prompt,
           duration,
-          aspect_ratio: size,
+          aspect_ratio: videoAspectRatio,
           resolution,
           image_urls: referenceUrls.length ? referenceUrls : undefined,
         },
@@ -1240,13 +1247,13 @@ import { getLegacyApp } from '../core/app-context';
     const status = refs.apimartMediaPanel?.querySelector('#apimartSubmitStatus');
     try {
       if (submitBtn) submitBtn.disabled = true;
-      if (status) status.textContent = '正在提交到 APIMart...';
+      if (status) status.textContent = '正在提交到 LiblibAI...';
       const { type, payload } = collectFormPayload();
       const { taskId, createdIds } = await submitAndTrackGeneration(type, payload);
       App.notify?.success?.(`已提交 ${createdIds.length} 个任务`, { key: `apimart-submit-${taskId}` });
     } catch (error) {
       if (status) status.textContent = error?.message || '提交失败';
-      App.notify?.warn?.(error?.message || 'APIMart 提交失败', { key: 'apimart-submit-failed' });
+      App.notify?.warn?.(error?.message || 'LiblibAI 提交失败', { key: 'apimart-submit-failed' });
     } finally {
       if (submitBtn) submitBtn.disabled = false;
     }
@@ -1284,7 +1291,7 @@ import { getLegacyApp } from '../core/app-context';
 
           <div class="apimart-scroll-area">
             <section class="apimart-panel-block">
-              <div class="apimart-field-label">模型</div>
+              <div class="apimart-field-label">LiblibAI 模型</div>
               <div id="apimartReactBitsModel"></div>
             </section>
 
@@ -1321,16 +1328,16 @@ import { getLegacyApp } from '../core/app-context';
               </div>
               <div class="apimart-params-grid">
                 <label class="apimart-field">
-                  <span>分辨率</span>
+                  <span>${type === 'video' ? '生成模式' : '分辨率'}</span>
                   <select id="apimartResolution">
-                    ${renderResolutionOptions(type, uiState.resolution || (type === 'video' ? '720p' : '1k'))}
+                    ${renderResolutionOptions(type, uiState.resolution || (type === 'video' ? 'pro' : '2k'))}
                   </select>
                 </label>
                 <label class="apimart-field">
                   <span>${type === 'video' ? '时长' : '数量'}</span>
                   <span class="apimart-stepper">
                     <button id="apimartStepperMinus" type="button" aria-label="减少${type === 'video' ? '时长' : '数量'}">−</button>
-                    <input id="${type === 'video' ? 'apimartDuration' : 'apimartCount'}" type="number" min="${type === 'video' ? '1' : '1'}" max="${type === 'video' ? '16' : '4'}" value="${type === 'video' ? esc(uiState.duration) : esc(uiState.count)}" />
+                    <input id="${type === 'video' ? 'apimartDuration' : 'apimartCount'}" type="number" min="${type === 'video' ? '5' : '1'}" max="${type === 'video' ? '10' : '4'}" step="${type === 'video' ? '5' : '1'}" value="${type === 'video' ? esc(uiState.duration) : esc(uiState.count)}" />
                     <button id="apimartStepperPlus" type="button" aria-label="增加${type === 'video' ? '时长' : '数量'}">+</button>
                   </span>
                   <input id="${type === 'video' ? 'apimartCount' : 'apimartDuration'}" type="number" min="${type === 'video' ? '1' : '1'}" max="${type === 'video' ? '4' : '16'}" value="${type === 'video' ? esc(uiState.count) : esc(uiState.duration)}" ${type === 'video' ? 'disabled' : 'disabled'} hidden />
@@ -1339,16 +1346,10 @@ import { getLegacyApp } from '../core/app-context';
             </section>
 
             <section class="apimart-panel-block apimart-reference-block">
-              <label class="apimart-field-label" for="apimartReferenceFile">参考图 <span>（可选）</span></label>
-              <div class="apimart-reference-box" id="apimartReferenceUploadBtn">
-                <span class="apimart-reference-icon"><i class="ti ti-upload" aria-hidden="true"></i></span>
-                <div class="apimart-reference-main">
-                  <strong>上传参考图</strong>
-                  <span>JPG / PNG，单张最多 10MB</span>
-                </div>
-                <input id="apimartReferenceFile" type="file" accept="image/jpeg,image/png" multiple hidden />
+              <label class="apimart-field-label" for="apimartReferenceUrls">参考图公网地址 <span>（可选，每行一个）</span></label>
+              <div class="apimart-reference-url-editor">
+                <textarea id="apimartReferenceUrls" rows="3" placeholder="https://example.com/reference.jpg">${esc(uiState.referenceUrls)}</textarea>
                 <div id="apimartReferenceFileNames" class="apimart-reference-file-names">${renderReferencePreviewItems(uiState.referenceUrls)}</div>
-                <textarea id="apimartReferenceUrls" hidden>${esc(uiState.referenceUrls)}</textarea>
               </div>
             </section>
 
@@ -1358,7 +1359,7 @@ import { getLegacyApp } from '../core/app-context';
                 <i class="ti ti-chevron-down" aria-hidden="true"></i>
               </button>
               <div class="apimart-advanced-body" ${uiState.advancedOpen ? '' : 'hidden'}>
-                <div id="apimartSubmitStatus" class="apimart-submit-status">${config.apiKey ? 'APIMart 配置已读取' : '请先在配置中心填写 APIMart API Key'}</div>
+                <div id="apimartSubmitStatus" class="apimart-submit-status">${config.accessKey && config.secretKey ? 'LiblibAI 配置已读取' : '请先在配置中心填写 LiblibAI AccessKey 和 SecretKey'}</div>
                 <button class="apimart-link-btn" type="button" data-apimart-config>配置密钥与模型默认值</button>
               </div>
             </section>
@@ -1392,7 +1393,7 @@ import { getLegacyApp } from '../core/app-context';
       modelHint: type === 'video' ? '高质量视频生成模型' : '高质量图像生成模型',
       mode: type,
       taskCount: tasks.length,
-      hasApiKey: Boolean(config.apiKey),
+      hasApiKey: Boolean(config.accessKey && config.secretKey),
       latestStatus: tasks[0] ? getTaskStatusLabel(tasks[0].status) : '',
       onPromptSelect: applyPrompt,
     } as any);
@@ -1424,7 +1425,8 @@ import { getLegacyApp } from '../core/app-context';
       ...uiState,
       type: newType,
       model: perTypeModel || (newType === 'video' ? config.videoModel : config.imageModel),
-      resolution: perTypeResolution || (newType === 'video' ? '720p' : '1k'),
+      resolution: perTypeResolution || (newType === 'video' ? 'pro' : '2k'),
+      size: newType === 'video' && !['16:9', '1:1', '9:16'].includes(uiState.size) ? '16:9' : uiState.size,
       count: newType === 'image' ? (uiState.imageCount || 1) : 1,
       duration: newType === 'video' ? (uiState.videoDuration || 5) : 5,
     };
@@ -1541,7 +1543,8 @@ import { getLegacyApp } from '../core/app-context';
         const input = refs.apimartMediaPanel?.querySelector(inputId);
         const min = Number(input?.getAttribute('min') || 1);
         const max = Number(input?.getAttribute('max') || 4);
-        if (input) input.value = String(clampNumber(Number(input.value || min) + (isPlus ? 1 : -1), min, max, min));
+        const step = Number(input?.getAttribute('step') || 1);
+        if (input) input.value = String(clampNumber(Number(input.value || min) + (isPlus ? step : -step), min, max, min));
         captureUiState();
         return;
       }
@@ -1628,7 +1631,7 @@ import { getLegacyApp } from '../core/app-context';
     tasks = readTasks();
     render();
     bind();
-    tasks.filter((task) => !['completed', 'failed', 'cancelled'].includes(task.status)).forEach((task) => {
+    tasks.filter((task) => task.provider === 'liblibai' && !['completed', 'failed', 'cancelled'].includes(task.status)).forEach((task) => {
       pollTask(task.id);
     });
   };

@@ -182,6 +182,71 @@
       gap:12px;
       min-width:0;
     }
+    .apimart-module-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:14px;
+      min-width:0;
+    }
+    .apimart-balance-btn{
+      min-height:30px;
+      padding:0 10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:700;
+      white-space:nowrap;
+      cursor:pointer;
+    }
+    .apimart-balance-btn:hover:not(:disabled){
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--surface);
+    }
+    .apimart-balance-btn:disabled{
+      cursor:wait;
+      opacity:.7;
+    }
+    .apimart-balance-btn.is-loading{
+      color:var(--accent);
+    }
+    .apimart-balance-btn.is-success{
+      border-color:#86c99a;
+      background:#f0faf3;
+      color:#18733a;
+    }
+    .apimart-balance-btn.is-warn{
+      border-color:#e8bd72;
+      background:#fff8e8;
+      color:#9a5b00;
+    }
+    body[data-theme="dark"] .apimart-balance-btn.is-success{
+      border-color:#2f7044;
+      background:#132a1b;
+      color:#7ee29e;
+    }
+    body[data-theme="dark"] .apimart-balance-btn.is-warn{
+      border-color:#755624;
+      background:#2b2112;
+      color:#f3c66e;
+    }
+    @media (max-width: 640px){
+      .config-module-apimart .config-module-head{
+        align-items:flex-start;
+      }
+      .apimart-module-actions{
+        flex-direction:column-reverse;
+        align-items:flex-end;
+        gap:8px;
+      }
+    }
     .config-module-title{
       display:flex;
       align-items:center;
@@ -263,7 +328,7 @@
       grid-column:span 2;
     }
     .config-module-apimart .apimart-key-field{
-      grid-column:span 2;
+      grid-column:auto;
     }
     .apimart-config-grid{
       grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1002,6 +1067,100 @@
     .switch input{
       margin:0;
       accent-color:var(--accent);
+    }
+    .image-upload-policy-field{
+      gap:0;
+    }
+    .image-upload-policy-row{
+      min-height:68px;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:24px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .image-upload-policy-copy{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+    }
+    .image-upload-policy-copy .field-label-main{
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:700;
+    }
+    .image-upload-policy-copy .field-label-note{
+      white-space:normal;
+      line-height:1.5;
+    }
+    .image-upload-toggle{
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      justify-content:flex-start;
+      gap:9px;
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .image-upload-toggle input{
+      position:absolute;
+      width:1px;
+      height:1px;
+      opacity:0;
+      pointer-events:none;
+    }
+    .image-upload-toggle-track{
+      position:relative;
+      width:36px;
+      height:20px;
+      border:1px solid var(--border-2);
+      border-radius:10px;
+      background:var(--surface);
+      transition:background .18s ease, border-color .18s ease;
+    }
+    .image-upload-toggle-track::after{
+      content:"";
+      position:absolute;
+      top:2px;
+      left:2px;
+      width:14px;
+      height:14px;
+      border-radius:50%;
+      background:var(--muted);
+      transition:transform .18s ease, background .18s ease;
+    }
+    .image-upload-toggle input:checked + .image-upload-toggle-track{
+      border-color:var(--accent);
+      background:var(--accent);
+    }
+    .image-upload-toggle input:checked + .image-upload-toggle-track::after{
+      transform:translateX(16px);
+      background:#fff;
+    }
+    .image-upload-toggle input:focus-visible + .image-upload-toggle-track{
+      outline:2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      outline-offset:2px;
+    }
+    @media (max-width: 640px){
+      .image-upload-policy-row{
+        align-items:flex-start;
+        gap:14px;
+      }
+      .image-upload-toggle{
+        margin-top:1px;
+      }
+      .image-upload-toggle > span:last-child{
+        position:absolute;
+        width:1px;
+        height:1px;
+        overflow:hidden;
+        clip:rect(0 0 0 0);
+      }
     }
     .action-bar{
       display:flex;

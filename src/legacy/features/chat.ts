@@ -17,6 +17,12 @@ import {
 import { createStreamRenderScheduler } from './chat/chat-render';
 import { canRunLocalSkillDirectly, selectRecentHistory } from './chat/chat-agent';
 import { createChatSessionStore } from './chat/chat-core';
+import { selectGroundedAnswer } from './agent-runtime/grounding';
+import {
+  evaluateAgentLoopDecision,
+  getAgentSkillCallSignature,
+  MAX_PROJECT_AGENT_TOOL_CALLS,
+} from './agent-runtime/orchestrator';
 
 (function () {
   'use strict';
@@ -1382,6 +1388,17 @@ import { createChatSessionStore } from './chat/chat-core';
           '如果用户询问今天、昨天、明天、当前日期、当前时间或相对日期，必须以这条日期时间为准，不要使用模型训练数据中的日期。',
         ].join('\n'),
       },
+      {
+        role: 'system',
+        content: [
+          '【可靠性规则】',
+          '区分已确认事实、合理推断和未知信息；不要把推断写成事实。',
+          '不得编造项目数据、页面、技能、执行结果、外部来源、链接、版本、价格或日期。',
+          '涉及本项目数据或操作时，只能依据本轮项目上下文与技能结果；没有证据时明确说明缺口。',
+          '涉及实时或可能变化的外部事实时，必须依据联网搜索资料；搜索不可用时明确说明无法核实。',
+          '遇到问题信息不足时，先指出缺少的关键条件，再给出最小必要的追问或安全下一步。',
+        ].join('\n'),
+      },
     ];
     const skillProtocolContext = projectContextEnabled ? (App.projectSkills?.getAiProtocolContext?.({ plan: options.agentPlan }) || '') : '';
 
@@ -1736,9 +1753,13 @@ import { createChatSessionStore } from './chat/chat-core';
         ? `前端已随本次消息上传 ${skillImages.length} 张匹配图谱图片。你必须阅读图片曲线和图中标注，重点做图谱之间的峰形、峰值、温区、吸放热/失重形态和异常点对比，不要只分析标题、标签或分类。`
         : '',
       '请直接回答用户原始问题，给出分析结论、关键依据和必要建议。',
+      '只回答用户实际询问的内容，不要把技能返回的全部字段、页面数量、数据源或内部执行过程一并罗列。',
+      '表达应自然并随问题变化，不要使用固定的“执行状态/执行详情/页面 ID”模板。',
       '不要再输出 gjhSkillCall JSON。',
       '不要只复述“技能已执行”。',
       '必须基于技能返回的数据上下文分析；数据不足时说明缺口。',
+      '所有数量、名称、状态、时间和操作结果都必须能在技能返回内容中逐项找到依据；禁止补写、推测或把常识当成项目事实。',
+      '技能状态为未完成时，禁止使用“成功、完成、已删除、已修改、已创建”等成功措辞。',
     ].filter(Boolean).join('\n');
   };
 
@@ -1804,6 +1825,15 @@ import { createChatSessionStore } from './chat/chat-core';
     ];
     const streamEnabled = config.aiProvider === 'lmstudio' || Boolean(config.streamEnabled);
     const requestTimer = createAbortTimer('AI 分析', SKILL_SYNTHESIS_TIMEOUT_MS, signal);
+    const selectVerifiedContent = (answer = '') => {
+      const selected = selectGroundedAnswer({
+        answer,
+        evidence: [execution?.result || {}],
+        fallback: App.projectSkills?.formatSkillMessage?.(execution) || execution?.result?.message || '',
+        requiresEvidence: true,
+      });
+      return [displayPrefix, selected.content].filter(Boolean).join('\n\n');
+    };
 
     try {
       const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
@@ -1841,12 +1871,11 @@ import { createChatSessionStore } from './chat/chat-core';
         if (!streamResult.receivedDelta) {
           throw new Error('AI 分析没有返回流式内容。');
         }
-        if (Number.isInteger(pendingIndex) && pendingIndex >= 0) {
-          flushStreamRender(pendingIndex, [displayPrefix, content || '我暂时没有返回内容。'].filter(Boolean).join('\n\n'));
-        }
+        const verifiedContent = selectVerifiedContent(content);
+        if (Number.isInteger(pendingIndex) && pendingIndex >= 0) flushStreamRender(pendingIndex, verifiedContent);
 
         return {
-          content: [displayPrefix, content.trim()].filter(Boolean).join('\n\n'),
+          content: verifiedContent,
           usage: streamResult.usage || null,
           finishReason: streamResult.finishReason || '',
           messages: synthesisMessages,
@@ -1859,7 +1888,7 @@ import { createChatSessionStore } from './chat/chat-core';
       if (requestTimer.signal?.aborted) throw createAbortError();
       const content = data?.choices?.[0]?.message?.content?.trim() || '';
       return {
-        content: [displayPrefix, content].filter(Boolean).join('\n\n'),
+        content: selectVerifiedContent(content),
         usage: data?.usage || null,
         finishReason: String(data?.choices?.[0]?.finish_reason || ''),
         messages: synthesisMessages,
@@ -1978,15 +2007,22 @@ import { createChatSessionStore } from './chat/chat-core';
         '你是广俊塑料科技后台的项目级 Agent 调度器。',
         '你必须先理解用户问题，再按需调用本地项目技能获取必要数据，不要让用户重复提供项目背景。',
         '你可以多轮调用技能，但每次只调用一个最有价值的技能；数据够用时必须 final。',
+        `单轮最多调用 ${MAX_PROJECT_AGENT_TOOL_CALLS} 个项目技能；禁止重复调用相同技能和相同参数。`,
+        '只能调用【项目能力地图】skills 中真实存在的技能，禁止编造技能、页面、字段或执行结果。',
         '默认采用意图裁剪：数量问题只取 count，列举才取 list，最高/最低取 extrema，筛选取 filter，详情取 detail，聚合取 aggregate。',
         '如果【系统推荐工具】不为 null，说明前端已经识别到当前页面、已选数据或专用数据源；除非用户只是闲聊，否则应优先输出 callSkill 读取事实数据，再基于 Observation final。',
         '不要为了回答数据问题调用 assistant.openPage；只有用户明确要求打开/进入/切换页面时才调用 assistant.openPage。',
         '如果已经有足够数据，输出 final。不要输出 Markdown，必须只输出 JSON。',
+        'final 中的每个数量、名称、状态、时间和操作结果都必须逐项来自 Observation；数据不足必须明确说明，禁止根据常识补全。',
+        '任何 Observation 的 ok=false 都不得描述成执行成功。confidence 只有在事实完整且直接命中时才允许 high。',
+        '最终回答只处理用户实际询问的重点。用户没问页面数量、关系数量、技能调用、执行状态、数据源清单或内部调度过程时，不要主动输出这些内容。',
+        '用自然、简洁的对话方式回答，不套固定模板，不机械罗列所有已读取字段；回答长度和结构应随问题变化。',
+        '不要在用户可见回答中出现“已调用项目技能”“Observation”“能力地图”“执行状态”等内部术语。',
         forceFinal ? '现在必须基于已有 Observation 给出最终答案；如果数据不足，说明缺口。' : '',
         '',
         '允许输出：',
         '{"action":"callSkill","thoughtSummary":"...","skillId":"business.queryPageData","input":{...}}',
-        '{"action":"final","thoughtSummary":"...","answer":"...","usedPages":["..."],"confidence":"high|medium|low"}',
+        '{"action":"final","thoughtSummary":"...","answer":"...","usedPages":["..."],"evidenceSkillIds":["..."],"confidence":"high|medium|low"}',
       ].filter(Boolean).join('\n'),
     },
     {
@@ -2118,6 +2154,8 @@ import { createChatSessionStore } from './chat/chat-core';
     const timer = createAbortTimer('项目级 Agent 调度', PROJECT_AGENT_LOOP_TIMEOUT_MS, signal);
     const traceItems = ['理解问题'];
     const observations = [];
+    const executions = [];
+    const calledSignatures = [];
     let apiUsage = null;
     let apiMessages = [];
     let finishReason = '';
@@ -2136,161 +2174,149 @@ import { createChatSessionStore } from './chat/chat-core';
       });
       const manifestExecution = manifestRetry.execution;
       if (manifestRetry.failed || !manifestExecution) {
-        const fallback = await runPlainChatFallback({ config, model, prompt, signal: timer.signal }).catch((error) => {
-          if (isAbortError(error)) throw error;
-          return null;
-        });
         return {
           content: [
-            fallback?.content || '项目技能暂时不可用，我无法可靠读取后台项目数据。',
+            '项目能力地图读取失败，我无法确认当前页面、数据源和可用技能，因此本次没有生成推测性答案。',
             '',
-            `【提示】项目能力读取失败，已尝试降级为普通对话。${manifestRetry.error?.message || ''}`.trim(),
+            `失败原因：${manifestRetry.error?.message || '项目能力接口未返回可用结果。'}`,
+            '请检查 AI 技能面板中的“审计 Agent 运行能力”，修复后再试。',
           ].join('\n'),
-          usage: fallback?.usage || apiUsage,
-          messages: fallback?.messages || apiMessages,
-          finishReason: fallback?.finishReason || 'agent_manifest_failed',
+          usage: apiUsage,
+          messages: apiMessages,
+          finishReason: 'agent_manifest_failed',
         };
       }
       observations.push(compactObservation(manifestExecution));
       traceItems.push('读取项目页面说明书');
 
       const recommendedPlan = localPlan || App.projectSkills?.routePrompt?.(prompt) || null;
-      flushStreamRender(pendingIndex, '正在选择需要读取的项目数据...', {
-        pending: true,
-        pendingStatus: '正在规划',
-      });
+      const manifest = observations[0]?.data || App.projectSkills.getProjectManifest?.() || {};
+      const allowedSkillIds = (App.projectSkills?.getSkillRegistry?.() || [])
+        .map((skill) => String(skill?.id || '').trim())
+        .filter(Boolean);
+      calledSignatures.push(getAgentSkillCallSignature('project.getManifest', { includeFields: true }));
 
-      let planner = null;
-      try {
-        planner = await callProjectAgentPlanner({
-          config,
-          model,
+      const buildDeterministicFallback = () => executions.length
+        ? executions.map((execution) => App.projectSkills.formatSkillMessage(execution)).join('\n\n')
+        : '当前没有取得足够的项目事实数据，无法给出可靠结论。请明确要处理的页面、对象或数据范围。';
+      const finalizeAnswer = (answer = '') => {
+        const selected = selectGroundedAnswer({
+          answer,
+          evidence: executions.map((execution) => execution?.result || {}),
+          fallback: buildDeterministicFallback(),
+          requiresEvidence: true,
+        });
+        return selected.content;
+      };
+
+      for (let toolCallCount = 0; toolCallCount < MAX_PROJECT_AGENT_TOOL_CALLS; toolCallCount += 1) {
+        flushStreamRender(pendingIndex, `正在规划第 ${toolCallCount + 1} 步...`, {
+          pending: true,
+          pendingStatus: '正在规划',
+        });
+        let planner = null;
+        try {
+          planner = await callProjectAgentPlanner({
+            config,
+            model,
+            prompt,
+            manifest,
+            observations,
+            traceItems,
+            recommendedPlan: toolCallCount === 0 ? recommendedPlan : null,
+            signal: timer.signal,
+          });
+        } catch (error) {
+          if (isAbortError(error)) throw error;
+        }
+        apiUsage = planner?.usage || apiUsage;
+        apiMessages = planner?.messages || apiMessages;
+        finishReason = planner?.finishReason || finishReason;
+
+        let decision = planner?.decision || null;
+        if (toolCallCount === 0 && recommendedPlan?.skillId && decision?.action !== 'callSkill') {
+          decision = {
+            action: 'callSkill',
+            skillId: recommendedPlan.skillId,
+            input: recommendedPlan.input || {},
+          };
+        }
+        const evaluated = evaluateAgentLoopDecision(decision, {
+          allowedSkillIds,
+          calledSignatures,
+          toolCallCount,
+          maxToolCalls: MAX_PROJECT_AGENT_TOOL_CALLS,
+          observationCount: executions.length,
+          requiresEvidence: true,
+        });
+        if (evaluated.ok && evaluated.kind === 'final') {
+          return {
+            content: finalizeAnswer(evaluated.answer),
+            usage: apiUsage,
+            messages: apiMessages,
+            finishReason,
+          };
+        }
+        if (!evaluated.ok || evaluated.kind !== 'callSkill') break;
+
+        calledSignatures.push(evaluated.signature);
+        traceItems.push(`调用项目技能：${evaluated.skillId}`);
+        flushStreamRender(pendingIndex, `正在执行项目技能 ${toolCallCount + 1}/${MAX_PROJECT_AGENT_TOOL_CALLS}...`, {
+          pending: true,
+          pendingStatus: '正在读取项目数据',
+        });
+        const skillRetry = await executeProjectSkillWithRetry(evaluated.skillId, evaluated.input, {
+          source: planner?.decision ? 'agent-planner' : 'agent-planner-fallback',
           prompt,
-          manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
-          observations,
-          traceItems,
-          recommendedPlan,
+        }, {
           signal: timer.signal,
         });
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        planner = null;
+        const execution = skillRetry.execution;
+        if (skillRetry.failed || !execution) {
+          return {
+            content: [
+              `项目技能 ${evaluated.skillId} 连续执行失败，因此本次没有生成推测性答案。`,
+              skillRetry.error?.message ? `失败原因：${skillRetry.error.message}` : '',
+              '请检查对应页面数据和技能接口后重试。',
+            ].filter(Boolean).join('\n'),
+            usage: apiUsage,
+            messages: apiMessages,
+            finishReason: 'agent_skill_failed',
+          };
+        }
+        executions.push(execution);
+        observations.push(compactObservation(execution));
       }
 
-      apiUsage = planner?.usage || apiUsage;
-      apiMessages = planner?.messages || apiMessages;
-      finishReason = planner?.finishReason || finishReason;
-
-      const decision = planner?.decision || null;
-      const fallbackPlan = recommendedPlan && recommendedPlan.skillId ? recommendedPlan : null;
-      if (!fallbackPlan && decision?.action === 'final' && String(decision.answer || '').trim()) {
-        return {
-          content: String(decision.answer || '').trim(),
-          usage: apiUsage,
-          messages: apiMessages,
-          finishReason,
-        };
-      }
-
-      const skillId = decision?.action === 'callSkill' && decision.skillId
-        ? String(decision.skillId)
-        : String(fallbackPlan?.skillId || '');
-      const input = decision?.action === 'callSkill' && decision.input && typeof decision.input === 'object'
-        ? decision.input
-        : (fallbackPlan?.input && typeof fallbackPlan.input === 'object' ? fallbackPlan.input : {});
-
-      if (!skillId) {
-        const finalPlanner = await callProjectAgentPlanner({
+      flushStreamRender(pendingIndex, '正在基于已取得的数据生成最终答案...', {
+        pending: true,
+        pendingStatus: '正在复盘答案',
+      });
+      let finalPlanner = null;
+      try {
+        finalPlanner = await callProjectAgentPlanner({
           config,
           model,
           prompt,
-          manifest: observations[0]?.data || App.projectSkills.getProjectManifest?.() || {},
+          manifest,
           observations,
           traceItems,
-          recommendedPlan,
+          recommendedPlan: null,
           signal: timer.signal,
           forceFinal: true,
         });
-        apiUsage = finalPlanner.usage || apiUsage;
-        apiMessages = finalPlanner.messages || apiMessages;
-        finishReason = finalPlanner.finishReason || finishReason;
-        return {
-          content: String(finalPlanner.decision?.answer || '').trim() || '我已经读取项目能力，但没有找到需要调用的项目数据。请把要查询的对象或范围说得更具体一些。',
-          usage: apiUsage,
-          messages: apiMessages,
-          finishReason,
-        };
-      }
-
-      traceItems.push(`调用项目技能：${skillId}`);
-      flushStreamRender(pendingIndex, '正在读取项目数据...', {
-        pending: true,
-        pendingStatus: '正在读取项目数据',
-      });
-
-      const skillRetry = await executeProjectSkillWithRetry(skillId, input, {
-        source: planner?.decision ? 'agent-planner' : 'agent-planner-fallback',
-        prompt,
-      }, {
-        signal: timer.signal,
-      });
-      const execution = skillRetry.execution;
-      if (skillRetry.failed || !execution) {
-        const fallback = await runPlainChatFallback({ config, model, prompt, signal: timer.signal }).catch((error) => {
-          if (isAbortError(error)) throw error;
-          return null;
-        });
-        return {
-          content: [
-            fallback?.content || '项目技能暂时不可用，我无法可靠读取后台项目数据。',
-            '',
-            `【提示】项目技能 ${skillId} 连续失败，已降级为普通对话；部分功能暂时不可用。${skillRetry.error?.message || ''}`.trim(),
-          ].join('\n'),
-          usage: fallback?.usage || apiUsage,
-          messages: fallback?.messages || apiMessages,
-          finishReason: fallback?.finishReason || 'agent_skill_failed',
-        };
-      }
-      const observation = compactObservation(execution);
-      observations.push(observation);
-
-      flushStreamRender(pendingIndex, '正在整理回答...', {
-        pending: true,
-        pendingStatus: '正在整理回答',
-      });
-
-      try {
-        const synthesized = await synthesizeSkillResult({
-          config,
-          model,
-          prompt,
-          execution,
-          pendingIndex,
-          displayPrefix: '',
-          signal: timer.signal,
-          images: [],
-        });
-        return {
-          content: synthesized.content || App.projectSkills.formatSkillMessage(execution),
-          usage: synthesized.usage || apiUsage,
-          messages: synthesized.messages || apiMessages,
-          finishReason: synthesized.finishReason || finishReason,
-          usedStream: Boolean(synthesized.usedStream),
-        };
       } catch (error) {
         if (isAbortError(error)) throw error;
-        const resultText = App.projectSkills.formatSkillMessage(execution);
-        return {
-          content: [
-            resultText,
-            '',
-            `【提示】AI 已完成规划和项目取数，但最终语言总结失败：${error?.message || '未知错误'}`,
-          ].join('\n'),
-          usage: apiUsage,
-          messages: apiMessages,
-          finishReason: finishReason || 'synthesis_failed',
-        };
       }
+      apiUsage = finalPlanner?.usage || apiUsage;
+      apiMessages = finalPlanner?.messages || apiMessages;
+      finishReason = finalPlanner?.finishReason || finishReason || 'agent_force_final';
+      return {
+        content: finalizeAnswer(finalPlanner?.decision?.answer || ''),
+        usage: apiUsage,
+        messages: apiMessages,
+        finishReason,
+      };
     } finally {
       timer.clear();
     }

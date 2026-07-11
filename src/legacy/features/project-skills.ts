@@ -1,5 +1,7 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
+import { buildSkillCatalogSummary, getSkillSearchText } from './agent-runtime/skill-catalog';
+import { normalizeAgentToolResult } from './agent-runtime/grounding';
 
 (function () {
   'use strict';
@@ -344,18 +346,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
     .map(([pageId, def]) => `${def?.title || pageId}=${pageId}`)
     .join('；');
 
-  const normalizeResult = (result, fallbackMessage = '技能已执行。') => {
-    if (!result || typeof result !== 'object') {
-      return { ok: true, message: fallbackMessage, details: [], data: {} };
-    }
-    return {
-      ok: result.ok !== false,
-      message: String(result.message || fallbackMessage),
-      details: Array.isArray(result.details) ? result.details.map((item) => String(item)) : [],
-      candidates: Array.isArray(result.candidates) ? result.candidates : [],
-      data: result.data && typeof result.data === 'object' ? result.data : {},
-    };
-  };
+  const normalizeResult = normalizeAgentToolResult;
 
   const SKILL_CALL_EXAMPLE = {
     gjhSkillCall: {
@@ -442,9 +433,12 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       ],
       skills: [
         'project.getManifest',
+        'project.searchCapabilities',
+        'project.auditRuntime',
         'project.inspectPage',
         'project.finalAnswerCheck',
         'business.queryPageData',
+        'business.analyzeOverview',
         'property.searchRows',
         'property.summarizeMetrics',
         'property.compareRows',
@@ -452,6 +446,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
         'spectrum.manageImages',
         'analysis.buildJointPackage',
         'formula.createRecipe',
+        'assistant.modelInfo',
         'assistant.currentPage',
         'assistant.projectGuide',
         'dataRecognition.searchHistory',
@@ -1431,13 +1426,25 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
   };
 
   const getLevelClass = (level) => {
-    const map = { '执行型': 'action', '查询型': 'query', '上下文型': 'context' };
+    const map = { '执行型': 'action', '查询型': 'query', '分析型': 'analysis', '上下文型': 'context' };
     return map[level] || 'action';
   };
 
   const render = () => {
     if (!refs.projectSkillPanel) return;
     const skills = getSkillRegistry();
+    const manifestPages = App.businessPages?.getAgentManifestPages?.() || [];
+    const issueCount = skills.reduce((count, skill) => (
+      count
+      + (skill?.id ? 0 : 1)
+      + (typeof skill?.handler === 'function' ? 0 : 1)
+      + (skill?.inputSpec && skill?.outputSpec ? 0 : 1)
+    ), 0);
+    const catalogSummary = buildSkillCatalogSummary(skills, {
+      totalPages: Object.keys(constants.PAGE_DEFS || {}).length,
+      structuredPages: manifestPages.length,
+      issueCount,
+    });
     const grouped = new Map();
     skills.forEach((skill) => {
       const module = skill.module || '其他';
@@ -1457,7 +1464,18 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
               <input class="project-skill-search" type="search" id="projectSkillSearch" placeholder="搜索技能..." autocomplete="off">
             </div>
           </div>
+          <section class="project-skill-summary" aria-label="AI 技能覆盖概览">
+            <article><span>可执行技能</span><strong>${catalogSummary.executableSkills}</strong><em>共 ${catalogSummary.totalSkills} 项</em></article>
+            <article><span>能力模块</span><strong>${catalogSummary.modules}</strong><em>分析型 ${catalogSummary.analysisSkills} 项</em></article>
+            <article><span>页面数据覆盖</span><strong>${catalogSummary.pageCoveragePercent}%</strong><em>${catalogSummary.structuredPages}/${catalogSummary.totalPages} 个页面</em></article>
+            <article class="${catalogSummary.issueCount ? 'is-warn' : 'is-ok'}"><span>注册异常</span><strong>${catalogSummary.issueCount}</strong><em>${catalogSummary.issueCount ? '建议运行能力审计' : '注册层正常'}</em></article>
+          </section>
           <div class="project-skill-grid">
+            <div class="project-skill-search-empty" id="projectSkillSearchEmpty" hidden>
+              <i class="ti ti-search-off" aria-hidden="true"></i>
+              <strong>没有匹配的已注册技能</strong>
+              <span>请尝试业务对象、技能 ID、操作名称或示例指令。</span>
+            </div>
             ${[...grouped.entries()].map(([module, moduleSkills]) => `
               <div class="project-skill-module-group">
                 <div class="project-skill-module-header">
@@ -1465,7 +1483,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
                   <em>${moduleSkills.length} 项技能</em>
                 </div>
                 ${moduleSkills.map((skill) => `
-                  <article class="project-skill-card" data-skill-module="${esc(skill.module)}" data-skill-title="${esc(skill.title)}">
+                  <article class="project-skill-card" data-skill-search="${esc(getSkillSearchText(skill))}">
                     <div class="project-skill-card-top">
                       <span class="project-skill-icon"><i class="ti ${esc(skill.icon)}" aria-hidden="true"></i></span>
                       <div>
@@ -1592,6 +1610,7 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       const input = event.target;
       if (input?.id !== 'projectSkillSearch') return;
       const query = normalizeText(input.value || '');
+      const terms = query.split(/[\s,，、/]+/).filter(Boolean);
       const cards = refs.projectSkillPanel?.querySelectorAll('.project-skill-card');
       const groups = refs.projectSkillPanel?.querySelectorAll('.project-skill-module-group');
       if (!cards || !groups) return;
@@ -1599,15 +1618,16 @@ import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
       groups.forEach((group) => {
         let groupVisible = false;
         group.querySelectorAll('.project-skill-card').forEach((card) => {
-          const title = normalizeText(card.getAttribute('data-skill-title') || '');
-          const module = normalizeText(card.getAttribute('data-skill-module') || '');
-          const visible = !query || title.includes(query) || module.includes(query);
+          const searchText = normalizeText(card.getAttribute('data-skill-search') || '');
+          const visible = !terms.length || terms.every((term) => searchText.includes(term));
           card.style.display = visible ? '' : 'none';
           if (visible) groupVisible = true;
         });
         group.style.display = groupVisible ? '' : 'none';
         if (groupVisible) anyVisible = true;
       });
+      const empty = refs.projectSkillPanel?.querySelector('#projectSkillSearchEmpty');
+      if (empty instanceof HTMLElement) empty.hidden = anyVisible;
     });
 
     refs.projectSkillPanel?.addEventListener('click', async (event) => {

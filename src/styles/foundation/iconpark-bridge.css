@@ -136,6 +136,7 @@
 .ti-alert-triangle{--ip-icon:var(--ip-alert)}
 .ti-arrow-back-up{--ip-icon:var(--ip-back)}
 .ti-binary-tree-2{--ip-icon:var(--ip-code-tree)}
+.ti-brain{--ip-icon:var(--ip-ai)}
 .ti-braces{--ip-icon:var(--ip-braces)}
 .ti-category,.ti-tags{--ip-icon:var(--ip-tag)}
 .ti-chart-bar,.ti-chart-dots,.ti-chart-dots-3{--ip-icon:var(--ip-bar-chart)}
@@ -198,7 +199,7 @@
 .ti-route{--ip-icon:var(--ip-route)}
 .ti-row-insert-bottom{--ip-icon:var(--ip-table)}
 .ti-scale{--ip-icon:var(--ip-scale)}
-.ti-search{--ip-icon:var(--ip-search)}
+.ti-search,.ti-search-off{--ip-icon:var(--ip-search)}
 .ti-schema{--ip-icon:var(--ip-code-tree)}
 .ti-send-2,.ti-share,.ti-upload{--ip-icon:var(--ip-send)}
 .ti-shield-check{--ip-icon:var(--ip-shield)}

@@ -1,5 +1,60 @@
 import { createAgentPlan } from './router';
 
+export const MAX_PROJECT_AGENT_TOOL_CALLS = 4;
+
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+};
+
+export const getAgentSkillCallSignature = (skillId: unknown, input: unknown) => (
+  `${String(skillId || '').trim()}:${stableJson(input && typeof input === 'object' ? input : {})}`
+);
+
+export const evaluateAgentLoopDecision = (decision: any, options: {
+  allowedSkillIds?: string[];
+  calledSignatures?: string[];
+  toolCallCount?: number;
+  maxToolCalls?: number;
+  observationCount?: number;
+  requiresEvidence?: boolean;
+} = {}) => {
+  const action = String(decision?.action || '').trim();
+  if (action === 'final') {
+    const answer = String(decision?.answer || '').trim();
+    if (!answer) return { ok: false, kind: 'final', reason: 'empty_final_answer' };
+    if (options.requiresEvidence && !Number(options.observationCount || 0)) {
+      return { ok: false, kind: 'final', reason: 'final_without_evidence' };
+    }
+    return { ok: true, kind: 'final', reason: '', answer };
+  }
+  if (action !== 'callSkill') return { ok: false, kind: 'invalid', reason: 'invalid_action' };
+
+  const skillId = String(decision?.skillId || '').trim();
+  const allowedSkillIds = Array.isArray(options.allowedSkillIds) ? options.allowedSkillIds : [];
+  if (!skillId || !allowedSkillIds.includes(skillId)) {
+    return { ok: false, kind: 'callSkill', reason: 'unknown_skill', skillId };
+  }
+  const maxToolCalls = Math.max(1, Number(options.maxToolCalls || MAX_PROJECT_AGENT_TOOL_CALLS));
+  if (Number(options.toolCallCount || 0) >= maxToolCalls) {
+    return { ok: false, kind: 'callSkill', reason: 'tool_call_limit', skillId };
+  }
+  const input = decision?.input && typeof decision.input === 'object' && !Array.isArray(decision.input)
+    ? decision.input
+    : {};
+  const signature = getAgentSkillCallSignature(skillId, input);
+  if ((options.calledSignatures || []).includes(signature)) {
+    return { ok: false, kind: 'callSkill', reason: 'duplicate_skill_call', skillId, signature };
+  }
+  return { ok: true, kind: 'callSkill', reason: '', skillId, input, signature };
+};
+
 export const createRuntimeDecision = (input: Parameters<typeof createAgentPlan>[0]) => {
   const plan = createAgentPlan(input);
   return {

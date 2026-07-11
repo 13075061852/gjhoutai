@@ -8,6 +8,26 @@ import {
 } from './router';
 
 describe('agent runtime router', () => {
+  it('routes capability searches and runtime diagnostics to deterministic project skills', () => {
+    expect(createAgentPlan({ prompt: '查找库存查询能力', activePageId: 'dashboard' }).localSkillPlan?.skillId)
+      .toBe('project.searchCapabilities');
+    expect(createAgentPlan({ prompt: '检查 Agent 技能是否完整', activePageId: 'project-skills' }).localSkillPlan?.skillId)
+      .toBe('project.auditRuntime');
+    expect(createAgentPlan({ prompt: '分析整个后台现在的业务总览', activePageId: 'dashboard' }).localSkillPlan?.skillId)
+      .toBe('business.analyzeOverview');
+  });
+
+  it('routes model identity questions to runtime model information instead of project guide', () => {
+    const plan = createAgentPlan({
+      prompt: '你是什么模型',
+      activePageId: 'property-analysis',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+
+    expect(plan.kind).toBe('local-tool');
+    expect(plan.localSkillPlan?.skillId).toBe('assistant.modelInfo');
+  });
   it('keeps local project data questions off web search', () => {
     const plan = createAgentPlan({
       prompt: '当前库存最低的成品商品是哪一个',

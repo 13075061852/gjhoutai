@@ -20,7 +20,11 @@ export const selectRecentHistory = (messages: any[], maxTokens = 8000) => {
 export const canRunLocalSkillDirectly = (plan: any, prompt: string, skills: any[]) => {
   const skillId = String(plan?.skillId || '');
   if (!skillId || shouldUseProjectAgentLoopForPrompt(prompt)) return false;
-  if (skillId === 'media.analyzeImages' || skillId.startsWith('property.') || skillId === 'analysis.buildJointPackage') return false;
-  return skills.some((skill) => skill.id === skillId && typeof skill.handler === 'function');
+  const registered = skills.some((skill) => skill.id === skillId && typeof skill.handler === 'function');
+  if (!registered) return false;
+  if (skillId === 'spectrum.manageImages') {
+    return String(plan?.input?.action || 'search') !== 'search';
+  }
+  return ['assistant.openPage', 'formula.createRecipe', 'media.generateImage'].includes(skillId);
 };
 import { shouldUseProjectAgentLoopForPrompt } from '../agent-runtime/router';

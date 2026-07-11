@@ -106,6 +106,54 @@
       gap:12px;
       padding-right:3px;
     }
+    .project-skill-summary{
+      flex:0 0 auto;
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:8px;
+      margin-bottom:12px;
+    }
+    .project-skill-summary article{
+      min-width:0;
+      padding:10px 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      display:grid;
+      gap:4px;
+    }
+    .project-skill-summary span,
+    .project-skill-summary em{
+      color:var(--muted);
+      font-size:11px;
+      font-style:normal;
+      font-weight:750;
+    }
+    .project-skill-summary strong{
+      color:var(--text);
+      font-size:20px;
+      line-height:1;
+      font-weight:900;
+    }
+    .project-skill-summary article.is-ok strong{color:#16a34a}
+    .project-skill-summary article.is-warn strong{color:#d97706}
+    .project-skill-search-empty{
+      min-height:150px;
+      border:1px dashed var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--muted);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      text-align:center;
+    }
+    .project-skill-search-empty[hidden]{display:none}
+    .project-skill-search-empty .ti{font-size:24px;color:var(--accent)}
+    .project-skill-search-empty strong{color:var(--text);font-size:14px}
+    .project-skill-search-empty span{font-size:12px}
     .project-skill-module-group{
       display:flex;
       flex-direction:column;
@@ -151,6 +199,11 @@
       background:rgba(139,92,246,.1);
       color:#8b5cf6;
       border:1px solid rgba(139,92,246,.2);
+    }
+    .project-skill-level--analysis{
+      background:rgba(2,132,199,.1);
+      color:#0284c7;
+      border:1px solid rgba(2,132,199,.2);
     }
     .project-skill-card{
       min-height:0;
@@ -210,7 +263,7 @@
     .project-skill-example-block{
       border:1px solid var(--border);
       border-radius:8px;
-      background:linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 92%, var(--accent-soft)), var(--surface-2));
+      background:var(--surface-2);
       padding:10px;
     }
     .project-skill-section-title{
@@ -295,8 +348,7 @@
       padding:10px;
       border:1px solid color-mix(in srgb, var(--border) 82%, transparent);
       border-radius:10px;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 96%, white 4%), var(--surface-2));
+      background:var(--surface-2);
       box-shadow:
         0 1px 0 color-mix(in srgb, white 45%, transparent) inset,
         0 10px 24px color-mix(in srgb, #0f172a 5%, transparent);
@@ -323,8 +375,7 @@
       padding:12px;
       border:1px solid color-mix(in srgb, var(--border) 78%, transparent);
       border-radius:9px;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-3) 86%, white 4%), var(--surface-3));
+      background:var(--surface-3);
       color:var(--text-2);
       font-size:12px;
       line-height:1.5;
@@ -379,6 +430,9 @@
       }
     }
     @media (max-width:900px){
+      .project-skill-summary{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
       .project-skill-schema{
         grid-template-columns:1fr;
       }
@@ -536,9 +590,7 @@
       padding:20px;
       border:1px dashed var(--border);
       border-radius:8px;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 18%, transparent), transparent 66%),
-        var(--surface-2);
+      background:var(--surface-2);
       color:var(--muted);
       display:flex;
       flex-direction:column;

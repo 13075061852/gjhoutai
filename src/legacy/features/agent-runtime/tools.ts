@@ -3,7 +3,212 @@
 const normalizeText = (value: unknown) => String(value || '').trim();
 const runtimeSkillDefinitionCache = new WeakMap<object, any[]>();
 
+const getCapabilitySearchTerms = (value: unknown) => {
+  const raw = normalizeText(value).toLowerCase();
+  const cleaned = raw
+    .replace(/(?:请问|帮我|一下|查询|搜索|查找|寻找|能力|功能|技能|支持|有没有|是否|能不能|可以|如何|怎么)/g, ' ')
+    .trim();
+  const terms = cleaned.split(/[\s,，、/]+/).filter(Boolean);
+  return terms.length ? terms : (raw ? [raw] : []);
+};
+
+const scoreCapabilityText = (text: unknown, terms: string[]) => {
+  const haystack = normalizeText(text).toLowerCase();
+  return terms.reduce((score, term) => score + (haystack.includes(term) ? Math.max(1, term.length) : 0), 0);
+};
+
 const buildRuntimeSkillDefinitions = (App: any) => [
+  {
+    id: 'assistant.modelInfo',
+    title: '读取当前模型信息',
+    module: 'AI 配置',
+    icon: 'ti-brain',
+    level: '查询型',
+    summary: '读取本次会话实际配置的模型提供商和模型标识，不返回 API Key 等敏感配置。',
+    inputSpec: '{}',
+    outputSpec: '{ "ok": true, "provider": "...", "model": "...", "configured": true }',
+    examples: ['你是什么模型', '当前使用哪个模型', '这次回答由哪个模型生成'],
+    infer(prompt: string) {
+      if (!/(?:你是什么|你是哪个|当前(?:使用|用的|配置的)?|现在(?:使用|用的)?|本次(?:使用|调用)?|这个会话(?:使用|用的)?|用的是什么|使用的是什么|调用的是什么)(?:ai)?模型|(?:哪个|什么)模型(?:在回答|正在回答|生成|用于本次)|模型(?:名称|信息|供应商|提供商)(?:是什么|为|是哪个)?/i.test(normalizeText(prompt))) return null;
+      return { skillId: this.id, confidence: 0.96, input: {} };
+    },
+    async handler() {
+      const config = App?.config?.getFormConfig?.() || {};
+      const provider = normalizeText(config.aiProvider || '未配置');
+      const model = normalizeText(App?.config?.getResolvedModel?.() || config.model || config.modelChoice || '未选择');
+      const configured = provider === 'lmstudio' || Boolean(config.apiKey);
+      return {
+        ok: true,
+        message: '已读取当前会话的模型配置。',
+        details: [],
+        data: { provider, model, configured },
+      };
+    },
+  },
+  {
+    id: 'project.searchCapabilities',
+    title: '搜索项目能力',
+    module: '项目管家',
+    icon: 'ti-sparkles',
+    level: '查询型',
+    summary: '从真实页面清单和技能注册表中查找可用能力，明确能做什么、入口在哪里以及是否已有确定性工具。',
+    inputSpec: '{ "query": "要解决的问题或能力关键词", "limit": 8 }',
+    outputSpec: '{ "ok": true, "pages": [], "skills": [], "supported": true }',
+    paramDocs: [
+      ['query', '能力、模块或问题关键词', '必填'],
+      ['limit', '页面和技能各自最多返回数量，默认 8', '可选'],
+    ],
+    resultDocs: [
+      ['pages', '真实命中的项目页面'],
+      ['skills', '真实命中的可执行技能'],
+      ['supported', '当前项目是否存在匹配能力'],
+    ],
+    examples: ['查找库存查询能力', '哪个技能可以检查项目运行状态', '这个项目能不能分析业务总览'],
+    infer(prompt: string) {
+      const text = normalizeText(prompt);
+      if (!/(?:哪个|什么|查找|搜索|有没有|是否有|支持|能不能|可以).*(?:技能|能力|功能|页面)|(?:技能|能力|功能|页面).*(?:哪个|什么|查找|搜索|有没有|支持|能不能)/.test(text)) return null;
+      return { skillId: this.id, confidence: 0.9, input: { query: text, limit: 8 } };
+    },
+    async handler(input: Record<string, any> = {} as any) {
+      const query = normalizeText(input.query || input.question);
+      if (!query) return { ok: false, message: '请提供要查找的项目能力关键词。' };
+      const terms = getCapabilitySearchTerms(query);
+      const limit = Math.max(1, Math.min(20, Number(input.limit) || 8));
+      const pages = Object.entries(App?.constants?.PAGE_DEFS || {})
+        .map(([pageId, def]: [string, any]) => ({
+          pageId,
+          title: normalizeText(def?.title || pageId),
+          desc: normalizeText(def?.desc),
+          score: scoreCapabilityText(`${pageId} ${def?.title || ''} ${def?.desc || ''}`, terms),
+        }))
+        .filter((item) => item.score > 0)
+        .sort((left, right) => right.score - left.score)
+        .slice(0, limit)
+        .map(({ score, ...item }) => item);
+      const skills = (App?.projectSkills?.getSkillRegistry?.() || [])
+        .map((skill: any) => ({
+          id: normalizeText(skill?.id),
+          title: normalizeText(skill?.title),
+          module: normalizeText(skill?.module),
+          summary: normalizeText(skill?.summary),
+          level: normalizeText(skill?.level),
+          score: scoreCapabilityText(`${skill?.id || ''} ${skill?.title || ''} ${skill?.module || ''} ${skill?.summary || ''}`, terms),
+        }))
+        .filter((item: any) => item.id && item.score > 0)
+        .sort((left: any, right: any) => right.score - left.score)
+        .slice(0, limit)
+        .map(({ score, ...item }: any) => item);
+      const supported = Boolean(pages.length || skills.length);
+      return {
+        ok: true,
+        message: supported ? `找到 ${pages.length} 个相关页面和 ${skills.length} 项相关技能。` : '当前项目没有找到匹配的已注册能力。',
+        details: supported ? ['结果来自当前页面清单和技能注册表，不包含模型猜测。'] : ['可以改用更具体的业务对象或操作关键词重试。'],
+        data: { query, supported, pages, skills },
+      };
+    },
+  },
+  {
+    id: 'project.auditRuntime',
+    title: '审计 Agent 运行能力',
+    module: '项目管家',
+    icon: 'ti-shield-check',
+    level: '分析型',
+    summary: '检查页面、结构化数据、技能处理器和 AI 配置是否完整，输出真实能力覆盖与缺口，不读取或展示密钥。',
+    inputSpec: '{}',
+    outputSpec: '{ "ok": true, "coverage": {}, "issues": [], "configuration": {} }',
+    examples: ['检查 Agent 能力是否完整', '诊断为什么 AI 不能读取项目数据', '审计项目管家运行状态'],
+    infer(prompt: string) {
+      const text = normalizeText(prompt);
+      if (!/(?:审计|检查|诊断|排查).*(?:agent|ai|助手|管家|技能|能力|项目)|(?:agent|ai|助手|管家|技能).*(?:异常|问题|完整|健康|状态)/i.test(text)) return null;
+      return { skillId: this.id, confidence: 0.93, input: {} };
+    },
+    async handler() {
+      const pageEntries = Object.entries(App?.constants?.PAGE_DEFS || {});
+      const structuredPages = App?.businessPages?.getAgentManifestPages?.() || [];
+      const skills = App?.projectSkills?.getSkillRegistry?.() || [];
+      const ids = skills.map((skill: any) => normalizeText(skill?.id)).filter(Boolean);
+      const duplicateIds = [...new Set(ids.filter((id: string, index: number) => ids.indexOf(id) !== index))];
+      const issues: string[] = [];
+      skills.forEach((skill: any) => {
+        if (!normalizeText(skill?.id)) issues.push(`存在缺少 id 的技能：${normalizeText(skill?.title) || '未命名技能'}`);
+        if (typeof skill?.handler !== 'function') issues.push(`技能 ${normalizeText(skill?.id) || normalizeText(skill?.title)} 缺少处理器`);
+        if (!skill?.inputSpec || !skill?.outputSpec) issues.push(`技能 ${normalizeText(skill?.id) || normalizeText(skill?.title)} 缺少输入或输出规范`);
+      });
+      duplicateIds.forEach((id) => issues.push(`技能 ID 重复：${id}`));
+      const config = App?.config?.getFormConfig?.() || {};
+      const configured = config.aiProvider === 'lmstudio' || Boolean(config.apiKey);
+      if (!configured) issues.push('AI 模型尚未配置 API Key，且未使用 LM Studio。');
+      const coverage = {
+        totalPages: pageEntries.length,
+        structuredPages: structuredPages.length,
+        pageCoveragePercent: pageEntries.length ? Math.round((structuredPages.length / pageEntries.length) * 100) : 0,
+        totalSkills: skills.length,
+        executableSkills: skills.filter((skill: any) => typeof skill?.handler === 'function').length,
+      };
+      return {
+        ok: true,
+        message: issues.length ? `Agent 运行审计完成，发现 ${issues.length} 项需要处理。` : 'Agent 运行审计完成，当前未发现注册层异常。',
+        details: [`页面结构化覆盖：${coverage.structuredPages}/${coverage.totalPages}`, `可执行技能：${coverage.executableSkills}/${coverage.totalSkills}`],
+        data: {
+          coverage,
+          issues,
+          configuration: {
+            provider: normalizeText(config.aiProvider || '未配置'),
+            model: normalizeText(config.model || config.modelId || '未选择'),
+            credentialConfigured: configured,
+          },
+        },
+      };
+    },
+  },
+  {
+    id: 'business.analyzeOverview',
+    title: '分析全局业务总览',
+    module: '业务数据',
+    icon: 'ti-chart-dots-3',
+    level: '分析型',
+    summary: '跨已接入业务页面读取记录数和状态分布，生成可追溯的全局业务快照。',
+    inputSpec: '{ "pageIds": [], "includeStatusGroups": true }',
+    outputSpec: '{ "ok": true, "totalRecords": 0, "pages": [], "statusGroups": {} }',
+    examples: ['分析整个后台现在的业务情况', '给我项目经营总览', '检查订单库存采购的整体状态'],
+    infer(prompt: string) {
+      const text = normalizeText(prompt);
+      if (!/(?:全局|整体|整个|综合|经营|业务|项目).*(?:总览|概况|情况|状态|分析|风险)|(?:总览|概况).*(?:业务|项目|后台)/.test(text)) return null;
+      return { skillId: this.id, confidence: 0.91, input: { includeStatusGroups: true } };
+    },
+    async handler(input: Record<string, any> = {} as any) {
+      if (!App?.businessPages?.getAgentManifestPages || !App?.businessPages?.queryAgentData) {
+        return { ok: false, message: '业务页面尚未完整接入 Agent 结构化查询接口。' };
+      }
+      const requestedPageIds = Array.isArray(input.pageIds) ? input.pageIds.map(normalizeText).filter(Boolean) : [];
+      const manifestPages = (App.businessPages.getAgentManifestPages() || [])
+        .filter((page: any) => !requestedPageIds.length || requestedPageIds.includes(page.pageId));
+      const pages = manifestPages.map((page: any) => {
+        const result = App.businessPages.queryAgentData({ pageId: page.pageId, intent: 'count' });
+        return {
+          pageId: page.pageId,
+          title: page.title || page.pageId,
+          ok: result?.ok !== false,
+          rowCount: Number(result?.rowCount ?? page.rowCount ?? 0),
+          summary: normalizeText(result?.summary),
+        };
+      });
+      const statusGroups: Record<string, any[]> = {};
+      if (input.includeStatusGroups !== false) {
+        manifestPages.forEach((page: any) => {
+          const result = App.businessPages.queryAgentData({ pageId: page.pageId, intent: 'aggregate', groupBy: 'status' });
+          if (result?.ok !== false && Array.isArray(result?.data) && result.data.length) statusGroups[page.pageId] = result.data;
+        });
+      }
+      const totalRecords = pages.reduce((total: number, page: any) => total + page.rowCount, 0);
+      return {
+        ok: true,
+        message: `已读取 ${pages.length} 个业务页面，共 ${totalRecords} 条结构化记录。`,
+        details: pages.map((page: any) => `${page.title}：${page.rowCount} 条`),
+        data: { totalRecords, pages, statusGroups, generatedAt: new Date().toISOString() },
+      };
+    },
+  },
   {
     id: 'assistant.currentPage',
     title: '读取当前页面',
@@ -51,37 +256,17 @@ const buildRuntimeSkillDefinitions = (App: any) => [
       if (!/(?:这个|当前|本|该)?(?:页面|模块|功能|系统|项目|网站|应用|平台).*(?:做什么|是什么|用途|作用|介绍|说明|怎么用|如何使用|有什么|包含|能干嘛)|(?:你是谁|你是什么|你能做什么|你会什么|介绍一下你自己|这个后台能做什么)/.test(String(prompt || ''))) return null;
       return { skillId: this.id, confidence: 0.88, input: { question: prompt } };
     },
-    async handler(input: Record<string, any> = {} as any) {
+    async handler() {
       const pageKey = App?.constants?.NAV_PAGE_KEY || 'sidebar-active-page';
       const pageId = localStorage.getItem(pageKey) || 'dashboard';
       const pageDef = App?.constants?.PAGE_DEFS?.[pageId] || {};
       const title = String(pageDef.title || pageId);
       const systemName = '广俊塑料科技后台管理系统';
-      const question = normalizeText(input.question);
-      const pages = Object.entries(App?.constants?.PAGE_DEFS || {})
-        .slice(0, 12)
-        .map(([id, def]: [string, any]) => `${def?.title || id}`)
-        .join('、');
       const manifest = App?.projectSkills?.getProjectManifest?.() || App?.agentButler?.getProjectManifest?.() || {};
-      const manifestPages = Array.isArray(manifest.pages) ? manifest.pages : [];
-      const manifestSkills = Array.isArray(manifest.skills) ? manifest.skills : [];
-      const dataSources = Array.isArray(manifest.dataSources) ? manifest.dataSources : [];
-      const currentData = manifest.currentData && typeof manifest.currentData === 'object' ? manifest.currentData : {};
-      const currentRecordCount = Object.values(currentData).reduce((total: number, count) => total + (Number(count) || 0), 0);
-      const asksAssistant = /你是谁|你是什么|你能做什么|你会什么|介绍一下你自己/.test(question);
-      const message = asksAssistant
-        ? `我是 ${systemName} 的项目级 AI 助手。当前可读取 ${manifestPages.length || Object.keys(App?.constants?.PAGE_DEFS || {}).length} 个页面、调用 ${manifestSkills.length || '已注册'} 项项目技能，并结合后台现有数据回答问题。`
-        : `当前页面是「${title}」。${pageDef.desc ? `它的用途是：${pageDef.desc}` : '该页面已注册在后台导航中。'}`;
       return {
         ok: true,
-        message,
-        details: [
-          `当前页面 ID：${pageId}`,
-          pageDef.eyebrow ? `所属模块：${pageDef.eyebrow}` : '',
-          pages ? `已注册页面示例：${pages}` : '',
-          dataSources.length ? `可用数据源：${dataSources.join('、')}` : '',
-          currentRecordCount ? `当前已接入结构化记录：${currentRecordCount} 条` : '',
-        ].filter(Boolean),
+        message: '已读取项目、当前页面和可用能力信息。',
+        details: [],
         data: {
           systemName,
           pageId,

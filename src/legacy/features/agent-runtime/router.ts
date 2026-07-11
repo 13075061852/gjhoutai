@@ -3,6 +3,10 @@
 const textOf = (value: unknown) => String(value || '').trim();
 const AGENT_PLAN_KINDS = ['local-tool', 'web-search', 'image-generation', 'image-analysis', 'chat'] as const;
 const ROUTABLE_LOCAL_SKILL_IDS = [
+  'project.searchCapabilities',
+  'project.auditRuntime',
+  'business.analyzeOverview',
+  'assistant.modelInfo',
   'assistant.projectGuide',
   'assistant.currentPage',
   'media.generateImage',
@@ -27,6 +31,10 @@ export const BUSINESS_QUERY_PATTERN = /(?:查看|看一下|查询|统计|列出|
 export const COMPLEX_PROJECT_ANALYSIS_PATTERN = /(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断).*(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据)|(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据).*(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断)/;
 export const PROPERTY_MODEL_PATTERN = /(?:^|[^A-Z0-9])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]+)+(?:$|[^A-Z0-9])/i;
 export const PROPERTY_DATA_PATTERN = /(?:物性|型号|批次|分类情况|材料分类|无卤|阻燃|尼龙|竞品|原料|熔指|熔融指数|拉伸|断裂伸长|弯曲|冲击|灼热丝|CTI|漏电起痕|灰份|灰分|测试温度|检测范围|检验范围|材料性能|PBT|PET)/i;
+export const CAPABILITY_SEARCH_PATTERN = /(?:哪个|什么|查找|搜索|有没有|是否有|支持|能不能|可以).*(?:技能|能力|功能)|(?:技能|能力|功能).*(?:哪个|什么|查找|搜索|有没有|支持|能不能)|(?:哪个|查找|搜索).*(?:页面).*(?:可以|支持|负责)/i;
+export const AGENT_AUDIT_PATTERN = /(?:审计|检查|诊断|排查).*(?:agent|ai|助手|管家|技能|能力|项目)|(?:agent|ai|助手|管家|技能).*(?:异常|问题|完整|健康|状态)/i;
+export const BUSINESS_OVERVIEW_PATTERN = /(?:全局|整体|整个|综合|经营|业务|项目|后台).*(?:总览|概况|情况|状态|分析|风险)|(?:总览|概况).*(?:业务|项目|后台)/i;
+export const MODEL_INFO_PATTERN = /(?:你是什么|你是哪个|当前(?:使用|用的|配置的)?|现在(?:使用|用的)?|本次(?:使用|调用)?|这个会话(?:使用|用的)?|用的是什么|使用的是什么|调用的是什么)(?:ai)?模型|(?:哪个|什么)模型(?:在回答|正在回答|生成|用于本次)|模型(?:名称|信息|供应商|提供商)(?:是什么|为|是哪个)?/i;
 
 export type AgentRouteClassification = {
   kind?: AgentPlan['kind'];
@@ -49,6 +57,38 @@ export type AgentRouteClassifier = (input: {
 }) => Promise<AgentRouteClassification | null>;
 
 export const buildLocalSkillPlan = (prompt: string, activePageId = ''): AgentSkillPlan | null => {
+  if (AGENT_AUDIT_PATTERN.test(prompt)) {
+    return {
+      skillId: 'project.auditRuntime',
+      input: {},
+      confidence: 0.93,
+      reason: '用户要求检查 Agent 或项目技能状态，执行确定性运行审计',
+    };
+  }
+  if (CAPABILITY_SEARCH_PATTERN.test(prompt)) {
+    return {
+      skillId: 'project.searchCapabilities',
+      input: { query: prompt, limit: 8 },
+      confidence: 0.9,
+      reason: '用户询问项目真实能力，从页面与技能注册表中检索',
+    };
+  }
+  if (BUSINESS_OVERVIEW_PATTERN.test(prompt)) {
+    return {
+      skillId: 'business.analyzeOverview',
+      input: { includeStatusGroups: true },
+      confidence: 0.91,
+      reason: '用户要求跨页面业务总览，读取已接入的结构化业务数据',
+    };
+  }
+  if (MODEL_INFO_PATTERN.test(prompt)) {
+    return {
+      skillId: 'assistant.modelInfo',
+      input: {},
+      confidence: 0.96,
+      reason: '用户询问当前会话实际使用的模型，读取运行时模型配置',
+    };
+  }
   if (PAGE_GUIDE_PATTERN.test(prompt)) {
     return {
       skillId: 'assistant.projectGuide',
@@ -146,6 +186,10 @@ const normalizeClassifierSkillPlan = (classification: AgentRouteClassification, 
     ? classification.input
     : {};
   const defaults: Record<string, Record<string, any>> = {
+    'project.searchCapabilities': { query: prompt, limit: 8 },
+    'project.auditRuntime': {},
+    'business.analyzeOverview': { includeStatusGroups: true },
+    'assistant.modelInfo': {},
     'assistant.projectGuide': { question: prompt },
     'assistant.currentPage': {},
     'media.generateImage': { prompt },
@@ -211,6 +255,7 @@ export const buildAgentRouteClassifierMessages = ({
       '判断用户问题应该进入哪类处理：local-tool、web-search、image-generation、image-analysis、chat。',
       'web-search：最新、最近、今天、价格、行情、政策、新闻、官网、资料来源、需要外部验证。',
       'local-tool：查询或操作本后台数据、当前页面、项目说明、订单/库存/配方/客户/供应商/人员/权限、物性数据、数据识别历史。物性问题必须使用 property.*，禁止使用 business.queryPageData。',
+      '用户询问本次会话正在使用什么模型时，使用 assistant.modelInfo；不要把它误判为项目介绍。',
       'image-generation：用户要生成图片、海报、封面、插图。',
       'image-analysis：用户要分析已上传或项目内图谱/图片。',
       'chat：普通闲聊、写作、解释，不需要项目技能或联网。',

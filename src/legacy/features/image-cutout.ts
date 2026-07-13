@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/image-cutout.css';
 import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {

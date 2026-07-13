@@ -259,6 +259,207 @@
   border-bottom:0;
 }
 
+/* ===== Shared controls and layout primitives ===== */
+.ui-button{
+  min-height:var(--control-height-md);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:var(--space-2);
+  padding:0 var(--space-3);
+  border:1px solid var(--control-border);
+  border-radius:var(--ui-radius-sm);
+  background:var(--control-bg);
+  color:var(--control-text);
+  font:inherit;
+  font-size:13px;
+  line-height:1;
+  font-weight:800;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:border-color var(--ui-transition-fast),background var(--ui-transition-fast),color var(--ui-transition-fast),box-shadow var(--ui-transition-fast);
+}
+.ui-button:hover{
+  border-color:var(--control-border-hover);
+  background:var(--control-bg-hover);
+}
+.ui-button:focus-visible{
+  outline:0;
+  border-color:var(--control-border-focus);
+  box-shadow:0 0 0 3px var(--control-ring);
+}
+.ui-button:disabled,
+.ui-button[aria-disabled="true"]{
+  opacity:.56;
+  cursor:not-allowed;
+}
+.ui-button--primary{
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fff;
+}
+.ui-button--primary:hover{
+  border-color:color-mix(in srgb,var(--accent) 82%,#000);
+  background:color-mix(in srgb,var(--accent) 82%,#000);
+}
+.ui-button--danger{
+  border-color:var(--danger);
+  color:var(--danger);
+}
+.ui-button--sm{min-height:var(--control-height-sm);padding-inline:var(--space-2)}
+.ui-button--lg{min-height:var(--control-height-lg);padding-inline:var(--space-4)}
+
+/* Shared analysis toolbar buttons used by property, spectrum, and data pages. */
+.analysis-toolbar-btn,
+.analysis-toolbar-btn-primary{
+  height:40px;
+  padding:0 16px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text-2);
+  font:inherit;
+  font-size:13px;
+  font-weight:700;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease;
+  position:relative;
+}
+.analysis-toolbar-btn i,
+.analysis-toolbar-btn-primary i{
+  font-size:16px;
+  line-height:1;
+  flex:0 0 auto;
+  color:var(--muted);
+  transition:color .18s ease;
+}
+.analysis-toolbar-btn:hover:not(:disabled),
+.analysis-toolbar-btn-primary:hover:not(:disabled){
+  border-color:var(--border-2);
+  background:var(--surface-2);
+  color:var(--text);
+}
+.analysis-toolbar-btn:hover:not(:disabled) i,
+.analysis-toolbar-btn-primary:hover:not(:disabled) i{color:var(--text-2)}
+.analysis-toolbar-btn:disabled{
+  opacity:1;
+  background:var(--surface-2);
+  border-color:var(--border);
+  color:var(--muted-2);
+  cursor:not-allowed;
+}
+.analysis-toolbar-btn:disabled i{color:var(--muted-2)}
+.analysis-toolbar-btn-primary{background:var(--surface)}
+.analysis-toolbar-btn.is-active,
+.analysis-toolbar-btn-primary.is-active{
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fff;
+  box-shadow:0 2px 8px rgba(37,99,235,.24);
+}
+.analysis-toolbar-btn.is-active:hover:not(:disabled),
+.analysis-toolbar-btn-primary.is-active:hover:not(:disabled){
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fff;
+}
+.analysis-toolbar-btn.is-active i,
+.analysis-toolbar-btn-primary.is-active i,
+.analysis-toolbar-btn.is-active:hover:not(:disabled) i,
+.analysis-toolbar-btn-primary.is-active:hover:not(:disabled) i{color:#fff}
+
+.ui-field{
+  width:100%;
+  min-height:var(--control-height-md);
+  padding:0 var(--space-3);
+  border:1px solid var(--control-border);
+  border-radius:var(--ui-radius-sm);
+  background:var(--control-bg);
+  color:var(--control-text);
+  font:inherit;
+  font-size:13px;
+  outline:0;
+  transition:border-color var(--ui-transition-fast),background var(--ui-transition-fast),box-shadow var(--ui-transition-fast);
+}
+.ui-field:hover{border-color:var(--control-border-hover)}
+.ui-field:focus{border-color:var(--control-border-focus);box-shadow:0 0 0 3px var(--control-ring)}
+.ui-field:disabled{opacity:.56;cursor:not-allowed}
+
+.ui-toolbar{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:var(--space-3);
+  padding:var(--space-3) var(--ui-panel-padding);
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.ui-toolbar__title{min-width:0;display:flex;align-items:center;gap:var(--space-2)}
+.ui-toolbar__actions{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:var(--space-2)}
+
+.ui-panel{
+  min-width:0;
+  border:1px solid var(--border);
+  border-radius:var(--ui-radius-lg);
+  background:var(--surface);
+  overflow:hidden;
+}
+
+.ui-stat-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--ui-page-gap);
+}
+.ui-stat-card{
+  min-width:0;
+  padding:var(--ui-panel-padding);
+  border:1px solid var(--border);
+  border-radius:var(--ui-radius-lg);
+  background:var(--surface);
+}
+
+.ui-pagination{
+  min-height:56px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:var(--space-2);
+  padding:var(--space-2) var(--ui-panel-padding);
+  border-top:1px solid var(--border);
+  background:var(--surface);
+}
+
+.ui-dialog-overlay{background:var(--ui-dialog-backdrop)}
+.ui-dialog-card{width:min(var(--ui-dialog-width-md),calc(100vw - 32px));max-height:min(88dvh,900px);overflow:hidden}
+.ui-dialog-card--sm{--ui-dialog-width-md:var(--ui-dialog-width-sm)}
+.ui-dialog-card--lg{--ui-dialog-width-md:var(--ui-dialog-width-lg)}
+.ui-dialog-header,
+.ui-dialog-footer{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+.ui-dialog-header{justify-content:space-between;border-bottom:1px solid var(--border)}
+.ui-dialog-body{min-height:0;overflow:auto;padding:var(--space-5)}
+.ui-dialog-footer{justify-content:flex-end;border-top:1px solid var(--border)}
+
+@media (max-width:720px){
+  .ui-toolbar{align-items:stretch;flex-direction:column}
+  .ui-toolbar__actions{width:100%;justify-content:stretch;flex-wrap:wrap}
+  .ui-toolbar__actions > *{flex:1 1 160px}
+  .ui-dialog-card{width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+  .ui-dialog-header,
+  .ui-dialog-footer{padding:var(--space-3) var(--space-4)}
+  .ui-dialog-body{padding:var(--space-4)}
+  .ui-stat-grid{grid-template-columns:1fr}
+}
+
+@media (min-width:721px) and (max-width:1200px){
+  .ui-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 .ui-table--sticky-header th{
   position:sticky;
   top:0;

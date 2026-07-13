@@ -1,4 +1,5 @@
 ﻿import { renderDashboard } from './dashboard';
+import '../../../styles/pages/business-pages.css';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
 import { authClient } from '../../../services/auth';
 import { cloudStorage } from '../../../services/cloud-storage';
@@ -33,8 +34,10 @@ import {
   procurementPageSizeOptions,
   procurementStatusOptions,
 } from './procurement';
-import { parseAgentNumber, queryAgentRows } from './agent-query';
 import { createBusinessPageShared } from './shared';
+import { createBusinessAgentApi } from './business-agent-api';
+import { renderPermissionPage } from './permission-page';
+import { createArchiveRenderer } from './archive-page';
 
 (function () {
   'use strict';
@@ -46,6 +49,7 @@ import { createBusinessPageShared } from './shared';
   const { refs, utils } = App;
   const {
     esc,
+    decorateBusinessUiMarkup,
     renderRows,
     renderSearchBox,
     renderStatStrip,
@@ -466,19 +470,19 @@ import { createBusinessPageShared } from './shared';
           ['最近交付', orderRows.map((order) => order.deliveryDate).sort().at(-1) || '--', '交货日期'],
         ])}
         <section class="business-panel biz-order-table-panel">
-          <div class="biz-formula-table-head biz-order-table-head">
-            <div class="biz-formula-table-title">
+          <div class="ui-toolbar biz-formula-table-head biz-order-table-head">
+            <div class="ui-toolbar__title biz-formula-table-title">
               <i class="ti ti-package" aria-hidden="true"></i>
               <div>
                 <h2>订单管理</h2>
               </div>
             </div>
-            <div class="biz-formula-table-actions biz-order-table-actions">
-              <select data-order-status-filter aria-label="订单状态筛选">
+            <div class="ui-toolbar__actions biz-formula-table-actions biz-order-table-actions">
+              <select class="ui-field" data-order-status-filter aria-label="订单状态筛选">
                 ${renderOptions(['全部', ...orderStatusOptions], orderStatusFilter)}
               </select>
-              <input type="date" value="${esc(orderDateFilter)}" data-order-date-filter aria-label="交货日期筛选">
-              <button class="biz-formula-new-btn" type="button" data-order-new>
+              <input class="ui-field" type="date" value="${esc(orderDateFilter)}" data-order-date-filter aria-label="交货日期筛选">
+              <button class="ui-button ui-button--primary biz-formula-new-btn" type="button" data-order-new>
                 <i class="ti ti-plus" aria-hidden="true"></i>
                 <span>新建订单</span>
               </button>
@@ -525,7 +529,7 @@ import { createBusinessPageShared } from './shared';
               </tbody>
             </table>
           </div>
-          <div class="biz-formula-pagination biz-order-pagination">
+          <div class="ui-pagination biz-formula-pagination biz-order-pagination">
             <div class="biz-formula-pagination-actions">
               <label class="biz-formula-page-size">
                 <span>每页</span>
@@ -547,9 +551,9 @@ import { createBusinessPageShared } from './shared';
           </div>
         </section>
         ${orderModalOpen ? `
-          <div class="biz-order-modal dialog-overlay" data-order-modal>
-            <div class="biz-inventory-material-dialog biz-order-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
-              <div class="biz-inventory-dialog-head">
+          <div class="ui-dialog-overlay biz-order-modal dialog-overlay" data-order-modal>
+            <div class="ui-dialog-card ui-dialog-card--md biz-inventory-material-dialog biz-order-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle">
+              <div class="ui-dialog-header biz-inventory-dialog-head">
                 <div>
                   <h2 id="orderModalTitle">${orderEditingId ? '编辑订单' : '新建订单'}</h2>
                   <span>${esc(orderDraftNote)}</span>
@@ -558,42 +562,42 @@ import { createBusinessPageShared } from './shared';
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
-              <div class="biz-order-editor">
+              <div class="ui-dialog-body biz-order-editor">
                 <label>
                   <span>客户 *</span>
-                  <select data-order-field="customer">${renderOptions(getOrderCustomerOptions(), modalOrder.customer)}</select>
+                  <select class="ui-field" data-order-field="customer">${renderOptions(getOrderCustomerOptions(), modalOrder.customer)}</select>
                 </label>
                 <label>
                   <span>配方 *</span>
-                  <select data-order-field="formula">${renderOptions(getOrderFormulaOptions(), modalOrder.formula)}</select>
+                  <select class="ui-field" data-order-field="formula">${renderOptions(getOrderFormulaOptions(), modalOrder.formula)}</select>
                 </label>
                 <label>
                   <span>数量 (kg) *</span>
-                  <input type="number" min="0" step="1" value="${esc(modalOrder.quantity || '')}" data-order-field="quantity">
+                  <input class="ui-field" type="number" min="0" step="1" value="${esc(modalOrder.quantity || '')}" data-order-field="quantity">
                 </label>
                 <label>
                   <span>单价 (¥/kg) *</span>
-                  <input type="number" min="0" step="0.01" value="${esc(modalOrder.unitPrice || '')}" data-order-field="unitPrice">
+                  <input class="ui-field" type="number" min="0" step="0.01" value="${esc(modalOrder.unitPrice || '')}" data-order-field="unitPrice">
                 </label>
                 <label>
                   <span>总金额 (¥)</span>
-                  <input type="text" value="${esc(formatOrderAmount(amountPreview))}" readonly data-order-total-preview>
+                  <input class="ui-field" type="text" value="${esc(formatOrderAmount(amountPreview))}" readonly data-order-total-preview>
                 </label>
                 <label>
                   <span>交货日期 *</span>
-                  <input type="date" value="${esc(modalOrder.deliveryDate)}" data-order-field="deliveryDate">
+                  <input class="ui-field" type="date" value="${esc(modalOrder.deliveryDate)}" data-order-field="deliveryDate">
                 </label>
                 <label>
                   <span>生产日期</span>
-                  <input type="date" value="${esc(modalOrder.productionDate || modalOrder.deliveryDate)}" data-order-field="productionDate">
+                  <input class="ui-field" type="date" value="${esc(modalOrder.productionDate || modalOrder.deliveryDate)}" data-order-field="productionDate">
                 </label>
                 <label>
                   <span>状态</span>
-                  <select data-order-field="status">${renderOptions(orderStatusOptions, modalOrder.status)}</select>
+                  <select class="ui-field" data-order-field="status">${renderOptions(orderStatusOptions, modalOrder.status)}</select>
                 </label>
                 <label class="is-note">
                   <span>备注</span>
-                  <textarea placeholder="补充客户要求、交付说明或生产备注" data-order-field="note">${esc(modalOrder.note)}</textarea>
+                  <textarea class="ui-field" placeholder="补充客户要求、交付说明或生产备注" data-order-field="note">${esc(modalOrder.note)}</textarea>
                 </label>
                 <div class="biz-order-stock-check">
                   <i class="ti ti-circle-check" aria-hidden="true"></i>
@@ -602,9 +606,9 @@ import { createBusinessPageShared } from './shared';
                     <span>所有材料库存充足</span>
                   </div>
                 </div>
-                <div class="biz-inventory-modal-actions biz-order-modal-actions">
-                  <button class="biz-inventory-ghost-btn" type="button" data-order-cancel>取消</button>
-                  <button class="biz-inventory-primary-btn" type="button" data-order-save>保存订单</button>
+                <div class="ui-dialog-footer biz-inventory-modal-actions biz-order-modal-actions">
+                  <button class="ui-button biz-inventory-ghost-btn" type="button" data-order-cancel>取消</button>
+                  <button class="ui-button ui-button--primary biz-inventory-primary-btn" type="button" data-order-save>保存订单</button>
                 </div>
               </div>
             </div>
@@ -5369,218 +5373,20 @@ import { createBusinessPageShared } from './shared';
     `;
   };
 
-  const renderArchive = (kind) => {
-    const config = archiveConfigs[kind];
-    const state = archiveStates[kind];
-    const categories = getArchiveCategories(config, state);
-    const categoryTabs = ['全部', ...categories];
-    if (!categoryTabs.includes(state.filter)) state.filter = '全部';
-    const statusTabs = ['全部', ...new Set([...config.statuses, ...state.rows.map((record) => record.status).filter(Boolean)])];
-    if (!statusTabs.includes(state.statusFilter)) state.statusFilter = '全部';
-    const normalizedSearch = state.search.trim().toLowerCase();
-    const visibleRows = state.rows.filter((record) => {
-      const matchedCategory = state.filter === '全部' || record.category === state.filter;
-      const matchedStatus = kind !== 'personnel' || state.statusFilter === '全部' || record.status === state.statusFilter;
-      const values = [record.code, record.name, record.phone, record.email, record.category, record.address, record.status, record.note];
-      const matchedSearch = !normalizedSearch || values.some((value) => String(value).toLowerCase().includes(normalizedSearch));
-      return matchedCategory && matchedStatus && matchedSearch;
-    });
-    const filteredCount = visibleRows.length;
-    const totalPages = Math.max(1, Math.ceil(filteredCount / state.pageSize));
-    state.page = Math.min(Math.max(1, state.page), totalPages);
-    const pageStart = (state.page - 1) * state.pageSize;
-    const pagedRows = visibleRows.slice(pageStart, pageStart + state.pageSize);
-    const editingRecord = state.editingCode ? getArchiveByCode(kind, state.editingCode) : null;
-    const editingAuthUser = kind === 'personnel' && editingRecord ? getAuthUserForRecord(editingRecord) : null;
-    const formRecord = editingRecord || normalizeArchiveRecord(config, {
-      code: getNextArchiveCode(kind),
-      category: state.filter === '全部' ? categories[0] || config.categories[0] : state.filter,
-      status: config.statuses[0],
-    });
-
-    return `
-      <div class="biz-supplier-page biz-archive-table-page">
-        <section class="business-panel biz-supplier-table-panel biz-archive-table-panel biz-${esc(kind)}-archive-table-panel">
-          <div class="biz-formula-table-head biz-supplier-table-head">
-            <div class="biz-formula-table-title">
-              <i class="ti ${esc(config.icon)}" aria-hidden="true"></i>
-              <div>
-                <h2>${esc(config.title)}</h2>
-              </div>
-            </div>
-            <div class="biz-formula-table-actions biz-supplier-table-actions biz-archive-table-actions">
-              ${renderSearchBox({
-                className: 'biz-supplier-search',
-                value: state.search,
-                placeholder: config.searchPlaceholder,
-                label: config.searchLabel,
-                attributes: { 'data-archive-search': kind },
-              })}
-              <select data-archive-filter="${esc(kind)}" aria-label="${esc(config.filterLabel)}筛选">
-                ${categoryTabs.map((category) => `
-                  <option value="${esc(category)}" ${category === state.filter ? 'selected' : ''}>${esc(category === '全部' ? config.filterAllLabel : category)}</option>
-                `).join('')}
-              </select>
-              ${kind === 'personnel' ? `
-                <select data-archive-status-filter="${esc(kind)}" aria-label="状态筛选">
-                  ${statusTabs.map((status) => `
-                    <option value="${esc(status)}" ${status === state.statusFilter ? 'selected' : ''}>${esc(status === '全部' ? '全部状态' : status)}</option>
-                  `).join('')}
-                </select>
-              ` : ''}
-              <button class="biz-formula-new-btn" type="button" data-archive-new="${esc(kind)}">
-                <i class="ti ti-plus" aria-hidden="true"></i>
-                <span>${esc(config.addText)}</span>
-              </button>
-            </div>
-          </div>
-          <div class="ui-table-wrap biz-supplier-table-wrap biz-archive-table-wrap">
-            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table biz-archive-table">
-              <thead>
-                <tr>${config.columns.map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
-              </thead>
-              <tbody>
-                ${pagedRows.map((record) => `
-                  <tr>
-                    <td>${esc(record.code)}</td>
-                    <td class="biz-supplier-name-cell">${kind === 'customer' ? `<button class="biz-order-code" type="button" data-customer-detail="${esc(record.code)}">${esc(record.name)}</button>` : esc(record.name)}</td>
-                    ${kind === 'personnel' ? `
-                      <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
-                      <td>${esc(record.phone || '--')}</td>
-                      <td>${esc(record.email || '--')}</td>
-                    ` : `
-                      <td>${esc(record.contact || '--')}</td>
-                      <td>${esc(record.phone || '--')}</td>
-                      <td>${esc(record.email || '--')}</td>
-                      <td><span class="biz-formula-chip">${esc(record.category || '未分类')}</span></td>
-                    `}
-                    <td><span class="biz-formula-status ${getArchiveStatusClass(record.status)}">${esc(record.status)}</span></td>
-                    <td>
-                      <div class="biz-supplier-row-actions">
-                        <button type="button" title="编辑${esc(config.entityName)}" aria-label="编辑 ${esc(record.name)}" data-archive-edit="${esc(kind)}" data-archive-code="${esc(record.code)}">
-                          <i class="ti ti-pencil" aria-hidden="true"></i>
-                        </button>
-                        <button class="is-danger" type="button" title="删除${esc(config.entityName)}" aria-label="删除 ${esc(record.name)}" data-archive-delete="${esc(kind)}" data-archive-code="${esc(record.code)}">
-                          <i class="ti ti-trash" aria-hidden="true"></i>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                `).join('') || `<tr class="biz-archive-empty-row"><td class="biz-archive-empty-cell" colspan="${config.columns.length}"><div class="biz-formula-empty">${esc(config.emptyText)}</div></td></tr>`}
-              </tbody>
-            </table>
-          </div>
-          <div class="biz-formula-pagination biz-supplier-pagination">
-            <div class="biz-formula-pagination-actions">
-              <label class="biz-formula-page-size">
-                <span>每页</span>
-                <select data-archive-page-size="${esc(kind)}" aria-label="${esc(config.entityName)}每页条数">${formulaPageSizeOptions.map((n) => `
-                  <option value="${n}" ${n === state.pageSize ? 'selected' : ''}>${n}</option>`).join('')}
-                </select>
-                <span>条</span>
-              </label>
-              <div class="biz-formula-page-buttons">
-                <button type="button" class="biz-formula-page-btn" data-archive-page-prev="${esc(kind)}" ${state.page <= 1 ? 'disabled' : ''} aria-label="${esc(config.entityName)}上一页">
-                  <i class="ti ti-chevron-left" aria-hidden="true"></i>
-                </button>
-                <span class="biz-formula-page-indicator">${state.page} / ${totalPages}</span>
-                <button type="button" class="biz-formula-page-btn" data-archive-page-next="${esc(kind)}" ${state.page >= totalPages ? 'disabled' : ''} aria-label="${esc(config.entityName)}下一页">
-                  <i class="ti ti-chevron-right" aria-hidden="true"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        ${state.modalOpen ? `
-          <div class="biz-order-modal dialog-overlay" data-archive-modal="${esc(kind)}">
-            <div class="biz-inventory-material-dialog biz-order-dialog biz-supplier-dialog dialog-card" role="dialog" aria-modal="true" aria-labelledby="${esc(kind)}ModalTitle">
-              <div class="biz-inventory-dialog-head">
-                <div>
-                  <h2 id="${esc(kind)}ModalTitle">${state.editingCode ? `编辑${config.entityName}` : config.addText}</h2>
-                  <span>${esc(state.draftNote)}</span>
-                </div>
-                <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭${esc(config.entityName)}编辑" data-archive-close="${esc(kind)}">
-                  <i class="ti ti-x" aria-hidden="true"></i>
-                </button>
-              </div>
-              <div class="biz-supplier-editor">
-                <label class="is-code">
-                  <span>${esc(config.codeLabel)} *</span>
-                  <input type="text" value="${esc(formRecord.code)}" placeholder="例如：${esc(config.codePrefix)}001" data-archive-field="code">
-                </label>
-                <label class="is-name">
-                  <span>${esc(config.nameLabel)} *</span>
-                  <input type="text" value="${esc(formRecord.name)}" placeholder="${esc(config.namePlaceholder)}" data-archive-field="name">
-                </label>
-                ${kind === 'personnel' ? '' : `
-                  <label>
-                    <span>联系人</span>
-                    <input type="text" value="${esc(formRecord.contact)}" placeholder="联系人" data-archive-field="contact">
-                  </label>
-                `}
-                <label>
-                  <span>电话</span>
-                  <input type="text" value="${esc(formRecord.phone)}" placeholder="联系电话" data-archive-field="phone">
-                </label>
-                <label>
-                  <span>邮箱</span>
-                  <input type="email" value="${esc(formRecord.email)}" placeholder="邮箱地址" data-archive-field="email">
-                </label>
-                <label>
-                  <span>${esc(config.categoryLabel)}</span>
-                  <select data-archive-field="category">${renderOptions(categories, formRecord.category)}</select>
-                </label>
-                <label>
-                  <span>${esc(config.statusLabel)}</span>
-                  <select data-archive-field="status">${renderOptions(config.statuses, formRecord.status)}</select>
-                </label>
-                ${kind === 'personnel' ? `
-                  <label>
-                    <span>登录账号</span>
-                    <input type="text" value="${esc(editingAuthUser?.username || '')}" placeholder="例如：zhangsan" data-archive-field="username">
-                  </label>
-                  <label>
-                    <span>${state.editingCode ? '新密码' : '初始密码'}</span>
-                    <input type="password" placeholder="${state.editingCode ? '留空则不修改' : '至少 10 位'}" data-archive-field="password">
-                  </label>
-                ` : ''}
-                ${kind === 'personnel' ? '' : `
-                  <label class="is-address">
-                    <span>地址</span>
-                    <textarea placeholder="客户地址" data-archive-field="address">${esc(formRecord.address)}</textarea>
-                  </label>
-                `}
-                <label class="is-note">
-                  <span>备注</span>
-                  <textarea placeholder="${esc(config.entityName)}档案备注" data-archive-field="note">${esc(formRecord.note)}</textarea>
-                </label>
-                <div class="biz-inventory-modal-actions">
-                  <button class="biz-inventory-ghost-btn" type="button" data-archive-cancel="${esc(kind)}">取消</button>
-                  <button class="biz-inventory-primary-btn" type="button" data-archive-save="${esc(kind)}">保存</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  };
-
-  const renderPermissionLegacy = () => `
-    <section class="biz-permission-layout">
-      <aside class="business-panel biz-role-list">
-        <div class="business-panel-head"><h2>角色</h2><span>12 个</span></div>
-        ${['销售主管', '实验室工程师', '生产部主管', '系统管理员'].map((role, index) => `<button class="${index === 0 ? 'is-active' : ''}" type="button">${esc(role)}</button>`).join('')}
-      </aside>
-      <article class="business-panel biz-permission-matrix">
-        <div class="business-panel-head"><h2>权限矩阵</h2><span>菜单 / 数据 / 动作</span></div>
-        ${['订单管理', '客户档案', '配方管理'].map((module, index) => `
-          <div class="biz-permission-row"><strong>${esc(module)}</strong><span class="on">查看</span><span class="${index < 3 ? 'on' : ''}">编辑</span><span class="${index === 0 ? 'on' : ''}">导出</span></div>
-        `).join('')}
-      </article>
-    </section>
-  `;
-
+  const renderArchive = createArchiveRenderer({
+    archiveConfigs,
+    archiveStates,
+    getArchiveCategories,
+    getArchiveByCode,
+    getAuthUserForRecord,
+    normalizeArchiveRecord,
+    getNextArchiveCode,
+    renderSearchBox,
+    renderOptions,
+    getArchiveStatusClass,
+    formulaPageSizeOptions,
+    esc,
+  });
   const getPermissionPages = () => Object.entries(App.constants?.PAGE_DEFS || {})
     .map(([id, def]) => ({ id, title: def?.title || id, eyebrow: def?.eyebrow || '项目页面' }))
     .filter((page) => page.id && page.id !== 'permission-management');
@@ -5676,19 +5482,6 @@ import { createBusinessPageShared } from './shared';
     if (!pageId) return true;
     return canRoleEditPage(getPermissionKeyForUser(user), pageId);
   };
-  const renderLockedPermissionToggle = (pageId, field, label) => (
-    `<button class="biz-permission-toggle on" type="button" data-permission-toggle="${esc(field)}" data-permission-page="${esc(pageId)}" data-permission-enabled="true" aria-pressed="true" disabled aria-disabled="true">${esc(label)}</button>`
-  );
-  const getPermissionScope = (permissionKey, pageId) => {
-    const department = getPermissionKeyDepartment(permissionKey);
-    if (!canRoleViewPage(permissionKey, pageId)) return '不可见';
-    if (department === '系统管理员') return '全项目';
-    if (/detail|archive|management|plan|procurement|stock|invoice/.test(pageId)) return '本角色业务域';
-    return '当前页面数据';
-  };
-  const renderPermissionToggle = (pageId, field, enabled, label, mutedLabel = '关闭') => (
-    `<button class="biz-permission-toggle ${enabled ? 'on' : ''}" type="button" data-permission-toggle="${esc(field)}" data-permission-page="${esc(pageId)}" data-permission-enabled="${enabled ? 'true' : 'false'}" aria-pressed="${enabled ? 'true' : 'false'}">${esc(enabled ? label : mutedLabel)}</button>`
-  );
   const getPermissionTableScroll = () => {
     const table = refs.businessPageContent?.querySelector('.biz-permission-table');
     if (!(table instanceof HTMLElement)) return { top: 0, left: 0 };
@@ -5721,80 +5514,19 @@ import { createBusinessPageShared } from './shared';
     const departments = getPermissionDepartments();
     if (!departments.includes(permissionActiveDepartment)) permissionActiveDepartment = departments[0] || personnelDepartments[0];
     const activePermissionKey = getPermissionDepartmentKey(permissionActiveDepartment);
-    const activeRoleUserCount = getPermissionDepartmentMemberCount(permissionActiveDepartment);
-    const visiblePageCount = pages.filter((page) => canRoleViewPage(activePermissionKey, page.id)).length;
-    const editablePageCount = pages.filter((page) => canRoleEditPage(activePermissionKey, page.id)).length;
     const apiPermissions = departmentApiPermissions[normalizePersonnelDepartment(permissionActiveDepartment)] || [];
-    return `
-      <section class="biz-permission-layout">
-        <aside class="business-panel biz-role-list">
-          <div class="business-panel-head"><h2>部门</h2><span>${departments.length} 个</span></div>
-          ${departments.map((department) => {
-            const count = getPermissionDepartmentMemberCount(department);
-            const isActive = department === permissionActiveDepartment;
-            return `
-              <button class="biz-role-card ${isActive ? 'is-active' : ''}" type="button" data-permission-department="${esc(department)}">
-                <span>
-                  <strong>${esc(department)}</strong>
-                  <em>按部门授权</em>
-                </span>
-                <b>${count}</b>
-              </button>
-            `;
-          }).join('')}
-        </aside>
-        <article class="business-panel biz-permission-matrix">
-          <div class="business-panel-head">
-            <h2>${esc(permissionActiveDepartment)}</h2>
-            <span>${visiblePageCount} / ${pages.length} 个页面可见</span>
-            <button class="biz-permission-reset-btn" type="button" data-permission-reset-key="${esc(activePermissionKey)}">恢复默认</button>
-          </div>
-          <div class="biz-permission-summary">
-            <article><strong>${visiblePageCount}</strong><span>可见页面</span></article>
-            <article><strong>${editablePageCount}</strong><span>可编辑页面</span></article>
-            <article><strong>${apiPermissions.length}</strong><span>后端能力</span></article>
-            <article><strong>${activeRoleUserCount}</strong><span>关联人员</span></article>
-          </div>
-          <div class="biz-permission-table" role="table" aria-label="页面权限矩阵">
-            <div class="biz-permission-row biz-permission-row-head" role="row">
-              <strong>项目页面</strong><span>查看</span><span>编辑</span><span>数据范围</span>
-            </div>
-            ${pages.map((page) => {
-              const canView = canRoleViewPage(activePermissionKey, page.id);
-              const canEdit = canRoleEditPage(activePermissionKey, page.id);
-              return `
-                <div class="biz-permission-row" role="row">
-                  <strong><small>${esc(page.eyebrow)}</small>${esc(page.title)}</strong>
-                  ${renderPermissionToggle(page.id, 'view', canView, '可见')}
-                  ${renderPermissionToggle(page.id, 'edit', canEdit, '可编辑', '只读')}
-                  <span class="${canView ? 'on' : ''}">${esc(getPermissionScope(activePermissionKey, page.id))}</span>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </article>
-      </section>
-    `;
+    return renderPermissionPage({
+      esc,
+      pages,
+      departments,
+      activeDepartment: permissionActiveDepartment,
+      activePermissionKey,
+      getMemberCount: getPermissionDepartmentMemberCount,
+      canView: (pageId) => canRoleViewPage(activePermissionKey, pageId),
+      canEdit: (pageId) => canRoleEditPage(activePermissionKey, pageId),
+      apiPermissionCount: apiPermissions.length,
+    });
   };
-
-  const renderAudit = () => `
-    <section class="biz-audit-layout">
-      <aside class="business-panel biz-audit-filter">
-        <div class="business-panel-head"><h2>筛选器</h2><span>486 条</span></div>
-        ${['全部', '异常事件', '配置变更', '导出行为', '登录访问'].map((item, index) => `<button class="${index === 0 ? 'is-active' : ''}" type="button">${esc(item)}</button>`).join('')}
-      </aside>
-      <article class="business-panel biz-audit-feed">
-        <div class="business-panel-head"><h2>事件流</h2><span>实时追踪</span></div>
-        ${[
-          ['15:42', '王敏导出客户跟进列表', '成功'],
-          ['15:28', '陈工删除图谱标签', '成功'],
-          ['15:06', 'OSS 数据同步重试', '已恢复'],
-          ['14:51', '外部 IP 登录失败', '拦截'],
-        ].map(([time, action, result]) => `<div class="biz-audit-event"><strong>${esc(time)}</strong><span>${esc(action)}</span><em>${esc(result)}</em></div>`).join('')}
-      </article>
-    </section>
-  `;
-
   const renderDashboardWithState = () => renderDashboard({
     orders: orderRows,
     orderLogs,
@@ -5837,9 +5569,7 @@ import { createBusinessPageShared } from './shared';
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-invoice-active', usesInvoiceWorkbench);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-permission-active', usesPermissionWorkbench);
-    refs.businessPageContent.innerHTML = `
-      ${renderBody(pageId)}
-    `;
+    refs.businessPageContent.innerHTML = decorateBusinessUiMarkup(renderBody(pageId));
     App.customSelects?.enhanceAll?.(refs.businessPageContent);
   }
 
@@ -6319,7 +6049,7 @@ import { createBusinessPageShared } from './shared';
     render('formula-management');
   });
 
-  refs.businessPageContent?.addEventListener('click', async (event) => {
+  const handleBusinessClick = async (event) => {
     if (!(event.target instanceof Element)) return;
 
     const permissionDepartmentButton = event.target.closest('[data-permission-department]');
@@ -7502,9 +7232,9 @@ import { createBusinessPageShared } from './shared';
       }
       return;
     }
-  });
+  };
 
-  refs.businessPageContent?.addEventListener('keydown', (event) => {
+  const handleBusinessKeydown = (event) => {
     if (!(event.target instanceof Element)) return;
     if (event.key === 'Escape' && inventoryMaterialModalOpen) {
       inventoryEditingMaterialName = '';
@@ -7561,558 +7291,68 @@ import { createBusinessPageShared } from './shared';
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     formulaAddCard.click();
-  });
-
-  void refreshAuthUsers().then(() => {
-    void syncPersonnelFromAuthUsers().then(() => {
-      App.navigation?.refreshAccess?.();
-      renderPersonnelArchiveIfActive();
-    });
-  });
-  void loadPersonnelArchiveFromCloud().then(() => App.navigation?.refreshAccess?.());
-
-  const formatAgentRecords = (rows = [], columns = [], limit = 20) => rows.slice(0, limit).map((row, index) => {
-    if (Array.isArray(row)) {
-      return `${index + 1}. ${row.map((value, cellIndex) => `${columns[cellIndex] || `列${cellIndex + 1}`}=${value || '--'}`).join('；')}`;
-    }
-    return `${index + 1}. ${columns.map(([label, key]) => `${label}=${row?.[key] || '--'}`).join('；')}`;
-  });
-
-  const getBusinessPageHints = (question = '', activePageId = '') => {
-    const text = String(question || '').toLowerCase();
-    const hints = new Set<any>();
-    const add = (...pageIds: any[]) => pageIds.forEach((pageId) => hints.add(pageId));
-    if (/账号|账户|用户|人员|员工|部门|权限|角色|登录|在线/.test(text)) add('personnel-archive', 'permission-management');
-    if (/订单|交付|交期|客户订单|销售单/.test(text)) add('order-management');
-    if (/库存|商品|产品|材料|原料|成品|仓库|可售|锁库/.test(text)) add('inventory-management');
-    if (/供应商|采购|供货|原料采购|进货/.test(text)) add('supplier-archive', 'raw-material-procurement');
-    if (/客户|客群|联系人|交易|信用/.test(text)) add('customer-archive');
-    if (/配方|工艺|组分|比例|版本/.test(text)) add('formula-management');
-    if (/办事|送样|配色|色粉|助剂|添加剂|打样|型号批次|混合比例/.test(text)) add('office-records');
-    if (/灰份|灰分|含量|杯重|料重|剩余重量|剩余料重/.test(text)) add('office-records');
-    if (/生产|排产|产线|批次|质检|待排/.test(text)) add('production-plan');
-    if (activePageId && App.constants?.PAGE_DEFS?.[activePageId]) add(activePageId);
-    return [...hints];
   };
 
-  const buildBusinessPageContext = (pageId) => {
-    if (pageId === 'personnel-archive') {
-      const rows = archiveStates['personnel']?.rows || [];
-      const accountRows = authUsers.map((user, index) => ({
-        code: `账号${index + 1}`,
-        name: user.display_name || user.displayName || user.username,
-        username: user.username,
-        department: getUserDepartment(user),
-        status: user.disabled ? '停用' : '启用',
-      }));
-      return [
-        '【人员档案 / 系统账号】',
-        `人员档案记录数：${rows.length}`,
-        `系统登录账号数：${authUsers.length}`,
-        rows.length ? '人员档案：' : '',
-        ...formatAgentRecords(rows, [['编号', 'code'], ['姓名', 'name'], ['部门', 'category'], ['电话', 'phone'], ['邮箱', 'email'], ['状态', 'status']]),
-        accountRows.length ? '登录账号：' : '',
-        ...formatAgentRecords(accountRows, [['编号', 'code'], ['姓名', 'name'], ['账号', 'username'], ['部门', 'department'], ['状态', 'status']]),
-      ].filter(Boolean).join('\n');
-    }
-    if (pageId === 'permission-management') {
-      const departments = getPermissionDepartments();
-      const pages = getPermissionPages();
-      return [
-        '【权限管理】',
-        `部门数：${departments.length}`,
-        `可配置页面数：${pages.length}`,
-        '部门与成员数：',
-        ...departments.map((department, index) => `${index + 1}. ${department}；成员数=${getPermissionDepartmentMemberCount(department)}`),
-      ].join('\n');
-    }
-    if (pageId === 'order-management') {
-      return [
-        '【订单管理】',
-        `订单总数：${orderRows.length}`,
-        `待处理：${orderRows.filter((row) => row.status === '待处理').length}`,
-        `生产中：${orderRows.filter((row) => row.status === '生产中').length}`,
-        ...formatAgentRecords(orderRows, [['订单号', 'id'], ['客户', 'customer'], ['配方', 'formula'], ['数量KG', 'quantity'], ['状态', 'status'], ['交货日期', 'deliveryDate']]),
-      ].join('\n');
-    }
-    if (pageId === 'inventory-management') {
-      return [
-        '【库存管理】',
-        `库存物料数：${inventoryRows.length}`,
-        `分类数：${getInventoryCategories().length}`,
-        ...formatAgentRecords(inventoryRows, ['物料', '规格/批次', '分类', '供应商', '库存', '单位', '状态']),
-      ].join('\n');
-    }
-    if (pageId === 'supplier-archive') {
-      return [
-        '【供应商档案】',
-        `供应商总数：${supplierRows.length}`,
-        ...formatAgentRecords(supplierRows, [['编号', 'code'], ['名称', 'name'], ['联系人', 'contact'], ['品类', 'category'], ['状态', 'status']]),
-      ].join('\n');
-    }
-    if (pageId === 'raw-material-procurement') {
-      return [
-        '【原料采购】',
-        `采购记录数：${procurementRows.length}`,
-        ...formatAgentRecords(procurementRows, [['采购单号', 'id'], ['供应商', 'supplier'], ['物料', 'material'], ['数量', 'quantity'], ['状态', 'status'], ['采购日期', 'purchaseDate']]),
-      ].join('\n');
-    }
-    if (pageId === 'office-records') {
-      const rows = officeRecords.map((record) => ({
-        ...record,
-        typeLabel: getOfficeRecordLabel(record.type),
-        customerApprovalText: record.type === 'sampling' ? `已认可 ${(record.customerApprovedRows || []).length}/${(record.tableRows || []).length} 条` : '',
-        tableColumnsText: (record.tableColumns || []).join('、'),
-        tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('；') || '无',
-      }));
-      const ashRows = ashRecords.map((record) => ({
-        ...record,
-        details: (record.rows || []).map((row) => `编号${row.index || ''}: 杯重=${row.cupWeight || '--'}；料重=${row.materialWeight || '--'}；剩余重量=${row.residueWeight || '--'}；剩余料重=${row.residueMaterialWeight || '--'}；含量=${row.content || '--'}`).join(' / '),
-      }));
-      return [
-        '【办事记录】',
-        `送样记录数：${officeRecords.filter((record) => record.type === 'sampling').length}`,
-        `配色记录数：${officeRecords.filter((record) => record.type === 'coloring').length}`,
-        `灰份记录数：${ashRecords.length}`,
-        ...formatAgentRecords(rows, [['板块', 'typeLabel'], ['编号', 'id'], ['客户/项目', 'project'], ['客户认可', 'customerApprovalText'], ['表头', 'tableColumnsText'], ['明细', 'tableRowsText'], ['目标', 'target'], ['日期', 'date']]),
-        ashRows.length ? '灰份记录：' : '',
-        ...formatAgentRecords(ashRows, [['编号', 'id'], ['日期', 'date'], ['名称', 'name'], ['批次', 'batch'], ['明细', 'details']]),
-      ].join('\n');
-    }
-    if (pageId === 'customer-archive') {
-      const rows = archiveStates['customer']?.rows || [];
-      return [
-        '【客户档案】',
-        `客户总数：${rows.length}`,
-        ...formatAgentRecords(rows, [['编号', 'code'], ['客户名称', 'name'], ['联系人', 'contact'], ['等级', 'category'], ['状态', 'status']]),
-      ].join('\n');
-    }
-    if (pageId === 'formula-management') {
-      const rows = formulaRecipes.map((recipe) => {
-        const summary = getFormulaSummary(recipe);
-        return {
-          code: recipe.code || String(recipe.id || '').replace(/^FM-/, ''),
-          name: recipe.name,
-          updated: recipe.updated || getTodayCode(),
-          category: summary.category,
-          line: `${recipe.line || 'A'}线`,
-          cost: summary.cost,
-          inventoryStatus: summary.riskCount ? `${summary.riskCount} 项风险` : '可排产',
-          version: recipe.version,
-          status: summary.status,
-        };
+  let businessEventsTarget: HTMLElement | null = null;
+  let businessInitialized = false;
+  const bindBusinessEvents = () => {
+    const target = refs.businessPageContent;
+    if (!target || target === businessEventsTarget) return;
+    businessEventsTarget?.removeEventListener('click', handleBusinessClick);
+    businessEventsTarget?.removeEventListener('keydown', handleBusinessKeydown);
+    target.addEventListener('click', handleBusinessClick);
+    target.addEventListener('keydown', handleBusinessKeydown);
+    businessEventsTarget = target;
+  };
+  const initializeBusinessPages = () => {
+    bindBusinessEvents();
+    if (businessInitialized) return;
+    businessInitialized = true;
+    void refreshAuthUsers().then(() => {
+      void syncPersonnelFromAuthUsers().then(() => {
+        App.navigation?.refreshAccess?.();
+        renderPersonnelArchiveIfActive();
       });
-      return [
-        '【配方管理】',
-        `配方总数：${formulaRecipes.length}`,
-        '说明：以下字段与配方管理页面表格保持一致；不要使用内部 id、product 或 owner 字段回答。',
-        ...formatAgentRecords(rows, [['配方编号', 'code'], ['配方名称', 'name'], ['日期', 'updated'], ['分类', 'category'], ['产线', 'line'], ['成本', 'cost'], ['库存状态', 'inventoryStatus'], ['版本', 'version'], ['状态', 'status']]),
-      ].join('\n');
-    }
-    if (pageId === 'production-plan') {
-      const rows = getProductionOrders();
-      return [
-        '【生产计划】',
-        `生产计划相关订单数：${rows.length}`,
-        ...formatAgentRecords(rows, [['订单号', 'id'], ['客户', 'customer'], ['配方', 'formula'], ['状态', 'status'], ['生产日期', 'productionDate'], ['生产编号', 'productionNo']]),
-      ].join('\n');
-    }
-    return '';
-  };
-
-  const getAgentContext = (question = '', options = {} as any) => {
-    const activePageId = options.activePageId || localStorage.getItem(App.constants?.NAV_PAGE_KEY || 'sidebar-active-page') || '';
-    const hints: any[] = getBusinessPageHints(question, activePageId);
-    const sections = hints
-      .map((pageId) => buildBusinessPageContext(pageId))
-      .filter((content) => String(content || '').trim());
-    if (!sections.length) return null;
-    return {
-      title: '业务页面数据调度',
-      reason: `按问题模糊调度页面：${hints.map((pageId) => App.constants?.PAGE_DEFS?.[pageId]?.title || pageId).join('、')}`,
-      score: /账号|账户|用户|人员|员工|部门|权限|订单|库存|供应商|客户|采购|配方|生产|多少|几个|数量|总数/.test(String(question || '')) ? 11 : 6,
-      content: [
-        '【业务页面精准数据】',
-        '说明：先根据问题在全系统页面能力地图中模糊匹配，再读取相关页面的数据池；即使当前不在目标页面，也可以回答数量、列表和状态类问题。',
-        sections.join('\n\n'),
-      ].join('\n'),
-    };
-  };
-
-  const renderAgentMarkdownTable = (headers = [], rows = []) => {
-    if (!headers.length || !rows.length) return '';
-    return [
-      `| ${headers.join(' | ')} |`,
-      `| ${headers.map(() => '---').join(' | ')} |`,
-      ...rows.map((row) => `| ${row.map((cell) => String(cell ?? '--').replace(/\|/g, '/')).join(' | ')} |`),
-    ].join('\n');
-  };
-
-  const getFormulaAgentRows = () => formulaRecipes.map((recipe) => {
-    const summary = getFormulaSummary(recipe);
-    return [
-      recipe.code || String(recipe.id || '').replace(/^FM-/, ''),
-      recipe.name || '--',
-      recipe.updated || getTodayCode(),
-      summary.category || '--',
-      `${recipe.line || 'A'}线`,
-      summary.cost || '--',
-      summary.riskCount ? `${summary.riskCount} 项风险` : '可排产',
-      recipe.version || '--',
-      summary.status || '--',
-    ];
-  });
-
-  const getAccountAgentRows = () => authUsers.map((user, index) => [
-    `账号${index + 1}`,
-    user.display_name || user.displayName || user.username || '--',
-    user.username || '--',
-    getUserDepartment(user) || '--',
-    user.disabled ? '停用' : '启用',
-  ]);
-
-  const getPersonnelAgentRows = () => (archiveStates['personnel']?.rows || []).map((record) => [
-    record.code || '--',
-    record.name || '--',
-    record.category || '--',
-    record.phone || '--',
-    record.email || '--',
-    record.status || '--',
-  ]);
-
-  const getFormulaAgentObjects = () => formulaRecipes.map((recipe) => {
-    const summary = getFormulaSummary(recipe);
-    return {
-      code: recipe.code || String(recipe.id || '').replace(/^FM-/, ''),
-      name: recipe.name || '--',
-      updated: recipe.updated || getTodayCode(),
-      category: summary.category || '--',
-      line: `${recipe.line || 'A'}线`,
-      cost: summary.cost || '--',
-      costValue: parseAgentNumber(summary.cost),
-      inventoryStatus: summary.riskCount ? `${summary.riskCount} 项风险` : '可排产',
-      riskCount: summary.riskCount || 0,
-      version: recipe.version || '--',
-      status: summary.status || '--',
-    };
-  });
-
-  const getInventoryAgentObjects = () => inventoryRows.map((row) => {
-    const stockText = String(row[4] || '--');
-    const unitMatch = stockText.match(/[\u4e00-\u9fa5A-Za-z/%]+$/);
-    return {
-      name: row[0] || '--',
-      type: row[1] || '--',
-      category: row[2] || '--',
-      supplier: row[3] || '--',
-      stock: stockText,
-      stockQuantity: parseAgentNumber(stockText),
-      stockUnit: unitMatch ? unitMatch[0] : '',
-      status: row[5] || '--',
-      note: row[6] || '',
-      isFinishedGoods: isFinishedInventoryRow(row),
-    };
-  });
-
-  const getBusinessAgentDatasets = () => ({
-    'formula-management': {
-      entity: 'formula',
-      rows: getFormulaAgentObjects(),
-      defaultFields: ['code', 'name', 'updated', 'category', 'line', 'cost', 'inventoryStatus', 'version', 'status'],
-      fieldAliases: {
-        id: 'code',
-        title: 'name',
-        date: 'updated',
-        productLine: 'line',
-      },
-    },
-    'inventory-management': {
-      entity: 'inventoryItem',
-      rows: getInventoryAgentObjects(),
-      defaultFields: ['name', 'type', 'category', 'supplier', 'stock', 'stockQuantity', 'stockUnit', 'status'],
-      fieldAliases: {
-        material: 'name',
-        itemName: 'name',
-        quantity: 'stockQuantity',
-        stockValue: 'stockQuantity',
-        unit: 'stockUnit',
-      },
-    },
-    'order-management': {
-      entity: 'order',
-      rows: orderRows.map((order) => ({ ...order })),
-      defaultFields: ['id', 'customer', 'formula', 'quantity', 'status', 'deliveryDate'],
-    },
-    'production-plan': {
-      entity: 'productionOrder',
-      rows: getProductionOrders().map((order) => ({ ...order })),
-      defaultFields: ['id', 'customer', 'formula', 'status', 'productionDate', 'productionNo'],
-    },
-    'supplier-archive': {
-      entity: 'supplier',
-      rows: supplierRows.map((supplier) => ({ ...supplier })),
-      defaultFields: ['code', 'name', 'contact', 'category', 'status'],
-    },
-    'raw-material-procurement': {
-      entity: 'procurement',
-      rows: procurementRows.map((record) => ({ ...record })),
-      defaultFields: ['id', 'supplier', 'material', 'quantity', 'unitPrice', 'purchaseDate', 'status'],
-    },
-    'office-records': {
-      entity: 'officeRecord',
-      rows: [
-        ...officeRecords.map((record) => ({
-          ...record,
-          typeLabel: getOfficeRecordLabel(record.type),
-          customerApprovalText: record.type === 'sampling' ? `已认可 ${(record.customerApprovedRows || []).length}/${(record.tableRows || []).length} 条` : '',
-          tableColumnsText: (record.tableColumns || []).join('、'),
-          tableRowsText: (record.tableRows || []).map((row) => row.filter(Boolean).join(' / ')).filter(Boolean).join('\n'),
-        })),
-        ...ashRecords.map((record) => ({
-          ...record,
-          typeLabel: '灰份记录',
-          project: record.name,
-          tableColumnsText: '编号、杯重、料重、剩余重量、剩余料重、含量',
-          tableRowsText: (record.rows || []).map((row) => `编号${row.index || ''}: 杯重=${row.cupWeight || '--'}；料重=${row.materialWeight || '--'}；剩余重量=${row.residueWeight || '--'}；剩余料重=${row.residueMaterialWeight || '--'}；含量=${row.content || '--'}`).join('\n'),
-          target: record.batch,
-        })),
-      ],
-      defaultFields: ['id', 'typeLabel', 'project', 'customerApprovalText', 'tableColumnsText', 'tableRowsText', 'target', 'date'],
-      fieldAliases: {
-        customer: 'project',
-        approval: 'customerApprovalText',
-        approved: 'customerApprovalText',
-        columns: 'tableColumnsText',
-        rows: 'tableRowsText',
-        sample: 'project',
-        lot: 'target',
-      },
-    },
-    'customer-archive': {
-      entity: 'customer',
-      rows: (archiveStates['customer']?.rows || []).map((record) => ({ ...record })),
-      defaultFields: ['code', 'name', 'contact', 'category', 'status'],
-    },
-    'personnel-archive': {
-      entity: 'personnel',
-      rows: (archiveStates['personnel']?.rows || []).map((record) => ({ ...record })),
-      defaultFields: ['code', 'name', 'category', 'phone', 'email', 'status'],
-    },
-    'permission-management': {
-      entity: 'permissionRole',
-      rows: getPermissionDepartments().map((department) => ({
-        department,
-        memberCount: getPermissionDepartmentMemberCount(department),
-      })),
-      defaultFields: ['department', 'memberCount'],
-    },
-  });
-
-  const getBusinessAgentManifestPages = () => {
-    const datasets = getBusinessAgentDatasets();
-    return Object.entries(datasets).map(([pageId, dataset]) => ({
-      pageId,
-      title: App.constants?.PAGE_DEFS?.[pageId]?.title || pageId,
-      desc: App.constants?.PAGE_DEFS?.[pageId]?.desc || '',
-      entity: dataset.entity,
-      fields: dataset.defaultFields,
-      skills: ['business.queryPageData', 'project.inspectPage'],
-      rowCount: dataset.rows.length,
-    }));
-  };
-
-  const inspectAgentPage = (pageId = '') => {
-    const datasets = getBusinessAgentDatasets();
-    const dataset = datasets[pageId];
-    if (!dataset) return null;
-    return {
-      ok: true,
-      pageId,
-      title: App.constants?.PAGE_DEFS?.[pageId]?.title || pageId,
-      entity: dataset.entity,
-      fields: dataset.defaultFields,
-      rowCount: dataset.rows.length,
-      sampleShape: dataset.rows[0] ? Object.fromEntries(dataset.defaultFields.map((field) => [field, dataset.rows[0]?.[field] ?? ''])) : {},
-      summary: `页面 ${pageId} 可查询实体 ${dataset.entity}，当前 ${dataset.rows.length} 条记录。`,
-    };
-  };
-
-  const normalizeBusinessQueryRequest = (request = {} as any) => {
-    const text = String(request.question || request.query || request.originalQuestion || '').trim();
-    const input = { ...request };
-    if (!input.pageId) {
-      const hints = getBusinessPageHints(text, input.activePageId || '');
-      input.pageId = hints[0] || input.activePageId || 'dashboard';
-    }
-    if (!input.intent) {
-      if (/几个|多少|数量|总数/.test(text)) input.intent = 'count';
-      else if (/最低|最少|最小/.test(text)) input.intent = 'extrema';
-      else if (/最高|最多|最大/.test(text)) input.intent = 'extrema';
-      else if (/有哪些|哪几个|列表|明细|查看|列举|列出|展示|罗列/.test(text)) input.intent = 'list';
-      else input.intent = 'filter';
-    }
-    if (!Array.isArray(input.filters)) input.filters = [];
-    if (/商品|产品|成品/.test(text) && /inventory|stock/.test(input.pageId)) {
-      input.filters.push({ field: 'isFinishedGoods', op: 'eq', value: true });
-    }
-    if (input.intent === 'extrema' && !Array.isArray(input.sort)) {
-      input.sort = [{ field: /库存|商品|产品|成品|物料|材料/.test(text) ? 'stockQuantity' : 'count', direction: /最高|最多|最大/.test(text) ? 'desc' : 'asc' }];
-    }
-    if (input.intent === 'extrema' && !input.limit) input.limit = 1;
-    return input;
-  };
-
-  const queryAgentData = (request = {} as any) => {
-    const input = normalizeBusinessQueryRequest(request);
-    const datasets = getBusinessAgentDatasets();
-    const dataset = datasets[input.pageId];
-    if (!dataset) {
-      return {
-        ok: false,
-        skillId: 'business.queryPageData',
-        pageId: input.pageId,
-        intent: input.intent || 'list',
-        data: [],
-        rowCount: 0,
-        summary: `页面 ${input.pageId || '-'} 暂未接入结构化取数。`,
-      };
-    }
-    return queryAgentRows({
-      pageId: input.pageId,
-      entity: input.entity || dataset.entity,
-      rows: dataset.rows,
-      request: input,
-      defaultFields: dataset.defaultFields,
-      fieldAliases: dataset.fieldAliases || {},
     });
+    void loadPersonnelArchiveFromCloud().then(() => App.navigation?.refreshAccess?.());
   };
 
-  const parseInventoryQuantity = (value) => {
-    const match = String(value || '').match(/-?\d+(?:\.\d+)?/);
-    return match ? Number(match[0]) : Number.NaN;
-  };
-
-  const isFinishedInventoryRow = (row = []) => (
-    /成品|商品|产品/.test(String(row[1] || '')) || /^GJ-/i.test(String(row[0] || ''))
-  );
-
-  const getInventoryRowsForQuestion = (text = '') => {
-    if (/商品|产品|成品/.test(text)) {
-      const rows = inventoryRows.filter(isFinishedInventoryRow);
-      return rows.length ? rows : inventoryRows;
-    }
-    return inventoryRows;
-  };
-
-  const answerInventoryExtremaQuestion = (text = '') => {
-    if (!/(?:最低|最少|最小|最高|最多|最大)/.test(text)) return '';
-    const rows = getInventoryRowsForQuestion(text)
-      .map((row) => ({ row, quantity: parseInventoryQuantity(row[4]) }))
-      .filter((item) => Number.isFinite(item.quantity));
-    if (!rows.length) return '当前库存数据里没有可比较的库存数值。';
-
-    const isMax = /最高|最多|最大/.test(text);
-    rows.sort((left, right) => isMax ? right.quantity - left.quantity : left.quantity - right.quantity);
-    const best = rows[0].row;
-    const scope = /商品|产品|成品/.test(text) ? '成品商品' : '库存物料';
-    return [
-      `当前库存${isMax ? '最高' : '最低'}的${scope}是：${best[0]}。`,
-      `库存：${best[4]}；类型：${best[1]}；分类：${best[2]}；供应商：${best[3]}；状态：${best[5]}。`,
-    ].join('\n');
-  };
-
-  const answerQuestion = (question = '', options = {} as any) => {
-    const text = String(question || '').trim();
-    if (!/(?:几个|多少|数量|总数|有哪些|哪几个|列表|明细|当前|现在|查看|列举|列出|展示|罗列|最低|最少|最小|最高|最多|最大)/.test(text)) return '';
-    const wantsListPattern = /(?:有哪些|哪几个|哪几|哪四|哪.*个|列表|明细|查看|列举|列出|展示|罗列|具体|详细|分别)/;
-
-    if (/配方/.test(text)) {
-      const rows = getFormulaAgentRows();
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${formulaRecipes.length} 个配方。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(
-          ['配方编号', '配方名称', '日期', '分类', '产线', '成本', '库存状态', '版本', '状态'],
-          rows
-        ) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/账号|账户|用户|登录/.test(text)) {
-      const rows = getAccountAgentRows();
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${authUsers.length} 个登录账号。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['序号', '姓名', '账号', '角色', '状态'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/人员|员工/.test(text)) {
-      const rows = getPersonnelAgentRows();
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${rows.length} 条人员档案。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['编号', '姓名', '部门', '电话', '邮箱', '状态'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/订单/.test(text)) {
-      const rows = orderRows.map((order) => [order.id, order.customer, order.formula, order.quantity, order.status, order.deliveryDate]);
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${orderRows.length} 个订单。`,
-        `其中待处理 ${orderRows.filter((row) => row.status === '待处理').length} 个，生产中 ${orderRows.filter((row) => row.status === '生产中').length} 个。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['订单号', '客户', '配方', '数量KG', '状态', '交货日期'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/供应商/.test(text)) {
-      const rows = supplierRows.map((supplier) => [supplier.code, supplier.name, supplier.contact, supplier.category, supplier.status]);
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${supplierRows.length} 个供应商。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['编号', '名称', '联系人', '品类', '状态'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/客户/.test(text)) {
-      const customers = archiveStates['customer']?.rows || [];
-      const rows = customers.map((customer) => [customer.code, customer.name, customer.contact, customer.category, customer.status]);
-      const wantsList = wantsListPattern.test(text);
-      return [
-        `系统当前共有 ${customers.length} 个客户。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['编号', '客户名称', '联系人', '等级', '状态'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    if (/库存|物料|材料|商品|产品|成品/.test(text)) {
-      const extremaAnswer = answerInventoryExtremaQuestion(text);
-      if (extremaAnswer) return extremaAnswer;
-
-      const inventoryScopeRows = getInventoryRowsForQuestion(text);
-      const rows = inventoryScopeRows.map((row) => [row[0], row[1], row[2], row[3], row[4], row[5], row[6]]);
-      const wantsList = wantsListPattern.test(text);
-      const scopeText = /商品|产品|成品/.test(text) ? '成品商品' : '库存物料记录';
-      return [
-        `系统当前共有 ${inventoryScopeRows.length} 条${scopeText}。`,
-        wantsList && rows.length ? '' : '',
-        wantsList && rows.length ? renderAgentMarkdownTable(['物料', '规格/批次', '分类', '供应商', '库存', '单位', '状态'], rows) : '',
-      ].filter((item) => item != null).join('\n').trim();
-    }
-
-    return '';
-  };
-
+  const {
+    getAgentContext,
+    answerQuestion,
+    queryAgentData,
+    inspectAgentPage,
+    getBusinessAgentManifestPages,
+  } = createBusinessAgentApi({
+    App,
+    authUsers,
+    archiveStates,
+    orderRows,
+    inventoryRows,
+    procurementRows,
+    supplierRows,
+    formulaRecipes,
+    officeRecords,
+    ashRecords,
+    getUserDepartment,
+    getPermissionDepartments,
+    getPermissionPages,
+    getPermissionDepartmentMemberCount,
+    getFormulaSummary,
+    getProductionOrders,
+    getInventoryCategories,
+    getOfficeRecordLabel,
+    getTodayCode,
+  });
   App.businessPages = {
+    init: initializeBusinessPages,
     render,
     refreshFromLocalStorage,
     cleanup: () => {
+      businessInitialized = false;
+      businessEventsTarget?.removeEventListener('click', handleBusinessClick);
+      businessEventsTarget?.removeEventListener('keydown', handleBusinessKeydown);
+      businessEventsTarget = null;
       document.querySelector('.biz-invoice-print-root')?.remove();
       Object.values(archiveStates).forEach((state) => {
         state.modalOpen = false;
@@ -8137,6 +7377,7 @@ import { createBusinessPageShared } from './shared';
     canCurrentUserEditPage: canUserEditPage,
     getCurrentUserPermissionKey: getPermissionKeyForUser,
   };
+  initializeBusinessPages();
 })();
 
 

@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/inspection-reports.css';
 import { cloudStorage } from '../../services/cloud-storage';
 
 (function () {
@@ -53,15 +54,6 @@ import { cloudStorage } from '../../services/cloud-storage';
 
   const installMarkup = () => {
     if (document.querySelector(`[data-page-section="${PAGE_ID}"]`)) return;
-
-    const dataRecognitionNav = document.querySelector('[data-page="data-recognition"]');
-    const spectrumNav = document.querySelector('[data-page="spectrum-analysis"]');
-    const imageCutoutNav = document.querySelector('[data-page="image-cutout"]');
-    if (!document.querySelector(`[data-page="${PAGE_ID}"]`)) {
-      (dataRecognitionNav || spectrumNav || imageCutoutNav)?.insertAdjacentHTML('afterend', `
-        <button class="nav-subitem" type="button" data-page="${PAGE_ID}">检测报告</button>
-      `);
-    }
 
     const dataRecognitionSection = document.querySelector('[data-page-section="data-recognition"]');
     const imageCutoutSection = document.querySelector('[data-page-section="image-cutout"]');

@@ -68,22 +68,14 @@
       margin:0;
     }
     :is(.shell.sidebar-collapsed, html[data-sidebar-collapsed="1"] .shell) .sidebar-toggle .toggle-icon .ti{font-size:14px;line-height:1}
-    @media (max-width: 1320px){
-      .config-lower-grid{grid-template-columns:1fr}
-    }
     @media (max-width: 1200px){
       .assistant{display:none}
       .config-layout{grid-template-columns:1fr}
       .config-lower-grid{grid-template-columns:1fr}
-      .placeholder-page{min-height:auto}
-      .business-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .business-grid{grid-template-columns:1fr}
       .biz-stat-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .biz-dashboard-grid,
       .biz-stock-layout,
       .biz-production-layout,
       .biz-permission-layout,
-      .biz-audit-layout,
       .biz-invoice-layout,
       .biz-formula-layout,
       .biz-formula-editor-layout,
@@ -132,27 +124,6 @@
       .biz-formula-table-actions select,
       .biz-formula-new-btn{
         flex:1 1 180px;
-      }
-      .biz-order-table-head.biz-formula-table-head{
-        display:grid;
-        grid-template-columns:1fr;
-        align-items:stretch;
-        gap:16px;
-      }
-      .biz-order-table-actions.biz-formula-table-actions{
-        width:100%;
-        display:grid;
-        grid-template-columns:minmax(132px,150px) minmax(150px,170px) max-content;
-        align-items:center;
-        justify-content:start;
-        gap:8px;
-      }
-      .biz-order-table-actions .custom-select,
-      .biz-order-table-actions input[type="date"],
-      .biz-order-table-actions .biz-formula-new-btn{
-        width:100%;
-        min-height:36px;
-        flex:initial;
       }
       .biz-office-table-head.biz-formula-table-head{
         display:grid;
@@ -220,7 +191,6 @@
       .biz-formula-mini-stats{
         grid-template-columns:repeat(2,minmax(0,1fr));
       }
-      .biz-today-list ol{grid-template-columns:1fr}
       .biz-archive-layout .biz-table-panel{grid-column:auto}
       .analysis-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
       .spectrum-page{
@@ -743,10 +713,6 @@
         padding:0 14px;
         white-space:nowrap;
       }
-      .placeholder-card{padding:20px}
-      .business-lanes{
-        grid-template-columns:1fr;
-      }
       .biz-inventory-table-head{
         align-items:center;
       }
@@ -847,16 +813,6 @@
       .biz-kanban{
         grid-template-columns:repeat(4, minmax(220px, 260px));
       }
-      .biz-rhythm{
-        grid-template-columns:repeat(5, minmax(72px, 1fr));
-        overflow:auto;
-      }
-      .biz-profile{
-        grid-template-columns:1fr;
-      }
-      .biz-avatar{
-        grid-row:auto;
-      }
       .analysis-filter-card,
       .analysis-panel-head,
       .analysis-panel-footer{padding-left:16px;padding-right:16px}
@@ -894,9 +850,11 @@
         font-size:12px;
       }
       .analysis-search-mode{
-        gap:4px;
+        --analysis-mode-item:56px;
+        height:26px;
+        gap:0;
         margin-left:2px;
-        padding-left:8px;
+        padding-left:0;
       }
       .analysis-search-mode-btn{
         height:26px;
@@ -1597,7 +1555,7 @@
         object-fit:contain;
       }
     }
-    @media (max-width: 420px){
+    @media (max-width: 480px){
       .content{
         padding:8px;
       }
@@ -1668,7 +1626,6 @@
       .theme-card{
         min-height:174px;
       }
-      .business-kpi-grid{grid-template-columns:1fr}
       .biz-stat-strip,
       .biz-warehouse-map{grid-template-columns:1fr}
       .biz-permission-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1972,7 +1929,7 @@
         margin-left:0;
       }
     }
-    @media (max-width: 520px){
+    @media (max-width: 720px){
       .spectrum-gallery{
         padding:10px;
       }

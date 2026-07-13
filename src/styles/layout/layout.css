@@ -241,6 +241,13 @@
       position:relative;
       overflow:hidden;
     }
+    .legacy-shell-booting .assistant{
+      display:none;
+    }
+    .legacy-shell-booting .page-section{
+      visibility:hidden;
+      pointer-events:none;
+    }
     .legacy-loading-state{
       position:absolute;
       inset:0;

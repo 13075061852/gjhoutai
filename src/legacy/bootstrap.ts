@@ -1,6 +1,9 @@
 import './core/app-namespace';
+import '../styles/pages/config.css';
+import '../styles/pages/theme-overrides.css';
 import { getLegacyApp } from './core/app-context';
-import './core/dom-refs';
+import { resetLegacyPageFeatures } from './bootstrap/feature-loader';
+import { refreshLegacyDomRefs } from './core/dom-refs';
 import './core/app-constants';
 import './core/runtime-state';
 import './core/utils';
@@ -21,23 +24,6 @@ async function loadCoreLegacyFeatures(): Promise<void> {
   await import('./shell/navigation');
 }
 
-async function loadDeferredLegacyFeatures(): Promise<void> {
-  await Promise.all([
-    import('./features/theme-settings'),
-    import('./features/property-analysis'),
-    import('./features/spectrum-analysis'),
-    import('./features/data-recognition'),
-    import('./features/inspection-reports'),
-    import('./features/image-cutout'),
-    import('./features/config'),
-    import('./features/apimart-media'),
-    import('./features/ai-call-analysis'),
-    import('./features/project-skills'),
-    import('./features/agent-butler'),
-    import('./features/chat'),
-  ]);
-}
-
 async function runLegacyInit(name: string, init?: () => void | Promise<void> | undefined): Promise<void> {
   if (typeof init !== 'function') return;
   try {
@@ -47,27 +33,16 @@ async function runLegacyInit(name: string, init?: () => void | Promise<void> | u
   }
 }
 
-function startDeferredLegacyFeatures(version: number): void {
-  void (async () => {
-    await loadDeferredLegacyFeatures();
+function startAssistantFeatures(version: number): void {
+  void Promise.all([
+    import('./features/agent-butler'),
+    import('./features/chat'),
+  ]).then(async () => {
     if (!booted || version !== bootVersion) return;
-
     const App = getLegacyApp();
-    await Promise.all([
-      runLegacyInit('themeSettings', () => App?.themeSettings?.init?.()),
-      runLegacyInit('propertyAnalysis', () => App?.propertyAnalysis?.init?.()),
-      runLegacyInit('spectrumAnalysis', () => App?.spectrumAnalysis?.init?.()),
-      runLegacyInit('dataRecognition', () => App?.dataRecognition?.init?.()),
-      runLegacyInit('inspectionReports', () => App?.inspectionReports?.init?.()),
-      runLegacyInit('imageCutout', () => App?.imageCutout?.init?.()),
-      runLegacyInit('config', () => App?.config?.init?.()),
-      runLegacyInit('apimartMedia', () => App?.apimartMedia?.init?.()),
-      runLegacyInit('aiCallAnalysis', () => App?.aiCallAnalysis?.init?.()),
-      runLegacyInit('projectSkills', () => App?.projectSkills?.init?.()),
-      runLegacyInit('chat', () => App?.chat?.init?.()),
-    ]);
-  })().catch((error) => {
-    console.warn('[legacy] Failed to load deferred features.', error);
+    await runLegacyInit('chat', () => App?.chat?.init?.());
+  }).catch((error) => {
+    console.warn('[legacy] Failed to load assistant features.', error);
   });
 }
 
@@ -77,12 +52,14 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
   const version = ++bootVersion;
 
   bootPromise = (async () => {
+    refreshLegacyDomRefs();
     await loadCoreLegacyFeatures();
     booted = true;
 
     const App = getLegacyApp();
     await runLegacyInit('navigation', () => App?.navigation?.init?.());
-    startDeferredLegacyFeatures(version);
+    if (!booted || version !== bootVersion) return undefined;
+    startAssistantFeatures(version);
     return undefined;
   })();
 
@@ -93,6 +70,7 @@ export function teardownLegacyApp(): void {
   bootVersion += 1;
   booted = false;
   bootPromise = null;
+  resetLegacyPageFeatures();
   const App = getLegacyApp();
   const modules: Array<LegacyLifecycleModule | LegacyAnimationApi | LegacyMotionEffectsApi | undefined> = [
     App?.chat,

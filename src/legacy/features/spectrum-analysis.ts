@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp, getPublicApp } from '../core/app-context';
+import '../../styles/pages/spectrum-analysis.css';
 import { cloudStorage } from '../../services/cloud-storage';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';

@@ -18,8 +18,7 @@
     body:not([data-theme="dark"]) .analysis-table-wrap,
     body:not([data-theme="dark"]) .config-card,
     body:not([data-theme="dark"]) .config-module,
-    body:not([data-theme="dark"]) .config-actions-panel,
-    body:not([data-theme="dark"]) .placeholder-card{
+    body:not([data-theme="dark"]) .config-actions-panel{
       background:var(--surface);
       border-color:var(--border);
     }
@@ -256,7 +255,7 @@
       background:var(--surface-2);
     }
     body:not([data-theme="dark"]) .analysis-table tbody tr.is-selected td{
-      background:var(--accent-soft);
+      background:color-mix(in srgb,var(--surface) 88%,var(--accent) 12%);
     }
     body:not([data-theme="dark"]) .analysis-page-btn,
     body:not([data-theme="dark"]) .analysis-page-number{
@@ -332,7 +331,6 @@
     body[data-theme="dark"] .config-card,
     body[data-theme="dark"] .config-module,
     body[data-theme="dark"] .config-actions-panel,
-    body[data-theme="dark"] .placeholder-card,
     body[data-theme="dark"] .analysis-filter-card,
     body[data-theme="dark"] .analysis-panel,
     body[data-theme="dark"] .spectrum-toolbar,
@@ -397,7 +395,6 @@
     body[data-theme="dark"] .analysis-search,
     body[data-theme="dark"] .analysis-search-suggest,
     body[data-theme="dark"] .analysis-search-suggest-item,
-    body[data-theme="dark"] .analysis-search-mode-btn,
     body[data-theme="dark"] .analysis-toolbar-btn,
     body[data-theme="dark"] .analysis-sheet-tab,
     body[data-theme="dark"] .analysis-page-btn,
@@ -446,7 +443,6 @@
       border-color:color-mix(in srgb, var(--danger) 28%, var(--border));
       background:color-mix(in srgb, var(--danger) 8%, var(--surface-2));
     }
-    body[data-theme="dark"] .analysis-search-mode-btn.is-active,
     body[data-theme="dark"] .spectrum-filter-btn.is-active,
     body[data-theme="dark"] .spectrum-card.is-selected{
       background:var(--accent-soft);
@@ -526,7 +522,7 @@
       color:var(--text);
     }
     body[data-theme="dark"] .analysis-table tbody tr.is-selected td{
-      background:var(--accent-soft);
+      background:color-mix(in srgb,var(--surface) 84%,var(--accent) 16%);
     }
     body[data-theme="dark"] .ai-message.is-pending{
       border-color:color-mix(in srgb, var(--accent) 24%, var(--border));
@@ -555,8 +551,7 @@
     body[data-theme="dark"] .theme-card-head strong,
     body[data-theme="dark"] .cutout-title-block h1,
     body[data-theme="dark"] .cutout-panel-title,
-    body[data-theme="dark"] .cutout-preview-title,
-    body[data-theme="dark"] .placeholder-title{
+    body[data-theme="dark"] .cutout-preview-title{
       color:var(--text);
     }
     body[data-theme="dark"] .analysis-panel-count,
@@ -578,8 +573,7 @@
     body[data-theme="dark"] .theme-card-desc,
     body[data-theme="dark"] .cutout-kicker,
     body[data-theme="dark"] .cutout-preview-subtitle,
-    body[data-theme="dark"] .cutout-range-field,
-    body[data-theme="dark"] .placeholder-desc{
+    body[data-theme="dark"] .cutout-range-field{
       color:var(--muted);
     }
     body[data-theme="dark"] .analysis-empty{
@@ -594,6 +588,12 @@
     body[data-theme="dark"] .spectrum-view-switch::before,
     body[data-theme="dark"] .spectrum-mode-switch::before{
       background:#60a5fa;
+    }
+    body[data-theme="dark"] .analysis-search-mode::before{
+      background:#60a5fa;
+    }
+    body[data-theme="dark"] .analysis-search-mode-btn.is-active{
+      color:#06131f;
     }
     body[data-theme="dark"] .spectrum-mode-btn.is-active,
     body[data-theme="dark"] .spectrum-icon-btn.is-active{
@@ -632,12 +632,7 @@
     body[data-theme="dark"] .spectrum-compact-detail-image.is-image-pending::before,
     body[data-theme="dark"] .spectrum-preview-thumb.is-image-pending::before,
     body[data-theme="dark"] .spectrum-preview-image-frame.is-image-pending::before{
-      background:
-        linear-gradient(90deg, transparent, rgba(148,163,184,.18), transparent) -120% 0/60% 100% no-repeat,
-        linear-gradient(rgba(148,163,184,.24) 0 0) 14px 16px/42% 8px no-repeat,
-        linear-gradient(rgba(148,163,184,.16) 0 0) 14px 34px/68% 8px no-repeat,
-        linear-gradient(rgba(148,163,184,.16) 0 0) 14px 52px/54% 8px no-repeat,
-        var(--surface);
+      background:var(--surface-3);
     }
     body[data-theme="dark"] .spectrum-card-image.is-image-pending::after,
     body[data-theme="dark"] .spectrum-detail-image.is-image-pending::after,
@@ -651,10 +646,7 @@
     body[data-theme="dark"] .spectrum-compact-detail-image.is-image-missing,
     body[data-theme="dark"] .spectrum-preview-thumb.is-image-missing,
     body[data-theme="dark"] .spectrum-preview-image-frame.is-image-missing{
-      background:
-        linear-gradient(135deg, rgba(148,163,184,.14) 25%, transparent 25%) 0 0/18px 18px,
-        linear-gradient(135deg, transparent 75%, rgba(148,163,184,.14) 75%) 0 0/18px 18px,
-        var(--surface-2);
+      background:var(--surface-2);
     }
     body[data-theme="dark"] .spectrum-card-image.is-image-missing::before,
     body[data-theme="dark"] .spectrum-detail-image.is-image-missing::before,
@@ -704,15 +696,12 @@
       border-color:var(--accent);
       color:#06131f;
     }
-    body[data-theme="dark"] .business-kpi,
     body[data-theme="dark"] .business-panel,
-    body[data-theme="dark"] .business-table-wrap,
-    body[data-theme="dark"] .business-lane-icon{
+    body[data-theme="dark"] .business-table-wrap{
       background:var(--surface);
       border-color:var(--border);
       color:var(--text);
     }
-    body[data-theme="dark"] .business-lane,
     body[data-theme="dark"] .business-table th{
       background:var(--surface-2);
       border-color:var(--border);
@@ -722,16 +711,10 @@
       border-color:var(--border);
       color:var(--text-2);
     }
-    body[data-theme="dark"] .business-kpi-value,
-    body[data-theme="dark"] .business-panel-head h2,
-    body[data-theme="dark"] .business-lane strong{
+    body[data-theme="dark"] .business-panel-head h2{
       color:var(--text);
     }
-    body[data-theme="dark"] .business-kpi-label,
-    body[data-theme="dark"] .business-kpi-meta em,
     body[data-theme="dark"] .business-panel-head span,
-    body[data-theme="dark"] .business-lane p,
-    body[data-theme="dark"] .business-insight ul,
     body[data-theme="dark"] .business-table th{
       color:var(--muted);
     }
@@ -742,12 +725,8 @@
     body[data-theme="dark"] .biz-print-queue li,
     body[data-theme="dark"] .biz-reserve-item,
     body[data-theme="dark"] .biz-material-ready > div:not(.business-panel-head),
-    body[data-theme="dark"] .biz-tags span,
     body[data-theme="dark"] .biz-role-card b,
-    body[data-theme="dark"] .biz-permission-summary article,
-    body[data-theme="dark"] .biz-audit-event,
-    body[data-theme="dark"] .biz-risk-card,
-    body[data-theme="dark"] .biz-today-list li{
+    body[data-theme="dark"] .biz-permission-summary article{
       background:var(--surface-2);
       border-color:var(--border);
       color:var(--text-2);
@@ -755,7 +734,6 @@
     body[data-theme="dark"] .biz-order-toolbar button,
     body[data-theme="dark"] .biz-directory button,
     body[data-theme="dark"] .biz-role-list button,
-    body[data-theme="dark"] .biz-audit-filter button,
     body[data-theme="dark"] .biz-formula-list button,
     body[data-theme="dark"] .biz-formula-row-actions button,
     body[data-theme="dark"] .biz-formula-table-actions select,
@@ -771,7 +749,6 @@
     body[data-theme="dark"] .biz-order-toolbar .is-active,
     body[data-theme="dark"] .biz-directory .is-active,
     body[data-theme="dark"] .biz-role-list .is-active,
-    body[data-theme="dark"] .biz-audit-filter .is-active,
     body[data-theme="dark"] .biz-formula-list .is-active,
     body[data-theme="dark"] .biz-permission-toggle.on,
     body[data-theme="dark"] .biz-permission-row .on{

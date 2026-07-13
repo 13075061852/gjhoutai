@@ -1,6 +1,7 @@
 ﻿import { getLegacyApp, getPublicApp } from '../core/app-context';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { parseJsonOr } from '../../utils/json';
+import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
 (function () {
   'use strict';
@@ -18,40 +19,7 @@ import { parseJsonOr } from '../../utils/json';
   let draggedVisitedOriginalNext = null;
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
-  let businessPagesPromise = null;
-  let dataRecognitionPromise = null;
-  let inspectionReportsPromise = null;
   let pageRenderSeq = 0;
-
-  const loadBusinessPages = async () => {
-    if (App.businessPages) return;
-    if (!businessPagesPromise) {
-      businessPagesPromise = import('../features/business-pages');
-    }
-    await businessPagesPromise;
-  };
-  const loadDataRecognitionPage = async () => {
-    if (!App.dataRecognition) {
-      if (!dataRecognitionPromise) {
-        dataRecognitionPromise = import('../features/data-recognition');
-      }
-      await dataRecognitionPromise;
-    }
-    refs.dataRecognitionPageSection = document.querySelector('[data-page-section="data-recognition"]');
-    refs.navPageButtons = document.querySelectorAll('[data-page]');
-    App.dataRecognition?.init?.();
-  };
-  const loadInspectionReportsPage = async () => {
-    if (!App.inspectionReports) {
-      if (!inspectionReportsPromise) {
-        inspectionReportsPromise = import('../features/inspection-reports');
-      }
-      await inspectionReportsPromise;
-    }
-    refs.inspectionReportsPageSection = document.querySelector('[data-page-section="inspection-reports"]');
-    refs.navPageButtons = document.querySelectorAll('[data-page]');
-    App.inspectionReports?.init?.();
-  };
   let navigationBound = false;
   let navigationGlobalListenersBound = false;
   const DEFAULT_PAGE_ID = 'dashboard';
@@ -354,6 +322,18 @@ import { parseJsonOr } from '../../utils/json';
     if (!refs.shell) return;
     const fullscreen = refs.shell.classList.contains('assistant-fullscreen');
     setAssistantFullscreen(!fullscreen);
+  };
+
+  const handleAssistantExpandClick = () => {
+    toggleAssistantFullscreen();
+  };
+
+  const handleAssistantCloseClick = () => {
+    if (refs.shell?.classList.contains('assistant-fullscreen')) {
+      setAssistantFullscreen(false);
+      return;
+    }
+    setAssistantCollapsed(true);
   };
 
   const getNavLabel = (button) => {
@@ -736,6 +716,11 @@ import { parseJsonOr } from '../../utils/json';
     const renderSeq = ++pageRenderSeq;
     pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
     if (!isPageVisible(pageId)) pageId = getFallbackPageId();
+    await ensureLegacyPageFeature(pageId);
+    if (renderSeq !== pageRenderSeq) return;
+    refs.dataRecognitionPageSection = document.querySelector('[data-page-section="data-recognition"]');
+    refs.inspectionReportsPageSection = document.querySelector('[data-page-section="inspection-reports"]');
+    refs.navPageButtons = document.querySelectorAll('[data-page]');
     const { scrollTop = true, trackRecent = true } = options;
     const isAiPage = pageId === 'ai-config';
     const isAnalysisPage = pageId === 'property-analysis';
@@ -747,14 +732,6 @@ import { parseJsonOr } from '../../utils/json';
     const isProjectSkillPage = pageId === 'project-skills';
     const isApimartMediaPage = pageId === 'apimart-media';
     const isAiCallAnalysisPage = pageId === 'ai-call-analysis';
-    if (isDataRecognitionPage) {
-      await loadDataRecognitionPage();
-    }
-    if (isInspectionReportsPage) {
-      await loadInspectionReportsPage();
-    }
-    if (renderSeq !== pageRenderSeq) return;
-
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
     const label = getNavLabel(activeButton);
     const def = getPageDefinition(pageId, label);
@@ -776,7 +753,6 @@ import { parseJsonOr } from '../../utils/json';
     const isBusinessPage = !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage;
 
     if (isBusinessPage) {
-      await loadBusinessPages();
       refreshNavAccess({ redirect: false });
     }
     if (isBusinessPage && renderSeq === pageRenderSeq) {
@@ -910,6 +886,11 @@ import { parseJsonOr } from '../../utils/json';
   };
 
   const cleanupNavigation = () => {
+    pageRenderSeq += 1;
+    navigationBound = false;
+    refs.assistantExpandBtn?.removeEventListener('click', handleAssistantExpandClick);
+    refs.assistantCloseBtn?.removeEventListener('click', handleAssistantCloseClick);
+    clearAssistantFullscreenExitTimer();
     cleanupNavigationGlobals();
     cleanupVisitedDrag();
     removeCollapsedNavFlyout();
@@ -997,17 +978,8 @@ import { parseJsonOr } from '../../utils/json';
 
     updateAssistantFullscreenToggle();
 
-    refs.assistantExpandBtn?.addEventListener('click', () => {
-      toggleAssistantFullscreen();
-    });
-
-    refs.assistantCloseBtn?.addEventListener('click', () => {
-      if (refs.shell?.classList.contains('assistant-fullscreen')) {
-        setAssistantFullscreen(false);
-        return;
-      }
-      setAssistantCollapsed(true);
-    });
+    refs.assistantExpandBtn?.addEventListener('click', handleAssistantExpandClick);
+    refs.assistantCloseBtn?.addEventListener('click', handleAssistantCloseClick);
 
     bindTopVisitedDragging();
     refs.topVisitedPages?.addEventListener('click', (event) => {
@@ -1049,4 +1021,3 @@ import { parseJsonOr } from '../../utils/json';
     updateAssistantToggle,
   };
 })();
-

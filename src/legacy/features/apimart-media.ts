@@ -1,4 +1,5 @@
 ﻿import { mountApimartReactBitsShowcase } from '../../components/reactbits/ApimartReactBitsShowcase';
+import '../../styles/pages/apimart-media.css';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { getLegacyApp } from '../core/app-context';
@@ -186,7 +187,8 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     videoDuration: 5,
     resultCleared: false,
   };
-  let bound = false;
+  let boundPanel = null;
+  let documentEventsBound = false;
   let tasks: any[] = [];
   let uiState: any = { ...DEFAULT_UI_STATE };
   const pollTimers = new Map();
@@ -900,17 +902,17 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     };
     const clampScale = (value) => Math.min(5, Math.max(1, Number(value) || 1));
     const preview = document.createElement('div');
-    preview.className = 'apimart-image-preview';
+    preview.className = 'dialog-overlay apimart-image-preview';
     preview.innerHTML = `
-      <div class="apimart-image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
-        <div class="apimart-image-preview-head">
+      <div class="dialog-card apimart-image-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
+        <div class="ui-dialog-header apimart-image-preview-head">
           <div class="apimart-image-preview-title">
             <strong title="${esc(task.prompt || '生成图片')}">${esc(task.prompt || '生成图片')}</strong>
             <span>图片尺寸 <b data-apimart-size-label data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(url)}">${esc(getImageSizeLabel(task, url))}</b></span>
             <span>文件大小 <b data-apimart-file-size-label data-apimart-file-size-task="${esc(task.id)}" data-apimart-file-size-url="${esc(url)}">${esc(getFileSizeLabel(task, url))}</b></span>
           </div>
           <div class="apimart-image-preview-actions">
-            <button class="apimart-image-preview-close" type="button" aria-label="关闭图片预览">
+            <button class="ui-button dialog-close apimart-image-preview-close" type="button" aria-label="关闭图片预览">
               <i class="ti ti-x" aria-hidden="true"></i>
             </button>
           </div>
@@ -991,17 +993,17 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (!task || !url) return;
     closeImagePreview();
     const preview = document.createElement('div');
-    preview.className = 'apimart-image-preview apimart-video-preview';
+    preview.className = 'dialog-overlay apimart-image-preview apimart-video-preview';
     preview.innerHTML = `
-      <div class="apimart-image-preview-dialog" role="dialog" aria-modal="true" aria-label="视频预览">
-        <div class="apimart-image-preview-head">
+      <div class="dialog-card apimart-image-preview-dialog" role="dialog" aria-modal="true" aria-label="视频预览">
+        <div class="ui-dialog-header apimart-image-preview-head">
           <div class="apimart-image-preview-title">
             <strong title="${esc(task.prompt || '生成视频')}">${esc(task.prompt || '生成视频')}</strong>
             <span>视频比例 <b>${esc(task.size || task.aspect_ratio || '16:9')}</b></span>
             <span>生成耗时 <b>${esc(formatGenerationDuration(task))}</b></span>
           </div>
           <div class="apimart-image-preview-actions">
-            <button class="apimart-image-preview-close" type="button" aria-label="关闭视频预览">
+            <button class="ui-button dialog-close apimart-image-preview-close" type="button" aria-label="关闭视频预览">
               <i class="ti ti-x" aria-hidden="true"></i>
             </button>
           </div>
@@ -1434,8 +1436,8 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   };
 
   const bind = () => {
-    if (bound || !refs.apimartMediaPanel) return;
-    bound = true;
+    if (!refs.apimartMediaPanel || boundPanel === refs.apimartMediaPanel) return;
+    boundPanel = refs.apimartMediaPanel;
     refs.apimartMediaPanel.addEventListener('input', (event) => {
       const target = event.target;
       if (target?.matches?.('#apimartPrompt')) updatePromptCounter();
@@ -1496,16 +1498,19 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       dropzone.classList.remove('is-drag-over');
       handleReferenceFiles(event.dataTransfer?.files);
     });
-    document.addEventListener('load', (event) => {
-      const image = event.target;
-      if (!image?.matches?.('img[data-apimart-size-image]')) return;
-      recordImageSize(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'), image);
-    }, true);
-    document.addEventListener('error', (event) => {
-      const image = event.target;
-      if (!image?.matches?.('img[data-apimart-size-image]')) return;
-      markInvalidMediaUrl(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'));
-    }, true);
+    if (!documentEventsBound) {
+      documentEventsBound = true;
+      document.addEventListener('load', (event) => {
+        const image = event.target;
+        if (!image?.matches?.('img[data-apimart-size-image]')) return;
+        recordImageSize(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'), image);
+      }, true);
+      document.addEventListener('error', (event) => {
+        const image = event.target;
+        if (!image?.matches?.('img[data-apimart-size-image]')) return;
+        markInvalidMediaUrl(image.getAttribute('data-apimart-size-task'), image.getAttribute('data-apimart-size-url'));
+      }, true);
+    }
     refs.apimartMediaPanel.addEventListener('click', async (event) => {
       const target = event.target;
       if (target.closest('#apimartPromptRandom')) {
@@ -1635,9 +1640,18 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       pollTask(task.id);
     });
   };
+  const cleanup = () => {
+    boundPanel = null;
+    closeImagePreview();
+    pollTimers.forEach((timer) => window.clearTimeout(timer));
+    pollTimers.clear();
+    reactBitsShowcaseCleanup?.();
+    reactBitsShowcaseCleanup = null;
+  };
 
   App.apimartMedia = {
     init,
+    cleanup,
     render,
     submitGeneration,
     getTaskStatus,

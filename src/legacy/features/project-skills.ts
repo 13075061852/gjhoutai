@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/project-skills.css';
 import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
 import { buildSkillCatalogSummary, getSkillSearchText } from './agent-runtime/skill-catalog';
 import { normalizeAgentToolResult } from './agent-runtime/grounding';

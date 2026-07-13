@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/config.css';
 import { cloudConfig } from '../../services/cloud-config';
 import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 import { cloneJsonValue, parseJsonMaybe } from '../../utils/json';

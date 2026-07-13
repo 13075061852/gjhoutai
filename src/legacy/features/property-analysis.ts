@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/property-analysis.css';
 import { cloudStorage } from '../../services/cloud-storage';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
@@ -252,7 +253,7 @@ import { fetchWithTimeout } from '../../utils/fetch';
   const ensureMobileActionMenu = () => {
     if (!refs.exportJsonBtn?.parentElement) return;
 
-    const sourceGroup = refs.exportJsonBtn.parentElement.closest('.analysis-action-group');
+    const sourceGroup = document.querySelector('[data-page-section="property-analysis"] .analysis-action-group');
     if (!sourceGroup) return;
     const mobileActionHost = isMobileAnalysisLayout() ? refs.statusRow || sourceGroup : sourceGroup;
 

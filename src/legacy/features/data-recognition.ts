@@ -1,4 +1,5 @@
 ﻿import { getLegacyApp } from '../core/app-context';
+import '../../styles/pages/data-recognition.css';
 import { cloudStorage } from '../../services/cloud-storage';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { parseJsonMaybe } from '../../utils/json';
@@ -1244,10 +1245,13 @@ import { parseJsonMaybe } from '../../utils/json';
     restoreSession();
     refreshHistory();
   };
+  const cleanup = () => {
+    initialized = false;
+  };
 
   installPageDefinition();
   installMarkup();
 
-  App.dataRecognition = { init, searchHistoryByAgent, inspectCurrentByAgent };
+  App.dataRecognition = { init, cleanup, searchHistoryByAgent, inspectCurrentByAgent };
 })();
 

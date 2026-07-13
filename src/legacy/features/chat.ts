@@ -6,6 +6,7 @@ import {
   parseAgentRouteClassification,
 } from './agent-runtime/router';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
+import '../../styles/pages/dashboard-chat.css';
 import {
   buildFallbackSearchPlan,
   buildSearchUnavailableAnswer,
@@ -677,9 +678,9 @@ import {
     if (!url) return;
     closeChatImagePreview();
     const preview = document.createElement('div');
-    preview.className = 'chat-image-preview';
+    preview.className = 'dialog-overlay chat-image-preview';
     preview.innerHTML = `
-      <button class="chat-image-preview-close" type="button" aria-label="关闭图片预览">
+      <button class="ui-button dialog-close chat-image-preview-close" type="button" aria-label="关闭图片预览">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
       <img src="${utils.escapeHtml(url)}" alt="图片预览" />

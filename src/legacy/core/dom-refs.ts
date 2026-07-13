@@ -1,14 +1,13 @@
 import { ensureLegacyApp } from './app-context';
 
-(function () {
-  'use strict';
+const byId = <T extends HTMLElement = HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
+const qs = <T extends Element = Element>(selector: string): T | null => document.querySelector<T>(selector);
+const qsa = <T extends Element = Element>(selector: string): NodeListOf<T> => document.querySelectorAll<T>(selector);
 
+export function refreshLegacyDomRefs(): LegacyRefs {
   const App = ensureLegacyApp();
-  const byId = <T extends HTMLElement = HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
-  const qs = <T extends Element = Element>(selector: string): T | null => document.querySelector<T>(selector);
-  const qsa = <T extends Element = Element>(selector: string): NodeListOf<T> => document.querySelectorAll<T>(selector);
-
-  const refs: LegacyRefs = {
+  const refs = (App.refs || {}) as LegacyRefs;
+  const nextRefs: LegacyRefs = {
     shell: byId('shell'),
     mobileMenuBtn: byId('mobileMenuBtn'),
     sidebarToggle: byId('sidebarToggle'),
@@ -116,5 +115,9 @@ import { ensureLegacyApp } from './app-context';
     aiConfigNav: byId('aiConfigNav'),
   };
 
+  Object.assign(refs, nextRefs);
   App.refs = refs;
-})();
+  return refs;
+}
+
+refreshLegacyDomRefs();

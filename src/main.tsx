@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { applyInitialThemeState } from './utils/themeBootstrap';
 import './styles/styles.css';
+import './styles/layout/responsive.css';
 
 async function bootstrap() {
   applyInitialThemeState();

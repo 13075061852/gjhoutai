@@ -209,7 +209,7 @@ export const renderDashboard = (state = {} as any) => {
 
   return `
     <section class="biz-dashboard-kpi-row">
-      <article class="biz-dashboard-kpi kpi-orders">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-orders">
         <div class="kpi-icon-wrap"><i class="ti ti-shopping-cart" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">今日订单</div>
@@ -217,7 +217,7 @@ export const renderDashboard = (state = {} as any) => {
           ${renderTrend(data.kpis.todayOrdersTrend, (value) => `较昨日 +${value} 单`)}
         </div>
       </article>
-      <article class="biz-dashboard-kpi kpi-revenue">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-revenue">
         <div class="kpi-icon-wrap"><i class="ti ti-currency-yuan" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">今日营收</div>
@@ -225,7 +225,7 @@ export const renderDashboard = (state = {} as any) => {
           ${renderTrend(Math.round(data.kpis.revenueTrend), (value) => `较昨日 +¥${formatWan(value)}万`, '较昨日持平')}
         </div>
       </article>
-      <article class="biz-dashboard-kpi kpi-production">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-production">
         <div class="kpi-icon-wrap"><i class="ti ti-assembly" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">待排产批次</div>
@@ -233,7 +233,7 @@ export const renderDashboard = (state = {} as any) => {
           <div class="kpi-trend warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i>${escapeHtml(data.kpis.urgentOrders)} 批临近交期</div>
         </div>
       </article>
-      <article class="biz-dashboard-kpi kpi-inventory">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-inventory">
         <div class="kpi-icon-wrap"><i class="ti ti-package" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">库存预警</div>
@@ -241,7 +241,7 @@ export const renderDashboard = (state = {} as any) => {
           <div class="kpi-trend ${data.kpis.inventoryRisk ? 'warn' : 'up'}"><i class="ti ${data.kpis.inventoryRisk ? 'ti-alert-triangle' : 'ti-circle-check'}" aria-hidden="true"></i>共 ${escapeHtml(data.kpis.inventoryTotal)} 项物料</div>
         </div>
       </article>
-      <article class="biz-dashboard-kpi kpi-quality">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-quality">
         <div class="kpi-icon-wrap"><i class="ti ti-checklist" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">生产完成率</div>
@@ -249,7 +249,7 @@ export const renderDashboard = (state = {} as any) => {
           <div class="kpi-trend up"><i class="ti ti-circle-check" aria-hidden="true"></i>${escapeHtml(data.kpis.productionTotal)} 个排产订单</div>
         </div>
       </article>
-      <article class="biz-dashboard-kpi kpi-customer">
+      <article class="ui-stat-card biz-dashboard-kpi kpi-customer">
         <div class="kpi-icon-wrap"><i class="ti ti-users" aria-hidden="true"></i></div>
         <div class="kpi-body">
           <div class="kpi-label">活跃客户</div>
@@ -261,7 +261,7 @@ export const renderDashboard = (state = {} as any) => {
 
     <section class="biz-dashboard-workbench">
       <div class="biz-dashboard-primary">
-        <article class="biz-dashboard-panel biz-chart-panel">
+        <article class="ui-panel biz-dashboard-panel biz-chart-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-chart-line" aria-hidden="true"></i>近7天订单趋势</h2>
             <div class="biz-panel-badges">
@@ -282,7 +282,7 @@ export const renderDashboard = (state = {} as any) => {
           </div>
         </article>
 
-        <article class="biz-dashboard-panel biz-production-panel">
+        <article class="ui-panel biz-dashboard-panel biz-production-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-chart-dots" aria-hidden="true"></i>生产状态概览</h2>
             <span class="biz-panel-meta">共追踪 ${escapeHtml(data.productionTotal)} 批次</span>
@@ -302,7 +302,7 @@ export const renderDashboard = (state = {} as any) => {
         </article>
 
         <section class="biz-dashboard-bottom-grid">
-          <article class="biz-dashboard-panel biz-todo-panel">
+          <article class="ui-panel biz-dashboard-panel biz-todo-panel">
             <div class="biz-panel-head">
               <h2><i class="ti ti-calendar-check" aria-hidden="true"></i>今日待办</h2>
               <span class="biz-panel-meta">${escapeHtml(data.todos.length)} 项</span>
@@ -321,7 +321,7 @@ export const renderDashboard = (state = {} as any) => {
             </div>
           </article>
 
-          <article class="biz-dashboard-panel biz-recent-panel">
+          <article class="ui-panel biz-dashboard-panel biz-recent-panel">
             <div class="biz-panel-head">
               <h2><i class="ti ti-clock-history" aria-hidden="true"></i>最近动态</h2>
               <span class="biz-panel-meta">来自业务数据</span>
@@ -343,7 +343,7 @@ export const renderDashboard = (state = {} as any) => {
       </div>
 
       <aside class="biz-dashboard-aside">
-        <article class="biz-dashboard-panel biz-risk-panel">
+        <article class="ui-panel biz-dashboard-panel biz-risk-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-radar" aria-hidden="true"></i>风险雷达</h2>
             <span class="biz-panel-meta">${escapeHtml(data.risks.length)} 项待处理</span>
@@ -362,15 +362,15 @@ export const renderDashboard = (state = {} as any) => {
           </div>
         </article>
 
-        <article class="biz-dashboard-panel biz-quick-actions-panel">
+        <article class="ui-panel biz-dashboard-panel biz-quick-actions-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-bolt" aria-hidden="true"></i>快捷操作</h2>
           </div>
           <div class="biz-quick-actions-grid">
-            <button class="biz-qk-btn" type="button" data-quick="order"><i class="ti ti-file-plus" aria-hidden="true"></i>新建订单</button>
-            <button class="biz-qk-btn" type="button" data-quick="produce"><i class="ti ti-assembly" aria-hidden="true"></i>排产</button>
-            <button class="biz-qk-btn" type="button" data-quick="quality"><i class="ti ti-checklist" aria-hidden="true"></i>质检录入</button>
-            <button class="biz-qk-btn" type="button" data-quick="report"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>导出报表</button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="order"><i class="ti ti-file-plus" aria-hidden="true"></i>新建订单</button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="produce"><i class="ti ti-assembly" aria-hidden="true"></i>排产</button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="quality"><i class="ti ti-checklist" aria-hidden="true"></i>质检录入</button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="report"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>导出报表</button>
           </div>
         </article>
       </aside>

@@ -1,0 +1,52 @@
+.business-page-shell{height:100%;min-height:0;display:flex;flex-direction:column;gap:var(--ui-page-gap);padding:12px;overflow:auto}
+.biz-dashboard-kpi-row{display:grid;grid-template-columns:repeat(6,minmax(140px,1fr));gap:10px}
+.biz-dashboard-kpi{min-height:80px;display:flex;align-items:center;gap:12px;padding:14px;transition:border-color var(--ui-transition-fast),transform var(--ui-transition-fast)}
+.biz-dashboard-kpi:hover{border-color:var(--border-2);transform:translateY(-1px)}
+.kpi-icon-wrap{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border-radius:var(--ui-radius-md);background:var(--surface-2);color:var(--accent);font-size:18px}
+.kpi-orders .kpi-icon-wrap{background:#e0f2fe;color:#0e7490}.kpi-revenue .kpi-icon-wrap{background:#dcfce7;color:#16a34a}.kpi-production .kpi-icon-wrap{background:#fef3c7;color:#d97706}.kpi-inventory .kpi-icon-wrap{background:#ede9fe;color:#7c3aed}.kpi-quality .kpi-icon-wrap{background:#cffafe;color:#0891b2}.kpi-customer .kpi-icon-wrap{background:#fce7f3;color:#db2777}
+.kpi-body{min-width:0;flex:1}.kpi-label{margin-bottom:4px;color:var(--muted);font-size:12px;font-weight:700}.kpi-value{color:var(--text);font-size:22px;line-height:1.1;font-weight:900}.kpi-unit{color:var(--muted);font-size:13px;font-weight:600}.kpi-trend{margin-top:4px;display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:11px;font-weight:700}.kpi-trend.up{color:var(--success)}.kpi-trend.warn,.kpi-trend.down{color:var(--warn)}
+.biz-dashboard-workbench{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:10px;align-items:start}.biz-dashboard-primary,.biz-dashboard-aside{min-width:0;display:flex;flex-direction:column;gap:10px}.biz-dashboard-aside{position:sticky;top:0}.biz-dashboard-panel{padding:14px}.biz-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.biz-panel-head h2{margin:0;display:flex;align-items:center;gap:7px;color:var(--text);font-size:15px;font-weight:900}.biz-panel-head h2 .ti{color:var(--accent);font-size:17px}.biz-panel-meta{color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}.biz-panel-badges{display:flex;gap:6px}.biz-badge{min-height:26px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:var(--ui-radius-sm);background:var(--surface-2);color:var(--muted);font-size:11px;font-weight:700}.biz-badge.is-active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.biz-chart-panel{min-height:228px}.biz-chart-bars{height:168px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:end;gap:10px;padding-top:8px}.biz-bar-col{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px}.biz-bar-fill{width:100%;max-width:40px;min-height:4px;border-radius:var(--ui-radius-sm) var(--ui-radius-sm) 0 0}.biz-bar-value{color:var(--text);font-size:12px;font-weight:800}.biz-bar-label{color:var(--muted);font-size:11px;font-weight:600}
+.biz-production-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.biz-production-status-card,.biz-risk-item,.biz-todo-item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:var(--ui-radius-md);background:var(--surface-2)}.biz-status-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:var(--ui-radius-sm)}.biz-status-icon.running{background:#dcfce7;color:#16a34a}.biz-status-icon.queued{background:#fef3c7;color:#d97706}.biz-status-icon.review{background:#dbeafe;color:#2563eb}.biz-status-icon.done{background:#f0fdf4;color:#059669}.biz-status-info,.biz-risk-body,.biz-todo-body{min-width:0;flex:1}.biz-status-info strong,.biz-risk-body strong,.biz-todo-body strong{display:block;color:var(--text);font-size:13px;font-weight:800}.biz-status-count,.biz-risk-body span,.biz-todo-body span{color:var(--muted);font-size:11px}.biz-status-bar{height:4px;margin-top:6px;border-radius:2px;background:var(--border);overflow:hidden}.biz-status-fill{height:100%;background:var(--accent)}.biz-status-fill.queued{background:var(--warn)}.biz-status-fill.done{background:var(--success)}
+.biz-risk-list,.biz-todo-list,.biz-recent-list{display:flex;flex-direction:column;gap:6px}.biz-risk-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--muted)}.biz-risk-item.danger .biz-risk-dot{background:var(--danger)}.biz-risk-item.warn .biz-risk-dot{background:var(--warn)}.biz-risk-item.info .biz-risk-dot{background:var(--accent)}.biz-risk-count{min-width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:var(--surface-3);font-size:11px;font-weight:800}.biz-todo-item.urgent{border-left:3px solid var(--danger)}.biz-todo-check{color:var(--muted);font-size:18px}.biz-todo-tag{min-height:22px;display:inline-flex;align-items:center;padding:0 8px;border-radius:var(--ui-radius-xs);background:var(--surface-3);color:var(--muted);font-size:11px;font-weight:800}
+.biz-quick-actions-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.biz-qk-btn{min-height:52px;flex-direction:column;gap:4px;background:var(--surface-2)}.biz-qk-btn .ti{color:var(--accent);font-size:20px}.biz-dashboard-bottom-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:10px}.biz-recent-item{position:relative;display:flex;gap:12px;padding:0 0 12px 16px}.biz-recent-line{position:absolute;left:4px;top:18px;bottom:0;width:2px;background:var(--border)}.biz-recent-item::before{content:'';position:absolute;left:0;top:6px;width:10px;height:10px;border:2px solid var(--surface);border-radius:50%;background:var(--accent)}.biz-recent-content{min-width:0;flex:1}.biz-recent-time{margin-bottom:2px;color:var(--muted-2);font-size:11px;font-weight:700}.biz-recent-content strong{display:block;color:var(--text);font-size:13px}.biz-recent-content span{color:var(--muted);font-size:11px}.biz-formula-empty{padding:24px;color:var(--muted);text-align:center}
+@media(max-width:1200px){.biz-dashboard-kpi-row{grid-template-columns:repeat(3,minmax(0,1fr))}.biz-dashboard-workbench{grid-template-columns:1fr}.biz-dashboard-aside{position:static}.biz-dashboard-bottom-grid{grid-template-columns:1fr}}
+@media(max-width:720px){.business-page-shell{padding:8px}.biz-dashboard-kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}.biz-production-status-grid{grid-template-columns:1fr}.biz-dashboard-bottom-grid{grid-template-columns:1fr}}
+@media(max-width:480px){.biz-dashboard-kpi-row{grid-template-columns:1fr}.biz-quick-actions-grid{grid-template-columns:1fr}}
+    /* Dark mode for dashboard */
+    body[data-theme="dark"] .biz-dashboard-kpi{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .biz-dashboard-kpi:hover{
+      box-shadow:0 8px 24px rgba(0,0,0,.24);
+    }
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-orders .kpi-icon-wrap{background:rgba(14,116,144,.18);color:#67e8f9}
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-revenue .kpi-icon-wrap{background:rgba(22,163,74,.18);color:#86efac}
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-production .kpi-icon-wrap{background:rgba(217,119,6,.18);color:#fcd34d}
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-inventory .kpi-icon-wrap{background:rgba(124,58,237,.18);color:#c4b5fd}
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-quality .kpi-icon-wrap{background:rgba(8,145,178,.18);color:#67e8f9}
+    body[data-theme="dark"] .biz-dashboard-kpi.kpi-customer .kpi-icon-wrap{background:rgba(219,39,119,.18);color:#f9a8d4}
+    body[data-theme="dark"] .biz-dashboard-panel{
+      background:var(--surface);
+      border-color:var(--border);
+    }
+    body[data-theme="dark"] .biz-production-status-card{
+      background:var(--surface-2);
+      border-color:var(--border-2);
+    }
+    body[data-theme="dark"] .biz-risk-item{
+      background:var(--surface-2);
+      border-color:var(--border-2);
+    }
+    body[data-theme="dark"] .biz-qk-btn{
+      background:var(--surface-2);
+      border-color:var(--border-2);
+    }
+    body[data-theme="dark"] .biz-todo-item{
+      background:var(--surface-2);
+      border-color:var(--border-2);
+    }
+    body[data-theme="dark"] .biz-recent-item::before{
+      border-color:var(--surface);
+    }

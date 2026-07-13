@@ -42,7 +42,7 @@ export const legacyMarkup = [
   APP_OPEN_MARKUP,
   SIDEBAR_MARKUP.replace('/logo.png', '/logo.webp').replace(
     '<button class="nav-subitem" type="button" data-page="spectrum-analysis">图谱分析</button>\r\n                <button class="nav-subitem" type="button" data-page="image-cutout">抠图助手</button>',
-    '<button class="nav-subitem" type="button" data-page="spectrum-analysis">图谱分析</button>\r\n                <button class="nav-subitem" type="button" data-page="office-records">办事记录</button>\r\n                <button class="nav-subitem" type="button" data-page="image-cutout">抠图助手</button>',
+    '<button class="nav-subitem" type="button" data-page="spectrum-analysis">图谱分析</button>\r\n                <button class="nav-subitem" type="button" data-page="inspection-reports">检测报告</button>\r\n                <button class="nav-subitem" type="button" data-page="office-records">办事记录</button>\r\n                <button class="nav-subitem" type="button" data-page="image-cutout">抠图助手</button>',
   ).replace(
     '</div>\r\n        </div>\r\n\r\n        <div class="sidebar-footer">',
     '</div>\r\n        </div>\r\n\r\n        <div class="sidebar-mobile-actions" data-sidebar-mobile-actions></div>\r\n\r\n        <div class="sidebar-footer">',

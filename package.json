@@ -15,6 +15,7 @@
     "typecheck": "npm run check:legacy-types && tsc -b --noEmit",
     "test": "vitest run",
     "check-icons": "node scripts/check-icon-mappings.mjs",
+    "check:ui": "node scripts/check-ui-consistency.mjs",
     "optimize:images": "node scripts/optimize-images.mjs",
     "check:legacy-types": "node scripts/check-legacy-ts-nocheck.mjs",
     "update:siliconflow-catalog": "node scripts/update-siliconflow-catalog.mjs"

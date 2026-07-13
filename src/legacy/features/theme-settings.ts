@@ -1,5 +1,7 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 
+import '../../styles/pages/theme-settings.css';
+
 (function () {
   'use strict';
 
@@ -385,6 +387,11 @@
     fontGrid: document.getElementById('fontPresetGrid'),
     resetBtn: document.getElementById('themeResetBtn'),
   };
+  const refreshRefs = () => {
+    refs.grid = document.getElementById('themePresetGrid');
+    refs.fontGrid = document.getElementById('fontPresetGrid');
+    refs.resetBtn = document.getElementById('themeResetBtn');
+  };
 
   const getTheme = (id) => themes.find((theme) => theme.id === id) || themes.find((theme) => theme.id === DEFAULT_THEME_ID) || themes[0];
   const getFontPreset = (id) => fontPresets.find((font) => font.id === id) || fontPresets.find((font) => font.id === DEFAULT_FONT_ID) || fontPresets[0];
@@ -518,6 +525,7 @@
   };
 
   const init = () => {
+    refreshRefs();
     const savedId = localStorage.getItem(THEME_ID_KEY);
     const theme = getTheme(savedId);
     const savedFont = readSavedFont();

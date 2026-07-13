@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDashboardState } from './dashboard-state';
 import { renderDashboard } from './dashboard';
+import dashboardPageSource from './dashboard-page.ts?raw';
 
 describe('createDashboardState', () => {
   it('reads dashboard datasets without loading the full business runtime', () => {
@@ -34,5 +35,11 @@ describe('createDashboardState', () => {
     expect(html).toContain('ui-stat-card biz-dashboard-kpi');
     expect(html).toContain('ui-panel biz-dashboard-panel');
     expect(html).toContain('ui-button biz-qk-btn');
+  });
+
+  it('does not let a late dashboard module replace the full business runtime', () => {
+    expect(dashboardPageSource).toContain('if (App.businessPages && !App.businessPages.dashboardOnly) return;');
+    expect(dashboardPageSource.indexOf('if (App.businessPages && !App.businessPages.dashboardOnly) return;'))
+      .toBeLessThan(dashboardPageSource.indexOf('App.businessPages = api;'));
   });
 });

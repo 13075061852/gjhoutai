@@ -7,6 +7,7 @@ import { createDashboardState } from './dashboard-state';
 (function registerDashboardPage() {
   const App = getLegacyApp();
   if (!App) return;
+  if (App.businessPages && !App.businessPages.dashboardOnly) return;
 
   const { refs, utils } = App;
   const api = {

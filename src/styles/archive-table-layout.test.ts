@@ -11,6 +11,7 @@ describe('archive table layout', () => {
 
   it('fills the table area only when an archive has no rows', () => {
     expect(businessStyles).toMatch(/\.biz-archive-table\.is-empty\s*\{[^}]*height:100%;/s);
+    expect(businessStyles).toMatch(/\.biz-supplier-table\.is-empty\s*\{[^}]*height:100%;/s);
   });
 
   it('lets the seven-column personnel table fit the available panel width', () => {

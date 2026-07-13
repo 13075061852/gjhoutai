@@ -1130,7 +1130,7 @@
       white-space:nowrap;
     }
     .biz-order-table tr:last-child td{
-      border-bottom:1px solid var(--border);
+      border-bottom:0;
     }
     .biz-order-empty-row{
       height:100%;
@@ -4951,7 +4951,7 @@
       color:var(--text-2);
     }
     .biz-production-table tr:last-child td{
-      border-bottom:1px solid var(--border);
+      border-bottom:0;
     }
     .biz-production-empty-row{
       height:100%;
@@ -5206,6 +5206,9 @@
     .biz-archive-table.is-empty{
       height:100%;
     }
+    .biz-supplier-table.is-empty{
+      height:100%;
+    }
     .biz-personnel-archive-table-panel .biz-supplier-table{
       min-width:0;
     }
@@ -5215,7 +5218,7 @@
       white-space:nowrap;
     }
     .biz-supplier-table tr:last-child td{
-      border-bottom:1px solid var(--border);
+      border-bottom:0;
     }
     .biz-supplier-empty-row,
     .biz-archive-empty-row{

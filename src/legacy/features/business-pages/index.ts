@@ -5262,7 +5262,7 @@ import { createArchiveRenderer } from './archive-page';
             </div>
           </div>
           <div class="ui-table-wrap biz-supplier-table-wrap biz-supplier-archive-table-wrap">
-            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table">
+            <table class="ui-table ui-table--sticky-header ui-table--comfortable biz-supplier-table${pagedSuppliers.length ? '' : ' is-empty'}">
               <thead>
                 <tr>${['编号', '供应商名称', '联系人', '电话', '邮箱', '供应类别', '状态', '操作'].map((column) => `<th>${esc(column)}</th>`).join('')}</tr>
               </thead>

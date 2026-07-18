@@ -4,6 +4,7 @@ export interface Env {
   CORS_ORIGINS?: string;
   BOOTSTRAP_ADMIN_TOKEN?: string;
   CONFIG_ENCRYPTION_KEY?: string;
+  LEGACY_PROPERTY_DATA_URL?: string;
 }
 
 type LegacyRole = 'system_admin' | 'sales_manager' | 'lab_engineer' | 'warehouse_manager';
@@ -98,6 +99,7 @@ const forbidden = () => json({ error: 'forbidden' }, { status: 403 });
 const badRequest = (error: string) => json({ error }, { status: 400 });
 const tooManyRequests = () => json({ error: 'too_many_login_attempts' }, { status: 429 });
 const getBlobKey = (namespace: string, key: string) => `${namespace}/${key}`;
+const PROPERTY_DATA_BACKUP_MAX_BYTES = 100 * 1024 * 1024;
 const normalizeContentType = (contentType: string) => contentType.split(';')[0].trim().toLowerCase();
 const getSafeBlobContentType = (contentType: string | undefined | null) => {
   const normalized = normalizeContentType(contentType || '');
@@ -110,6 +112,15 @@ const getAttachmentFileName = (key: string) => {
 const getSafeFileName = (value: unknown, fallback = 'download') => {
   const fileName = String(value || fallback).trim() || fallback;
   return fileName.replace(/[\\/\r\n"]/g, '_').slice(0, 180);
+};
+
+const getSafeBackupContentType = (value: string | null) => {
+  const contentType = normalizeContentType(value || '');
+  return new Set([
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/octet-stream',
+  ]).has(contentType) ? contentType : null;
 };
 const getImageExtension = (contentType: string) => ({
   'image/png': 'png',
@@ -1010,6 +1021,59 @@ export default {
     const user = await getSessionUser(request, env);
     if (!user) return withCors(request, env, unauthorized());
     if (user.mustChangePassword) return withCors(request, env, forbidden());
+
+    if (url.pathname === '/api/property-data' || url.pathname === '/api/property-data/backup') {
+      if (!can(user, 'state:read')) return withCors(request, env, forbidden());
+      if (url.pathname === '/api/property-data' && request.method === 'GET') {
+        let row = await env.DB.prepare('SELECT data_json, source_file_name FROM property_data WHERE id = 1').first<{ data_json: string; source_file_name: string }>();
+        if (!row && env.LEGACY_PROPERTY_DATA_URL) {
+          try {
+            const legacyResponse = await fetch(env.LEGACY_PROPERTY_DATA_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+            if (legacyResponse.ok) {
+              const legacyData = await legacyResponse.json<unknown>();
+              const legacyJson = JSON.stringify(legacyData);
+              if (new TextEncoder().encode(legacyJson).byteLength <= 1_900_000) {
+                await env.DB.prepare(`
+                  INSERT INTO property_data (id, data_json, source_file_name, updated_at)
+                  VALUES (1, ?1, ?2, CURRENT_TIMESTAMP)
+                `).bind(legacyJson, '测试数据.xlsx').run();
+                row = { data_json: legacyJson, source_file_name: '测试数据.xlsx' };
+              }
+            }
+          } catch {
+            // The legacy source is only a one-time compatibility path; an empty D1 remains valid.
+          }
+        }
+        return withCors(request, env, json(row ? { data: JSON.parse(row.data_json), sourceFileName: row.source_file_name } : null));
+      }
+      if (url.pathname === '/api/property-data' && request.method === 'PUT') {
+        if (!can(user, 'state:write')) return withCors(request, env, forbidden());
+        const payload = await request.json<{ data?: unknown; sourceFileName?: unknown }>();
+        if (!payload || payload.data == null) return withCors(request, env, badRequest('invalid_property_data'));
+        const serialized = JSON.stringify(payload.data);
+        if (new TextEncoder().encode(serialized).byteLength > 1_900_000) return withCors(request, env, badRequest('property_data_too_large'));
+        await env.DB.prepare(`
+          INSERT INTO property_data (id, data_json, source_file_name, updated_at)
+          VALUES (1, ?1, ?2, CURRENT_TIMESTAMP)
+          ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, source_file_name = excluded.source_file_name, updated_at = CURRENT_TIMESTAMP
+        `).bind(serialized, String(payload.sourceFileName || '').slice(0, 255)).run();
+        await audit(env, user.id, 'property_data.write', 'property_data', '1');
+        return withCors(request, env, json({ ok: true }));
+      }
+      if (url.pathname === '/api/property-data/backup' && request.method === 'PUT') {
+        if (!can(user, 'blob:write')) return withCors(request, env, forbidden());
+        const contentType = getSafeBackupContentType(request.headers.get('content-type'));
+        const contentLength = Number(request.headers.get('content-length') || 0);
+        if (!contentType) return withCors(request, env, badRequest('invalid_property_backup_type'));
+        if (contentLength > PROPERTY_DATA_BACKUP_MAX_BYTES) return withCors(request, env, badRequest('property_backup_too_large'));
+        const fileName = getSafeFileName(url.searchParams.get('fileName'), 'property-data.xlsx');
+        const backupKey = `property-analysis/backups/${new Date().toISOString().replace(/[:.]/g, '-')}-${fileName}`;
+        await env.FILES.put(backupKey, request.body, { httpMetadata: { contentType } });
+        await env.DB.prepare('UPDATE property_data SET backup_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1').bind(backupKey).run();
+        await audit(env, user.id, 'property_data.backup.write', 'blob', backupKey);
+        return withCors(request, env, json({ ok: true, key: backupKey }));
+      }
+    }
 
     if (url.pathname.startsWith('/api/state/')) {
       const key = decodeURIComponent(url.pathname.slice('/api/state/'.length));

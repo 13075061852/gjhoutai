@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS property_data (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  data_json TEXT NOT NULL,
+  source_file_name TEXT NOT NULL DEFAULT '',
+  backup_key TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

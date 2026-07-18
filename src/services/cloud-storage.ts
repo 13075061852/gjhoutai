@@ -34,6 +34,37 @@ const parseJson = async <T>(response: Response): Promise<T | null> => {
 };
 
 export const cloudStorage = {
+  async getPropertyData<T>(): Promise<{ data: T; sourceFileName: string } | null> {
+    const response = await fetchWithTimeout(buildUrl('/api/property-data'), { credentials: 'include' });
+    return await parseJson<{ data: T; sourceFileName: string }>(response);
+  },
+
+  async putPropertyData<T>(data: T, sourceFile: File | null = null, onProgress?: (percent: number) => void): Promise<boolean> {
+    try {
+      const response = await fetchWithTimeout(buildUrl('/api/property-data'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data, sourceFileName: sourceFile?.name || '' }),
+      });
+      if (!response.ok) return false;
+      onProgress?.(50);
+      if (sourceFile) {
+        const backup = await fetchWithTimeout(buildUrl(`/api/property-data/backup?fileName=${encodeURIComponent(sourceFile.name)}`), {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'content-type': sourceFile.type || 'application/octet-stream' },
+          body: sourceFile,
+        }, UPLOAD_FETCH_TIMEOUT_MS);
+        if (!backup.ok) return false;
+      }
+      onProgress?.(100);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   async getJson<T>(key: string): Promise<T | null> {
     const response = await fetchWithTimeout(buildUrl(`/api/state/${encodeURIComponent(key)}`), { credentials: 'include' });
     const payload = await parseJson<{ value: T }>(response);

@@ -52,9 +52,9 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
       liblibBaseUrl: 'https://openapi.liblibai.cloud',
       liblibImageModel: 'doubao-seedream-4-5-251128',
       liblibVideoModel: 'kling-v2-6',
-      ossBucket: 'gjhoutai',
-      ossEndpoint: 'oss-cn-shanghai.aliyuncs.com',
-      ossObjectKey: '测试数据.json',
+      ossBucket: '',
+      ossEndpoint: '',
+      ossObjectKey: '',
       ossAccessKeyId: '',
       ossAccessKeySecret: '',
       ossExcelBackupPrefix: '',
@@ -183,7 +183,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
       'ai-config': {
         title: '配置中心',
         eyebrow: '系统管理',
-        desc: '这里可以配置 AI 模型接入、AI 助手行为和 OSS 数据源。支持导入、导出与本地保存。',
+        desc: '这里可以配置 AI 模型接入、AI 助手行为。物性数据统一由 Cloudflare D1 和 R2 存储。支持导入、导出与本地保存。',
       },
     },
   } satisfies LegacyAppConstants;

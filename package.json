@@ -8,6 +8,7 @@
     "dev:worker": "wrangler dev",
     "build": "npm run check:legacy-types && tsc -b && vite build",
     "deploy:web": "npm run build && wrangler pages deploy dist --project-name gjhoutai-web",
+    "web": "npm run deploy:web",
     "deploy:api": "wrangler deploy",
     "deploy:db": "wrangler d1 migrations apply gjhoutai --remote",
     "preview": "vite preview",

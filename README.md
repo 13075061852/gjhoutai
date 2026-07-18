@@ -4,7 +4,7 @@
 
 ## 项目定位
 
-这是一个前端后台原型，用于沉淀广俊塑料科技的业务管理、数据分析、AI 助手和配置中心能力。项目当前没有自建后端服务，运行依赖浏览器本地存储、IndexedDB、云端 OSS 数据和第三方模型接口。
+这是一个前端后台原型，用于沉淀广俊塑料科技的业务管理、数据分析、AI 助手和配置中心能力。项目运行依赖浏览器本地存储、IndexedDB、Cloudflare D1/R2 和第三方模型接口。
 
 当前页面主要包含：
 
@@ -109,7 +109,7 @@ npm run preview
 
 ## 数据来源
 
-物性分析表只读取云端 OSS 数据，不再保留本地测试 JSON。
+物性分析表从 Cloudflare Worker 读取 D1 中的结构化数据；导入 Excel 时，解析后的数据写入 D1，Excel 原文件备份写入 R2。前端不再保存或使用阿里云 OSS 密钥。
 
 配置中心默认 OSS 配置：
 
@@ -117,7 +117,7 @@ npm run preview
 - Endpoint：`oss-cn-shanghai.aliyuncs.com`
 - JSON 路径：`测试数据.json`
 
-本地开发地址为 `http://127.0.0.1:5001`。如果浏览器控制台出现 CORS 报错，需要在阿里云 OSS Bucket 跨域规则中允许该 Origin，并允许 `GET` 请求。
+本地开发地址为 `http://127.0.0.1:5001`。前端通过 `VITE_STORAGE_API_BASE` 访问 Cloudflare Worker，由 Worker 负责鉴权、D1 和 R2 操作。
 
 ## 外部依赖和网络请求
 
@@ -140,4 +140,4 @@ npm run preview
 - 新的 React 代码优先放入 `src/pages/`、`src/components/`、`src/utils/` 和 `src/types/`。
 - 迁移兼容层仍在 `src/legacy/`，后续可逐步替换为 React state 和组件。
 - 样式继续沿用当前类名体系，统一从 `src/styles/styles.css` 进入。
-- 涉及密钥、OSS、模型调用、文件导入和导出时，需要特别检查浏览器安全限制和跨域配置。
+- 涉及密钥、Cloudflare 存储、模型调用、文件导入和导出时，需要特别检查鉴权、上传大小限制和跨域配置。

@@ -714,17 +714,9 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     }
   };
 
-  const mountOssHelpLink = () => {
-    const head = document.querySelector('.oss-config-block .config-module-head');
-    if (!head || head.querySelector('.panel-help')) return;
-
-    const link = document.createElement('a');
-    link.className = 'panel-help';
-    link.href = 'https://help.aliyun.com/zh/oss/';
-    link.target = '_blank';
-    link.rel = 'noreferrer';
-    link.textContent = '阿里云 OSS 文档';
-    head.appendChild(link);
+  const removeLegacyStorageConfigSection = () => {
+    const module = document.querySelector('.oss-config-block');
+    module?.remove();
   };
 
   const mountConfigContentPanel = () => {
@@ -3016,7 +3008,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     mountDeepSeekProviderOption();
     mountSiliconFlowProviderOption();
     mountBalanceControl();
-    mountOssHelpLink();
+    removeLegacyStorageConfigSection();
     mountConfigContentPanel();
     App.customSelects?.enhanceAll?.();
     syncConfigBindings();

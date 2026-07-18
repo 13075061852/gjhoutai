@@ -3,7 +3,6 @@ import '../../styles/pages/property-analysis.css';
 import { cloudStorage } from '../../services/cloud-storage';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
-import { fetchWithTimeout } from '../../utils/fetch';
 
 (function () {
   'use strict';
@@ -551,49 +550,10 @@ import { fetchWithTimeout } from '../../utils/fetch';
     };
   };
 
-  const getOssConfig = async () => {
-    const savedConfig = await (App.config?.loadSavedConfig?.() || {});
-    const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
-    const defaultConfig = constants.DEFAULT_CONFIG || {};
-    const getValue = (key) => String(saved[key] || defaultConfig[key] || '').trim();
-    const bucket = getValue('ossBucket');
-    const endpoint = getValue('ossEndpoint').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    const objectKey = getValue('ossObjectKey').replace(/^\/+/, '');
-    return {
-      bucket,
-      endpoint,
-      objectKey,
-      accessKeyId: getValue('ossAccessKeyId'),
-      accessKeySecret: getValue('ossAccessKeySecret'),
-      excelBackupPrefix: getValue('ossExcelBackupPrefix').replace(/^\/+/, ''),
-    };
-  };
-
-  const hasOssReadConfig = (config) => Boolean(config.bucket && config.endpoint && config.objectKey);
-
-  const hasOssWriteConfig = (config) => Boolean(
-    config.bucket && config.endpoint && config.objectKey && config.accessKeyId && config.accessKeySecret
-  );
-
-  const encodeOssObjectKey = (objectKey) => String(objectKey || '')
-    .split('/')
-    .map((part) => encodeURIComponent(part))
-    .join('/');
-
-  const getOssObjectUrl = (config, objectKey = config.objectKey) => {
-    const endpoint = String(config.endpoint || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    return `https://${config.bucket}.${endpoint}/${encodeOssObjectKey(objectKey)}`;
-  };
-
-  const fetchJsonWithTimeout = async (url, timeoutMs = 15000) => {
-    try {
-      const response = await fetchWithTimeout(url, { cache: 'no-store' }, timeoutMs);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      if (error?.name === 'AbortError' || error?.name === 'TimeoutError') throw new Error('request_timeout');
-      throw error;
-    }
+  const fetchPropertyData = async () => {
+    const payload = await cloudStorage.getPropertyData<any>();
+    if (!payload?.data) throw new Error('物性数据尚未配置');
+    return payload;
   };
 
   const formatDuration = (startTime) => {
@@ -619,28 +579,6 @@ import { fetchWithTimeout } from '../../utils/fetch';
     refs.importStatus.classList.toggle('is-loading', statusTone === 'loading');
     refs.importStatus.classList.toggle('is-success', statusTone === 'success');
     refs.importStatus.classList.toggle('is-error', statusTone === 'error');
-  };
-
-  const arrayBufferToBase64 = (buffer) => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    return btoa(binary);
-  };
-
-  const hmacSha1Base64 = async (secret, message) => {
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(secret),
-      { name: 'HMAC', hash: 'SHA-1' },
-      false,
-      ['sign']
-    );
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-    return arrayBufferToBase64(signature);
   };
 
   const loadScriptOnce = (src, globalName) => new Promise((resolve, reject) => {
@@ -694,95 +632,6 @@ import { fetchWithTimeout } from '../../utils/fetch';
     }
 
     return window.JSZip;
-  };
-
-  const utf8ToBase64 = (value) => {
-    const bytes = new TextEncoder().encode(value);
-    let binary = '';
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    return btoa(binary);
-  };
-
-  const postOssObject = async ({ config, objectKey, body, contentType, onProgress }) => {
-    const policy = {
-      expiration: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-      conditions: [
-        ['eq', '$key', objectKey],
-        ['content-length-range', 0, 100 * 1024 * 1024],
-      ],
-    };
-    const encodedPolicy = utf8ToBase64(JSON.stringify(policy));
-    const signature = await hmacSha1Base64(config.accessKeySecret, encodedPolicy);
-    const formData = new FormData();
-
-    formData.append('key', objectKey);
-    formData.append('OSSAccessKeyId', config.accessKeyId);
-    formData.append('policy', encodedPolicy);
-    formData.append('Signature', signature);
-    formData.append('success_action_status', '200');
-    formData.append('Content-Type', contentType);
-    formData.append('file', body);
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `https://${config.bucket}.${config.endpoint}`);
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable || typeof onProgress !== 'function') return;
-        const percent = Math.min(99, Math.max(1, Math.round((event.loaded / event.total) * 100)));
-        onProgress(percent);
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          if (typeof onProgress === 'function') onProgress(100);
-          resolve();
-          return;
-        }
-        reject(new Error(`OSS上传失败：HTTP ${xhr.status}${xhr.responseText ? ` ${xhr.responseText.slice(0, 120)}` : ''}`));
-      };
-
-      xhr.onerror = () => reject(new Error('OSS上传失败：网络错误'));
-      xhr.onabort = () => reject(new Error('OSS上传失败：请求已取消'));
-      xhr.send(formData);
-    });
-  };
-
-  const buildExcelBackupKey = (prefix, fileName) => {
-    const safePrefix = String(prefix || '').replace(/^\/+/, '').replace(/\/?$/, '/');
-    const baseName = String(fileName || 'property-data.xlsx').replace(/[\\/:*?"<>|]/g, '_');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return `${safePrefix}${stamp}-${baseName}`;
-  };
-
-  const uploadPropertyDataToOss = async (data, sourceFile, onProgress) => {
-    const config = await getOssConfig();
-    if (!hasOssWriteConfig(config)) {
-      throw new Error('请先在配置中心填写 OSS Bucket、Endpoint、JSON 路径和 AccessKey。');
-    }
-
-    const jsonText = JSON.stringify(data, null, 2);
-    await postOssObject({
-      config,
-      objectKey: config.objectKey,
-      body: new Blob([jsonText], { type: 'application/json;charset=utf-8' }),
-      contentType: 'application/json;charset=utf-8',
-      onProgress,
-    });
-
-    if (config.excelBackupPrefix && sourceFile) {
-      await postOssObject({
-        config,
-        objectKey: buildExcelBackupKey(config.excelBackupPrefix, sourceFile.name),
-        body: sourceFile,
-        contentType: sourceFile.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        onProgress: (percent) => {
-          if (typeof onProgress === 'function') onProgress(percent);
-        },
-      });
-    }
   };
 
   const getPrecision = (value) => {
@@ -4045,10 +3894,11 @@ import { fetchWithTimeout } from '../../utils/fetch';
       setUploadStatus('解析中');
       const parsed = await parseExcelWorkbook(file);
       setUploadStatus('上传中 0%');
-      await uploadPropertyDataToOss(parsed, file, (percent) => {
+      const saved = await cloudStorage.putPropertyData(parsed, file, (percent) => {
         setUploadStatus(`上传中 ${percent}%`);
       });
-      await loadData({ bustCache: true, useOss: true });
+      if (!saved) throw new Error('D1/R2 写入失败');
+      await loadData({ bustCache: true });
       setUploadStatus('已同步成功');
     } catch (error) {
       setUploadStatus(`同步失败：${error?.message || '文件格式错误'}`);
@@ -4171,33 +4021,24 @@ import { fetchWithTimeout } from '../../utils/fetch';
     const startedAt = performance.now();
     try {
       setUploadStatus('读取中', 'loading');
-      const ossConfig = await getOssConfig();
-      const shouldReadOss = hasOssReadConfig(ossConfig);
-      if (!shouldReadOss) {
-        throw new Error('请先在配置中心填写 OSS Bucket、Endpoint 和 JSON 路径。');
-      }
-      const dataUrl = getOssObjectUrl(ossConfig);
-      const url = options.bustCache
-        ? `${dataUrl}${dataUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
-        : dataUrl;
-      const data = await fetchJsonWithTimeout(url);
+      const payload = await fetchPropertyData();
       if (requestId !== state.loadRequestId) return;
 
-      setAnalysisData(data, {
-        source: 'oss',
-        fileName: ossConfig.objectKey,
+      setAnalysisData(payload.data, {
+        source: 'cloudflare',
+        fileName: payload.sourceFileName || '物性数据',
       });
       setUploadStatus(`读取成功 ${formatDuration(startedAt)}`, 'success');
     } catch (error) {
       if (requestId !== state.loadRequestId) return;
       state.data = null;
-      state.dataSource = 'oss';
+      state.dataSource = 'cloudflare';
       state.sourceFileName = '';
 
       if (refs.sheetTabs) refs.sheetTabs.innerHTML = '';
       if (refs.panel) refs.panel.hidden = true;
       if (refs.tableWrap) {
-        refs.tableWrap.innerHTML = '<div class="analysis-empty">云端物性数据加载失败，请检查 OSS 配置、文件路径或跨域设置。</div>';
+        refs.tableWrap.innerHTML = '<div class="analysis-empty">云端物性数据加载失败，请检查登录状态或 Cloudflare D1 配置。</div>';
       }
       if (refs.footerTotal) refs.footerTotal.textContent = '共 0 条';
       if (refs.selectionMeta) refs.selectionMeta.textContent = '已选 0 条';

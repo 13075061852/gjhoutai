@@ -131,3 +131,26 @@ export interface AgentToolDefinition<
     idempotencyKey?: string;
   }) => Promise<AgentToolResultV2<TOutput>>;
 }
+
+export const validateAgentToolResult = <TOutput extends Record<string, unknown>>(
+  definition: Pick<AgentToolDefinition<unknown, TOutput>, 'outputSchema'>,
+  result: unknown,
+): AgentToolResultV2<TOutput> => {
+  const parsedResult = agentToolResultSchema.parse(result);
+  const data = definition.outputSchema.parse(parsedResult.data);
+  return { ...parsedResult, data };
+};
+
+export const executeAgentTool = async <TInput, TOutput extends Record<string, unknown>>(
+  definition: AgentToolDefinition<TInput, TOutput>,
+  input: TInput,
+  context: {
+    runId: string;
+    stepId: string;
+    signal?: AbortSignal;
+    idempotencyKey?: string;
+  },
+): Promise<AgentToolResultV2<TOutput>> => {
+  const result = await definition.handler(input, context);
+  return validateAgentToolResult(definition, result);
+};

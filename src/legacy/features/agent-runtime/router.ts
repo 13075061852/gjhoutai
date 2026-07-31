@@ -1,4 +1,33 @@
-﻿import type { AgentPlan, AgentSkillPlan } from './types';
+type AgentPlanKind =
+  | 'local-tool'
+  | 'web-search'
+  | 'image-generation'
+  | 'image-analysis'
+  | 'chat';
+
+type AgentSkillPlan = {
+  skillId: string;
+  input: Record<string, any>;
+  confidence?: number;
+  reason?: string;
+};
+
+type AgentPlan = {
+  kind: AgentPlanKind;
+  useProjectContext: boolean;
+  needsWebSearch: boolean;
+  wantsImageGeneration: boolean;
+  wantsImageAnalysis: boolean;
+  localSkillPlan: AgentSkillPlan | null;
+  searchPlan?: {
+    queries: string[];
+    maxResults?: number;
+    searchDepth?: 'basic' | 'advanced';
+    topic?: 'general' | 'news';
+    reason?: string;
+  } | null;
+  reason: string;
+};
 
 const textOf = (value: unknown) => String(value || '').trim();
 const AGENT_PLAN_KINDS = ['local-tool', 'web-search', 'image-generation', 'image-analysis', 'chat'] as const;

@@ -32,9 +32,11 @@ export type ChatAgentConfirmation = {
 };
 
 export type ChatRuntimeMessage = {
+  id?: string;
   role: 'assistant';
   content: string;
   pending: boolean;
+  agentRunId?: string;
   pendingStatus?: string;
   images?: unknown[];
   actions?: unknown[];
@@ -47,12 +49,22 @@ export type ChatRuntimeSubmitInput = {
   prompt: string;
 };
 
+export type ChatRuntimeMessageReference = {
+  sessionId: string;
+  messageId: string;
+};
+
+export type ChatRuntimeSessionContext = {
+  sessionId: string;
+  history: unknown[];
+};
+
 type ChatRuntimeConfig = {
   projectAccessEnabled: boolean;
   webSearchEnabled: boolean;
 };
 
-type MessageReference = string | number;
+type MessageReference = ChatRuntimeMessageReference | string | number;
 
 type ProgressWithRunId = AgentProgressEvent & {
   runId?: string;
@@ -66,16 +78,28 @@ type PrepareAttachmentsInput = {
 
 type PrepareAttachmentsResult = {
   terminalMessage?: string;
+  attachments?: {
+    images?: unknown[];
+  };
 };
 
 type CreateChatRuntimeControllerOptions = {
   runtime: AgentRuntime;
   getActivePageId: () => string;
   getRunConfig: () => ChatRuntimeConfig | Promise<ChatRuntimeConfig>;
+  getSessionContext?: (sessionId?: string) => ChatRuntimeSessionContext;
+  findAssistantMessageByRunId?: (runId: string) => {
+    messageRef: MessageReference;
+    message: ChatRuntimeMessage;
+  } | null;
+  createMessageId?: () => string;
   prepareAttachments?: (
     input: PrepareAttachmentsInput,
   ) => void | PrepareAttachmentsResult | Promise<void | PrepareAttachmentsResult>;
-  addAssistantMessage: (message: ChatRuntimeMessage) => MessageReference;
+  addAssistantMessage: (
+    message: ChatRuntimeMessage,
+    requestedRef?: ChatRuntimeMessageReference,
+  ) => MessageReference;
   updateAssistantMessage: (
     messageRef: MessageReference,
     message: ChatRuntimeMessage,
@@ -158,6 +182,13 @@ export const createChatRuntimeController = ({
   runtime,
   getActivePageId,
   getRunConfig,
+  getSessionContext = () => ({ sessionId: '', history: [] }),
+  findAssistantMessageByRunId,
+  createMessageId = () => {
+    const randomId = globalThis.crypto?.randomUUID?.()
+      ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return `chat-runtime-message-${randomId}`;
+  },
   prepareAttachments,
   addAssistantMessage,
   updateAssistantMessage,
@@ -169,9 +200,15 @@ export const createChatRuntimeController = ({
   let activeRunId = '';
   let activeController: AbortController | null = null;
   const messageByRunId = new Map<string, MessageReference>();
-  const progressInvocationByRunId = new Map<string, string>();
-  const messageByInvocation = new Map<string, MessageReference>();
   const latestMessageByRef = new Map<MessageReference, ChatRuntimeMessage>();
+
+  const releaseTracking = (
+    runId: string,
+    messageRef: MessageReference,
+  ): void => {
+    if (runId) messageByRunId.delete(runId);
+    latestMessageByRef.delete(messageRef);
+  };
 
   const replaceMessage = (
     messageRef: MessageReference,
@@ -191,8 +228,10 @@ export const createChatRuntimeController = ({
     updateAssistantMessage(messageRef, next);
   };
 
-  const addPendingMessage = (): MessageReference => {
+  const addPendingMessage = (sessionId = ''): MessageReference => {
+    const messageId = createMessageId();
     const message: ChatRuntimeMessage = {
+      id: messageId,
       role: 'assistant',
       content: '正在理解问题...',
       pending: true,
@@ -200,9 +239,29 @@ export const createChatRuntimeController = ({
       agentSteps: [],
       agentConfirmation: null,
     };
-    const messageRef = addAssistantMessage(message);
+    const requestedRef = { sessionId, messageId };
+    const messageRef = addAssistantMessage(message, requestedRef);
     latestMessageByRef.set(messageRef, message);
     return messageRef;
+  };
+
+  const findTrackedMessage = (runId: string): {
+    messageRef: MessageReference;
+    message: ChatRuntimeMessage;
+  } | null => {
+    const trackedRef = messageByRunId.get(runId);
+    if (trackedRef !== undefined) {
+      return {
+        messageRef: trackedRef,
+        message: latestMessageByRef.get(trackedRef) ?? {
+          role: 'assistant',
+          content: '',
+          pending: false,
+          agentRunId: runId,
+        },
+      };
+    }
+    return findAssistantMessageByRunId?.(runId) ?? null;
   };
 
   const applyProgress = (
@@ -215,7 +274,6 @@ export const createChatRuntimeController = ({
     if (runtimeRunId) {
       activeRunId = runtimeRunId;
       messageByRunId.set(runtimeRunId, messageRef);
-      progressInvocationByRunId.set(runtimeRunId, invocationId);
     }
     const step: ChatAgentStep = {
       phase: progress.phase,
@@ -231,6 +289,7 @@ export const createChatRuntimeController = ({
       content: progress.label,
       pending: true,
       pendingStatus: progress.label,
+      ...(runtimeRunId ? { agentRunId: runtimeRunId } : {}),
       agentSteps: [step],
       agentConfirmation: null,
     });
@@ -246,7 +305,6 @@ export const createChatRuntimeController = ({
     if (runtimeRunId) {
       activeRunId = runtimeRunId;
       messageByRunId.set(runtimeRunId, messageRef);
-      progressInvocationByRunId.set(runtimeRunId, invocationId);
     }
     const awaitingConfirmation = result.state === 'awaiting_confirmation';
     replaceMessage(messageRef, {
@@ -257,6 +315,7 @@ export const createChatRuntimeController = ({
       ),
       pending: false,
       pendingStatus: '',
+      ...(runtimeRunId ? { agentRunId: runtimeRunId } : {}),
       images: Array.isArray(result.images) ? result.images : [],
       actions: Array.isArray(result.actions) ? result.actions : [],
       searchSources: searchSourcesOf(result.run),
@@ -264,6 +323,7 @@ export const createChatRuntimeController = ({
         ? confirmationModel(result.run)
         : null,
     });
+    if (!awaitingConfirmation) releaseTracking(runtimeRunId, messageRef);
   };
 
   const applyTerminalError = (
@@ -279,6 +339,7 @@ export const createChatRuntimeController = ({
       images: [],
       agentConfirmation: null,
     });
+    releaseTracking(activeRunId, messageRef);
   };
 
   const submit = async ({ prompt }: ChatRuntimeSubmitInput): Promise<void> => {
@@ -288,8 +349,8 @@ export const createChatRuntimeController = ({
     activeInvocationId = invocationId;
     activeRunId = '';
     activeController = controller;
-    const messageRef = addPendingMessage();
-    messageByInvocation.set(invocationId, messageRef);
+    const sessionContext = getSessionContext();
+    const messageRef = addPendingMessage(sessionContext.sessionId);
     try {
       const config = await getRunConfig();
       const prepared = await prepareAttachments?.({
@@ -307,11 +368,17 @@ export const createChatRuntimeController = ({
         });
         return;
       }
+      const attachments = prepared && 'attachments' in prepared
+        ? prepared.attachments
+        : undefined;
       const result = await runtime.run({
         prompt,
         activePageId: getActivePageId(),
         projectAccessEnabled: config.projectAccessEnabled,
         webSearchEnabled: config.webSearchEnabled,
+        sessionId: sessionContext.sessionId,
+        history: sessionContext.history,
+        ...(attachments ? { attachments } : {}),
         signal: controller.signal,
         onProgress: (progress) => applyProgress(
           invocationId,
@@ -341,10 +408,16 @@ export const createChatRuntimeController = ({
     confirmationId: string;
   }): Promise<void> => {
     setBusy(true);
-    const invocationId = progressInvocationByRunId.get(runId)
-      ?? `chat-confirmation-${++invocationSequence}`;
+    const invocationId = `chat-confirmation-${++invocationSequence}`;
     const controller = new AbortController();
-    const messageRef = messageByRunId.get(runId) ?? addPendingMessage();
+    const recovered = findTrackedMessage(runId);
+    const messageRef = recovered?.messageRef
+      ?? addPendingMessage(getSessionContext().sessionId);
+    if (recovered) latestMessageByRef.set(messageRef, recovered.message);
+    messageByRunId.set(runId, messageRef);
+    const sessionContext = typeof messageRef === 'object'
+      ? getSessionContext(messageRef.sessionId)
+      : getSessionContext();
     activeInvocationId = invocationId;
     activeRunId = runId;
     activeController = controller;
@@ -359,6 +432,13 @@ export const createChatRuntimeController = ({
         runId,
         confirmationId,
         signal: controller.signal,
+        sessionId: sessionContext.sessionId,
+        history: sessionContext.history,
+        onProgress: (progress) => applyProgress(
+          invocationId,
+          messageRef,
+          progress as ProgressWithRunId,
+        ),
       });
       applyRunResult(invocationId, messageRef, result);
     } catch (error) {
@@ -376,12 +456,16 @@ export const createChatRuntimeController = ({
 
   const cancel = async (requestedRunId = ''): Promise<void> => {
     const runtimeRunId = String(requestedRunId || activeRunId || '').trim();
-    const storedInvocationId = runtimeRunId
-      ? progressInvocationByRunId.get(runtimeRunId) ?? ''
-      : '';
-    const messageRef = runtimeRunId
-      ? messageByRunId.get(runtimeRunId)
-      : undefined;
+    const recovered = runtimeRunId ? findTrackedMessage(runtimeRunId) : null;
+    const messageRef = recovered?.messageRef;
+    if (recovered && messageRef !== undefined) {
+      latestMessageByRef.set(messageRef, recovered.message);
+      messageByRunId.set(runtimeRunId, messageRef);
+    }
+    const storedInvocationId = activeInvocationId
+      || (runtimeRunId && messageRef !== undefined
+        ? `chat-cancellation-${++invocationSequence}`
+        : '');
     const resumesPersistedRun = Boolean(
       requestedRunId
       && runtimeRunId
@@ -434,5 +518,9 @@ export const createChatRuntimeController = ({
     cancel,
     isBusy: () => Boolean(activeInvocationId),
     getActiveRunId: () => activeRunId,
+    getRetainedStateSize: () => ({
+      messages: latestMessageByRef.size,
+      runs: messageByRunId.size,
+    }),
   };
 };

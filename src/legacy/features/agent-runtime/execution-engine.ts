@@ -40,6 +40,7 @@ export type ExecutePlanInput = {
   prompt: string;
   plan: AgentPlanV2;
   signal?: AbortSignal;
+  onProgress?: (event: AgentExecutionProgressEvent) => void;
 };
 
 export type ExecuteSingleToolInput = {
@@ -49,12 +50,14 @@ export type ExecuteSingleToolInput = {
   input: Record<string, unknown>;
   stepId?: string;
   signal?: AbortSignal;
+  onProgress?: (event: AgentExecutionProgressEvent) => void;
 };
 
 export type ResumeConfirmedRunInput = {
   runId: string;
   confirmation: AgentConfirmation;
   signal?: AbortSignal;
+  onProgress?: (event: AgentExecutionProgressEvent) => void;
 };
 
 export interface AgentExecutionEngine {
@@ -234,12 +237,21 @@ export const createAgentExecutionEngine = ({
 
   const nowIso = (): string => nowDate().toISOString();
 
-  const emit = (event: AgentExecutionProgressEvent): void => {
-    try {
-      onProgress?.(event);
-    } catch {
-      // UI progress observers cannot change execution semantics.
-    }
+  const emit = (
+    event: AgentExecutionProgressEvent,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
+  ): void => {
+    const observers = new Set([
+      ...(onProgress ? [onProgress] : []),
+      ...(runProgress ? [runProgress] : []),
+    ]);
+    observers.forEach((observer) => {
+      try {
+        observer(event);
+      } catch {
+        // UI progress observers cannot change execution semantics.
+      }
+    });
   };
 
   const transition = (run: AgentRunRecord, nextState: AgentRunState, reason: string): void => {
@@ -252,10 +264,15 @@ export const createAgentExecutionEngine = ({
   const appendPersistedProgress = (
     run: AgentRunRecord,
     event: Omit<AgentProgressEvent, 'at'>,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): void => {
-    const progressEvent: AgentProgressEvent = { ...event, at: nowIso() };
+    const progressEvent: AgentProgressEvent = {
+      ...event,
+      at: nowIso(),
+      runId: run.id,
+    };
     appendProgress(run, progressEvent);
-    emit(progressEvent);
+    emit(progressEvent, runProgress);
   };
 
   const emitTerminalProgress = (
@@ -263,14 +280,16 @@ export const createAgentExecutionEngine = ({
     status: 'timeout' | 'cancelled',
     label: string,
     step?: AgentPlanStep,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): void => {
     emit({
       at: nowIso(),
       phase: run.state,
       label,
       status,
+      runId: run.id,
       ...(step ? { toolId: step.toolId, stepId: step.id } : {}),
-    });
+    }, runProgress);
   };
 
   const clearActiveCall = (runId: string): void => {
@@ -293,7 +312,10 @@ export const createAgentExecutionEngine = ({
     run.terminalError = { code: 'AGENT_RUN_CANCELLED', message };
   };
 
-  const persistCancelledRun = async (run: AgentRunRecord): Promise<AgentRunRecord> => (
+  const persistCancelledRun = async (
+    run: AgentRunRecord,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
+  ): Promise<AgentRunRecord> => (
     withRunMutation(run.id, async () => {
       const latest = await store.get(run.id);
       const current = latest ?? run;
@@ -301,7 +323,7 @@ export const createAgentExecutionEngine = ({
       if (latest?.state !== 'cancelled') {
         forceCancelled(current);
         await store.save(current);
-        emitTerminalProgress(current, 'cancelled', '操作已取消。');
+        emitTerminalProgress(current, 'cancelled', '操作已取消。', undefined, runProgress);
       }
       Object.assign(run, current);
       return current;
@@ -312,6 +334,7 @@ export const createAgentExecutionEngine = ({
     run: AgentRunRecord,
     step: AgentPlanStep,
     result: AgentExecutionResult,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): Promise<AgentExecutionResult> => withRunMutation(run.id, async () => {
     const latest = await store.get(run.id);
     if (latest && isTerminalAgentState(latest.state)) {
@@ -341,7 +364,7 @@ export const createAgentExecutionEngine = ({
       status: persistedStatus,
       toolId: step.toolId,
       stepId: step.id,
-    });
+    }, runProgress);
 
     if (effectiveResult.status !== 'success') {
       const nextState = effectiveResult.status === 'timeout'
@@ -374,7 +397,7 @@ export const createAgentExecutionEngine = ({
     }
 
     if (effectiveResult.status === 'timeout' || effectiveResult.status === 'cancelled') {
-      emitTerminalProgress(run, effectiveResult.status, effectiveResult.message, step);
+      emitTerminalProgress(run, effectiveResult.status, effectiveResult.message, step, runProgress);
     }
     return effectiveResult;
   });
@@ -485,11 +508,12 @@ export const createAgentExecutionEngine = ({
   const pauseForConfirmation = async (
     run: AgentRunRecord,
     step: AgentPlanStep,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): Promise<AgentExecutionResult> => {
     const definition = registry.get(step.toolId);
     if (!definition) {
       const result = engineError('UNKNOWN_TOOL', `未知工具：${step.toolId}`, `Unknown tool: ${step.toolId}`);
-      await saveTerminalResult(run, step, result);
+      await saveTerminalResult(run, step, result, runProgress);
       return result;
     }
 
@@ -499,14 +523,14 @@ export const createAgentExecutionEngine = ({
         '写工具必须支持取消信号后才能执行。',
         `Write tool ${step.toolId} does not declare supportsAbort.`,
       );
-      return await saveTerminalResult(run, step, result);
+      return await saveTerminalResult(run, step, result, runProgress);
     }
 
     try {
       registry.prepareCall(step.toolId, step.input, { runId: run.id, stepId: step.id });
     } catch (error) {
       const result = engineError('TOOL_INPUT_INVALID', '工具输入校验失败。', errorDetail(error));
-      await saveTerminalResult(run, step, result);
+      await saveTerminalResult(run, step, result, runProgress);
       return result;
     }
 
@@ -523,7 +547,7 @@ export const createAgentExecutionEngine = ({
       createdAt,
     });
     if (cancelledRuns.has(run.id)) {
-      await persistCancelledRun(run);
+      await persistCancelledRun(run, runProgress);
       return cancelledResult();
     }
 
@@ -549,7 +573,7 @@ export const createAgentExecutionEngine = ({
         status: 'waiting_confirmation',
         toolId: step.toolId,
         stepId: step.id,
-      });
+      }, runProgress);
       await store.save(run);
       if (cancelledRuns.has(run.id)) {
         forceCancelled(run);
@@ -570,9 +594,10 @@ export const createAgentExecutionEngine = ({
     step: AgentPlanStep,
     signal?: AbortSignal,
     idempotencyKey?: string,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): Promise<AgentExecutionResult> => {
     if (cancelledRuns.has(run.id)) {
-      return await saveTerminalResult(run, step, cancelledResult());
+      return await saveTerminalResult(run, step, cancelledResult(), runProgress);
     }
 
     const canStart = await withRunMutation(run.id, async () => {
@@ -588,20 +613,21 @@ export const createAgentExecutionEngine = ({
         status: 'running',
         toolId: step.toolId,
         stepId: step.id,
-      });
+      }, runProgress);
       await store.save(run);
       return !cancelledRuns.has(run.id);
     });
-    if (!canStart) return await saveTerminalResult(run, step, cancelledResult());
+    if (!canStart) return await saveTerminalResult(run, step, cancelledResult(), runProgress);
 
     const result = await executeToolCall(run, step, signal, idempotencyKey);
-    return await saveTerminalResult(run, step, result);
+    return await saveTerminalResult(run, step, result, runProgress);
   };
 
   const continuePlan = async (
     run: AgentRunRecord,
     signal?: AbortSignal,
     initialResult?: AgentExecutionResult,
+    runProgress?: (event: AgentExecutionProgressEvent) => void,
   ): Promise<AgentExecutionResult> => {
     const plan = run.plan;
     if (!plan) {
@@ -611,7 +637,7 @@ export const createAgentExecutionEngine = ({
     let latestResult = initialResult;
     while (Object.keys(run.stepResults).length < plan.steps.length) {
       if (cancelledRuns.has(run.id)) {
-        await persistCancelledRun(run);
+        await persistCancelledRun(run, runProgress);
         return cancelledResult();
       }
       const nextStep = plan.steps.find((step) => (
@@ -622,20 +648,20 @@ export const createAgentExecutionEngine = ({
       if (!nextStep) {
         const result = engineError('PLAN_DEPENDENCY_BLOCKED', '执行计划的依赖无法继续。');
         const fallbackStep = plan.steps.find((step) => run.stepResults[step.id] === undefined) ?? plan.steps[0];
-        return await saveTerminalResult(run, fallbackStep, result);
+        return await saveTerminalResult(run, fallbackStep, result, runProgress);
       }
 
       const definition = registry.get(nextStep.toolId);
       if (!definition) {
         const result = engineError('UNKNOWN_TOOL', `未知工具：${nextStep.toolId}`, `Unknown tool: ${nextStep.toolId}`);
-        return await saveTerminalResult(run, nextStep, result);
+        return await saveTerminalResult(run, nextStep, result, runProgress);
       }
 
       if (requiresConfirmation(definition.riskLevel)) {
-        return pauseForConfirmation(run, nextStep);
+        return pauseForConfirmation(run, nextStep, runProgress);
       }
 
-      latestResult = await executeStep(run, nextStep, signal);
+      latestResult = await executeStep(run, nextStep, signal, undefined, runProgress);
       if (latestResult.status !== 'success') return latestResult;
     }
 
@@ -644,7 +670,7 @@ export const createAgentExecutionEngine = ({
       return latestResult ?? engineError('RUN_TERMINAL', '运行已结束。');
     }
     if (cancelledRuns.has(run.id)) {
-      await persistCancelledRun(run);
+      await persistCancelledRun(run, runProgress);
       return cancelledResult();
     }
     const composed = await withRunMutation(run.id, async () => {
@@ -702,6 +728,7 @@ export const createAgentExecutionEngine = ({
     prompt,
     plan,
     signal,
+    onProgress: runProgress,
   }: ExecutePlanInput): Promise<AgentExecutionResult> => {
     const parsedPlan = agentPlanSchema.parse(plan);
     const existing = await store.get(runId);
@@ -712,7 +739,7 @@ export const createAgentExecutionEngine = ({
     run.plan = parsedPlan;
     transition(run, 'executing', 'Plan execution started.');
     await store.save(run);
-    return continuePlan(run, signal);
+    return continuePlan(run, signal, undefined, runProgress);
   };
 
   const engine: AgentExecutionEngine = {
@@ -747,6 +774,7 @@ export const createAgentExecutionEngine = ({
                 dependsOn: [],
               }],
             },
+            onProgress: input.onProgress,
           });
         } catch (error) {
           return await failRun(input.runId, input.prompt, error);
@@ -861,9 +889,15 @@ export const createAgentExecutionEngine = ({
               : engineError('CONFIRMATION_CONTEXT_MISMATCH', '确认信息与待执行操作不匹配。');
           }
 
-          const result = await executeStep(run, step, input.signal, history.confirmation.idempotencyKey);
+          const result = await executeStep(
+            run,
+            step,
+            input.signal,
+            history.confirmation.idempotencyKey,
+            input.onProgress,
+          );
           if (result.status !== 'success') return result;
-          return await continuePlan(run, input.signal, result);
+          return await continuePlan(run, input.signal, result, input.onProgress);
         } catch (error) {
           return await failRun(input.runId, '', error);
         } finally {

@@ -1120,7 +1120,10 @@ export const createProjectToolDefinitions = (
         const activePageId = readPageId(App);
         const options = { question, activePageId, forceCurrentPage: true };
         const context = App?.agentButler?.buildContext?.(options) || '';
-        const images = App?.agentButler?.getImages?.(options) || [];
+        const attachedImages = Array.isArray(input.images) ? input.images : [];
+        const images = attachedImages.length
+          ? attachedImages
+          : App?.agentButler?.getImages?.(options) || [];
         return {
           ok: Boolean(context || images.length),
           message: images.length

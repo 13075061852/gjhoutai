@@ -1,4 +1,8 @@
-import type { AgentExecutionEngine, AgentExecutionResult } from './execution-engine';
+import type {
+  AgentExecutionEngine,
+  AgentExecutionProgressEvent,
+  AgentExecutionResult,
+} from './execution-engine';
 import type { IntentGatewayInput } from './intent-gateway';
 import {
   AgentPlannerCancelledError,
@@ -60,13 +64,21 @@ export interface AgentRuntime {
     activePageId: string;
     projectAccessEnabled: boolean;
     webSearchEnabled: boolean;
+    sessionId?: string;
+    history?: unknown[];
+    attachments?: {
+      images?: unknown[];
+    };
     signal?: AbortSignal;
     onProgress?: (event: AgentProgressEvent) => void;
   }): Promise<AgentRuntimeResult>;
   confirm(input: {
     runId: string;
     confirmationId: string;
+    sessionId?: string;
+    history?: unknown[];
     signal?: AbortSignal;
+    onProgress?: (event: AgentProgressEvent) => void;
   }): Promise<AgentRuntimeResult>;
   cancel(runId: string): Promise<AgentRunRecord | null>;
 }
@@ -195,6 +207,12 @@ const toolCallForIntent = (intent: AgentIntent): {
   };
 };
 
+const runtimeProgressStatus = (
+  status: AgentExecutionProgressEvent['status'],
+): AgentProgressEvent['status'] => (
+  status === 'timeout' || status === 'cancelled' ? 'failed' : status
+);
+
 const terminalStateForError = (
   error: unknown,
   signal?: AbortSignal,
@@ -282,6 +300,14 @@ export const createAgentRuntime = ({
     status,
   });
 
+  const bridgeExecutionProgress = (
+    runId: string,
+    event: AgentExecutionProgressEvent,
+  ): void => emit(runId, {
+    ...event,
+    status: runtimeProgressStatus(event.status),
+  });
+
   const emitTerminal = (run: AgentRunRecord, label: string): void => {
     if (!isTerminalAgentState(run.state) || terminalEventsEmitted.has(run.id)) return;
     terminalEventsEmitted.add(run.id);
@@ -356,16 +382,23 @@ export const createAgentRuntime = ({
     intent,
     executionResult,
     signal,
+    images = [],
+    sessionId = '',
+    history = [],
   }: {
     runId: string;
     intent: AgentIntent;
     executionResult: AgentExecutionResult;
     signal?: AbortSignal;
+    images?: unknown[];
+    sessionId?: string;
+    history?: unknown[];
   }): Promise<AgentRuntimeResult> => {
     let run = await persistIntent(runId, intent) ?? await store.get(runId);
     if (!run) throw new Error(`Execution engine did not persist run ${runId}.`);
 
     if (run.state === 'awaiting_confirmation') {
+      callbacksByRun.delete(run.id);
       return runtimeResult(run, '此操作需要确认后才能执行。');
     }
     if (run.state === 'composing') {
@@ -373,7 +406,12 @@ export const createAgentRuntime = ({
       const composed = await composeGroundedResponse({
         question: run.prompt,
         results: resultsOf(run),
-        model: chatModel,
+        model: (request) => chatModel({
+          ...request,
+          ...(intent.kind === 'image_analysis' && images.length ? { images } : {}),
+          ...(sessionId ? { sessionId } : {}),
+          ...(history.length ? { history } : {}),
+        }),
         signal,
       });
       if (signal?.aborted) {
@@ -479,6 +517,11 @@ export const createAgentRuntime = ({
             purpose: 'chat',
             question: prompt,
             messages: [{ role: 'user', content: prompt }],
+            ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+            ...(Array.isArray(input.history) ? { history: input.history } : {}),
+            ...(Array.isArray(input.attachments?.images) && input.attachments.images.length
+              ? { images: input.attachments.images }
+              : {}),
             signal: linked.controller.signal,
           });
           if (linked.controller.signal.aborted) {
@@ -508,6 +551,7 @@ export const createAgentRuntime = ({
             prompt,
             plan,
             signal: linked.controller.signal,
+            onProgress: (event) => bridgeExecutionProgress(runId, event),
           });
         } else {
           const call = toolCallForIntent(intent);
@@ -518,8 +562,16 @@ export const createAgentRuntime = ({
             runId,
             prompt,
             toolId: call.toolId,
-            input: call.input,
+            input: intent.kind === 'image_analysis'
+              ? {
+                  ...call.input,
+                  images: Array.isArray(input.attachments?.images)
+                    ? input.attachments.images
+                    : [],
+                }
+              : call.input,
             signal: linked.controller.signal,
+            onProgress: (event) => bridgeExecutionProgress(runId, event),
           });
         }
 
@@ -528,6 +580,11 @@ export const createAgentRuntime = ({
           intent,
           executionResult,
           signal: linked.controller.signal,
+          images: Array.isArray(input.attachments?.images)
+            ? input.attachments.images
+            : [],
+          sessionId: input.sessionId,
+          history: Array.isArray(input.history) ? input.history : [],
         });
       } catch (error) {
         const signal = linked?.controller.signal ?? input.signal;
@@ -546,6 +603,10 @@ export const createAgentRuntime = ({
         linked?.unlink();
         if (runId && activeControllers.get(runId) === linked?.controller) {
           activeControllers.delete(runId);
+        }
+        if (runId) {
+          callbacksByRun.delete(runId);
+          terminalEventsEmitted.delete(runId);
         }
       }
     },
@@ -567,10 +628,12 @@ export const createAgentRuntime = ({
         }
 
         linked = linkController(input.runId, input.signal);
+        rememberCallback(input.runId, input.onProgress);
         const executionResult = await executionEngine.resumeConfirmedRun({
           runId: input.runId,
           confirmation,
           signal: linked.controller.signal,
+          onProgress: (event) => bridgeExecutionProgress(input.runId, event),
         });
         const latest = await store.get(input.runId);
         const intent = latest?.intent ?? run.intent ?? {
@@ -583,6 +646,8 @@ export const createAgentRuntime = ({
           intent,
           executionResult,
           signal: linked.controller.signal,
+          sessionId: input.sessionId,
+          history: Array.isArray(input.history) ? input.history : [],
         });
       } catch (error) {
         const signal = linked?.controller.signal ?? input.signal;
@@ -601,18 +666,21 @@ export const createAgentRuntime = ({
         if (activeControllers.get(input.runId) === linked?.controller) {
           activeControllers.delete(input.runId);
         }
+        callbacksByRun.delete(input.runId);
+        terminalEventsEmitted.delete(input.runId);
       }
     },
 
     async cancel(runId) {
       const controller = activeControllers.get(runId);
+      const wasActive = Boolean(controller);
       if (controller && !controller.signal.aborted) {
         controller.abort(new AgentTransportCancelledError({
           cause: 'runtime.cancel',
         }));
       }
       const run = await executionEngine.cancelRun(runId);
-      if (run && isTerminalAgentState(run.state)) {
+      if (wasActive && run && isTerminalAgentState(run.state)) {
         emitTerminal(run, deterministicAnswer(run));
       }
       return run;

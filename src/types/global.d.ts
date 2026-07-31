@@ -236,13 +236,21 @@ declare global {
       activePageId: string;
       projectAccessEnabled: boolean;
       webSearchEnabled: boolean;
+      sessionId?: string;
+      history?: unknown[];
+      attachments?: {
+        images?: unknown[];
+      };
       signal?: AbortSignal;
       onProgress?: (event: LegacyAgentProgressEvent) => void;
     }) => Promise<LegacyAgentRuntimeResult>;
     confirm: (input: {
       runId: string;
       confirmationId: string;
+      sessionId?: string;
+      history?: unknown[];
       signal?: AbortSignal;
+      onProgress?: (event: LegacyAgentProgressEvent) => void;
     }) => Promise<LegacyAgentRuntimeResult>;
     cancel: (runId: string) => Promise<LegacyAgentRunRecord | null>;
   };

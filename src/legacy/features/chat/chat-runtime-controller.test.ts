@@ -1,6 +1,14 @@
+import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
+import { createAgentExecutionEngine } from '../agent-runtime/execution-engine';
 import type { AgentProgressEvent, AgentRunRecord, AgentRunState } from '../agent-runtime/protocol';
-import type { AgentRuntime, AgentRuntimeResult } from '../agent-runtime/runtime';
+import { createMemoryAgentRunStore } from '../agent-runtime/run-store';
+import {
+  createAgentRuntime,
+  type AgentRuntime,
+  type AgentRuntimeResult,
+} from '../agent-runtime/runtime';
+import { createAgentToolRegistry } from '../agent-runtime/tool-registry';
 import {
   createChatRuntimeController,
   type ChatRuntimeMessage,
@@ -45,6 +53,7 @@ const createHarness = (
   } = {},
 ) => {
   const messages: ChatRuntimeMessage[] = [];
+  const messageUpdates: ChatRuntimeMessage[] = [];
   const busy: boolean[] = [];
   const runtime: AgentRuntime = {
     run: vi.fn().mockResolvedValue(runtimeResult('run-1', 'completed')),
@@ -69,7 +78,8 @@ const createHarness = (
       return messages.length - 1;
     },
     updateAssistantMessage(index, message) {
-      messages[index] = message;
+      messages[Number(index)] = message;
+      messageUpdates.push(structuredClone(message));
     },
     setBusy(value) {
       busy.push(value);
@@ -81,6 +91,7 @@ const createHarness = (
     controller,
     focusInput,
     messages,
+    messageUpdates,
     prepareAttachments,
     runtime,
   };
@@ -134,6 +145,84 @@ describe('chat runtime controller', () => {
       }),
     ]);
     expect(emitProgress).toBeTypeOf('function');
+  });
+
+  it('shows each real execution-engine tool step once through the runtime bridge', async () => {
+    let finishTool!: () => void;
+    const toolFinished = new Promise<void>((resolve) => {
+      finishTool = resolve;
+    });
+    const registry = createAgentToolRegistry([{
+      id: 'inventory.read',
+      version: 2,
+      title: '读取库存',
+      description: '读取库存',
+      category: 'inventory',
+      riskLevel: 'read',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      timeoutMs: 30_000,
+      maxRetries: 0,
+      idempotent: true,
+      supportsAbort: true,
+      async handler() {
+        await toolFinished;
+        return {
+          status: 'success',
+          message: '库存读取完成。',
+          data: { count: 3 },
+          evidence: [{ count: 3 }],
+          actions: [],
+        };
+      },
+    }]);
+    const store = createMemoryAgentRunStore();
+    const executionEngine = createAgentExecutionEngine({
+      registry,
+      store,
+      now: () => now,
+    });
+    const runtime = createAgentRuntime({
+      gateway: {
+        route: vi.fn().mockResolvedValue({
+          kind: 'single_tool',
+          confidence: 0.99,
+          reason: 'inventory lookup',
+          toolId: 'inventory.read',
+          toolInput: {},
+        }),
+      },
+      planner: { plan: vi.fn() },
+      registry,
+      executionEngine,
+      store,
+      chatModel: vi.fn().mockResolvedValue('库存共有 3 条。'),
+      now: () => now,
+      createId: () => 'run-real-engine',
+    });
+    const harness = createHarness(runtime);
+
+    const running = harness.controller.submit({ prompt: '读取库存' });
+    await vi.waitFor(() => {
+      expect(harness.messages[0]?.agentSteps?.[0]).toMatchObject({
+        phase: 'executing',
+        stepId: 'single-step',
+        status: 'running',
+      });
+    });
+    expect(harness.messages).toHaveLength(1);
+
+    finishTool();
+    await running;
+
+    expect(harness.messageUpdates.filter((message) => (
+      message.agentSteps?.[0]?.stepId === 'single-step'
+      && message.agentSteps[0].status === 'running'
+    ))).toHaveLength(1);
+    expect(harness.messageUpdates.filter((message) => (
+      message.agentSteps?.[0]?.stepId === 'single-step'
+      && message.agentSteps[0].status === 'completed'
+    ))).toHaveLength(1);
   });
 
   it('renders confirmation target, parameters, impact, expiry and both actions', async () => {
@@ -221,7 +310,7 @@ describe('chat runtime controller', () => {
         return harness.messages.length - 1;
       },
       updateAssistantMessage: (index, message) => {
-        harness.messages[index] = message;
+        harness.messages[Number(index)] = message;
       },
       setBusy: (value) => harness.busy.push(value),
       focusInput: harness.focusInput,
@@ -254,6 +343,52 @@ describe('chat runtime controller', () => {
       pending: false,
     });
     expect(harness.busy).toEqual([true, false]);
+  });
+
+  it('passes prepared authorized attachments and the originating session snapshot into runtime.run', async () => {
+    const authorizedImage = {
+      type: 'image_url',
+      image_url: { url: 'data:image/jpeg;base64,compressed-authorized' },
+    };
+    const history = [{ id: 'user-a', role: 'user', content: '分析图片' }];
+    const harness = createHarness({}, {
+      prepareAttachments: async () => ({
+        attachments: { images: [authorizedImage] },
+      }),
+    });
+    const controller = createChatRuntimeController({
+      runtime: harness.runtime,
+      getActivePageId: () => 'dashboard',
+      getRunConfig: () => ({
+        projectAccessEnabled: true,
+        webSearchEnabled: true,
+      }),
+      getSessionContext: () => ({
+        sessionId: 'session-a',
+        history,
+      }),
+      prepareAttachments: harness.prepareAttachments,
+      addAssistantMessage(message) {
+        harness.messages.push(message);
+        return {
+          sessionId: 'session-a',
+          messageId: 'assistant-a',
+        };
+      },
+      updateAssistantMessage(_messageRef, message) {
+        harness.messages[0] = message;
+      },
+      setBusy: (value) => harness.busy.push(value),
+      focusInput: harness.focusInput,
+    });
+
+    await controller.submit({ prompt: '分析图片' });
+
+    expect(harness.runtime.run).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-a',
+      history,
+      attachments: { images: [authorizedImage] },
+    }));
   });
 
   it('ignores progress and results from an older superseded run', async () => {
@@ -366,6 +501,158 @@ describe('chat runtime controller', () => {
       content: 'Agent 运行已取消。',
       pending: false,
       agentConfirmation: null,
+    });
+  });
+
+  it.each(['confirm', 'cancel'] as const)(
+    'hydrates and updates the original persisted confirmation message after reload on %s',
+    async (action) => {
+      const confirmation = {
+        version: 2 as const,
+        id: 'confirmation-reload',
+        runId: 'run-confirm-reload',
+        stepId: 'delete-row',
+        toolId: 'inventory.delete',
+        inputHash: 'hash',
+        riskLevel: 'delete' as const,
+        expiresAt: '2026-07-31T08:10:00.000Z',
+        idempotencyKey: 'idem-reload',
+        createdAt: now,
+      };
+      const persisted = runtimeResult('run-confirm-reload', 'awaiting_confirmation', {
+        run: runRecord('run-confirm-reload', 'awaiting_confirmation', {
+          pendingConfirmation: confirmation,
+        }),
+        answer: '此操作需要确认后才能执行。',
+      });
+      const terminalRun = runRecord(
+        'run-confirm-reload',
+        action === 'confirm' ? 'completed' : 'cancelled',
+        action === 'cancel'
+          ? {
+              terminalError: {
+                code: 'AGENT_RUNTIME_CANCELLED',
+                message: 'Agent 运行已取消。',
+              },
+            }
+          : {},
+      );
+      const messages = [{
+        ...runtimeResult('unused', 'completed'),
+      }] as unknown as ChatRuntimeMessage[];
+      messages[0] = {
+        role: 'assistant',
+        id: 'assistant-confirm-reload',
+        agentRunId: 'run-confirm-reload',
+        content: persisted.answer,
+        pending: false,
+        agentConfirmation: {
+          runId: 'run-confirm-reload',
+          confirmationId: 'confirmation-reload',
+          target: 'inventory.delete',
+          parameters: [],
+          impact: '将删除项目数据，此操作可能无法恢复',
+          expiresAt: confirmation.expiresAt,
+          actions: [
+            { id: 'confirm', label: '确认执行' },
+            { id: 'cancel', label: '取消' },
+          ],
+        },
+      };
+      const runtime: AgentRuntime = {
+        run: vi.fn(),
+        confirm: vi.fn().mockResolvedValue({
+          run: terminalRun,
+          state: terminalRun.state,
+          answer: '删除完成。',
+          images: [],
+          actions: [],
+        }),
+        cancel: vi.fn().mockResolvedValue(terminalRun),
+      };
+      const controller = createChatRuntimeController({
+        runtime,
+        getActivePageId: () => 'dashboard',
+        getRunConfig: () => ({
+          projectAccessEnabled: true,
+          webSearchEnabled: true,
+        }),
+        getSessionContext: () => ({ sessionId: 'session-b', history: [] }),
+        findAssistantMessageByRunId: () => ({
+          messageRef: {
+            sessionId: 'session-a',
+            messageId: 'assistant-confirm-reload',
+          },
+          message: messages[0],
+        }),
+        addAssistantMessage: vi.fn(),
+        updateAssistantMessage(_messageRef, message) {
+          messages[0] = message;
+        },
+        setBusy: vi.fn(),
+        focusInput: vi.fn(),
+      });
+
+      if (action === 'confirm') {
+        await controller.confirm({
+          runId: 'run-confirm-reload',
+          confirmationId: 'confirmation-reload',
+        });
+      } else {
+        await controller.cancel('run-confirm-reload');
+      }
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        id: 'assistant-confirm-reload',
+        agentRunId: 'run-confirm-reload',
+        pending: false,
+        agentConfirmation: null,
+      });
+      expect(messages[0].content).toBe(
+        action === 'confirm' ? '删除完成。' : 'Agent 运行已取消。',
+      );
+    },
+  );
+
+  it('releases terminal message and run tracking while retaining an awaiting confirmation', async () => {
+    const completedHarness = createHarness();
+    for (let index = 0; index < 20; index += 1) {
+      await completedHarness.controller.submit({ prompt: `问题 ${index}` });
+    }
+    expect(completedHarness.controller.getRetainedStateSize()).toEqual({
+      messages: 0,
+      runs: 0,
+    });
+
+    const confirmation = {
+      version: 2 as const,
+      id: 'confirmation-retained',
+      runId: 'run-retained',
+      stepId: 'write',
+      toolId: 'formula.create',
+      inputHash: 'hash',
+      riskLevel: 'create' as const,
+      expiresAt: '2026-07-31T08:10:00.000Z',
+      idempotencyKey: 'idem-retained',
+      createdAt: now,
+    };
+    const waitingHarness = createHarness({
+      run: vi.fn().mockResolvedValue(runtimeResult(
+        'run-retained',
+        'awaiting_confirmation',
+        {
+          run: runRecord('run-retained', 'awaiting_confirmation', {
+            pendingConfirmation: confirmation,
+          }),
+        },
+      )),
+    });
+    await waitingHarness.controller.submit({ prompt: '创建配方' });
+
+    expect(waitingHarness.controller.getRetainedStateSize()).toEqual({
+      messages: 1,
+      runs: 1,
     });
   });
 });

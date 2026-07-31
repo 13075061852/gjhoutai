@@ -18,6 +18,9 @@ export type AgentChatModelRequest = {
   purpose: 'chat' | 'grounded_response';
   question: string;
   evidence?: unknown[];
+  images?: unknown[];
+  sessionId?: string;
+  history?: unknown[];
   messages: Array<{ role: 'system' | 'user'; content: string }>;
   signal?: AbortSignal;
 };

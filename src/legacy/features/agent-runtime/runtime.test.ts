@@ -12,6 +12,7 @@ import type {
   AgentProgressEvent,
   AgentToolDefinition,
 } from './protocol';
+import { createProjectToolRegistry } from './project-tool-definitions';
 import { createMemoryAgentRunStore, type AgentRunStore } from './run-store';
 import { createAgentRuntime } from './runtime';
 import { createAgentToolRegistry } from './tool-registry';
@@ -214,6 +215,31 @@ describe('agent runtime coordinator', () => {
     expect(terminalEvents(events)).toHaveLength(1);
   });
 
+  it('keeps the originating session id and history on the chat-model request', async () => {
+    const history = [
+      { id: 'user-a', role: 'user', content: 'A 会话问题' },
+      { id: 'assistant-old', role: 'assistant', content: 'A 会话旧回答' },
+    ];
+    const harness = createHarness({
+      intent: { kind: 'chat', confidence: 0.99, reason: 'ordinary chat' },
+    });
+
+    await harness.runtime.run({
+      prompt: '继续分析 A',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      sessionId: 'session-a',
+      history,
+    });
+
+    expect(harness.chatModel).toHaveBeenCalledWith(expect.objectContaining({
+      purpose: 'chat',
+      sessionId: 'session-a',
+      history,
+    }));
+  });
+
   it('executes a two-tool complex plan and composes one grounded terminal answer', async () => {
     const plan: AgentPlanV2 = {
       version: 2,
@@ -255,6 +281,136 @@ describe('agent runtime coordinator', () => {
     expect(result.answer).toContain('配方共有 2 条');
     expect(Object.keys(result.run.stepResults)).toEqual(['inventory', 'formula']);
     expect(terminalEvents(events)).toHaveLength(1);
+  });
+
+  it('passes authorized image attachments through the real media adapter and visual model request', async () => {
+    const attachedImage = {
+      type: 'image_url',
+      image_url: { url: 'data:image/jpeg;base64,authorized-compressed-image' },
+    };
+    const pageImage = {
+      type: 'image_url',
+      image_url: { url: 'data:image/jpeg;base64,page-image' },
+    };
+    const registry = createProjectToolRegistry({
+      constants: {},
+      agentButler: {
+        buildContext: () => '当前图谱上下文',
+        getImages: () => [pageImage],
+      },
+    }, {
+      searchWeb: vi.fn(),
+    });
+    const store = createMemoryAgentRunStore();
+    const executionEngine = createAgentExecutionEngine({
+      registry,
+      store,
+      now: fixedNow,
+    });
+    const chatModel = vi.fn().mockResolvedValue('图片显示一个明显峰值。');
+    const runtime = createAgentRuntime({
+      gateway: {
+        route: vi.fn().mockResolvedValue({
+          kind: 'image_analysis',
+          confidence: 0.99,
+          reason: 'attached image',
+          toolId: 'media.analyzeImages',
+          toolInput: { question: '分析这张图片' },
+        }),
+      },
+      planner: { plan: vi.fn() },
+      registry,
+      executionEngine,
+      store,
+      chatModel,
+      now: fixedNow,
+      createId: () => 'run-image-attachment',
+    });
+
+    const result = await runtime.run({
+      prompt: '分析这张图片',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      attachments: { images: [attachedImage] },
+    });
+
+    expect(result.run.stepResults['single-step']?.data).toMatchObject({
+      imageCount: 1,
+      images: [attachedImage],
+    });
+    expect(chatModel).toHaveBeenCalledWith(expect.objectContaining({
+      purpose: 'grounded_response',
+      images: [attachedImage],
+    }));
+  });
+
+  it('bridges real execution-engine step progress through the per-run runtime callback once', async () => {
+    const harness = createHarness({
+      intent: {
+        kind: 'single_tool',
+        confidence: 0.99,
+        reason: 'inventory lookup',
+        toolId: 'inventory.read',
+        toolInput: {},
+      },
+      tools: [resultTool('inventory.read', vi.fn(async () => completedResult(
+        '库存读取完成。',
+        [{ field: 'inventoryCount', value: 3 }],
+      )))],
+    });
+    const events: AgentProgressEvent[] = [];
+
+    await harness.runtime.run({
+      prompt: '读取库存',
+      activePageId: 'inventory',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      onProgress: (event) => events.push(event),
+    });
+
+    expect(events.filter((event) => (
+      event.phase === 'executing'
+      && event.stepId === 'single-step'
+      && event.status === 'running'
+    ))).toHaveLength(1);
+    expect(events.filter((event) => (
+      event.phase === 'executing'
+      && event.stepId === 'single-step'
+      && event.status === 'completed'
+    ))).toHaveLength(1);
+  });
+
+  it('bridges an execution-engine unknown-tool failure through the current run callback', async () => {
+    const harness = createHarness({
+      intent: { kind: 'complex_agent', confidence: 0.9, reason: 'planned operation' },
+      plan: {
+        version: 2,
+        kind: 'complex_agent',
+        summary: '调用缺失工具',
+        steps: [{
+          id: 'missing-step',
+          toolId: 'missing.tool',
+          input: {},
+          dependsOn: [],
+        }],
+      },
+    });
+    const events: AgentProgressEvent[] = [];
+
+    await harness.runtime.run({
+      prompt: '执行缺失工具',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      onProgress: (event) => events.push(event),
+    });
+
+    expect(events.filter((event) => (
+      event.phase === 'executing'
+      && event.stepId === 'missing-step'
+      && event.status === 'failed'
+    ))).toHaveLength(1);
   });
 
   it('pauses a write plan for confirmation and resumes it exactly once', async () => {
@@ -300,6 +456,7 @@ describe('agent runtime coordinator', () => {
     const completed = await harness.runtime.confirm({
       runId: waiting.run.id,
       confirmationId: waiting.run.pendingConfirmation!.id,
+      onProgress: (event) => events.push(event),
     });
 
     expect(completed.run.state).toBe('completed');
@@ -308,6 +465,51 @@ describe('agent runtime coordinator', () => {
     expect(completed.answer).not.toContain('配方已创建');
     expect(writeHandler).toHaveBeenCalledOnce();
     expect(terminalEvents(events)).toHaveLength(1);
+  });
+
+  it('detaches the original run callback while confirmation is persisted', async () => {
+    const writeHandler = vi.fn(async () => completedResult(
+      '配方已创建。',
+      [{ id: 'formula-1', created: true }],
+    ));
+    const harness = createHarness({
+      intent: { kind: 'complex_agent', confidence: 0.95, reason: 'write request' },
+      plan: {
+        version: 2,
+        kind: 'complex_agent',
+        summary: '创建配方',
+        steps: [{
+          id: 'create-formula',
+          toolId: 'formula.create',
+          input: { name: 'PBT-A' },
+          dependsOn: [],
+        }],
+      },
+      tools: [resultTool('formula.create', writeHandler, {
+        riskLevel: 'create',
+        idempotent: false,
+      })],
+    });
+    const initialEvents: AgentProgressEvent[] = [];
+    const resumedEvents: AgentProgressEvent[] = [];
+
+    const waiting = await harness.runtime.run({
+      prompt: '创建 PBT-A 配方',
+      activePageId: 'formula-management',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      onProgress: (event) => initialEvents.push(event),
+    });
+    const initialEventCount = initialEvents.length;
+
+    await harness.runtime.confirm({
+      runId: waiting.run.id,
+      confirmationId: waiting.run.pendingConfirmation!.id,
+      onProgress: (event) => resumedEvents.push(event),
+    });
+
+    expect(initialEvents).toHaveLength(initialEventCount);
+    expect(resumedEvents.some((event) => event.stepId === 'create-formula')).toBe(true);
   });
 
   it('cancels the active child tool request and emits one cancelled terminal event', async () => {

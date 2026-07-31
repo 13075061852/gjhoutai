@@ -21,6 +21,7 @@ import {
   createChatRuntimeController,
   type ChatRuntimeMessage,
 } from './chat/chat-runtime-controller';
+import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store';
 
 (function () {
   'use strict';
@@ -144,6 +145,8 @@ import {
     return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   };
 
+  const makeMessageId = () => `message-${makeSessionId()}`;
+
   const cloneActionInput = (input) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
     try {
@@ -200,6 +203,7 @@ import {
   }).filter(Boolean).slice(0, 10) : []);
 
   const normalizeMessage = (message) => ({
+    id: String(message?.id || makeMessageId()),
     role: message?.role === 'user' || message?.role === 'assistant' ? message.role : 'system',
     content: String(message?.content || ''),
     images: Array.isArray(message?.images) ? message.images.map((item) => {
@@ -237,6 +241,11 @@ import {
     agentConfirmation: message?.agentConfirmation && typeof message.agentConfirmation === 'object'
       ? message.agentConfirmation
       : null,
+    agentRunId: String(
+      message?.agentRunId
+      || message?.agentConfirmation?.runId
+      || '',
+    ),
   });
 
   const deriveSessionTitle = (messages) => {
@@ -1348,14 +1357,44 @@ import {
     return compressed.filter(Boolean);
   };
 
+  const findChatMessageLocation = ({ messageRef, pendingIndex, requestId } = {} as any) => {
+    if (messageRef?.sessionId && messageRef?.messageId) {
+      const session = state.chatSessions.find((item) => item.id === messageRef.sessionId);
+      const index = session?.messages?.findIndex((item) => item.id === messageRef.messageId) ?? -1;
+      if (session && index >= 0) return { session, index, message: session.messages[index] };
+    }
+    if (requestId) {
+      for (const session of state.chatSessions) {
+        const index = session.messages.findIndex((item) => item?.imageUploadAuth?.id === requestId);
+        if (index >= 0) return { session, index, message: session.messages[index] };
+      }
+    }
+    const parsedIndex = Number.parseInt(pendingIndex, 10);
+    const session = getActiveSession();
+    if (session && Number.isFinite(parsedIndex) && parsedIndex >= 0 && session.messages[parsedIndex]) {
+      return { session, index: parsedIndex, message: session.messages[parsedIndex] };
+    }
+    return null;
+  };
+
+  const persistChatMessageLocation = (location) => {
+    if (!location?.session) return;
+    location.session.updatedAt = nowIso();
+    if (location.session.id === state.chatSessionId) {
+      state.chatHistory = location.session.messages;
+      renderChatMessages({ autoScroll: true });
+    }
+    saveChatState();
+  };
+
   const settleImageUploadAuthorization = (requestId, approved) => {
     const request = imageUploadAuthResolvers.get(requestId);
     if (!request) {
-      const expiredIndex = state.chatHistory.findIndex((message) => message?.imageUploadAuth?.id === requestId);
-      if (expiredIndex >= 0) {
-        const message = state.chatHistory[expiredIndex];
+      const expiredLocation = findChatMessageLocation({ requestId });
+      if (expiredLocation) {
+        const { message } = expiredLocation;
         const baseContent = stripPendingStatus(String(message?.content || ''), message?.pendingStatus);
-        state.chatHistory[expiredIndex] = {
+        expiredLocation.session.messages[expiredLocation.index] = {
           ...message,
           content: [
             baseContent,
@@ -1368,8 +1407,7 @@ import {
             status: 'cancelled',
           },
         };
-        saveChatState();
-        renderChatMessages({ autoScroll: true });
+        persistChatMessageLocation(expiredLocation);
       }
       App.notify?.warn?.('上传授权已失效，请重新发送问题后再试。', { key: `image-upload-expired:${requestId}` });
       return;
@@ -1377,7 +1415,8 @@ import {
     imageUploadAuthResolvers.delete(requestId);
     request.cleanup?.();
 
-    const message = state.chatHistory[request.pendingIndex];
+    const location = findChatMessageLocation(request);
+    const message = location?.message;
     if (message?.imageUploadAuth?.id === requestId) {
       message.imageUploadAuth = {
         ...message.imageUploadAuth,
@@ -1385,8 +1424,7 @@ import {
       };
       message.pending = approved;
       message.pendingStatus = approved ? '准备上传图片' : '';
-      saveChatState();
-      renderChatMessages({ autoScroll: true });
+      persistChatMessageLocation(location);
     }
 
     request.resolve(Boolean(approved));
@@ -1405,7 +1443,9 @@ import {
       return;
     }
     const pendingIndex = Number.parseInt(options.pendingIndex, 10);
-    if (!Number.isFinite(pendingIndex) || pendingIndex < 0) {
+    const messageRef = options.messageRef;
+    const location = findChatMessageLocation({ messageRef, pendingIndex });
+    if (!location) {
       resolve(true);
       return;
     }
@@ -1435,6 +1475,7 @@ import {
       reject,
       cleanup,
       pendingIndex,
+      messageRef,
     });
 
     const content = [
@@ -1443,7 +1484,8 @@ import {
       '请在下方确认要上传的图片清单；授权后我会继续让 AI 阅读图片并输出分析结果。',
     ].filter(Boolean).join('\n\n');
 
-    flushStreamRender(pendingIndex, content, {
+    location.session.messages[location.index] = {
+      ...buildAssistantRenderMessage(content, {
       pending: true,
       pendingStatus: '等待上传授权',
       imageUploadAuth: {
@@ -1456,7 +1498,11 @@ import {
           meta: String(image.meta || '').trim(),
         })),
       },
-    });
+      }),
+      id: location.message.id,
+      agentRunId: location.message.agentRunId,
+    };
+    persistChatMessageLocation(location);
   });
 
   const getContextMessages = (config, prompt, projectContextEnabled = isProjectAccessEnabled(), options = {} as any) => {
@@ -2485,6 +2531,7 @@ import {
     if (!session) return;
 
     session.messages.push({
+      id: makeMessageId(),
       role,
       content,
       images: normalizeImages(images),
@@ -2500,36 +2547,40 @@ import {
     renderChat();
   };
 
-  const addRuntimeAssistantMessage = (message: ChatRuntimeMessage) => {
-    const session = getActiveSession();
-    if (!session) return -1;
-    session.messages.push({
+  const runtimeMessageStore = createChatRuntimeMessageStore({
+    getSessions: () => state.chatSessions,
+    getActiveSessionId: () => state.chatSessionId,
+    createMessageId: makeMessageId,
+    onChange(sessionId) {
+      const session = state.chatSessions.find((item) => item.id === sessionId);
+      if (!session) return;
+      session.updatedAt = nowIso();
+      if (session.id === state.chatSessionId) {
+        state.chatHistory = session.messages;
+        renderChatMessages({ autoScroll: true });
+      }
+      saveChatState();
+    },
+  });
+
+  const addRuntimeAssistantMessage = (message: ChatRuntimeMessage, requestedRef) => {
+    return runtimeMessageStore.addAssistantMessage({
+      ...message,
+      role: 'assistant',
+      images: normalizeImages(message.images),
+      actions: normalizeSkillActions(message.actions),
+      searchSources: normalizeMessageSearchSources(message.searchSources),
+    }, requestedRef);
+  };
+
+  const updateRuntimeAssistantMessage = (messageRef, message: ChatRuntimeMessage) => {
+    runtimeMessageStore.updateAssistantMessage(messageRef, {
       ...message,
       role: 'assistant',
       images: normalizeImages(message.images),
       actions: normalizeSkillActions(message.actions),
       searchSources: normalizeMessageSearchSources(message.searchSources),
     });
-    session.updatedAt = nowIso();
-    state.chatHistory = session.messages;
-    saveChatState();
-    renderChatMessages({ autoScroll: true });
-    return session.messages.length - 1;
-  };
-
-  const updateRuntimeAssistantMessage = (messageIndex, message: ChatRuntimeMessage) => {
-    if (!Number.isInteger(messageIndex) || messageIndex < 0 || !state.chatHistory[messageIndex]) return;
-    state.chatHistory[messageIndex] = {
-      ...message,
-      role: 'assistant',
-      images: normalizeImages(message.images),
-      actions: normalizeSkillActions(message.actions),
-      searchSources: normalizeMessageSearchSources(message.searchSources),
-    };
-    const session = getActiveSession();
-    if (session) session.updatedAt = nowIso();
-    saveChatState();
-    renderChatMessages({ autoScroll: true });
   };
 
   const getRuntimeRunConfig = () => {
@@ -2577,9 +2628,13 @@ import {
     context.attachedDataFile = context.projectAccessEnabled ? getAttachedDataFile(prompt) : null;
     context.attachedDataContext = context.projectAccessEnabled ? getAttachedDataContext(prompt) : '';
 
-    if (!rawImages.length) return undefined;
+    if (!rawImages.length) {
+      return {
+        attachments: { images: [] },
+      };
+    }
     const approved = await requestImageUploadAuthorization(rawImages, {
-      pendingIndex: Number(messageRef),
+      messageRef,
       source: '本次消息',
       signal,
     });
@@ -2589,29 +2644,55 @@ import {
       };
     }
     context.attachedImages = await compressImagesForAi(rawImages, { prompt });
-    const userMessage = state.chatHistory[Number(messageRef) - 1];
+    const session = messageRef && typeof messageRef === 'object'
+      ? state.chatSessions.find((item) => item.id === messageRef.sessionId)
+      : getActiveSession();
+    const assistantIndex = session?.messages?.findIndex(
+      (item) => item.id === messageRef?.messageId,
+    ) ?? -1;
+    let userMessage = null;
+    for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+      if (session.messages[index]?.role === 'user') {
+        userMessage = session.messages[index];
+        break;
+      }
+    }
     if (userMessage?.role === 'user') {
       userMessage.images = context.attachedImages;
       saveChatState();
-      renderChatMessages({ autoScroll: true });
+      if (session?.id === state.chatSessionId) {
+        renderChatMessages({ autoScroll: true });
+      }
     }
-    return undefined;
+    return {
+      attachments: { images: context.attachedImages },
+    };
   };
 
   const requestRuntimeCompletion = async (request) => {
     const context = runtimeRequestContext;
     if (!context) throw new Error('本次运行配置未就绪。');
     const { config, model } = context;
+    const requestImages = normalizeImages(request.images || context.attachedImages);
     let messages = [];
 
     if (request.purpose === 'grounded_response') {
       messages = [
         { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
-        ...request.messages,
+        ...request.messages.map((item, index, items) => {
+          const isLastUserMessage = item.role === 'user'
+            && !items.slice(index + 1).some((candidate) => candidate.role === 'user');
+          return toApiMessage(item, {
+            images: isLastUserMessage ? requestImages : [],
+          });
+        }),
       ];
     } else {
+      const originatingHistory = Array.isArray(request.history)
+        ? request.history
+        : state.chatHistory;
       const history = selectRecentHistory(
-        state.chatHistory.filter((item) => (
+        originatingHistory.filter((item) => (
           (item.role === 'user' || item.role === 'assistant')
           && !item.pending
         )),
@@ -2635,7 +2716,7 @@ import {
             files: isCurrentUserMessage && context.attachedDataFile
               ? [context.attachedDataFile]
               : [],
-            images: isCurrentUserMessage ? context.attachedImages : item.images,
+            images: isCurrentUserMessage ? requestImages : item.images,
           });
         }),
       ];
@@ -2670,7 +2751,7 @@ import {
       model,
       endpoint: `${config.baseUrl}/chat/completions`,
       pageId: getActivePageId(),
-      sessionId: state.chatSessionId,
+      sessionId: String(request.sessionId || state.chatSessionId || ''),
       startedAt,
       endedAt: nowIso(),
       durationMs: (window.performance?.now?.() ?? Date.now()) - startedMs,
@@ -2682,7 +2763,7 @@ import {
       completionText: content,
       requestMeta: {
         messages: messages.length,
-        images: context.attachedImages.length,
+        images: requestImages.length,
         files: context.attachedDataFile ? 1 : 0,
         attachedData: Boolean(context.attachedDataContext || context.attachedDataFile),
         stream: false,
@@ -2749,6 +2830,9 @@ import {
       runtime,
       getActivePageId,
       getRunConfig: getRuntimeRunConfig,
+      getSessionContext: runtimeMessageStore.getSessionContext,
+      findAssistantMessageByRunId: runtimeMessageStore.findAssistantMessageByRunId,
+      createMessageId: makeMessageId,
       prepareAttachments: prepareRuntimeAttachments,
       addAssistantMessage: addRuntimeAssistantMessage,
       updateAssistantMessage: updateRuntimeAssistantMessage,

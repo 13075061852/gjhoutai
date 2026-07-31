@@ -62,4 +62,41 @@ describe('agent answer grounding', () => {
     expect(selected.content).toContain('执行状态：未完成');
     expect(selected.content).not.toContain('成功更新 9 条');
   });
+
+  it('uses an exact deterministic fallback without appending model-facing prose', () => {
+    const selected = selectGroundedAnswer({
+      answer: '库存共有 99 条。',
+      evidence: [],
+      fallback: '没有取得库存数据。',
+      requiresEvidence: true,
+    });
+
+    expect(selected.content).toBe('没有取得库存数据。');
+  });
+
+  it('requires the evidence field instead of trusting result data or messages', () => {
+    const withoutEvidence = auditGroundedAnswer({
+      answer: '当前共有 3 条库存。',
+      evidence: [{
+        status: 'success',
+        message: '当前共有 3 条库存。',
+        data: { count: 3 },
+        evidence: [],
+      }],
+      requiresEvidence: true,
+    });
+    const withEvidence = auditGroundedAnswer({
+      answer: '当前共有 3 条库存。',
+      evidence: [{
+        status: 'success',
+        message: '当前共有 3 条库存。',
+        data: { count: 3 },
+        evidence: [{ field: 'count', value: 3 }],
+      }],
+      requiresEvidence: true,
+    });
+
+    expect(withoutEvidence.reasons).toContain('missing_evidence');
+    expect(withEvidence.ok).toBe(true);
+  });
 });

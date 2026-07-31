@@ -48,15 +48,44 @@ const evidenceItemSucceeded = (item: any) => {
   return item.ok === true || item.result?.ok === true || Boolean(item.data || item.message || item.summary);
 };
 
+const isV2ToolResult = (item: unknown): item is {
+  status: 'success' | 'error' | 'cancelled' | 'timeout';
+  message?: unknown;
+  evidence?: unknown[];
+} => (
+  typeof item === 'object'
+  && item !== null
+  && !Array.isArray(item)
+  && ['success', 'error', 'cancelled', 'timeout'].includes(
+    String((item as { status?: unknown }).status || ''),
+  )
+);
+
+const expandEvidenceItems = (items: unknown[]): unknown[] => items.flatMap((item) => {
+  if (!isV2ToolResult(item)) return [item];
+  if (item.status !== 'success') {
+    return [{
+      ok: false,
+      status: item.status,
+      message: String(item.message || ''),
+    }];
+  }
+  if (!Array.isArray(item.evidence) || item.evidence.length === 0) return [];
+  return item.evidence.map((evidence) => ({
+    ok: true,
+    evidence,
+  }));
+});
+
 export const auditGroundedAnswer = ({
   answer = '',
   evidence = [],
   requiresEvidence = false,
 }: GroundingAuditInput = {}): GroundingAuditResult => {
   const text = String(answer || '').trim();
-  const items = Array.isArray(evidence) ? evidence.filter(Boolean) : [];
+  const items = expandEvidenceItems(Array.isArray(evidence) ? evidence.filter(Boolean) : []);
   const successfulEvidence = items.filter(evidenceItemSucceeded);
-  const evidenceText = normalizeClaim(stringifyEvidence(items));
+  const evidenceText = normalizeClaim(stringifyEvidence(successfulEvidence));
   const reasons: string[] = [];
 
   if (!text) reasons.push('empty_answer');
@@ -95,7 +124,7 @@ export const selectGroundedAnswer = ({
   }
   const fallbackText = String(fallback || '').trim() || '项目数据不足，暂时无法给出可靠结论。';
   return {
-    content: `${fallbackText}\n\n【准确性保护】AI 总结中存在无法由项目数据验证的内容，已自动改用技能原始结果。`,
+    content: fallbackText,
     usedFallback: true,
     audit,
   };

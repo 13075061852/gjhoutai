@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAgentPlanner, AgentPlannerError, AgentPlannerTimeoutError, validatePlanDependencies } from './planner';
+import {
+  createAgentPlanner,
+  AgentPlannerCancelledError,
+  AgentPlannerError,
+  AgentPlannerTimeoutError,
+  validatePlanDependencies,
+} from './planner';
 import { createAgentToolRegistry } from './tool-registry';
 
 type PlannerMessage = { role: string; content: string };
@@ -46,18 +52,66 @@ describe('agent planner', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('rejects unknown tools, missing dependencies, cycles, and duplicate step ids', () => {
+  it('rejects duplicate step ids with the duplicate_step_id reason', () => {
     const invalid = {
       version: 2,
       kind: 'complex_agent',
       summary: 'invalid',
       steps: [
-        { id: 'same', toolId: 'unknown', input: {}, dependsOn: ['same'] },
-        { id: 'same', toolId: 'inventory.read', input: {}, dependsOn: ['missing'] },
+        { id: 'same', toolId: 'inventory.read', input: {}, dependsOn: [] },
+        { id: 'same', toolId: 'inventory.read', input: {}, dependsOn: [] },
       ],
     } as const;
 
-    expect(validatePlanDependencies(invalid, new Set(['inventory.read'])).ok).toBe(false);
+    expect(validatePlanDependencies(invalid, new Set(['inventory.read']))).toMatchObject({
+      ok: false,
+      reason: 'duplicate_step_id',
+    });
+  });
+
+  it('rejects an unknown tool with the unknown_tool reason', () => {
+    const invalid = {
+      version: 2,
+      kind: 'complex_agent',
+      summary: 'invalid',
+      steps: [{ id: 'inventory', toolId: 'unknown', input: {}, dependsOn: [] }],
+    } as const;
+
+    expect(validatePlanDependencies(invalid, new Set(['inventory.read']))).toMatchObject({
+      ok: false,
+      reason: 'unknown_tool',
+    });
+  });
+
+  it('rejects a missing dependency with the missing_dependency reason', () => {
+    const invalid = {
+      version: 2,
+      kind: 'complex_agent',
+      summary: 'invalid',
+      steps: [{ id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: ['missing'] }],
+    } as const;
+
+    expect(validatePlanDependencies(invalid, new Set(['inventory.read']))).toMatchObject({
+      ok: false,
+      reason: 'missing_dependency',
+    });
+  });
+
+  it('rejects a dependency cycle with the dependency_cycle reason', () => {
+    const invalid = {
+      version: 2,
+      kind: 'complex_agent',
+      summary: 'invalid',
+      steps: [
+        { id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: ['formula'] },
+        { id: 'formula', toolId: 'inventory.read', input: {}, dependsOn: ['inventory'] },
+      ],
+    } as const;
+
+    expect(validatePlanDependencies(invalid, new Set(['inventory.read']))).toMatchObject({
+      ok: false,
+      reason: 'dependency_cycle',
+    });
   });
 
   it('rejects V2-shaped responses with fields outside the plan contract', () => {
@@ -140,6 +194,74 @@ describe('agent planner', () => {
     await timeoutExpectation;
     expect(receivedSignal?.aborted).toBe(true);
     expect(inventoryTool.handler).not.toHaveBeenCalled();
+  });
+
+  it('rejects an already-aborted parent signal with a dedicated cancellation error without requesting a plan', async () => {
+    const registry = createAgentToolRegistry([inventoryTool]);
+    const requestPlan = vi.fn(async (): Promise<unknown> => validPlan);
+    const planner = createAgentPlanner({ registry, requestPlan });
+    const parentController = new AbortController();
+    parentController.abort('parent cancelled before planning');
+
+    const error = await planner.plan({
+      prompt: 'analyse inventory',
+      activePageId: 'inventory',
+      signal: parentController.signal,
+    }).catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(AgentPlannerCancelledError);
+    expect(error).toMatchObject({ code: 'AGENT_PLANNER_CANCELLED' });
+    expect(requestPlan).not.toHaveBeenCalled();
+  });
+
+  it('aborts an in-flight request and cleans up the parent listener when the parent signal cancels', async () => {
+    vi.useFakeTimers();
+    const registry = createAgentToolRegistry([inventoryTool]);
+    const parentController = new AbortController();
+    const removeEventListener = vi.spyOn(parentController.signal, 'removeEventListener');
+    let receivedSignal: AbortSignal | undefined;
+    const requestPlan = vi.fn((_messages: PlannerMessage[], signal: AbortSignal): Promise<unknown> => {
+      receivedSignal = signal;
+      return new Promise<unknown>(() => undefined);
+    });
+    const planner = createAgentPlanner({ registry, requestPlan });
+    const planning = planner.plan({
+      prompt: 'analyse inventory',
+      activePageId: 'inventory',
+      signal: parentController.signal,
+    });
+
+    parentController.abort('parent cancelled during planning');
+
+    await expect(planning).rejects.toBeInstanceOf(AgentPlannerCancelledError);
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cleans up its deadline timer and parent listener after a successful request', async () => {
+    vi.useFakeTimers();
+    const registry = createAgentToolRegistry([inventoryTool]);
+    const parentController = new AbortController();
+    const removeEventListener = vi.spyOn(parentController.signal, 'removeEventListener');
+    const planner = createAgentPlanner({
+      registry,
+      requestPlan: async () => ({
+        ...validPlan,
+        steps: [{ id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: [] }],
+      }),
+    });
+
+    await expect(planner.plan({
+      prompt: 'analyse inventory',
+      activePageId: 'inventory',
+      signal: parentController.signal,
+    })).resolves.toMatchObject({
+      steps: [{ id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: [] }],
+    });
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
   it('rejects plans with more than four steps', async () => {

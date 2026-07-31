@@ -22,7 +22,11 @@ type PlanValidationResult =
   | { ok: true; reason: ''; plan: AgentPlanV2 }
   | { ok: false; reason: 'invalid_plan' | 'duplicate_step_id' | 'unknown_tool' | 'missing_dependency' | 'dependency_cycle' };
 
+type AgentPlannerErrorCode = 'AGENT_PLANNER_FAILED' | 'AGENT_PLANNER_TIMEOUT' | 'AGENT_PLANNER_CANCELLED';
+
 export class AgentPlannerError extends Error {
+  readonly code: AgentPlannerErrorCode = 'AGENT_PLANNER_FAILED';
+
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
     this.name = 'AgentPlannerError';
@@ -30,9 +34,20 @@ export class AgentPlannerError extends Error {
 }
 
 export class AgentPlannerTimeoutError extends AgentPlannerError {
+  readonly code = 'AGENT_PLANNER_TIMEOUT';
+
   constructor(timeoutMs: number) {
     super(`Agent planner exceeded its ${timeoutMs}ms deadline.`);
     this.name = 'AgentPlannerTimeoutError';
+  }
+}
+
+export class AgentPlannerCancelledError extends AgentPlannerError {
+  readonly code = 'AGENT_PLANNER_CANCELLED';
+
+  constructor(options?: { cause?: unknown }) {
+    super('Agent planner request was cancelled.', options);
+    this.name = 'AgentPlannerCancelledError';
   }
 }
 
@@ -160,13 +175,13 @@ export const createAgentPlanner = ({
 
     if (input.signal?.aborted) {
       controller.abort(input.signal.reason);
-      throw new AgentPlannerError('Agent planner request was aborted.');
+      throw new AgentPlannerCancelledError({ cause: input.signal.reason });
     }
 
     let rejectExternalAbort: ((reason: AgentPlannerError) => void) | undefined;
     const onExternalAbort = () => {
       controller.abort(input.signal?.reason);
-      rejectExternalAbort?.(new AgentPlannerError('Agent planner request was aborted.'));
+      rejectExternalAbort?.(new AgentPlannerCancelledError({ cause: input.signal?.reason }));
     };
     input.signal?.addEventListener('abort', onExternalAbort, { once: true });
 

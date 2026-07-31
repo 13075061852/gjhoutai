@@ -180,8 +180,8 @@ export const createAgentPlanner = ({
 
     let rejectExternalAbort: ((reason: AgentPlannerError) => void) | undefined;
     const onExternalAbort = () => {
-      controller.abort(input.signal?.reason);
       rejectExternalAbort?.(new AgentPlannerCancelledError({ cause: input.signal?.reason }));
+      controller.abort(input.signal?.reason);
     };
     input.signal?.addEventListener('abort', onExternalAbort, { once: true });
 

@@ -214,7 +214,7 @@ describe('agent planner', () => {
     expect(requestPlan).not.toHaveBeenCalled();
   });
 
-  it('aborts an in-flight request and cleans up the parent listener when the parent signal cancels', async () => {
+  it('returns the dedicated cancellation error when an abort-aware in-flight request rejects synchronously', async () => {
     vi.useFakeTimers();
     const registry = createAgentToolRegistry([inventoryTool]);
     const parentController = new AbortController();
@@ -222,7 +222,13 @@ describe('agent planner', () => {
     let receivedSignal: AbortSignal | undefined;
     const requestPlan = vi.fn((_messages: PlannerMessage[], signal: AbortSignal): Promise<unknown> => {
       receivedSignal = signal;
-      return new Promise<unknown>(() => undefined);
+      return new Promise<unknown>((_, reject) => {
+        signal.addEventListener('abort', () => {
+          const abortError = new Error('request aborted');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        }, { once: true });
+      });
     });
     const planner = createAgentPlanner({ registry, requestPlan });
     const planning = planner.plan({
@@ -234,6 +240,7 @@ describe('agent planner', () => {
     parentController.abort('parent cancelled during planning');
 
     await expect(planning).rejects.toBeInstanceOf(AgentPlannerCancelledError);
+    await expect(planning).rejects.toMatchObject({ code: 'AGENT_PLANNER_CANCELLED' });
     expect(receivedSignal?.aborted).toBe(true);
     expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
     expect(vi.getTimerCount()).toBe(0);

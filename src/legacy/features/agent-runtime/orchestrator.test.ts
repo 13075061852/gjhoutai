@@ -1,56 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateAgentLoopDecision, getAgentSkillCallSignature } from './orchestrator';
 
-describe('project agent loop guard', () => {
+describe('project agent planner compatibility', () => {
   const allowedSkillIds = ['project.getManifest', 'business.queryPageData', 'project.finalAnswerCheck'];
 
-  it('accepts an allowed skill call and returns a stable signature', () => {
-    const decision = { action: 'callSkill', skillId: 'business.queryPageData', input: { pageId: 'order-management', intent: 'count' } };
-    const result = evaluateAgentLoopDecision(decision, { allowedSkillIds, calledSignatures: [], toolCallCount: 0 });
+  it('accepts a complete V2 plan using registered tools', () => {
+    const plan = {
+      version: 2,
+      kind: 'complex_agent',
+      summary: '读取订单后检查结果',
+      steps: [
+        { id: 'orders', toolId: 'business.queryPageData', input: { pageId: 'order-management', intent: 'count' }, dependsOn: [] },
+        { id: 'review', toolId: 'project.finalAnswerCheck', input: {}, dependsOn: ['orders'] },
+      ],
+    };
+    const result = evaluateAgentLoopDecision(plan, { allowedSkillIds });
 
     expect(result.ok).toBe(true);
-    expect(result.kind).toBe('callSkill');
-    expect(result.signature).toBe(getAgentSkillCallSignature(decision.skillId, decision.input));
+    expect(result.kind).toBe('plan');
+    expect(result.plan).toEqual(plan);
   });
 
-  it('rejects skills that are not registered in the current project', () => {
+  it('rejects V2 plans that use tools not registered in the current project', () => {
     const result = evaluateAgentLoopDecision(
-      { action: 'callSkill', skillId: 'shell.execute', input: { command: 'rm -rf /' } },
-      { allowedSkillIds, calledSignatures: [], toolCallCount: 0 }
+      {
+        version: 2,
+        kind: 'complex_agent',
+        summary: 'unsafe',
+        steps: [{ id: 'shell', toolId: 'shell.execute', input: {}, dependsOn: [] }],
+      },
+      { allowedSkillIds }
     );
 
     expect(result.ok).toBe(false);
-    expect(result.reason).toBe('unknown_skill');
+    expect(result.reason).toBe('unknown_tool');
   });
 
-  it('stops repeated calls with identical inputs', () => {
-    const signature = getAgentSkillCallSignature('business.queryPageData', { pageId: 'order-management', intent: 'count' });
+  it('rejects plans with dependency cycles', () => {
     const result = evaluateAgentLoopDecision(
-      { action: 'callSkill', skillId: 'business.queryPageData', input: { intent: 'count', pageId: 'order-management' } },
-      { allowedSkillIds, calledSignatures: [signature], toolCallCount: 1 }
+      {
+        version: 2,
+        kind: 'complex_agent',
+        summary: 'cyclic',
+        steps: [
+          { id: 'first', toolId: 'business.queryPageData', input: {}, dependsOn: ['second'] },
+          { id: 'second', toolId: 'project.finalAnswerCheck', input: {}, dependsOn: ['first'] },
+        ],
+      },
+      { allowedSkillIds }
     );
 
     expect(result.ok).toBe(false);
-    expect(result.reason).toBe('duplicate_skill_call');
+    expect(result.reason).toBe('dependency_cycle');
   });
 
-  it('requires evidence before a project-data final answer', () => {
-    const result = evaluateAgentLoopDecision(
-      { action: 'final', answer: '当前库存一切正常。', confidence: 'high' },
-      { allowedSkillIds, calledSignatures: [], toolCallCount: 0, observationCount: 0, requiresEvidence: true }
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe('final_without_evidence');
-  });
-
-  it('enforces the maximum number of tool calls', () => {
-    const result = evaluateAgentLoopDecision(
-      { action: 'callSkill', skillId: 'business.queryPageData', input: { pageId: 'order-management' } },
-      { allowedSkillIds, calledSignatures: [], toolCallCount: 4, maxToolCalls: 4 }
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe('tool_call_limit');
+  it('keeps stable skill signatures for migrations that still import it', () => {
+    expect(getAgentSkillCallSignature('business.queryPageData', { intent: 'count', pageId: 'order-management' }))
+      .toBe(getAgentSkillCallSignature('business.queryPageData', { pageId: 'order-management', intent: 'count' }));
   });
 });

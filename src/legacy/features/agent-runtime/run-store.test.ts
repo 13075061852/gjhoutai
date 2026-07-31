@@ -74,6 +74,30 @@ describe('agent run store', () => {
     expect(JSON.parse(storage.getItem(AGENT_RUN_STORAGE_KEY)!)).toContainEqual(legacyEntry);
   });
 
+  it('refuses saves that would overwrite a non-array legacy payload', async () => {
+    const legacyPayload = JSON.stringify({ version: 1, id: 'legacy-run' });
+    const storage = createStorage(legacyPayload);
+    const store = createLocalStorageAgentRunStore(storage);
+
+    await expect(store.save(createAgentRun({
+      id: 'run-legacy-save',
+      prompt: '不覆盖旧记录',
+      startedAt: '2026-07-31T00:00:00.000Z',
+    }))).rejects.toThrow('migration');
+
+    expect(storage.getItem(AGENT_RUN_STORAGE_KEY)).toBe(legacyPayload);
+  });
+
+  it('refuses removes that would overwrite a non-array legacy payload', async () => {
+    const legacyPayload = JSON.stringify({ version: 1, id: 'legacy-run' });
+    const storage = createStorage(legacyPayload);
+    const store = createLocalStorageAgentRunStore(storage);
+
+    await expect(store.remove('legacy-run')).rejects.toThrow('migration');
+
+    expect(storage.getItem(AGENT_RUN_STORAGE_KEY)).toBe(legacyPayload);
+  });
+
   it('caps persisted V2 runs at 100', async () => {
     const storage = createStorage();
     const store = createLocalStorageAgentRunStore(storage);

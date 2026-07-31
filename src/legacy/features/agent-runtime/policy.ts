@@ -7,7 +7,7 @@ type CreateAgentConfirmationInput = Omit<AgentConfirmation, 'version' | 'inputHa
   createdAt?: string;
 };
 
-type ConfirmationValidationInput = Pick<AgentConfirmation, 'runId' | 'stepId' | 'toolId'> & {
+type ConfirmationValidationInput = Pick<AgentConfirmation, 'runId' | 'stepId' | 'toolId' | 'idempotencyKey'> & {
   input: ConfirmationInput;
   now?: string;
 };
@@ -55,6 +55,7 @@ export const validateAgentConfirmation = (
   const matchesContext = confirmation.runId === context.runId
     && confirmation.stepId === context.stepId
     && confirmation.toolId === context.toolId
+    && confirmation.idempotencyKey === context.idempotencyKey
     && confirmation.inputHash === createInputHash(input);
 
   return matchesContext ? { ok: true } : { ok: false, reason: 'confirmation_context_mismatch' };

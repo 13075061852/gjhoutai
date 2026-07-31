@@ -4,6 +4,13 @@ export const AGENT_RUN_STORAGE_KEY = 'gjh-agent-runs-v2';
 
 const MAX_STORED_AGENT_RUNS = 100;
 
+class AgentRunStorageMigrationRequiredError extends Error {
+  constructor() {
+    super('Agent run storage migration is required before mutation.');
+    this.name = 'AgentRunStorageMigrationRequiredError';
+  }
+}
+
 export interface AgentRunStore {
   get(id: string): Promise<AgentRunRecord | null>;
   save(run: AgentRunRecord): Promise<void>;
@@ -18,16 +25,22 @@ const parseRun = (value: unknown): AgentRunRecord | null => {
   return parsed.success ? parsed.data : null;
 };
 
-const parseStoredEntries = (storage: Storage): unknown[] => {
+const parseStoredEntries = (storage: Storage): unknown[] | null => {
   const raw = storage.getItem(AGENT_RUN_STORAGE_KEY);
   if (raw === null) return [];
 
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    return [];
+    return null;
   }
+};
+
+const parseMutableStoredEntries = (storage: Storage): unknown[] => {
+  const entries = parseStoredEntries(storage);
+  if (entries === null) throw new AgentRunStorageMigrationRequiredError();
+  return entries;
 };
 
 const writeStoredEntries = (storage: Storage, entries: unknown[]): void => {
@@ -64,12 +77,12 @@ export const createMemoryAgentRunStore = (): AgentRunStore => {
 
 export const createLocalStorageAgentRunStore = (storage: Storage = globalThis.localStorage): AgentRunStore => ({
   async get(id) {
-    const run = validRuns(parseStoredEntries(storage)).find((record) => record.id === id);
+    const run = validRuns(parseStoredEntries(storage) ?? []).find((record) => record.id === id);
     return run ? cloneRun(run) : null;
   },
   async save(run) {
     const parsed = agentRunRecordSchema.parse(run);
-    const entries = parseStoredEntries(storage);
+    const entries = parseMutableStoredEntries(storage);
     const retainedInvalidEntries = preserveInvalidEntries(entries);
     const retainedRuns = validRuns(entries).filter((record) => record.id !== parsed.id);
     const nextRuns = [cloneRun(parsed), ...retainedRuns].slice(0, MAX_STORED_AGENT_RUNS);
@@ -77,11 +90,11 @@ export const createLocalStorageAgentRunStore = (storage: Storage = globalThis.lo
     writeStoredEntries(storage, [...retainedInvalidEntries, ...nextRuns]);
   },
   async list(limit) {
-    const records = validRuns(parseStoredEntries(storage)).map(cloneRun);
+    const records = validRuns(parseStoredEntries(storage) ?? []).map(cloneRun);
     return limit === undefined ? records : records.slice(0, Math.max(0, limit));
   },
   async remove(id) {
-    const entries = parseStoredEntries(storage);
+    const entries = parseMutableStoredEntries(storage);
     const remainingEntries = entries.filter((entry) => {
       const run = parseRun(entry);
       return run === null || run.id !== id;

@@ -31,8 +31,31 @@ describe('agent permission policy', () => {
       stepId: 'step-1',
       toolId: 'formula.createRecipe',
       input: { name: 'PBT-B' },
+      idempotencyKey: 'idem-1',
       now: '2026-07-31T00:30:00.000Z',
     }).ok).toBe(false);
+  });
+
+  it('invalidates confirmation when its idempotency key changes', () => {
+    const confirmation = createAgentConfirmation({
+      id: 'confirm-idempotency',
+      runId: 'run-idempotency',
+      stepId: 'step-idempotency',
+      toolId: 'formula.createRecipe',
+      input: { name: 'PBT-A' },
+      riskLevel: 'create',
+      expiresAt: '2026-07-31T01:00:00.000Z',
+      idempotencyKey: 'idem-original',
+    });
+
+    expect(validateAgentConfirmation(confirmation, {
+      runId: 'run-idempotency',
+      stepId: 'step-idempotency',
+      toolId: 'formula.createRecipe',
+      input: { name: 'PBT-A' },
+      idempotencyKey: 'idem-replayed',
+      now: '2026-07-31T00:30:00.000Z',
+    }).reason).toBe('confirmation_context_mismatch');
   });
 
   it('uses stable input hashing regardless of object property order', () => {
@@ -52,6 +75,7 @@ describe('agent permission policy', () => {
       stepId: 'step-stable',
       toolId: 'formula.createRecipe',
       input: { formula: { additive: 'GF30', resin: 'PBT' } },
+      idempotencyKey: 'idem-stable',
       now: '2026-07-31T00:30:00.000Z',
     })).toEqual({ ok: true });
   });
@@ -73,6 +97,7 @@ describe('agent permission policy', () => {
       stepId: 'step-expired',
       toolId: 'formula.updateRecipe',
       input: { id: 'PBT-A' },
+      idempotencyKey: 'idem-expired',
       now: '2026-07-31T00:00:00.000Z',
     }).reason).toBe('confirmation_expired');
   });
@@ -96,6 +121,7 @@ describe('agent permission policy', () => {
       stepId: 'step-2',
       toolId: 'spectrum.deleteImages',
       input: { ids: ['img-1'] },
+      idempotencyKey: 'idem-2',
       now: '2026-07-31T00:30:00.000Z',
     }).reason).toBe('confirmation_already_consumed');
   });

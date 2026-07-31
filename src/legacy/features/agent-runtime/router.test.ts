@@ -171,6 +171,25 @@ describe('agent runtime router', () => {
     }
   });
 
+  it('requires a property semantic signal before the property page disambiguates quality wording', () => {
+    const genericPlan = createAgentPlan({
+      prompt: '帮我分析一下生活质量',
+      activePageId: 'property-analysis',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+    const materialPlan = createAgentPlan({
+      prompt: '帮我看看这批料的质量怎么样',
+      activePageId: 'property-analysis',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+
+    expect(genericPlan).toMatchObject({ kind: 'chat', useProjectContext: false, localSkillPlan: null });
+    expect(materialPlan).toMatchObject({ kind: 'local-tool', useProjectContext: true });
+    expect(materialPlan.localSkillPlan?.skillId).toBe('property.searchRows');
+  });
+
   it('lets AI classification upgrade ambiguous wording to web search', async () => {
     const classifier = vi.fn().mockResolvedValue({
       kind: 'web-search',

@@ -60,6 +60,7 @@ export const BUSINESS_QUERY_PATTERN = /(?:查看|看一下|查询|统计|列出|
 export const COMPLEX_PROJECT_ANALYSIS_PATTERN = /(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断).*(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据)|(?:订单|库存|配方|物性|图谱|生产|采购|客户|供应商|业务|数据).*(?:综合分析|联合分析|对比分析|风险分析|原因分析|为什么|怎么优化|如何优化|给出建议|诊断|判断)/;
 export const PROPERTY_MODEL_PATTERN = /(?:^|[^A-Z0-9])(?=[A-Z0-9-]*\d)[A-Z0-9]{2,}(?:-[A-Z0-9]+)+(?:$|[^A-Z0-9])/i;
 export const PROPERTY_DATA_PATTERN = /(?:物性|型号|批次|分类情况|材料分类|无卤|阻燃|尼龙|竞品|原料|熔指|熔融指数|拉伸|断裂伸长|弯曲|冲击|灼热丝|CTI|漏电起痕|灰份|灰分|测试温度|检测范围|检验范围|材料性能|PBT|PET)/i;
+export const PROPERTY_PAGE_CONTEXT_PATTERN = /(?:(?:这|本|该)(?:批)?(?:料|材料|样品)|(?:当前|本次|该)(?:物性|材料|型号|批次|样品))/i;
 export const CAPABILITY_SEARCH_PATTERN = /(?:哪个|什么|查找|搜索|有没有|是否有|支持|能不能|可以).*(?:技能|能力|功能)|(?:技能|能力|功能).*(?:哪个|什么|查找|搜索|有没有|支持|能不能)|(?:哪个|查找|搜索).*(?:页面).*(?:可以|支持|负责)/i;
 export const AGENT_AUDIT_PATTERN = /(?:审计|检查|诊断|排查).*(?:agent|ai|助手|管家|技能|能力|项目)|(?:agent|ai|助手|管家|技能).*(?:异常|问题|完整|健康|状态)/i;
 export const BUSINESS_OVERVIEW_PATTERN = /(?:全局|整体|整个|综合|经营|业务|项目|后台).*(?:总览|概况|情况|状态|分析|风险)|(?:总览|概况).*(?:业务|项目|后台)/i;
@@ -159,8 +160,10 @@ export const buildLocalSkillPlan = (prompt: string, activePageId = ''): AgentSki
     };
   }
   const hasPropertyModel = PROPERTY_MODEL_PATTERN.test(prompt);
-  const hasPropertyIntent = PROPERTY_DATA_PATTERN.test(prompt)
-    || (activePageId === 'property-analysis' && (hasPropertyModel || /(?:质量|性能|指标|数据|材料|强度)/i.test(prompt)));
+  const hasExplicitPropertyIntent = PROPERTY_DATA_PATTERN.test(prompt) || hasPropertyModel;
+  const hasPageDisambiguatedPropertyIntent = activePageId === 'property-analysis'
+    && PROPERTY_PAGE_CONTEXT_PATTERN.test(prompt);
+  const hasPropertyIntent = hasExplicitPropertyIntent || hasPageDisambiguatedPropertyIntent;
   if (hasPropertyIntent) {
     const skillId = /(?:合格|不合格|达标|超标|异常|检测范围|检验范围|规格范围|上下限|判定)/.test(prompt)
       ? 'property.validateRanges'

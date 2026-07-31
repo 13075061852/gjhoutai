@@ -18,6 +18,7 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
   const MAX_HISTORY = 18;
   let eventController = null;
   let toolRegistry = null;
+  let runStore = null;
   let executionEngine = null;
 
   const EXTRA_PAGE_ALIASES = {
@@ -1031,11 +1032,15 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
       outputSpec: { schema: tool.outputShape },
     };
   });
+  const getRunStore = () => {
+    if (!runStore) runStore = createLocalStorageAgentRunStore();
+    return runStore;
+  };
   const getExecutionEngine = () => {
     if (!executionEngine) {
       executionEngine = createAgentExecutionEngine({
         registry: getToolRegistry(),
-        store: createLocalStorageAgentRunStore(),
+        store: getRunStore(),
       });
     }
     return executionEngine;
@@ -1122,6 +1127,25 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     return getToolRegistry().get(skillId) ? { skillId, input } : null;
   };
 
+  const normalizeV2ExecutionResult = (executionResult) => ({
+    ...normalizeResult({
+      ok: executionResult.status === 'success',
+      message: executionResult.message,
+      data: executionResult.data,
+      candidates: executionResult.data?.candidates,
+    }),
+    status: executionResult.status,
+    diagnostics: executionResult.diagnostics,
+    actions: executionResult.actions,
+    evidence: executionResult.evidence,
+  });
+
+  const getAwaitingConfirmation = (run) => (
+    run?.state === 'awaiting_confirmation' && !run.pendingConfirmation?.consumedAt
+      ? run.pendingConfirmation
+      : undefined
+  );
+
   const executeSkill = async (skillId, input = {} as any, meta = {} as any) => {
     const normalizedInvocation = normalizeSkillInvocation(skillId, input);
     const startedAt = nowMs();
@@ -1147,26 +1171,22 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     }
 
     let result;
+    let executionContext = {};
     try {
       if (v2Invocation) {
+        const runId = createExecutionId('manual-run');
         const executionResult = await getExecutionEngine().executeSingleTool({
-          runId: createExecutionId('manual-run'),
+          runId,
           prompt: String(meta.prompt || ''),
           toolId: v2Invocation.skillId,
           input: v2Invocation.input,
           signal: meta.signal,
         });
-        result = {
-          ...normalizeResult({
-            ok: executionResult.status === 'success',
-            message: executionResult.message,
-            data: executionResult.data,
-            candidates: (executionResult.data as any)?.candidates,
-          }),
-          status: executionResult.status,
-          diagnostics: executionResult.diagnostics,
-          actions: executionResult.actions,
-          evidence: executionResult.evidence,
+        const run = await getRunStore().get(runId);
+        result = normalizeV2ExecutionResult(executionResult);
+        executionContext = {
+          runId,
+          pendingConfirmation: getAwaitingConfirmation(run),
         };
       } else {
         // create/update/select/tag/categorize remain on the legacy spectrum
@@ -1187,7 +1207,54 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
       inputSize,
       outputSize: measureJsonSize(result),
     });
-    return { skill, result };
+    return { skill, result, ...executionContext };
+  };
+
+  const resumeConfirmedRun = async (requestOrRunId, confirmationArg = null, metaArg = {} as any) => {
+    const request = requestOrRunId && typeof requestOrRunId === 'object'
+      ? requestOrRunId
+      : {
+          runId: requestOrRunId,
+          confirmation: confirmationArg,
+          signal: metaArg.signal,
+          source: metaArg.source,
+        };
+    const runId = String(request.runId || '').trim();
+    const before = runId ? await getRunStore().get(runId) : null;
+    const confirmation = request.confirmation || before?.pendingConfirmation;
+    const toolId = String(confirmation?.toolId || before?.plan?.steps?.[0]?.toolId || '').trim();
+    const skill = getToolCatalog().find((tool) => tool.id === toolId)
+      || { id: toolId || 'unknown', title: toolId || '未知工具' };
+    const startedAt = nowMs();
+
+    if (!runId || !confirmation) {
+      const result = normalizeResult({ ok: false, message: '缺少待确认运行或确认数据。' });
+      return { skill, result, runId, pendingConfirmation: getAwaitingConfirmation(before) };
+    }
+
+    const executionResult = await getExecutionEngine().resumeConfirmedRun({
+      runId,
+      confirmation,
+      signal: request.signal,
+    });
+    const after = await getRunStore().get(runId);
+    const result = normalizeV2ExecutionResult(executionResult);
+    appendHistory({
+      skillId: toolId,
+      title: skill.title,
+      ok: result.ok,
+      message: result.message,
+      source: request.source || 'manual-confirmation',
+      durationMs: Math.round(nowMs() - startedAt),
+      inputSize: measureJsonSize(confirmation),
+      outputSize: measureJsonSize(result),
+    });
+    return {
+      skill,
+      result,
+      runId,
+      pendingConfirmation: getAwaitingConfirmation(after),
+    };
   };
 
   const formatSkillMessage = ({ skill, result }) => {
@@ -1765,6 +1832,7 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     routePrompt,
     executePrompt,
     executeSkill,
+    resumeConfirmedRun,
     executeSkillCallFromText,
     formatSkillMessage,
     getResultActions,

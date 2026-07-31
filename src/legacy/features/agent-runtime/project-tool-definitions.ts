@@ -18,6 +18,7 @@ export type ProjectToolAdapters = {
 type ToolContext = Parameters<AgentToolDefinition['handler']>[1];
 type PlainRecord = Record<string, unknown>;
 type ProjectToolMetadata = {
+  abortPolicy: 'unsupported' | 'cooperative' | 'preflight_only_write_outcome_unknown';
   icon: string;
   examples: string[];
   level: '查询型' | '分析型' | '上下文型' | '执行型';
@@ -230,8 +231,13 @@ const projectOutputSchemas: Record<string, z.ZodType<PlainRecord>> = {
   }).passthrough(),
   'dataRecognition.inspectCurrent': z.object({
     fileName: z.string().optional(),
+    model: z.string().optional(),
+    modelCode: z.string().optional(),
+    batchCode: z.string().optional(),
     rowCount: z.number().int().nonnegative().optional(),
-    result: z.record(z.string(), z.unknown()).optional(),
+    result: z.record(z.string(), z.unknown()).nullable().optional(),
+    hasImage: z.boolean().optional(),
+    image: z.record(z.string(), z.unknown()).nullable().optional(),
   }).passthrough(),
   'web.search': z.object({
     results: z.array(z.unknown()).optional(),
@@ -381,12 +387,7 @@ const invokeMethod = async (
       actions: [],
     };
   }
-  return method.call(owner, input, {
-    idempotencyKey: context.idempotencyKey,
-    runId: context.runId,
-    signal: context.signal,
-    stepId: context.stepId,
-  });
+  return method.call(owner, input);
 };
 
 const forceAction = (result: unknown, action: 'search' | 'delete'): unknown => {
@@ -434,7 +435,8 @@ const createDefinition = ({
   timeoutMs,
   maxRetries,
   idempotent,
-  supportsAbort = true,
+  supportsAbort = false,
+  abortPolicy,
   icon,
   examples,
   level,
@@ -451,6 +453,7 @@ const createDefinition = ({
   maxRetries?: number;
   idempotent?: boolean;
   supportsAbort?: boolean;
+  abortPolicy?: ProjectToolMetadata['abortPolicy'];
   icon: string;
   examples: string[];
   level: ProjectToolMetadata['level'];
@@ -468,6 +471,13 @@ const createDefinition = ({
   maxRetries: maxRetries ?? (riskLevel === 'read' ? 1 : 0),
   idempotent: idempotent ?? riskLevel === 'read',
   supportsAbort,
+  abortPolicy: abortPolicy ?? (
+    supportsAbort
+      ? riskLevel === 'read'
+        ? 'cooperative'
+        : 'preflight_only_write_outcome_unknown'
+      : 'unsupported'
+  ),
   module: category,
   icon,
   level,
@@ -939,6 +949,10 @@ export const createProjectToolDefinitions = (
       description: '按目标或当前选择范围删除图谱记录。',
       category: '图谱分析',
       riskLevel: 'delete',
+      // The adapter gates cancellation before invoking the one-argument
+      // legacy write. Once started, the engine reports interruption as
+      // WRITE_OUTCOME_UNKNOWN instead of claiming the side effect stopped.
+      supportsAbort: true,
       inputSchema: spectrumDeleteInput,
       icon: 'ti-trash',
       level: '执行型',
@@ -986,6 +1000,7 @@ export const createProjectToolDefinitions = (
       description: '根据名称和组分在配方管理中创建真实配方记录。',
       category: '配方管理',
       riskLevel: 'create',
+      supportsAbort: true,
       inputSchema: formulaCreateInput,
       icon: 'ti-flask-2',
       level: '执行型',
@@ -1044,6 +1059,7 @@ export const createProjectToolDefinitions = (
       description: '通过显式注入的搜索适配器获取实时网页资料。',
       category: '联网能力',
       inputSchema: webSearchInput,
+      supportsAbort: true,
       timeoutMs: 30_000,
       icon: 'ti-world-search',
       level: '查询型',
@@ -1066,6 +1082,7 @@ export const createProjectToolDefinitions = (
       description: '提交图片生成任务并返回任务标识。',
       category: '媒体生成',
       riskLevel: 'create',
+      supportsAbort: true,
       inputSchema: imageGenerationInput,
       timeoutMs: 60_000,
       icon: 'ti-photo-spark',
@@ -1081,7 +1098,7 @@ export const createProjectToolDefinitions = (
           context,
           'AI 绘图模块尚未初始化。',
         );
-        if (isRecord(result) && result.ok === false) return result;
+        if (isRecord(result) && (result.ok === false || typeof result.status === 'string')) return result;
         return {
           ok: true,
           message: `图片生成任务已提交：${(result as any)?.taskId || '-'}`,

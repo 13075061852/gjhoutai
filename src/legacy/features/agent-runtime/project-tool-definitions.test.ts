@@ -3,6 +3,8 @@ import {
   createProjectToolDefinitions,
   createProjectToolRegistry,
 } from './project-tool-definitions';
+import { createAgentExecutionEngine } from './execution-engine';
+import { createMemoryAgentRunStore } from './run-store';
 import { createProjectToolAdapters } from './tools';
 
 const legacyAppRef = vi.hoisted(() => ({ current: null as any }));
@@ -78,6 +80,24 @@ describe('project V2 tool registry', () => {
           ? 'delete'
           : 'read';
       expect(definition.riskLevel).toBe(expectedRisk);
+    });
+
+    const abortableToolIds = definitions
+      .filter((definition) => definition.supportsAbort)
+      .map((definition) => definition.id);
+    expect(abortableToolIds).toEqual([
+      'spectrum.deleteImages',
+      'formula.createRecipe',
+      'web.search',
+      'media.generateImage',
+    ]);
+    definitions.forEach((definition) => {
+      const expectedPolicy = definition.id === 'web.search'
+        ? 'cooperative'
+        : definition.riskLevel === 'read'
+          ? 'unsupported'
+          : 'preflight_only_write_outcome_unknown';
+      expect((definition as any).abortPolicy).toBe(expectedPolicy);
     });
   });
 
@@ -175,6 +195,46 @@ describe('project tool handler normalization', () => {
     }));
   });
 
+  it('accepts the real empty current-recognition payload with nullable result and image fields', async () => {
+    const registry = createProjectToolRegistry({
+      dataRecognition: {
+        inspectCurrentByAgent: vi.fn().mockResolvedValue({
+          ok: false,
+          message: '当前没有可用的识别结果。',
+          data: {
+            fileName: '',
+            model: '',
+            modelCode: '',
+            batchCode: '',
+            rowCount: 0,
+            result: null,
+            hasImage: false,
+            image: null,
+          },
+        }),
+      },
+    }, createAdapters());
+    const definition = registry.get('dataRecognition.inspectCurrent');
+    const rawResult = await definition?.handler(
+      {},
+      { runId: 'run-empty-current', stepId: 'step-empty-current' },
+    );
+
+    expect(() => registry.validateResult('dataRecognition.inspectCurrent', rawResult)).not.toThrow();
+    expect(rawResult).toEqual(expect.objectContaining({
+      status: 'error',
+      data: expect.objectContaining({
+        result: null,
+        image: null,
+        hasImage: false,
+      }),
+    }));
+    expect(() => definition?.outputSchema.parse({
+      result: 'not-a-structured-result',
+      image: null,
+    })).toThrow();
+  });
+
   it('forces the split spectrum action before invoking legacy handlers', async () => {
     const searchByAgent = vi.fn().mockResolvedValue({ ok: true, message: 'searched', data: {} });
     const deleteByAgent = vi.fn().mockResolvedValue({ ok: true, message: 'deleted', data: {} });
@@ -193,12 +253,12 @@ describe('project tool handler normalization', () => {
 
     expect(searchByAgent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'search', query: 'DSC' }),
-      expect.objectContaining({ signal: undefined }),
     );
     expect(deleteByAgent).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'delete', target: 'image-1' }),
-      expect.objectContaining({ idempotencyKey: 'delete-1', signal: undefined }),
     );
+    expect(searchByAgent.mock.calls[0]).toHaveLength(1);
+    expect(deleteByAgent.mock.calls[0]).toHaveLength(1);
   });
 
   it('sanitizes thrown errors and excludes secrets and raw image payloads from evidence', async () => {
@@ -261,6 +321,80 @@ describe('project tool handler normalization', () => {
     }, controller.signal);
     expect(result.status).toBe('success');
     expect(result.data.results).toHaveLength(1);
+  });
+
+  it('uses a preflight-only abort boundary for non-abortable legacy image generation', async () => {
+    const generateImage = vi.fn().mockResolvedValue({ taskId: 'task-1' });
+    const tool = getDefinition({ apimartMedia: { generateImage } }, 'media.generateImage');
+    const activeController = new AbortController();
+
+    const result = await tool.handler(
+      { prompt: '产品海报', count: 1, referenceUrls: [] },
+      {
+        runId: 'run-image-write',
+        stepId: 'step-image-write',
+        signal: activeController.signal,
+        idempotencyKey: 'image-write-1',
+      },
+    );
+
+    expect(result.status).toBe('success');
+    expect(generateImage).toHaveBeenCalledTimes(1);
+    expect(generateImage.mock.calls[0]).toHaveLength(1);
+
+    const abortedController = new AbortController();
+    abortedController.abort();
+    const aborted = await tool.handler(
+      { prompt: '另一个海报', count: 1, referenceUrls: [] },
+      {
+        runId: 'run-image-aborted',
+        stepId: 'step-image-aborted',
+        signal: abortedController.signal,
+        idempotencyKey: 'image-write-2',
+      },
+    );
+    expect(aborted.status).toBe('cancelled');
+    expect(generateImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an in-flight legacy write cancellation as outcome unknown', async () => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const generateImage = vi.fn().mockImplementation(async () => {
+      markStarted();
+      return new Promise(() => {});
+    });
+    const store = createMemoryAgentRunStore();
+    const registry = createProjectToolRegistry(
+      { apimartMedia: { generateImage } },
+      createAdapters(),
+    );
+    const engine = createAgentExecutionEngine({ registry, store });
+    const waiting = await engine.executeSingleTool({
+      runId: 'run-image-outcome-unknown',
+      prompt: '生成图片',
+      toolId: 'media.generateImage',
+      input: { prompt: '产品海报' },
+    });
+    expect(waiting.diagnostics?.code).toBe('CONFIRMATION_REQUIRED');
+    const confirmation = (await store.get('run-image-outcome-unknown'))?.pendingConfirmation;
+    expect(confirmation).toBeDefined();
+
+    const execution = engine.resumeConfirmedRun({
+      runId: 'run-image-outcome-unknown',
+      confirmation: confirmation!,
+    });
+    await started;
+    const cancellation = engine.cancelRun('run-image-outcome-unknown');
+    const result = await execution;
+    await cancellation;
+
+    expect(result.status).toBe('error');
+    expect(result.diagnostics?.code).toBe('WRITE_OUTCOME_UNKNOWN');
+    expect(result.actions).toEqual([{ type: 'reconcile_write', cause: 'cancelled' }]);
+    expect(generateImage).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -349,5 +483,80 @@ describe('project capability page integration', () => {
       data: { rowCount: 2 },
     }));
     expect(JSON.parse(storageItems.get('gjh-agent-runs-v2') || '[]')).toHaveLength(1);
+  });
+
+  it('returns confirmation context and resumes one legacy write exactly once', async () => {
+    const storageItems = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      get length() {
+        return storageItems.size;
+      },
+      clear: () => storageItems.clear(),
+      getItem: (key: string) => storageItems.get(key) ?? null,
+      key: (index: number) => [...storageItems.keys()][index] ?? null,
+      removeItem: (key: string) => storageItems.delete(key),
+      setItem: (key: string, value: string) => storageItems.set(key, String(value)),
+    });
+    vi.stubGlobal('window', { performance });
+    vi.stubGlobal('document', { getElementById: () => null });
+    const createFormulaByAgent = vi.fn().mockResolvedValue({
+      ok: true,
+      message: '配方已创建',
+      data: {
+        created: 1,
+        items: [{ name: '阻燃配方', code: 'FR-01' }],
+      },
+    });
+    legacyAppRef.current = {
+      refs: { projectSkillPanel: null },
+      constants: {
+        NAV_PAGE_KEY: 'page',
+        PAGE_DEFS: { dashboard: { title: '仪表盘' } },
+      },
+      utils: {
+        escapeHtml: (value: unknown) => String(value ?? ''),
+        readJson: () => [],
+        writeJson: vi.fn(),
+      },
+      businessPages: { createFormulaByAgent },
+      config: { getFormConfig: () => ({ searchProvider: 'tavily' }) },
+    };
+    vi.resetModules();
+    await import('../project-skills');
+
+    const waiting = await legacyAppRef.current.projectSkills.executeSkill(
+      'formula.createRecipe',
+      {
+        name: '阻燃配方',
+        code: 'FR-01',
+        components: [{ material: 'ABS', percentage: 70 }],
+      },
+      { prompt: '创建阻燃配方', source: 'manual-test' },
+    );
+    expect(waiting.result.diagnostics?.code).toBe('CONFIRMATION_REQUIRED');
+    expect(waiting.runId).toEqual(expect.any(String));
+    expect(waiting.pendingConfirmation).toEqual(expect.objectContaining({
+      runId: waiting.runId,
+      toolId: 'formula.createRecipe',
+    }));
+    expect(createFormulaByAgent).toHaveBeenCalledTimes(0);
+
+    const resumed = await legacyAppRef.current.projectSkills.resumeConfirmedRun({
+      runId: waiting.runId,
+      confirmation: waiting.pendingConfirmation,
+    });
+    expect(resumed.result).toEqual(expect.objectContaining({
+      ok: true,
+      message: '配方已创建',
+      data: expect.objectContaining({ created: 1 }),
+    }));
+    expect(createFormulaByAgent).toHaveBeenCalledTimes(1);
+
+    const replayed = await legacyAppRef.current.projectSkills.resumeConfirmedRun({
+      runId: waiting.runId,
+      confirmation: waiting.pendingConfirmation,
+    });
+    expect(replayed.result.data).toEqual(resumed.result.data);
+    expect(createFormulaByAgent).toHaveBeenCalledTimes(1);
   });
 });

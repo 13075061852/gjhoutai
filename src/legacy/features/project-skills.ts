@@ -1,6 +1,9 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 import '../../styles/pages/project-skills.css';
-import { createRuntimeSkillDefinitions } from './agent-runtime/tools';
+import { createAgentExecutionEngine } from './agent-runtime/execution-engine';
+import { createProjectToolRegistry } from './agent-runtime/project-tool-definitions';
+import { createLocalStorageAgentRunStore } from './agent-runtime/run-store';
+import { createProjectToolAdapters, createRuntimeSkillDefinitions } from './agent-runtime/tools';
 import { buildSkillCatalogSummary, getSkillSearchText } from './agent-runtime/skill-catalog';
 import { normalizeAgentToolResult } from './agent-runtime/grounding';
 
@@ -14,6 +17,8 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
   const HISTORY_KEY = 'gjh-project-skill-history-v1';
   const MAX_HISTORY = 18;
   let eventController = null;
+  let toolRegistry = null;
+  let executionEngine = null;
 
   const EXTRA_PAGE_ALIASES = {
     配置中心: 'ai-config',
@@ -444,7 +449,8 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
         'property.summarizeMetrics',
         'property.compareRows',
         'property.validateRanges',
-        'spectrum.manageImages',
+        'spectrum.searchImages',
+        'spectrum.deleteImages',
         'analysis.buildJointPackage',
         'formula.createRecipe',
         'assistant.modelInfo',
@@ -452,6 +458,7 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
         'assistant.projectGuide',
         'dataRecognition.searchHistory',
         'dataRecognition.inspectCurrent',
+        'web.search',
         'media.generateImage',
         'media.analyzeImages',
         'assistant.openPage',
@@ -1001,7 +1008,43 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     },
   ];
 
-  const getSkillRegistry = () => createSkillRegistry();
+  // Legacy callers still consume inference rules until the chat protocol is
+  // migrated. Capability pages and the V2 runtime use the registry below.
+  const getLegacySkillRegistry = () => createSkillRegistry();
+  const getSkillRegistry = getLegacySkillRegistry;
+  const getToolRegistry = () => {
+    if (!toolRegistry) {
+      toolRegistry = createProjectToolRegistry(App, createProjectToolAdapters(App));
+    }
+    return toolRegistry;
+  };
+  const getToolCatalog = () => getToolRegistry().getPlannerCatalog().map((tool) => {
+    const metadata = tool as any;
+    return {
+      ...metadata,
+      module: metadata.module || tool.category,
+      level: metadata.level || (tool.riskLevel === 'read' ? '查询型' : '执行型'),
+      summary: metadata.summary || tool.description,
+      icon: metadata.icon || 'ti-sparkles',
+      examples: Array.isArray(metadata.examples) ? metadata.examples : [],
+      inputSpec: { schema: tool.inputShape },
+      outputSpec: { schema: tool.outputShape },
+    };
+  });
+  const getExecutionEngine = () => {
+    if (!executionEngine) {
+      executionEngine = createAgentExecutionEngine({
+        registry: getToolRegistry(),
+        store: createLocalStorageAgentRunStore(),
+      });
+    }
+    return executionEngine;
+  };
+  const createExecutionId = (prefix) => {
+    const id = globalThis.crypto?.randomUUID?.()
+      || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    return `${prefix}-${id}`;
+  };
   const SPECTRUM_LEGACY_ACTIONS = {
     'spectrum.deleteImage': 'delete',
     'spectrum.createImageRecord': 'create',
@@ -1064,11 +1107,30 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     renderHistory();
   };
 
+  const resolveV2Invocation = ({ skillId, input }) => {
+    if (skillId === 'spectrum.manageImages') {
+      if (input?.action === 'search') {
+        const { action, ...toolInput } = input;
+        return { skillId: 'spectrum.searchImages', input: toolInput };
+      }
+      if (input?.action === 'delete') {
+        const { action, ...toolInput } = input;
+        return { skillId: 'spectrum.deleteImages', input: toolInput };
+      }
+      return null;
+    }
+    return getToolRegistry().get(skillId) ? { skillId, input } : null;
+  };
+
   const executeSkill = async (skillId, input = {} as any, meta = {} as any) => {
     const normalizedInvocation = normalizeSkillInvocation(skillId, input);
     const startedAt = nowMs();
     const inputSize = measureJsonSize(normalizedInvocation.input);
-    const skill = getSkillById(normalizedInvocation.skillId);
+    const v2Invocation = resolveV2Invocation(normalizedInvocation);
+    const legacySkill = getSkillById(normalizedInvocation.skillId);
+    const skill = v2Invocation
+      ? getToolCatalog().find((tool) => tool.id === v2Invocation.skillId)
+      : legacySkill;
     if (!skill) {
       const missing = normalizeResult({ ok: false, message: `未知项目技能：${normalizedInvocation.skillId}` });
       appendHistory({
@@ -1086,13 +1148,37 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
 
     let result;
     try {
-      result = normalizeResult(await (skill.handler as any)(normalizedInvocation.input, meta));
+      if (v2Invocation) {
+        const executionResult = await getExecutionEngine().executeSingleTool({
+          runId: createExecutionId('manual-run'),
+          prompt: String(meta.prompt || ''),
+          toolId: v2Invocation.skillId,
+          input: v2Invocation.input,
+          signal: meta.signal,
+        });
+        result = {
+          ...normalizeResult({
+            ok: executionResult.status === 'success',
+            message: executionResult.message,
+            data: executionResult.data,
+            candidates: (executionResult.data as any)?.candidates,
+          }),
+          status: executionResult.status,
+          diagnostics: executionResult.diagnostics,
+          actions: executionResult.actions,
+          evidence: executionResult.evidence,
+        };
+      } else {
+        // create/update/select/tag/categorize remain on the legacy spectrum
+        // compatibility path until their V2 migration is assigned.
+        result = normalizeResult(await (legacySkill.handler as any)(normalizedInvocation.input, meta));
+      }
     } catch (error) {
-      result = normalizeResult({ ok: false, message: error?.message || '技能执行失败。' });
+      result = normalizeResult({ ok: false, message: '技能执行失败。' });
     }
 
     appendHistory({
-      skillId: normalizedInvocation.skillId,
+      skillId: v2Invocation?.skillId || normalizedInvocation.skillId,
       title: skill.title,
       ok: result.ok,
       message: result.message,
@@ -1433,15 +1519,15 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
 
   const render = () => {
     if (!refs.projectSkillPanel) return;
-    const skills = getSkillRegistry();
+    const skills = getToolCatalog();
+    const toolDefinitions = getToolRegistry().list();
     const manifestPages = App.businessPages?.getAgentManifestPages?.() || [];
     const issueCount = skills.reduce((count, skill) => (
       count
       + (skill?.id ? 0 : 1)
-      + (typeof skill?.handler === 'function' ? 0 : 1)
-      + (skill?.inputSpec && skill?.outputSpec ? 0 : 1)
+      + (skill?.inputShape && skill?.outputShape ? 0 : 1)
     ), 0);
-    const catalogSummary = buildSkillCatalogSummary(skills, {
+    const catalogSummary = buildSkillCatalogSummary(toolDefinitions, {
       totalPages: Object.keys(constants.PAGE_DEFS || {}).length,
       structuredPages: manifestPages.length,
       issueCount,
@@ -1671,6 +1757,9 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     cleanup,
     render,
     getSkillRegistry,
+    getLegacySkillRegistry,
+    getToolRegistry,
+    getToolCatalog,
     getProjectManifest: buildProjectManifest,
     getAiProtocolContext,
     routePrompt,

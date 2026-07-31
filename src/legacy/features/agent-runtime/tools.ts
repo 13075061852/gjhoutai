@@ -1,5 +1,46 @@
 ﻿import { mapImageGenerationParams } from './media';
 
+import { createChatSearchRuntime } from '../chat/chat-search';
+import type { ProjectToolAdapters } from './project-tool-definitions';
+
+type SearchRuntime = {
+  searchWebForPromptDynamic: (
+    config: any,
+    prompt: string,
+    options?: Record<string, unknown>,
+  ) => Promise<unknown>;
+};
+
+const defaultSearchRuntime = createChatSearchRuntime({
+  getCurrentDateTimeLabel: () => new Date().toLocaleString('zh-CN', {
+    hour12: false,
+    timeZone: 'Asia/Shanghai',
+  }),
+  createAbortError: () => new DOMException('The operation was aborted.', 'AbortError'),
+}) as SearchRuntime;
+
+/**
+ * Compatibility adapter used while the legacy chat search runtime remains the
+ * owner of Tavily transport details. V2 tools receive only this explicit
+ * boundary and never read search credentials from planner-visible metadata.
+ */
+export const createProjectToolAdapters = (
+  App: any,
+  searchRuntime: SearchRuntime = defaultSearchRuntime,
+): ProjectToolAdapters => ({
+  async searchWeb(input, signal) {
+    const config = App?.config?.getFormConfig?.() || {};
+    return searchRuntime.searchWebForPromptDynamic(
+      config,
+      input.queries.join('\n'),
+      {
+        searchPlan: input,
+        signal,
+      },
+    );
+  },
+});
+
 const normalizeText = (value: unknown) => String(value || '').trim();
 const runtimeSkillDefinitionCache = new WeakMap<object, any[]>();
 

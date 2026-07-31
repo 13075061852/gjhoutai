@@ -39,7 +39,7 @@ export const shouldAttachAgentSkillImages = ({
     return {
       systemName: '广俊塑料科技后台管理系统',
       pages: resolvedPages,
-      skills: (App.projectSkills?.getSkillRegistry?.() || []).map((skill) => skill.id).filter(Boolean),
+      skills: (App.projectSkills?.getToolRegistry?.().list?.() || []).map((tool) => tool.id).filter(Boolean),
       dataSources: ['本地业务数据', 'OSS 云端同步', '物性分析表格', '图谱图片库'],
       currentData: Object.fromEntries(
         resolvedPages

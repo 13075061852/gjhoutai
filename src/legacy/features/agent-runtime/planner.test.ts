@@ -90,6 +90,39 @@ describe('agent planner', () => {
     expect(formulaTool.handler).not.toHaveBeenCalled();
   });
 
+  it('never serializes secret-bearing or arbitrary catalog properties into model messages', async () => {
+    const secretBearingTool = Object.assign({}, inventoryTool, {
+      apiKey: 'planner-api-key-must-not-leak',
+      token: 'planner-token-must-not-leak',
+      config: { authorization: 'planner-config-must-not-leak' },
+      internalNotes: 'arbitrary-metadata-must-not-leak',
+    });
+    const registry = createAgentToolRegistry([secretBearingTool]);
+    let messages: PlannerMessage[] = [];
+    const planner = createAgentPlanner({
+      registry,
+      requestPlan: async (requestMessages) => {
+        messages = requestMessages;
+        return {
+          ...validPlan,
+          steps: [{ id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: [] }],
+        };
+      },
+    });
+
+    await planner.plan({ prompt: '分析库存', activePageId: 'inventory' });
+
+    const serializedMessages = JSON.stringify(messages);
+    expect(serializedMessages).not.toContain('planner-api-key-must-not-leak');
+    expect(serializedMessages).not.toContain('planner-token-must-not-leak');
+    expect(serializedMessages).not.toContain('planner-config-must-not-leak');
+    expect(serializedMessages).not.toContain('arbitrary-metadata-must-not-leak');
+    expect(serializedMessages).not.toContain('apiKey');
+    expect(serializedMessages).not.toContain('token');
+    expect(serializedMessages).not.toContain('config');
+    expect(serializedMessages).not.toContain('internalNotes');
+  });
+
   it('aborts the model request at the 45-second deadline', async () => {
     vi.useFakeTimers();
     const registry = createAgentToolRegistry([inventoryTool]);

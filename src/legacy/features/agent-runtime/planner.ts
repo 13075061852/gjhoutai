@@ -2,6 +2,21 @@ import { agentPlanSchema, type AgentPlanV2 } from './protocol';
 import type { AgentToolRegistry } from './tool-registry';
 
 type PlannerMessage = { role: string; content: string };
+type PlannerCatalog = ReturnType<AgentToolRegistry['getPlannerCatalog']>;
+type PlannerSafeToolMetadata = Pick<PlannerCatalog[number],
+  | 'id'
+  | 'version'
+  | 'title'
+  | 'description'
+  | 'category'
+  | 'riskLevel'
+  | 'timeoutMs'
+  | 'maxRetries'
+  | 'idempotent'
+  | 'supportsAbort'
+  | 'inputShape'
+  | 'outputShape'
+>;
 
 type PlanValidationResult =
   | { ok: true; reason: ''; plan: AgentPlanV2 }
@@ -89,10 +104,27 @@ const parsePlannerResponse = (response: unknown): unknown => {
   }
 };
 
+const toPlannerSafeCatalog = (catalog: PlannerCatalog): PlannerSafeToolMetadata[] => (
+  catalog.map((tool) => ({
+    id: tool.id,
+    version: tool.version,
+    title: tool.title,
+    description: tool.description,
+    category: tool.category,
+    riskLevel: tool.riskLevel,
+    timeoutMs: tool.timeoutMs,
+    maxRetries: tool.maxRetries,
+    idempotent: tool.idempotent,
+    supportsAbort: tool.supportsAbort,
+    inputShape: tool.inputShape,
+    outputShape: tool.outputShape,
+  }))
+);
+
 const buildPlannerMessages = (input: {
   prompt: string;
   activePageId: string;
-  catalog: ReturnType<AgentToolRegistry['getPlannerCatalog']>;
+  catalog: PlannerSafeToolMetadata[];
 }): PlannerMessage[] => [
   {
     role: 'system',
@@ -121,7 +153,7 @@ export const createAgentPlanner = ({
   timeoutMs?: number;
 }) => ({
   plan: async (input: { prompt: string; activePageId: string; signal?: AbortSignal }): Promise<AgentPlanV2> => {
-    const catalog = registry.getPlannerCatalog();
+    const catalog = toPlannerSafeCatalog(registry.getPlannerCatalog());
     const controller = new AbortController();
     const messages = buildPlannerMessages({ ...input, catalog });
     let timeoutId: ReturnType<typeof setTimeout> | undefined;

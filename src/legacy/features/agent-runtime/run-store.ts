@@ -14,6 +14,7 @@ class AgentRunStorageMigrationRequiredError extends Error {
 export interface AgentRunStore {
   get(id: string): Promise<AgentRunRecord | null>;
   save(run: AgentRunRecord): Promise<void>;
+  update(id: string, updater: (run: AgentRunRecord) => AgentRunRecord): Promise<AgentRunRecord | null>;
   list(limit?: number): Promise<AgentRunRecord[]>;
   remove(id: string): Promise<void>;
 }
@@ -65,6 +66,14 @@ export const createMemoryAgentRunStore = (): AgentRunStore => {
       const parsed = agentRunRecordSchema.parse(run);
       runs.set(parsed.id, cloneRun(parsed));
     },
+    async update(id, updater) {
+      const current = runs.get(id);
+      if (!current) return null;
+      const updated = agentRunRecordSchema.parse(updater(cloneRun(current)));
+      if (updated.id !== id) throw new TypeError('Agent run update cannot change its id.');
+      runs.set(id, cloneRun(updated));
+      return cloneRun(updated);
+    },
     async list(limit) {
       const records = [...runs.values()].map(cloneRun);
       return limit === undefined ? records : records.slice(0, Math.max(0, limit));
@@ -88,6 +97,20 @@ export const createLocalStorageAgentRunStore = (storage: Storage = globalThis.lo
     const nextRuns = [cloneRun(parsed), ...retainedRuns].slice(0, MAX_STORED_AGENT_RUNS);
 
     writeStoredEntries(storage, [...retainedInvalidEntries, ...nextRuns]);
+  },
+  async update(id, updater) {
+    const entries = parseMutableStoredEntries(storage);
+    const current = validRuns(entries).find((record) => record.id === id);
+    if (!current) return null;
+
+    const updated = agentRunRecordSchema.parse(updater(cloneRun(current)));
+    if (updated.id !== id) throw new TypeError('Agent run update cannot change its id.');
+
+    const retainedInvalidEntries = preserveInvalidEntries(entries);
+    const retainedRuns = validRuns(entries).filter((record) => record.id !== id);
+    const nextRuns = [cloneRun(updated), ...retainedRuns].slice(0, MAX_STORED_AGENT_RUNS);
+    writeStoredEntries(storage, [...retainedInvalidEntries, ...nextRuns]);
+    return cloneRun(updated);
   },
   async list(limit) {
     const records = validRuns(parseStoredEntries(storage) ?? []).map(cloneRun);

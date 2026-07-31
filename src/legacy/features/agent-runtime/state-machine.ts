@@ -33,6 +33,7 @@ export const createAgentRun = ({
   startedAt,
   updatedAt: startedAt,
   progress: [],
+  confirmationHistory: {},
   stepResults: {},
 });
 

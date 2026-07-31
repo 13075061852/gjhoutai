@@ -32,6 +32,21 @@ describe('agent runtime protocol', () => {
     expect(() => agentRunRecordSchema.parse({ version: 1, id: 'run-1' })).toThrow();
   });
 
+  it('defaults confirmation history for existing version 2 run records', () => {
+    const parsed = agentRunRecordSchema.parse({
+      version: 2,
+      id: 'run-existing-v2',
+      prompt: '旧 V2 记录',
+      state: 'routing',
+      startedAt: '2026-07-31T00:00:00.000Z',
+      updatedAt: '2026-07-31T00:00:00.000Z',
+      progress: [],
+      stepResults: {},
+    });
+
+    expect(parsed.confirmationHistory).toEqual({});
+  });
+
   it('rejects malformed outer tool results before returning a handler result', async () => {
     await expect(executeAgentTool({
       id: 'inventory.count',

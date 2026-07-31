@@ -63,6 +63,11 @@ export const agentConfirmationSchema = z.object({
   consumedAt: z.string().datetime().optional(),
 });
 
+export const agentConfirmationHistoryEntrySchema = z.object({
+  confirmation: agentConfirmationSchema,
+  result: agentToolResultSchema.optional(),
+});
+
 export const agentProgressEventSchema = z.object({
   at: z.string().datetime(),
   phase: agentRunStateSchema,
@@ -93,6 +98,7 @@ export const agentRunRecordSchema = z.object({
   plan: agentPlanSchema.optional(),
   progress: z.array(agentProgressEventSchema).default([]),
   pendingConfirmation: agentConfirmationSchema.optional(),
+  confirmationHistory: z.record(z.string(), agentConfirmationHistoryEntrySchema).default({}),
   stepResults: z.record(z.string(), agentToolResultSchema).default({}),
   terminalError: z.object({ code: z.string(), message: z.string() }).optional(),
 });
@@ -104,6 +110,7 @@ export type AgentRunState = z.infer<typeof agentRunStateSchema>;
 export type AgentToolCall = z.infer<typeof agentToolCallSchema>;
 export type AgentProgressEvent = z.infer<typeof agentProgressEventSchema>;
 export type AgentConfirmation = z.infer<typeof agentConfirmationSchema>;
+export type AgentConfirmationHistoryEntry = z.infer<typeof agentConfirmationHistoryEntrySchema>;
 export type AgentRunRecord = z.infer<typeof agentRunRecordSchema>;
 export type AgentToolResultV2<TOutput extends Record<string, unknown> = Record<string, unknown>> =
   Omit<z.infer<typeof agentToolResultSchema>, 'data'> & { data: TOutput };

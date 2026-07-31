@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AGENT_RUN_STORAGE_KEY, createLocalStorageAgentRunStore, createMemoryAgentRunStore } from './run-store';
+import {
+  AGENT_RUN_STORAGE_KEY,
+  createLocalStorageAgentRunStore,
+  createMemoryAgentRunStore,
+} from './run-store';
 import { createAgentRun } from './state-machine';
 
 const createStorage = (initialValue: string | null = null): Storage => {
@@ -38,6 +42,26 @@ describe('agent run store', () => {
     loaded!.state = 'failed';
 
     expect((await store.get('run-2'))?.state).toBe('routing');
+  });
+
+  it.each([
+    ['memory', () => createMemoryAgentRunStore()],
+    ['local storage', () => createLocalStorageAgentRunStore(createStorage())],
+  ])('atomically updates the latest stored run in %s', async (_label, createStore) => {
+    const store = createStore();
+    await store.save(createAgentRun({
+      id: 'run-atomic-update',
+      prompt: '原始提示',
+      startedAt: '2026-07-31T00:00:00.000Z',
+    }));
+
+    const updated = await store.update('run-atomic-update', (run) => ({
+      ...run,
+      prompt: '原子更新后的提示',
+    }));
+
+    expect(updated?.prompt).toBe('原子更新后的提示');
+    expect((await store.get('run-atomic-update'))?.prompt).toBe('原子更新后的提示');
   });
 
   it('clones writes so later caller mutations are not persisted', async () => {

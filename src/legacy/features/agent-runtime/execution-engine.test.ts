@@ -272,6 +272,146 @@ describe('agent execution engine', () => {
     expect(events.indexOf('confirmation persisted')).toBeLessThan(events.indexOf('handler invoked'));
   });
 
+  it('serializes concurrent confirmation resumes and returns one persisted write result', async () => {
+    let resolveWrite!: (result: AgentExecutionResultFixture) => void;
+    const pendingWrite = new Promise<AgentExecutionResultFixture>((resolve) => {
+      resolveWrite = resolve;
+    });
+    const writeResult = {
+      status: 'success' as const,
+      message: '创建完成。',
+      data: { id: 'formula-concurrent' },
+      evidence: [],
+      actions: [],
+    };
+    const handler = vi.fn(() => pendingWrite);
+    const tool = createTool({
+      id: 'formula.create.concurrent',
+      title: '并发创建配方',
+      riskLevel: 'create',
+      idempotent: false,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    await engine.executeSingleTool({
+      runId: 'run-concurrent-resume',
+      prompt: '创建配方',
+      toolId: tool.id,
+      input: { name: 'PBT-C' },
+    });
+    const confirmation = (await store.get('run-concurrent-resume'))!.pendingConfirmation!;
+
+    const first = engine.resumeConfirmedRun({ runId: 'run-concurrent-resume', confirmation });
+    const second = engine.resumeConfirmedRun({ runId: 'run-concurrent-resume', confirmation });
+    await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+    resolveWrite(writeResult);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(firstResult).toEqual(writeResult);
+    expect(secondResult).toEqual(writeResult);
+  });
+
+  it('replays an earlier write after a later write replaces the pending confirmation', async () => {
+    const firstHandler = vi.fn().mockResolvedValue({
+      status: 'success',
+      message: '第一笔写入完成。',
+      data: { id: 'first-write' },
+      evidence: [],
+      actions: [],
+    });
+    const secondHandler = vi.fn().mockResolvedValue({
+      status: 'success',
+      message: '第二笔写入完成。',
+      data: { id: 'second-write' },
+      evidence: [],
+      actions: [],
+    });
+    const firstTool = createTool({
+      id: 'write.first',
+      title: '第一笔写入',
+      riskLevel: 'create',
+      idempotent: false,
+      handler: firstHandler,
+    });
+    const secondTool = createTool({
+      id: 'write.second',
+      title: '第二笔写入',
+      riskLevel: 'update',
+      idempotent: false,
+      handler: secondHandler,
+    });
+    const { engine, store } = createEngine({ tools: [firstTool, secondTool] });
+
+    await engine.executePlan({
+      runId: 'run-multi-write',
+      prompt: '连续执行两笔写入',
+      plan: planOf(
+        { id: 'first', toolId: firstTool.id, input: { id: 'one' }, dependsOn: [] },
+        { id: 'second', toolId: secondTool.id, input: { id: 'two' }, dependsOn: ['first'] },
+      ),
+    });
+    const firstConfirmation = (await store.get('run-multi-write'))!.pendingConfirmation!;
+    await engine.resumeConfirmedRun({
+      runId: 'run-multi-write',
+      confirmation: firstConfirmation,
+    });
+    const waitingOnSecond = await store.get('run-multi-write');
+
+    expect(waitingOnSecond?.state).toBe('awaiting_confirmation');
+    expect(waitingOnSecond?.pendingConfirmation?.stepId).toBe('second');
+
+    const replay = await engine.resumeConfirmedRun({
+      runId: 'run-multi-write',
+      confirmation: firstConfirmation,
+    });
+
+    expect(replay).toMatchObject({
+      status: 'success',
+      data: { id: 'first-write' },
+    });
+    expect(firstHandler).toHaveBeenCalledTimes(1);
+    expect(secondHandler).not.toHaveBeenCalled();
+  });
+
+  it('resumes an existing V2 pending confirmation that predates confirmation history', async () => {
+    const handler = vi.fn().mockResolvedValue({
+      status: 'success',
+      message: '旧确认执行完成。',
+      data: { id: 'legacy-pending-write' },
+      evidence: [],
+      actions: [],
+    });
+    const tool = createTool({
+      id: 'write.legacy-pending',
+      title: '旧待确认写入',
+      riskLevel: 'create',
+      idempotent: false,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    await engine.executeSingleTool({
+      runId: 'run-legacy-pending',
+      prompt: '恢复旧待确认写入',
+      toolId: tool.id,
+      input: { id: 'legacy-1' },
+    });
+    const legacyRun = (await store.get('run-legacy-pending'))!;
+    const confirmation = legacyRun.pendingConfirmation!;
+    legacyRun.confirmationHistory = {};
+    await store.save(legacyRun);
+
+    const result = await engine.resumeConfirmedRun({
+      runId: legacyRun.id,
+      confirmation,
+    });
+
+    expect(result).toMatchObject({ status: 'success', data: { id: 'legacy-pending-write' } });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a different confirmation without invoking a write handler', async () => {
     const handler = vi.fn();
     const tool = createTool({
@@ -304,6 +444,34 @@ describe('agent execution engine', () => {
     expect(result.diagnostics?.code).toBe('CONFIRMATION_CONTEXT_MISMATCH');
     expect(handler).not.toHaveBeenCalled();
     expect((await store.get('run-wrong-confirmation'))?.state).toBe('awaiting_confirmation');
+  });
+
+  it('runtime-validates the confirmation version before matching or invoking a write', async () => {
+    const handler = vi.fn();
+    const tool = createTool({
+      id: 'formula.update.versioned',
+      title: '修改配方',
+      riskLevel: 'update',
+      idempotent: false,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    await engine.executeSingleTool({
+      runId: 'run-invalid-confirmation-version',
+      prompt: '修改配方',
+      toolId: tool.id,
+      input: { id: 'formula-1' },
+    });
+    const confirmation = (await store.get('run-invalid-confirmation-version'))!.pendingConfirmation!;
+
+    const result = await engine.resumeConfirmedRun({
+      runId: 'run-invalid-confirmation-version',
+      confirmation: { ...confirmation, version: 1 } as unknown as AgentConfirmation,
+    });
+
+    expect(result.diagnostics?.code).toBe('CONFIRMATION_INVALID');
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('topologically executes ready steps in their declared order', async () => {
@@ -460,6 +628,152 @@ describe('agent execution engine', () => {
     expect(permanent).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects write definitions that cannot receive an abort signal', async () => {
+    const handler = vi.fn();
+    const tool = createTool({
+      id: 'write.no-abort',
+      title: '不可取消写入',
+      riskLevel: 'create',
+      idempotent: false,
+      supportsAbort: false,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    const result = await engine.executeSingleTool({
+      runId: 'run-write-no-abort',
+      prompt: '执行不可取消写入',
+      toolId: tool.id,
+      input: {},
+    });
+
+    expect(result.diagnostics?.code).toBe('WRITE_ABORT_UNSUPPORTED');
+    expect((await store.get('run-write-no-abort'))?.state).toBe('failed');
+    expect((await store.get('run-write-no-abort'))?.pendingConfirmation).toBeUndefined();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('marks a timed-out confirmed write as outcome unknown and ignores its late success', async () => {
+    vi.useFakeTimers();
+    let resolveHandler!: (result: AgentExecutionResultFixture) => void;
+    const handler = vi.fn(() => new Promise<AgentExecutionResultFixture>((resolve) => {
+      resolveHandler = resolve;
+    }));
+    const tool = createTool({
+      id: 'write.timeout-unknown',
+      title: '超时写入',
+      riskLevel: 'update',
+      idempotent: false,
+      timeoutMs: 100,
+      supportsAbort: true,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    await engine.executeSingleTool({
+      runId: 'run-write-timeout-unknown',
+      prompt: '修改数据',
+      toolId: tool.id,
+      input: { id: 'record-1' },
+    });
+    const confirmation = (await store.get('run-write-timeout-unknown'))!.pendingConfirmation!;
+    const execution = engine.resumeConfirmedRun({
+      runId: 'run-write-timeout-unknown',
+      confirmation,
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    const result = await execution;
+
+    expect(result.status).toBe('error');
+    expect(result.diagnostics?.code).toBe('WRITE_OUTCOME_UNKNOWN');
+    expect(result.message).toContain('核对');
+    expect((await store.get('run-write-timeout-unknown'))?.state).toBe('failed');
+
+    resolveHandler({
+      status: 'success',
+      message: '迟到的写入结果。',
+      data: { updated: true },
+      evidence: [],
+      actions: [],
+    });
+    await Promise.resolve();
+
+    expect((await store.get('run-write-timeout-unknown'))?.state).toBe('failed');
+    expect((await store.get('run-write-timeout-unknown'))?.stepResults['single-step']?.diagnostics?.code)
+      .toBe('WRITE_OUTCOME_UNKNOWN');
+  });
+
+  it('marks a cancelled in-flight write as outcome unknown instead of safely cancelled', async () => {
+    const handler = vi.fn(() => new Promise<never>(() => undefined));
+    const tool = createTool({
+      id: 'write.cancel-unknown',
+      title: '取消中的写入',
+      riskLevel: 'delete',
+      idempotent: false,
+      supportsAbort: true,
+      handler,
+    });
+    const { engine, store } = createEngine({ tools: [tool] });
+
+    await engine.executeSingleTool({
+      runId: 'run-write-cancel-unknown',
+      prompt: '删除数据',
+      toolId: tool.id,
+      input: { id: 'record-2' },
+    });
+    const confirmation = (await store.get('run-write-cancel-unknown'))!.pendingConfirmation!;
+    const execution = engine.resumeConfirmedRun({
+      runId: 'run-write-cancel-unknown',
+      confirmation,
+    });
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    const cancellation = engine.cancelRun('run-write-cancel-unknown');
+    const [result, cancelledRun] = await Promise.all([execution, cancellation]);
+
+    expect(result.diagnostics?.code).toBe('WRITE_OUTCOME_UNKNOWN');
+    expect(cancelledRun?.state).toBe('failed');
+    expect((await store.get('run-write-cancel-unknown'))?.state).toBe('failed');
+  });
+
+  it('keeps cancellation terminal when a stale successful save was already in flight', async () => {
+    const backingStore = createMemoryAgentRunStore();
+    let releaseSuccessSave!: () => void;
+    let reportSuccessSaveStarted!: () => void;
+    const successSaveStarted = new Promise<void>((resolve) => {
+      reportSuccessSaveStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseSuccessSave = resolve;
+    });
+    let blocked = false;
+    const store: AgentRunStore = {
+      ...backingStore,
+      save: async (run) => {
+        if (!blocked && run.stepResults['single-step']?.status === 'success') {
+          blocked = true;
+          reportSuccessSaveStarted();
+          await release;
+        }
+        await backingStore.save(run);
+      },
+    };
+    const { engine } = createEngine({ tools: [createTool()], store });
+
+    const execution = engine.executeSingleTool({
+      runId: 'run-cancel-save-race',
+      prompt: '读取库存',
+      toolId: 'inventory.read',
+      input: {},
+    });
+    await successSaveStarted;
+    const cancellation = engine.cancelRun('run-cancel-save-race');
+    await Promise.resolve();
+    releaseSuccessSave();
+    await Promise.all([execution, cancellation]);
+
+    expect((await store.get('run-cancel-save-race'))?.state).toBe('cancelled');
+  });
+
   it('ignores a handler result that arrives after the run timed out', async () => {
     vi.useFakeTimers();
     let resolveHandler!: (value: {
@@ -501,3 +815,11 @@ describe('agent execution engine', () => {
     expect(progress).toHaveLength(progressLength);
   });
 });
+
+type AgentExecutionResultFixture = {
+  status: 'success';
+  message: string;
+  data: Record<string, unknown>;
+  evidence: Record<string, unknown>[];
+  actions: Record<string, unknown>[];
+};

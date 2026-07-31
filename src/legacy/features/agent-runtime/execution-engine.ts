@@ -1,4 +1,5 @@
 import {
+  agentConfirmationSchema,
   agentPlanSchema,
   type AgentConfirmation,
   type AgentPlanStep,
@@ -77,6 +78,7 @@ type ActiveCall = {
   controller: AbortController;
   cancel: (reason?: unknown) => void;
   timerId: ReturnType<typeof setTimeout>;
+  isWrite: boolean;
 };
 
 class AgentToolTimeoutError extends Error {
@@ -124,6 +126,18 @@ const timeoutResult = (timeoutMs: number): AgentExecutionResult => ({
   diagnostics: { code: 'AGENT_TOOL_TIMEOUT', detail: `The tool call exceeded ${timeoutMs}ms.` },
 });
 
+const writeOutcomeUnknownResult = (cause: 'cancelled' | 'timeout'): AgentExecutionResult => ({
+  status: 'error',
+  message: '写操作结果无法确认，请先核对目标数据并人工协调后续处理。',
+  data: {},
+  evidence: [],
+  actions: [{ type: 'reconcile_write', cause }],
+  diagnostics: {
+    code: 'WRITE_OUTCOME_UNKNOWN',
+    detail: `The confirmed write was ${cause} before a trustworthy handler outcome; reconciliation is required.`,
+  },
+});
+
 const errorDetail = (error: unknown): string => (
   error instanceof Error ? error.message : 'Unknown agent execution error.'
 );
@@ -138,7 +152,8 @@ const confirmationMatches = (
   stored: AgentConfirmation,
   provided: AgentConfirmation,
 ): boolean => (
-  stored.id === provided.id
+  stored.version === provided.version
+  && stored.id === provided.id
   && stored.runId === provided.runId
   && stored.stepId === provided.stepId
   && stored.toolId === provided.toolId
@@ -158,6 +173,57 @@ export const createAgentExecutionEngine = ({
   onProgress,
 }: CreateAgentExecutionEngineInput): AgentExecutionEngine => {
   const activeCalls = new Map<string, ActiveCall>();
+  const cancelledRuns = new Set<string>();
+  const mutationTails = new Map<string, Promise<void>>();
+  const resumeTails = new Map<string, Promise<void>>();
+  const runningOperations = new Map<string, Set<Promise<unknown>>>();
+
+  const withRunQueue = async <T>(
+    tails: Map<string, Promise<void>>,
+    runId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = tails.get(runId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    tails.set(runId, tail);
+    await previous;
+
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (tails.get(runId) === tail) tails.delete(runId);
+    }
+  };
+
+  const withRunMutation = <T>(runId: string, operation: () => Promise<T>): Promise<T> => (
+    withRunQueue(mutationTails, runId, operation)
+  );
+
+  const serializeResume = <T>(runId: string, operation: () => Promise<T>): Promise<T> => (
+    withRunQueue(resumeTails, runId, operation)
+  );
+
+  const trackOperation = <T>(runId: string, operation: Promise<T>): Promise<T> => {
+    const operations = runningOperations.get(runId) ?? new Set<Promise<unknown>>();
+    operations.add(operation);
+    runningOperations.set(runId, operations);
+    const cleanup = () => {
+      operations.delete(operation);
+      if (operations.size === 0) runningOperations.delete(runId);
+    };
+    void operation.then(cleanup, cleanup);
+    return operation;
+  };
+
+  const waitForRunOperations = async (runId: string): Promise<void> => {
+    const operations = [...(runningOperations.get(runId) ?? [])];
+    await Promise.allSettled(operations);
+  };
 
   const nowDate = (): Date => {
     const value = now();
@@ -215,45 +281,103 @@ export const createAgentExecutionEngine = ({
     activeCalls.delete(runId);
   };
 
+  const forceCancelled = (run: AgentRunRecord, message = '操作已取消。'): void => {
+    if (!isTerminalAgentState(run.state)) {
+      transition(run, 'cancelled', message);
+    } else {
+      const timestamp = nowIso();
+      run.state = 'cancelled';
+      run.updatedAt = timestamp;
+      run.endedAt = timestamp;
+    }
+    run.terminalError = { code: 'AGENT_RUN_CANCELLED', message };
+  };
+
+  const persistCancelledRun = async (run: AgentRunRecord): Promise<AgentRunRecord> => (
+    withRunMutation(run.id, async () => {
+      const latest = await store.get(run.id);
+      const current = latest ?? run;
+      if (latest?.terminalError?.code === 'WRITE_OUTCOME_UNKNOWN') return latest;
+      if (latest?.state !== 'cancelled') {
+        forceCancelled(current);
+        await store.save(current);
+        emitTerminalProgress(current, 'cancelled', '操作已取消。');
+      }
+      Object.assign(run, current);
+      return current;
+    })
+  );
+
   const saveTerminalResult = async (
     run: AgentRunRecord,
     step: AgentPlanStep,
     result: AgentExecutionResult,
-  ): Promise<void> => {
+  ): Promise<AgentExecutionResult> => withRunMutation(run.id, async () => {
     const latest = await store.get(run.id);
-    if (latest && isTerminalAgentState(latest.state)) return;
+    if (latest && isTerminalAgentState(latest.state)) {
+      Object.assign(run, latest);
+      return latest.stepResults[step.id] ?? result;
+    }
 
-    run.stepResults[step.id] = result;
-    const persistedStatus = result.status === 'success' ? 'completed' : 'failed';
+    let effectiveResult = cancelledRuns.has(run.id)
+      && result.diagnostics?.code !== 'WRITE_OUTCOME_UNKNOWN'
+      ? cancelledResult()
+      : result;
+    run.stepResults[step.id] = effectiveResult;
+
+    const confirmation = run.pendingConfirmation;
+    if (confirmation?.stepId === step.id && confirmation.consumedAt) {
+      const history = run.confirmationHistory[confirmation.id];
+      if (history) {
+        history.confirmation = confirmation;
+        history.result = effectiveResult;
+      }
+    }
+
+    const persistedStatus = effectiveResult.status === 'success' ? 'completed' : 'failed';
     appendPersistedProgress(run, {
       phase: 'executing',
-      label: result.message,
+      label: effectiveResult.message,
       status: persistedStatus,
       toolId: step.toolId,
       stepId: step.id,
     });
 
-    if (result.status === 'success') {
-      await store.save(run);
-      return;
+    if (effectiveResult.status !== 'success') {
+      const nextState = effectiveResult.status === 'timeout'
+        ? 'timed_out'
+        : effectiveResult.status === 'cancelled'
+          ? 'cancelled'
+          : 'failed';
+      transition(run, nextState, effectiveResult.message);
+      run.terminalError = {
+        code: effectiveResult.diagnostics?.code ?? 'AGENT_TOOL_FAILED',
+        message: effectiveResult.message,
+      };
     }
 
-    const nextState = result.status === 'timeout'
-      ? 'timed_out'
-      : result.status === 'cancelled'
-        ? 'cancelled'
-        : 'failed';
-    transition(run, nextState, result.message);
-    run.terminalError = {
-      code: result.diagnostics?.code ?? 'AGENT_TOOL_FAILED',
-      message: result.message,
-    };
     await store.save(run);
 
-    if (result.status === 'timeout' || result.status === 'cancelled') {
-      emitTerminalProgress(run, result.status, result.message, step);
+    if (
+      cancelledRuns.has(run.id)
+      && effectiveResult.diagnostics?.code !== 'WRITE_OUTCOME_UNKNOWN'
+      && effectiveResult.status !== 'cancelled'
+    ) {
+      effectiveResult = cancelledResult();
+      run.stepResults[step.id] = effectiveResult;
+      if (confirmation?.stepId === step.id && confirmation.consumedAt) {
+        const history = run.confirmationHistory[confirmation.id];
+        if (history) history.result = effectiveResult;
+      }
+      forceCancelled(run);
+      await store.save(run);
     }
-  };
+
+    if (effectiveResult.status === 'timeout' || effectiveResult.status === 'cancelled') {
+      emitTerminalProgress(run, effectiveResult.status, effectiveResult.message, step);
+    }
+    return effectiveResult;
+  });
 
   const executeToolCall = async (
     run: AgentRunRecord,
@@ -261,7 +385,7 @@ export const createAgentExecutionEngine = ({
     signal?: AbortSignal,
     idempotencyKey?: string,
   ): Promise<AgentExecutionResult> => {
-    if (signal?.aborted) return cancelledResult();
+    if (signal?.aborted || cancelledRuns.has(run.id)) return cancelledResult();
 
     const definition = registry.get(step.toolId);
     if (!definition) {
@@ -277,8 +401,10 @@ export const createAgentExecutionEngine = ({
 
     const controller = new AbortController();
     const token = Symbol(run.id);
+    const isWrite = definition.riskLevel !== 'read' && idempotencyKey !== undefined;
     let rejectInterruption: ((error: AgentToolTimeoutError | AgentToolCancelledError) => void) | undefined;
     let interrupted = false;
+    let handlerStarted = false;
 
     const interruption = new Promise<never>((_, reject) => {
       rejectInterruption = reject;
@@ -297,7 +423,7 @@ export const createAgentExecutionEngine = ({
       rejectInterruption?.(error);
       controller.abort(error);
     }, definition.timeoutMs);
-    const active: ActiveCall = { token, controller, cancel, timerId };
+    const active: ActiveCall = { token, controller, cancel, timerId, isWrite };
     activeCalls.set(run.id, active);
 
     const onParentAbort = () => cancel(signal?.reason);
@@ -310,6 +436,7 @@ export const createAgentExecutionEngine = ({
 
       let attempt = 1;
       while (true) {
+        handlerStarted = true;
         const handlerResult = await Promise.race([
           Promise.resolve(definition.handler(call.input, {
             runId: call.runId,
@@ -337,8 +464,16 @@ export const createAgentExecutionEngine = ({
         attempt += 1;
       }
     } catch (error) {
-      if (error instanceof AgentToolTimeoutError) return timeoutResult(error.timeoutMs);
-      if (error instanceof AgentToolCancelledError) return cancelledResult();
+      if (error instanceof AgentToolTimeoutError) {
+        return isWrite && handlerStarted
+          ? writeOutcomeUnknownResult('timeout')
+          : timeoutResult(error.timeoutMs);
+      }
+      if (error instanceof AgentToolCancelledError) {
+        return isWrite && handlerStarted
+          ? writeOutcomeUnknownResult('cancelled')
+          : cancelledResult();
+      }
       return engineError('AGENT_TOOL_EXECUTION_FAILED', '工具执行失败。', errorDetail(error));
     } finally {
       clearTimeout(timerId);
@@ -356,6 +491,15 @@ export const createAgentExecutionEngine = ({
       const result = engineError('UNKNOWN_TOOL', `未知工具：${step.toolId}`, `Unknown tool: ${step.toolId}`);
       await saveTerminalResult(run, step, result);
       return result;
+    }
+
+    if (!definition.supportsAbort) {
+      const result = engineError(
+        'WRITE_ABORT_UNSUPPORTED',
+        '写工具必须支持取消信号后才能执行。',
+        `Write tool ${step.toolId} does not declare supportsAbort.`,
+      );
+      return await saveTerminalResult(run, step, result);
     }
 
     try {
@@ -378,23 +522,47 @@ export const createAgentExecutionEngine = ({
       idempotencyKey: createId('idempotency'),
       createdAt,
     });
-    run.pendingConfirmation = confirmation;
-    await store.save(run);
-    transition(run, 'awaiting_confirmation', `Confirmation required for ${step.toolId}.`);
-    appendPersistedProgress(run, {
-      phase: 'awaiting_confirmation',
-      label: `等待确认：${definition.title}`,
-      status: 'waiting_confirmation',
-      toolId: step.toolId,
-      stepId: step.id,
-    });
-    await store.save(run);
+    if (cancelledRuns.has(run.id)) {
+      await persistCancelledRun(run);
+      return cancelledResult();
+    }
 
-    return engineError(
-      'CONFIRMATION_REQUIRED',
-      '此操作需要确认后才能执行。',
-      confirmation.id,
-    );
+    return withRunMutation(run.id, async () => {
+      const latest = await store.get(run.id);
+      if (latest && isTerminalAgentState(latest.state)) {
+        Object.assign(run, latest);
+        return latest.stepResults[step.id] ?? cancelledResult();
+      }
+      run.pendingConfirmation = confirmation;
+      run.confirmationHistory[confirmation.id] = { confirmation };
+      await store.save(run);
+      if (cancelledRuns.has(run.id)) {
+        forceCancelled(run);
+        await store.save(run);
+        return cancelledResult();
+      }
+
+      transition(run, 'awaiting_confirmation', `Confirmation required for ${step.toolId}.`);
+      appendPersistedProgress(run, {
+        phase: 'awaiting_confirmation',
+        label: `等待确认：${definition.title}`,
+        status: 'waiting_confirmation',
+        toolId: step.toolId,
+        stepId: step.id,
+      });
+      await store.save(run);
+      if (cancelledRuns.has(run.id)) {
+        forceCancelled(run);
+        await store.save(run);
+        return cancelledResult();
+      }
+
+      return engineError(
+        'CONFIRMATION_REQUIRED',
+        '此操作需要确认后才能执行。',
+        confirmation.id,
+      );
+    });
   };
 
   const executeStep = async (
@@ -403,18 +571,31 @@ export const createAgentExecutionEngine = ({
     signal?: AbortSignal,
     idempotencyKey?: string,
   ): Promise<AgentExecutionResult> => {
-    appendPersistedProgress(run, {
-      phase: 'executing',
-      label: `正在执行：${step.toolId}`,
-      status: 'running',
-      toolId: step.toolId,
-      stepId: step.id,
+    if (cancelledRuns.has(run.id)) {
+      return await saveTerminalResult(run, step, cancelledResult());
+    }
+
+    const canStart = await withRunMutation(run.id, async () => {
+      const latest = await store.get(run.id);
+      if (latest && isTerminalAgentState(latest.state)) {
+        Object.assign(run, latest);
+        return false;
+      }
+      if (cancelledRuns.has(run.id)) return false;
+      appendPersistedProgress(run, {
+        phase: 'executing',
+        label: `正在执行：${step.toolId}`,
+        status: 'running',
+        toolId: step.toolId,
+        stepId: step.id,
+      });
+      await store.save(run);
+      return !cancelledRuns.has(run.id);
     });
-    await store.save(run);
+    if (!canStart) return await saveTerminalResult(run, step, cancelledResult());
 
     const result = await executeToolCall(run, step, signal, idempotencyKey);
-    await saveTerminalResult(run, step, result);
-    return result;
+    return await saveTerminalResult(run, step, result);
   };
 
   const continuePlan = async (
@@ -429,6 +610,10 @@ export const createAgentExecutionEngine = ({
 
     let latestResult = initialResult;
     while (Object.keys(run.stepResults).length < plan.steps.length) {
+      if (cancelledRuns.has(run.id)) {
+        await persistCancelledRun(run);
+        return cancelledResult();
+      }
       const nextStep = plan.steps.find((step) => (
         run.stepResults[step.id] === undefined
         && step.dependsOn.every((dependencyId) => run.stepResults[dependencyId]?.status === 'success')
@@ -437,15 +622,13 @@ export const createAgentExecutionEngine = ({
       if (!nextStep) {
         const result = engineError('PLAN_DEPENDENCY_BLOCKED', '执行计划的依赖无法继续。');
         const fallbackStep = plan.steps.find((step) => run.stepResults[step.id] === undefined) ?? plan.steps[0];
-        await saveTerminalResult(run, fallbackStep, result);
-        return result;
+        return await saveTerminalResult(run, fallbackStep, result);
       }
 
       const definition = registry.get(nextStep.toolId);
       if (!definition) {
         const result = engineError('UNKNOWN_TOOL', `未知工具：${nextStep.toolId}`, `Unknown tool: ${nextStep.toolId}`);
-        await saveTerminalResult(run, nextStep, result);
-        return result;
+        return await saveTerminalResult(run, nextStep, result);
       }
 
       if (requiresConfirmation(definition.riskLevel)) {
@@ -460,8 +643,31 @@ export const createAgentExecutionEngine = ({
     if (latest && isTerminalAgentState(latest.state)) {
       return latestResult ?? engineError('RUN_TERMINAL', '运行已结束。');
     }
-    transition(run, 'composing', 'All tool steps completed.');
-    await store.save(run);
+    if (cancelledRuns.has(run.id)) {
+      await persistCancelledRun(run);
+      return cancelledResult();
+    }
+    const composed = await withRunMutation(run.id, async () => {
+      const current = await store.get(run.id);
+      if (current && isTerminalAgentState(current.state)) {
+        Object.assign(run, current);
+        return false;
+      }
+      if (cancelledRuns.has(run.id)) {
+        forceCancelled(run);
+        await store.save(run);
+        return false;
+      }
+      transition(run, 'composing', 'All tool steps completed.');
+      await store.save(run);
+      if (cancelledRuns.has(run.id)) {
+        forceCancelled(run);
+        await store.save(run);
+        return false;
+      }
+      return true;
+    });
+    if (!composed) return cancelledResult();
     return latestResult ?? engineError('PLAN_EMPTY', '执行计划没有可用步骤。');
   };
 
@@ -511,120 +717,193 @@ export const createAgentExecutionEngine = ({
 
   const engine: AgentExecutionEngine = {
     async executePlan(input) {
-      try {
-        return await executePlanCore(input);
-      } catch (error) {
-        return await failRun(input.runId, input.prompt, error);
-      } finally {
-        clearActiveCall(input.runId);
-      }
+      const operation = (async () => {
+        try {
+          return await executePlanCore(input);
+        } catch (error) {
+          return await failRun(input.runId, input.prompt, error);
+        } finally {
+          clearActiveCall(input.runId);
+        }
+      })();
+      return await trackOperation(input.runId, operation);
     },
 
     async executeSingleTool(input) {
-      try {
-        return await executePlanCore({
-          runId: input.runId,
-          prompt: input.prompt,
-          signal: input.signal,
-          plan: {
-            version: 2,
-            kind: 'complex_agent',
-            summary: input.prompt || `Execute ${input.toolId}`,
-            steps: [{
-              id: input.stepId ?? 'single-step',
-              toolId: input.toolId,
-              input: input.input,
-              dependsOn: [],
-            }],
-          },
-        });
-      } catch (error) {
-        return await failRun(input.runId, input.prompt, error);
-      } finally {
-        clearActiveCall(input.runId);
-      }
+      const operation = (async () => {
+        try {
+          return await executePlanCore({
+            runId: input.runId,
+            prompt: input.prompt,
+            signal: input.signal,
+            plan: {
+              version: 2,
+              kind: 'complex_agent',
+              summary: input.prompt || `Execute ${input.toolId}`,
+              steps: [{
+                id: input.stepId ?? 'single-step',
+                toolId: input.toolId,
+                input: input.input,
+                dependsOn: [],
+              }],
+            },
+          });
+        } catch (error) {
+          return await failRun(input.runId, input.prompt, error);
+        } finally {
+          clearActiveCall(input.runId);
+        }
+      })();
+      return await trackOperation(input.runId, operation);
     },
 
     async resumeConfirmedRun(input) {
-      try {
-        const run = await store.get(input.runId);
-        if (!run) return engineError('RUN_NOT_FOUND', '未找到待确认的运行记录。', input.runId);
-
-        const stored = run.pendingConfirmation;
-        if (!stored || !confirmationMatches(stored, input.confirmation)) {
-          return engineError('CONFIRMATION_CONTEXT_MISMATCH', '确认信息与待执行操作不匹配。');
-        }
-
-        const replay = run.stepResults[stored.stepId];
-        if (stored.consumedAt && replay) return replay;
-        if (stored.consumedAt) {
-          if (run.state === 'awaiting_confirmation') {
-            transition(run, 'executing', 'Consumed confirmation has no persisted result.');
+      const operation = serializeResume(input.runId, async () => {
+        try {
+          const parsedConfirmation = agentConfirmationSchema.safeParse(input.confirmation);
+          if (!parsedConfirmation.success) {
+            return engineError('CONFIRMATION_INVALID', '确认数据不符合 V2 协议。');
           }
-          if (!isTerminalAgentState(run.state)) {
-            transition(run, 'failed', 'Consumed confirmation has no persisted result.');
-            run.terminalError = {
-              code: 'CONFIRMATION_RESULT_UNKNOWN',
-              message: '确认已消费，但没有可安全重放的执行结果。',
-            };
-            await store.save(run);
+          const provided = parsedConfirmation.data;
+          let run = await store.get(input.runId);
+          if (!run) return engineError('RUN_NOT_FOUND', '未找到待确认的运行记录。', input.runId);
+
+          let history = run.confirmationHistory[provided.id];
+          if (
+            !history
+            && run.pendingConfirmation
+            && confirmationMatches(run.pendingConfirmation, provided)
+          ) {
+            history = { confirmation: run.pendingConfirmation };
           }
-          return engineError('CONFIRMATION_RESULT_UNKNOWN', '确认已消费，无法重复执行写操作。');
+          if (!history || !confirmationMatches(history.confirmation, provided)) {
+            return engineError('CONFIRMATION_CONTEXT_MISMATCH', '确认信息与待执行操作不匹配。');
+          }
+          if (history.result) return history.result;
+
+          const stored = history.confirmation;
+          if (stored.consumedAt) {
+            if (run.state === 'awaiting_confirmation') {
+              transition(run, 'executing', 'Consumed confirmation has no persisted result.');
+            }
+            if (!isTerminalAgentState(run.state)) {
+              transition(run, 'failed', 'Consumed confirmation has no persisted result.');
+              run.terminalError = {
+                code: 'CONFIRMATION_RESULT_UNKNOWN',
+                message: '确认已消费，但没有可安全重放的执行结果。',
+              };
+              await store.save(run);
+            }
+            return engineError('CONFIRMATION_RESULT_UNKNOWN', '确认已消费，无法重复执行写操作。');
+          }
+          if (run.state !== 'awaiting_confirmation' || run.pendingConfirmation?.id !== stored.id) {
+            return engineError('RUN_NOT_AWAITING_CONFIRMATION', '当前运行不在等待此确认的状态。');
+          }
+
+          const step = run.plan?.steps.find((candidate) => candidate.id === stored.stepId);
+          if (!step) return engineError('CONFIRMATION_STEP_MISSING', '确认对应的计划步骤不存在。');
+
+          const validation = validateAgentConfirmation(stored, {
+            runId: run.id,
+            stepId: step.id,
+            toolId: step.toolId,
+            input: step.input,
+            idempotencyKey: stored.idempotencyKey,
+            now: nowIso(),
+          });
+          if (!validation.ok) {
+            const code = validation.reason === 'confirmation_expired'
+              ? 'CONFIRMATION_EXPIRED'
+              : validation.reason === 'confirmation_already_consumed'
+                ? 'CONFIRMATION_ALREADY_CONSUMED'
+                : 'CONFIRMATION_CONTEXT_MISMATCH';
+            return engineError(code, '确认校验失败。', validation.reason);
+          }
+
+          let claimed = false;
+          const claimedRun = await withRunMutation(run.id, () => store.update(run.id, (current) => {
+            let currentHistory = current.confirmationHistory[provided.id];
+            if (
+              !currentHistory
+              && current.pendingConfirmation
+              && confirmationMatches(current.pendingConfirmation, provided)
+            ) {
+              currentHistory = { confirmation: current.pendingConfirmation };
+              current.confirmationHistory[provided.id] = currentHistory;
+            }
+            if (
+              !currentHistory
+              || currentHistory.result
+              || currentHistory.confirmation.consumedAt
+              || current.state !== 'awaiting_confirmation'
+              || current.pendingConfirmation?.id !== provided.id
+              || !confirmationMatches(currentHistory.confirmation, provided)
+            ) {
+              return current;
+            }
+
+            const consumedAt = nowIso();
+            markConfirmationConsumed(currentHistory.confirmation, consumedAt);
+            if (current.pendingConfirmation?.id === provided.id) {
+              markConfirmationConsumed(current.pendingConfirmation, consumedAt);
+            }
+            transition(current, 'executing', 'Confirmation consumed.');
+            claimed = true;
+            return current;
+          }));
+          if (!claimedRun) return engineError('RUN_NOT_FOUND', '未找到待确认的运行记录。', input.runId);
+          run = claimedRun;
+          history = run.confirmationHistory[provided.id];
+          if (history.result) return history.result;
+          if (!claimed) {
+            return history.confirmation.consumedAt
+              ? engineError('CONFIRMATION_RESULT_UNKNOWN', '确认已消费，无法重复执行写操作。')
+              : engineError('CONFIRMATION_CONTEXT_MISMATCH', '确认信息与待执行操作不匹配。');
+          }
+
+          const result = await executeStep(run, step, input.signal, history.confirmation.idempotencyKey);
+          if (result.status !== 'success') return result;
+          return await continuePlan(run, input.signal, result);
+        } catch (error) {
+          return await failRun(input.runId, '', error);
+        } finally {
+          clearActiveCall(input.runId);
         }
-        if (run.state !== 'awaiting_confirmation') {
-          return engineError('RUN_NOT_AWAITING_CONFIRMATION', '当前运行不在等待确认状态。');
-        }
-
-        const step = run.plan?.steps.find((candidate) => candidate.id === stored.stepId);
-        if (!step) return engineError('CONFIRMATION_STEP_MISSING', '确认对应的计划步骤不存在。');
-
-        const validation = validateAgentConfirmation(stored, {
-          runId: run.id,
-          stepId: step.id,
-          toolId: step.toolId,
-          input: step.input,
-          idempotencyKey: stored.idempotencyKey,
-          now: nowIso(),
-        });
-        if (!validation.ok) {
-          const code = validation.reason === 'confirmation_expired'
-            ? 'CONFIRMATION_EXPIRED'
-            : validation.reason === 'confirmation_already_consumed'
-              ? 'CONFIRMATION_ALREADY_CONSUMED'
-              : 'CONFIRMATION_CONTEXT_MISMATCH';
-          return engineError(code, '确认校验失败。', validation.reason);
-        }
-
-        markConfirmationConsumed(stored, nowIso());
-        await store.save(run);
-        transition(run, 'executing', 'Confirmation consumed.');
-        await store.save(run);
-
-        const result = await executeStep(run, step, input.signal, stored.idempotencyKey);
-        if (result.status !== 'success') return result;
-        return await continuePlan(run, input.signal, result);
-      } catch (error) {
-        return await failRun(input.runId, '', error);
-      } finally {
-        clearActiveCall(input.runId);
-      }
+      });
+      return await trackOperation(input.runId, operation);
     },
 
     async cancelRun(runId) {
       try {
-        activeCalls.get(runId)?.cancel(new AgentToolCancelledError());
+        cancelledRuns.add(runId);
+        const active = activeCalls.get(runId);
+        active?.cancel(new AgentToolCancelledError());
         const run = await store.get(runId);
-        if (!run || isTerminalAgentState(run.state)) return run;
+        if (!run) {
+          await waitForRunOperations(runId);
+          return await store.get(runId);
+        }
 
-        transition(run, 'cancelled', 'User cancelled the run.');
-        run.terminalError = { code: 'AGENT_RUN_CANCELLED', message: '操作已取消。' };
-        await store.save(run);
-        emitTerminalProgress(run, 'cancelled', '操作已取消。');
-        return run;
+        const pendingHistory = run.pendingConfirmation
+          ? run.confirmationHistory[run.pendingConfirmation.id]
+          : undefined;
+        const writeOutcomePending = active?.isWrite === true
+          || Boolean(run.pendingConfirmation?.consumedAt && !pendingHistory?.result);
+
+        if (writeOutcomePending) {
+          await waitForRunOperations(runId);
+          return await store.get(runId);
+        }
+
+        if (!isTerminalAgentState(run.state)) await persistCancelledRun(run);
+        await waitForRunOperations(runId);
+        const latest = await store.get(runId);
+        return latest;
       } catch {
         return await store.get(runId);
       } finally {
         clearActiveCall(runId);
+        cancelledRuns.delete(runId);
       }
     },
   };

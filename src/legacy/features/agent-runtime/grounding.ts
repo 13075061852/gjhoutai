@@ -10,7 +10,6 @@ export type GroundingAuditResult = {
   unsupportedClaims: string[];
 };
 
-const SUCCESS_CLAIM_PATTERN = /(?:已|已经)?(?:成功|完成|已完成|已删除|已修改|已更新|已创建|已新增|已写入|已切换)/;
 const QUANTIFIED_CLAIM_PATTERN = /-?\d+(?:\.\d+)?\s*(?:条|个|项|张|元|%|％|kg|KG|吨|天|次|人|页|行|家|份|种|台|小时|分钟)/g;
 
 const stringifyEvidence = (evidence: unknown[]) => {
@@ -103,7 +102,7 @@ export const auditGroundedAnswer = ({
 
   if (!text) reasons.push('empty_answer');
   if (requiresEvidence && !successfulEvidence.length) reasons.push('missing_evidence');
-  if (failedEvidence.length && SUCCESS_CLAIM_PATTERN.test(text)) {
+  if (failedEvidence.length) {
     reasons.push('failed_operation_claimed_success');
   }
 

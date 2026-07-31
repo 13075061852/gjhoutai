@@ -5,6 +5,7 @@ import {
   AgentPlannerCancelledError,
   AgentPlannerTimeoutError,
 } from './planner';
+import { createIntentGateway } from './intent-gateway';
 import type {
   AgentIntent,
   AgentPlanV2,
@@ -70,6 +71,7 @@ const createHarness = ({
   chatOutput,
   store = createMemoryAgentRunStore(),
   gatewayRoute,
+  intentGateway,
 }: {
   intent: AgentIntent;
   tools?: AgentToolDefinition[];
@@ -84,9 +86,10 @@ const createHarness = ({
     webSearchEnabled?: boolean;
     signal?: AbortSignal;
   }) => Promise<AgentIntent>;
+  intentGateway?: ReturnType<typeof createIntentGateway>;
 }) => {
   const registry = createAgentToolRegistry(tools);
-  const gateway = {
+  const gateway = intentGateway ?? {
     route: gatewayRoute
       ? vi.fn(gatewayRoute)
       : vi.fn().mockResolvedValue(intent),
@@ -533,6 +536,37 @@ describe('agent runtime coordinator', () => {
     expect(settledBeforeGateway).toBe(true);
     expect(result.run.state).toBe('cancelled');
     expect(terminalEvents(events)).toHaveLength(1);
+    expect(harness.chatModel).not.toHaveBeenCalled();
+  });
+
+  it('aborts the classifier inside a production intent gateway through runtime.cancel', async () => {
+    let classifierSignal: AbortSignal | undefined;
+    const classifier = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      classifierSignal = signal;
+      return new Promise<null>((resolve) => {
+        signal.addEventListener('abort', () => resolve(null), { once: true });
+      });
+    });
+    const intentGateway = createIntentGateway({ classifier });
+    const harness = createHarness({
+      intent: { kind: 'chat', confidence: 0.99, reason: 'fallback' },
+      intentGateway,
+    });
+
+    const running = harness.runtime.run({
+      prompt: '帮我处理一下这个',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+    await vi.waitFor(() => expect(classifier).toHaveBeenCalledOnce());
+
+    await harness.runtime.cancel('run-1');
+    const result = await running;
+
+    expect(classifierSignal?.aborted).toBe(true);
+    expect(result.run.state).toBe('cancelled');
+    expect(result.answer).toContain('取消');
     expect(harness.chatModel).not.toHaveBeenCalled();
   });
 });

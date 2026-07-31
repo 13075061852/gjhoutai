@@ -91,6 +91,33 @@ describe('grounded response composer', () => {
     expect(response.content).not.toContain('成功完成');
   });
 
+  it.each([
+    '所有步骤都顺利执行。',
+    '删除了3条图谱。',
+  ])('uses deterministic evidence when mixed results could be misrepresented as: %s', async (proposedAnswer) => {
+    const model = vi.fn().mockResolvedValue(proposedAnswer);
+    const response = await composeGroundedResponse({
+      question: '读取库存并删除图谱',
+      results: [
+        resultOf({ evidence: [{ field: 'inventoryCount', value: 3 }] }),
+        resultOf({
+          status: 'error',
+          message: '删除没有执行。',
+          evidence: [],
+          diagnostics: { code: 'DELETE_FAILED', detail: 'The delete operation failed.' },
+        }),
+      ],
+      model,
+    });
+
+    expect(model).not.toHaveBeenCalled();
+    expect(response.usedFallback).toBe(true);
+    expect(response.content).toContain('"field":"inventoryCount"');
+    expect(response.content).toContain('"value":3');
+    expect(response.content).toContain('工具执行失败');
+    expect(response.content).not.toContain(proposedAnswer);
+  });
+
   it('sends only the original question and compact evidence to the model', async () => {
     const model = vi.fn().mockResolvedValue('当前库存共有 3 条。');
     const rawImage = `data:image/png;base64,${'a'.repeat(2_000)}`;

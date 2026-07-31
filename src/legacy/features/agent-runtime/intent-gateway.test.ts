@@ -101,6 +101,41 @@ describe('agent intent gateway', () => {
     }
   });
 
+  it('aborts the production classifier with the runtime signal and removes its listener', async () => {
+    const parent = new AbortController();
+    const removeEventListener = vi.spyOn(parent.signal, 'removeEventListener');
+    let classifierSignal: AbortSignal | undefined;
+    let releaseClassifier!: (intent: null) => void;
+    const classifier = vi.fn(({ signal }: { signal: AbortSignal }) => {
+      classifierSignal = signal;
+      return new Promise<null>((resolve) => {
+        releaseClassifier = resolve;
+        signal.addEventListener('abort', () => resolve(null), { once: true });
+      });
+    });
+    const gateway = createIntentGateway({ classifier });
+
+    const routing = gateway.route({
+      prompt: '帮我处理一下这个',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      signal: parent.signal,
+    });
+    await vi.waitFor(() => expect(classifier).toHaveBeenCalledOnce());
+
+    parent.abort('runtime cancelled');
+    await Promise.resolve();
+    const abortedBeforeManualRelease = classifierSignal?.aborted === true;
+    if (!abortedBeforeManualRelease) releaseClassifier(null);
+    const intent = await routing;
+
+    expect(abortedBeforeManualRelease).toBe(true);
+    expect(classifierSignal?.reason).toBe('runtime cancelled');
+    expect(intent.kind).toBe('chat');
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
   it('does not let ambiguous classification bypass disabled project access', async () => {
     const gateway = createIntentGateway({
       classifier: async () => ({

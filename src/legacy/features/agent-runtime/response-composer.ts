@@ -88,6 +88,10 @@ const compactEvidence = (results: AgentToolResultV2[]): unknown[] => results.fla
     : []
 )).slice(0, MAX_EVIDENCE_ITEMS);
 
+const hasNonSuccessResult = (results: AgentToolResultV2[]): boolean => (
+  results.some((result) => result.status !== 'success')
+);
+
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -133,7 +137,7 @@ const selectResponse = (
     ? formatToolResults(results)
     : requestedFallback || formatToolResults(results);
   return selectGroundedAnswer({
-    answer: proposedAnswer,
+    answer: hasNonSuccessResult(results) ? '' : proposedAnswer,
     evidence: results,
     fallback,
     requiresEvidence: true,
@@ -144,6 +148,8 @@ const composeWithModel = async (
   input: ComposeGroundedResponseWithModelInput,
 ): Promise<GroundedResponse> => {
   const results = Array.isArray(input.results) ? input.results : [];
+  if (hasNonSuccessResult(results)) return selectResponse(input, '');
+
   const evidence = compactEvidence(results);
   let proposedAnswer = '';
 

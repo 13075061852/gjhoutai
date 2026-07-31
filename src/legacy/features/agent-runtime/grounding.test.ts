@@ -53,6 +53,33 @@ describe('agent answer grounding', () => {
     expect(audit.reasons).toContain('failed_operation_claimed_success');
   });
 
+  it.each([
+    '所有步骤都顺利执行。',
+    '删除了3条图谱。',
+  ])('rejects every proposed answer for mixed success and failure results: %s', (answer) => {
+    const audit = auditGroundedAnswer({
+      answer,
+      evidence: [
+        {
+          status: 'success',
+          message: '库存读取完成。',
+          data: {},
+          evidence: [{ field: 'inventoryCount', value: 3 }],
+        },
+        {
+          status: 'error',
+          message: '删除没有执行。',
+          data: {},
+          evidence: [],
+        },
+      ],
+      requiresEvidence: true,
+    });
+
+    expect(audit.ok).toBe(false);
+    expect(audit.reasons).toContain('failed_operation_claimed_success');
+  });
+
   it('rejects quantified claims that are absent from evidence', () => {
     const audit = auditGroundedAnswer({
       answer: '当前共有 18 个订单，其中 6 个生产中。',

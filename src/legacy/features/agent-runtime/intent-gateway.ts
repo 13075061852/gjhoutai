@@ -29,6 +29,7 @@ export type IntentGatewayInput = {
   activePageId?: string;
   projectAccessEnabled?: boolean;
   webSearchEnabled?: boolean;
+  signal?: AbortSignal;
 };
 
 export type IntentGatewayClassifier = (input: {
@@ -146,25 +147,36 @@ const classifyWithinDeadline = async (
   prompt: string,
   activePageId: string,
   timeoutMs: number,
+  externalSignal?: AbortSignal,
 ): Promise<AgentIntent | null> => {
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
+  let resolveInterruption: ((value: null) => void) | undefined;
+  const interruption = new Promise<null>((resolve) => {
+    resolveInterruption = resolve;
     timeoutId = setTimeout(() => {
       controller.abort();
       resolve(null);
     }, timeoutMs);
   });
+  const onExternalAbort = () => {
+    if (!controller.signal.aborted) controller.abort(externalSignal?.reason);
+    resolveInterruption?.(null);
+  };
+
+  if (externalSignal?.aborted) onExternalAbort();
+  else externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
   try {
     return await Promise.race([
       classifier({ prompt, activePageId, signal: controller.signal }),
-      timeout,
+      interruption,
     ]);
   } catch {
     return null;
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 };
 
@@ -187,7 +199,13 @@ export const createIntentGateway = ({
     if (!classifier || !prompt || isObviousChat(prompt)) return deterministic;
 
     if (deterministic.kind === 'web_search') {
-      const classified = parseClassifierIntent(await classifyWithinDeadline(classifier, prompt, activePageId, classifyTimeoutMs));
+      const classified = parseClassifierIntent(await classifyWithinDeadline(
+        classifier,
+        prompt,
+        activePageId,
+        classifyTimeoutMs,
+        input.signal,
+      ));
       return classified?.searchPlan
         ? { ...deterministic, searchPlan: classified.searchPlan, reason: classified.reason || deterministic.reason }
         : deterministic;
@@ -195,7 +213,13 @@ export const createIntentGateway = ({
 
     if (deterministic.kind !== 'chat') return deterministic;
 
-    const classified = parseClassifierIntent(await classifyWithinDeadline(classifier, prompt, activePageId, classifyTimeoutMs));
+    const classified = parseClassifierIntent(await classifyWithinDeadline(
+      classifier,
+      prompt,
+      activePageId,
+      classifyTimeoutMs,
+      input.signal,
+    ));
     if (!classified) return deterministic;
     if (classified.kind === 'web_search' && !webSearchEnabled) return deterministic;
     if (requiresProjectAccess(classified) && !projectAccessEnabled) return deterministic;

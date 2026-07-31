@@ -49,3 +49,16 @@ export type AgentToolResult = {
   candidates?: any[];
 };
 
+export type {
+  AgentConfirmation,
+  AgentIntent,
+  AgentPlanStep,
+  AgentPlanV2,
+  AgentProgressEvent,
+  AgentRunRecord,
+  AgentRunState,
+  AgentToolCall,
+  AgentToolDefinition,
+  AgentToolResultV2,
+} from './protocol';
+

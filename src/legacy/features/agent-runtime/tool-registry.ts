@@ -44,6 +44,9 @@ const schemaShape = (schema: { constructor: { name?: string } }): string =>
   schema.constructor.name || 'schema';
 
 const assertValidDefinition = (definition: AgentToolDefinition): void => {
+  if (typeof definition !== 'object' || definition === null || Array.isArray(definition)) {
+    throw new ToolRegistrationError('Tool definition must be an object.');
+  }
   const candidate = definition as unknown as Record<string, unknown>;
   const requiredStrings = ['id', 'title', 'description', 'category'];
   const missing = requiredStrings.find((field) => !isNonEmptyString(candidate[field]));

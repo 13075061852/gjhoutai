@@ -45,6 +45,12 @@ describe('agent tool registry', () => {
     expect(() => registry.register(invalidTimeout)).toThrow(ToolRegistrationError);
   });
 
+  it.each([null, undefined, 'not a definition'])('rejects non-object registration input: %p', (definition) => {
+    const registry = createAgentToolRegistry();
+
+    expect(() => registry.register(definition as never)).toThrow(ToolRegistrationError);
+  });
+
   it('freezes registered definitions', () => {
     const registry = createAgentToolRegistry([readTool]);
 

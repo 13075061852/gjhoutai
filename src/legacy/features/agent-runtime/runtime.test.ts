@@ -11,7 +11,7 @@ import type {
   AgentProgressEvent,
   AgentToolDefinition,
 } from './protocol';
-import { createMemoryAgentRunStore } from './run-store';
+import { createMemoryAgentRunStore, type AgentRunStore } from './run-store';
 import { createAgentRuntime } from './runtime';
 import { createAgentToolRegistry } from './tool-registry';
 import {
@@ -68,17 +68,28 @@ const createHarness = ({
   plan,
   plannerError,
   chatOutput,
+  store = createMemoryAgentRunStore(),
+  gatewayRoute,
 }: {
   intent: AgentIntent;
   tools?: AgentToolDefinition[];
   plan?: AgentPlanV2;
   plannerError?: unknown;
   chatOutput?: unknown;
+  store?: AgentRunStore;
+  gatewayRoute?: (input: {
+    prompt: unknown;
+    activePageId?: string;
+    projectAccessEnabled?: boolean;
+    webSearchEnabled?: boolean;
+    signal?: AbortSignal;
+  }) => Promise<AgentIntent>;
 }) => {
-  const store = createMemoryAgentRunStore();
   const registry = createAgentToolRegistry(tools);
   const gateway = {
-    route: vi.fn().mockResolvedValue(intent),
+    route: gatewayRoute
+      ? vi.fn(gatewayRoute)
+      : vi.fn().mockResolvedValue(intent),
   };
   const planner = {
     plan: plannerError === undefined
@@ -115,6 +126,39 @@ const createHarness = ({
     planner,
     chatModel,
     executionEngine,
+  };
+};
+
+const createCompletionRaceStore = () => {
+  const backing = createMemoryAgentRunStore();
+  let armed = false;
+  let cancelAtCommit: (() => Promise<unknown>) | undefined;
+
+  const runCancellation = async (): Promise<void> => {
+    if (!armed || !cancelAtCommit) return;
+    armed = false;
+    await cancelAtCommit();
+  };
+
+  const store: AgentRunStore = {
+    ...backing,
+    async save(run) {
+      if (run.state === 'completed') await runCancellation();
+      await backing.save(run);
+    },
+    async update(id, updater) {
+      const current = await backing.get(id);
+      if (current?.state === 'composing') await runCancellation();
+      return backing.update(id, updater);
+    },
+  };
+
+  return {
+    store,
+    arm(cancel: () => Promise<unknown>) {
+      cancelAtCommit = cancel;
+      armed = true;
+    },
   };
 };
 
@@ -238,7 +282,9 @@ describe('agent runtime coordinator', () => {
     });
 
     expect(completed.run.state).toBe('completed');
-    expect(completed.answer).toContain('配方已创建');
+    expect(completed.answer).toContain('"created":true');
+    expect(completed.answer).toContain('"id":"formula-1"');
+    expect(completed.answer).not.toContain('配方已创建');
     expect(writeHandler).toHaveBeenCalledOnce();
     expect(terminalEvents(events)).toHaveLength(1);
   });
@@ -315,6 +361,43 @@ describe('agent runtime coordinator', () => {
 
     expect(result.run.state).toBe('cancelled');
     expect((await harness.store.get('run-1'))?.state).toBe('cancelled');
+    expect(result.answer).toContain('取消');
+    expect(result.answer).not.toContain('库存共有 3 条');
+  });
+
+  it('does not revive cancellation persisted exactly at the grounded completion commit', async () => {
+    const race = createCompletionRaceStore();
+    const plan: AgentPlanV2 = {
+      version: 2,
+      kind: 'complex_agent',
+      summary: '读取库存后回答',
+      steps: [{ id: 'inventory', toolId: 'inventory.read', input: {}, dependsOn: [] }],
+    };
+    const harness = createHarness({
+      intent: { kind: 'complex_agent', confidence: 0.9, reason: 'analysis' },
+      plan,
+      store: race.store,
+      tools: [resultTool('inventory.read', vi.fn(async () => completedResult(
+        '库存共有 3 条。',
+        [{ field: 'inventoryCount', value: 3 }],
+      )))],
+    });
+    harness.chatModel.mockImplementationOnce(async () => {
+      race.arm(() => harness.runtime.cancel('run-1'));
+      return '库存共有 3 条。';
+    });
+
+    const result = await harness.runtime.run({
+      prompt: '分析库存',
+      activePageId: 'inventory',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+
+    expect(result.run.state).toBe('cancelled');
+    expect((await race.store.get('run-1'))?.state).toBe('cancelled');
+    expect(result.answer).toContain('取消');
+    expect(result.answer).not.toContain('库存共有 3 条');
   });
 
   it('reports a planner deadline as timed out instead of user cancellation', async () => {
@@ -386,6 +469,72 @@ describe('agent runtime coordinator', () => {
     expect(result.answer).toContain('超时');
     expect(result.answer).not.toContain('取消');
   });
+
+  it('preserves a timeout reason when the chat child resolves after abort', async () => {
+    const parent = new AbortController();
+    const harness = createHarness({
+      intent: { kind: 'chat', confidence: 0.99, reason: 'greeting' },
+    });
+    harness.chatModel.mockImplementationOnce(({ signal }: { signal?: AbortSignal }) => (
+      new Promise((resolve) => {
+        signal?.addEventListener('abort', () => resolve('迟到的模型回复。'), { once: true });
+      })
+    ));
+
+    const running = harness.runtime.run({
+      prompt: '早',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      signal: parent.signal,
+    });
+    await vi.waitFor(() => expect(harness.chatModel).toHaveBeenCalledOnce());
+    parent.abort(new AgentTransportTimeoutError(45_000));
+    const result = await running;
+
+    expect(result.run.state).toBe('timed_out');
+    expect(result.answer).toContain('超时');
+    expect(result.answer).not.toContain('取消');
+    expect(result.answer).not.toContain('迟到的模型回复');
+  });
+
+  it('cancels a pending route without waiting for a gateway that ignores abort', async () => {
+    let releaseRoute!: (intent: AgentIntent) => void;
+    let receivedSignal: AbortSignal | undefined;
+    const route = (input: { signal?: AbortSignal }) => {
+      receivedSignal = input.signal;
+      return new Promise<AgentIntent>((resolve) => {
+        releaseRoute = resolve;
+      });
+    };
+    const harness = createHarness({
+      intent: { kind: 'chat', confidence: 0.99, reason: 'greeting' },
+      gatewayRoute: route,
+    });
+    const events: AgentProgressEvent[] = [];
+    const running = harness.runtime.run({
+      prompt: '早',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      onProgress: (event) => events.push(event),
+    });
+    await vi.waitFor(() => expect(harness.gateway.route).toHaveBeenCalledOnce());
+
+    await harness.runtime.cancel('run-1');
+    const settledBeforeGateway = await Promise.race([
+      running.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+    ]);
+    releaseRoute({ kind: 'chat', confidence: 0.99, reason: 'released after cancellation' });
+    const result = await running;
+
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(settledBeforeGateway).toBe(true);
+    expect(result.run.state).toBe('cancelled');
+    expect(terminalEvents(events)).toHaveLength(1);
+    expect(harness.chatModel).not.toHaveBeenCalled();
+  });
 });
 
 describe('agent transport abort errors', () => {
@@ -411,5 +560,16 @@ describe('agent transport abort errors', () => {
 
     expect(error).toBeInstanceOf(AgentTransportCancelledError);
     expect(error).toMatchObject({ code: 'AGENT_TRANSPORT_CANCELLED', cause: 'user cancelled' });
+  });
+
+  it('prefers the timeout signal reason over a child cancellation error', () => {
+    const controller = new AbortController();
+    const timeout = new AgentTransportTimeoutError(45_000);
+    controller.abort(timeout);
+
+    expect(normalizeAgentTransportError(
+      new AgentTransportCancelledError({ cause: timeout }),
+      { signal: controller.signal, timeoutMs: 45_000 },
+    )).toBe(timeout);
   });
 });

@@ -37,8 +37,9 @@ describe('grounded response composer', () => {
     });
 
     expect(response.usedFallback).toBe(true);
-    expect(response.content).toContain('目标不唯一，没有执行删除。');
+    expect(response.content).toBe('工具执行失败，未生成事实性结论。');
     expect(response.content).not.toContain('成功删除');
+    expect(response.content).not.toContain('目标不唯一');
   });
 
   it('does not use an ungrounded successful tool message as a business fact fallback', () => {
@@ -67,7 +68,27 @@ describe('grounded response composer', () => {
     });
 
     expect(response.usedFallback).toBe(true);
-    expect(response.content).toBe('库存读取完成。');
+    expect(response.content).toBe('依据 1：{"field":"count","value":3}');
+  });
+
+  it('rejects a success claim when any tool in a mixed result set failed', () => {
+    const response = composeGroundedResponse({
+      proposedAnswer: '项目操作已成功完成。',
+      results: [
+        resultOf({ evidence: [{ field: 'count', value: 3 }] }),
+        resultOf({
+          status: 'error',
+          message: '删除没有执行。',
+          evidence: [],
+          diagnostics: { code: 'DELETE_FAILED', detail: 'The delete operation failed.' },
+        }),
+      ],
+    });
+
+    expect(response.usedFallback).toBe(true);
+    expect(response.content).toContain('"value":3');
+    expect(response.content).toContain('工具执行失败');
+    expect(response.content).not.toContain('成功完成');
   });
 
   it('sends only the original question and compact evidence to the model', async () => {
@@ -85,6 +106,12 @@ describe('grounded response composer', () => {
           field: 'count',
           value: 3,
           apiKey: 'evidence-secret',
+          password: 'password-secret',
+          credential: 'credential-secret',
+          privateKey: 'private-key-secret',
+          genericBearer: 'Bearer bearer-secret-value',
+          genericJwt: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signature-value',
+          genericApiKey: 'sk-proj-common-secret-value-1234567890',
           rawImage,
         }],
       })],
@@ -99,6 +126,12 @@ describe('grounded response composer', () => {
     expect(serializedRequest).not.toContain('data-secret');
     expect(serializedRequest).not.toContain('confirmation-secret');
     expect(serializedRequest).not.toContain('evidence-secret');
+    expect(serializedRequest).not.toContain('password-secret');
+    expect(serializedRequest).not.toContain('credential-secret');
+    expect(serializedRequest).not.toContain('private-key-secret');
+    expect(serializedRequest).not.toContain('bearer-secret-value');
+    expect(serializedRequest).not.toContain('signature-value');
+    expect(serializedRequest).not.toContain('sk-proj-common-secret-value');
     expect(serializedRequest).not.toContain('data:image');
     expect(serializedRequest).not.toContain('handler');
   });

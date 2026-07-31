@@ -1,8 +1,14 @@
 import type { AgentToolResultV2 } from './protocol';
 import { selectGroundedAnswer, type GroundingAuditResult } from './grounding';
 
-const REDACTED_KEY_PATTERN = /(?:api[-_]?key|token|secret|authorization|cookie|handler|schema|confirmation|raw[-_]?image|base64|data[-_]?url)/i;
+const REDACTED_KEY_PATTERN = /(?:api[-_]?key|token|secret|authorization|cookie|pass(?:word|wd)?|credentials?|private[-_]?key|handler|schema|confirmation|raw[-_]?image|base64|data[-_]?url)/i;
 const DATA_URL_PATTERN = /^data:/i;
+const SECRET_VALUE_PATTERNS = [
+  /^Bearer\s+\S+/i,
+  /\b(?:sk-proj|sk|ghp|github_pat|xox[baprs]|AIza|AKIA)[-_A-Za-z0-9]{10,}\b/,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\b/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
 const MAX_EVIDENCE_ITEMS = 24;
 const MAX_ARRAY_ITEMS = 24;
 const MAX_STRING_LENGTH = 500;
@@ -40,7 +46,12 @@ type ComposeGroundedResponseWithModelInput = ComposeGroundedResponseInput & {
 const sanitizeEvidenceValue = (value: unknown, depth = 0): unknown => {
   if (depth >= MAX_DEPTH) return '[truncated]';
   if (typeof value === 'string') {
-    if (DATA_URL_PATTERN.test(value)) return undefined;
+    if (
+      DATA_URL_PATTERN.test(value)
+      || SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(value))
+    ) {
+      return undefined;
+    }
     return value.length > MAX_STRING_LENGTH
       ? `${value.slice(0, MAX_STRING_LENGTH)}…`
       : value;
@@ -77,15 +88,26 @@ const compactEvidence = (results: AgentToolResultV2[]): unknown[] => results.fla
     : []
 )).slice(0, MAX_EVIDENCE_ITEMS);
 
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+};
+
 const formatToolResults = (results: AgentToolResultV2[]): string => {
-  const messages = [...new Set(results
-    .map((result) => (
-      result.status === 'success' && result.evidence.length === 0
-        ? '工具没有返回可核验依据。'
-        : String(result.message || '').trim()
-    ))
-    .filter(Boolean))];
-  return messages.join('\n') || '没有取得可用于回答的数据。';
+  if (results.length === 0) return '没有取得可用于回答的数据。';
+
+  const evidenceLines = compactEvidence(results)
+    .map((evidence, index) => `依据 ${index + 1}：${stableJson(evidence)}`);
+  const failed = results.some((result) => result.status !== 'success');
+  if (failed) evidenceLines.push('工具执行失败，未生成事实性结论。');
+  if (evidenceLines.length) return evidenceLines.join('\n');
+  return '工具没有返回可核验依据。';
 };
 
 const extractModelContent = (response: unknown): string => {
@@ -106,7 +128,10 @@ const selectResponse = (
   proposedAnswer: unknown,
 ): GroundedResponse => {
   const results = Array.isArray(input.results) ? input.results : [];
-  const fallback = String(input.fallback || '').trim() || formatToolResults(results);
+  const requestedFallback = String(input.fallback || '').trim();
+  const fallback = results.length > 0
+    ? formatToolResults(results)
+    : requestedFallback || formatToolResults(results);
   return selectGroundedAnswer({
     answer: proposedAnswer,
     evidence: results,

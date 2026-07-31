@@ -30,8 +30,12 @@ import {
   normalizeAgentTransportError,
 } from './transport';
 
+type AgentGatewayRouteInput = IntentGatewayInput & {
+  signal?: AbortSignal;
+};
+
 type AgentIntentGateway = {
-  route(input: IntentGatewayInput): Promise<AgentIntent>;
+  route(input: AgentGatewayRouteInput): Promise<AgentIntent>;
 };
 
 type AgentPlanner = {
@@ -88,6 +92,27 @@ const defaultCreateId = (): string => {
   return `run-${randomId}`;
 };
 
+const abortError = (signal: AbortSignal): Error => (
+  signal.reason instanceof Error
+    ? signal.reason
+    : new AgentTransportCancelledError({ cause: signal.reason })
+);
+
+const settleWithSignal = <T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> => {
+  if (signal.aborted) return Promise.reject(abortError(signal));
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort);
+    });
+  });
+};
+
 const extractChatContent = (response: unknown): string => {
   if (typeof response === 'string') return response.trim();
   if (!response || typeof response !== 'object' || Array.isArray(response)) return '';
@@ -126,6 +151,15 @@ const imagesOf = (run: AgentRunRecord): unknown[] => resultsOf(run).flatMap((res
 });
 
 const deterministicAnswer = (run: AgentRunRecord, result?: AgentExecutionResult): string => {
+  if (run.state === 'cancelled') {
+    return run.terminalError?.message || 'Agent 运行已取消。';
+  }
+  if (run.state === 'timed_out') {
+    return run.terminalError?.message || 'Agent 运行超时，请稍后重试。';
+  }
+  if (run.state === 'failed') {
+    return run.terminalError?.message || result?.message || 'Agent 运行失败，请稍后重试。';
+  }
   const messages = resultsOf(run)
     .map((item) => String(item.message || '').trim())
     .filter(Boolean);
@@ -296,6 +330,26 @@ export const createAgentRuntime = ({
     actions: actionsOf(run),
   });
 
+  const commitCompletion = async (
+    runId: string,
+    reason: string,
+  ): Promise<AgentRunRecord> => {
+    const committed = await store.update(runId, (current) => {
+      if (isTerminalAgentState(current.state)) return current;
+      if (current.state !== 'composing') return current;
+
+      transitionAgentRun(current, 'completed', reason);
+      current.updatedAt = nowIso();
+      current.endedAt = current.updatedAt;
+      return current;
+    });
+    if (!committed) throw new Error(`Agent run not found during completion: ${runId}.`);
+    if (committed.state !== 'completed' && !isTerminalAgentState(committed.state)) {
+      throw new Error(`Agent run ${runId} cannot complete from ${committed.state}.`);
+    }
+    return committed;
+  };
+
   const finalizeExecution = async ({
     runId,
     intent,
@@ -326,12 +380,12 @@ export const createAgentRuntime = ({
           ? signal.reason
           : new AgentTransportCancelledError({ cause: signal.reason });
       }
-      transitionAgentRun(run, 'completed', 'Grounded response composed.');
-      run.updatedAt = nowIso();
-      run.endedAt = run.updatedAt;
-      await store.save(run);
-      emitTerminal(run, composed.content);
-      return runtimeResult(run, composed.content);
+      const committed = await commitCompletion(runId, 'Grounded response composed.');
+      const answer = committed.state === 'completed'
+        ? composed.content
+        : deterministicAnswer(committed, executionResult);
+      emitTerminal(committed, answer);
+      return runtimeResult(committed, answer);
     }
 
     const answer = deterministicAnswer(run, executionResult);
@@ -394,12 +448,16 @@ export const createAgentRuntime = ({
         linked = linkController(runId, input.signal);
         emitPhase(runId, 'routing', '正在判断请求类型。', 'started');
 
-        intent = await gateway.route({
-          prompt,
-          activePageId: String(input.activePageId || ''),
-          projectAccessEnabled: input.projectAccessEnabled ?? true,
-          webSearchEnabled: input.webSearchEnabled ?? true,
-        });
+        intent = await settleWithSignal(
+          gateway.route({
+            prompt,
+            activePageId: String(input.activePageId || ''),
+            projectAccessEnabled: input.projectAccessEnabled ?? true,
+            webSearchEnabled: input.webSearchEnabled ?? true,
+            signal: linked.controller.signal,
+          }),
+          linked.controller.signal,
+        );
 
         if (linked.controller.signal.aborted) {
           throw new AgentTransportCancelledError({
@@ -428,12 +486,12 @@ export const createAgentRuntime = ({
             });
           }
           const answer = extractChatContent(response) || '暂时无法生成回复。';
-          transitionAgentRun(run, 'completed', 'Ordinary chat completed.');
-          run.updatedAt = nowIso();
-          run.endedAt = run.updatedAt;
-          await store.save(run);
-          emitTerminal(run, answer);
-          return runtimeResult(run, answer);
+          const committed = await commitCompletion(runId, 'Ordinary chat completed.');
+          const finalAnswer = committed.state === 'completed'
+            ? answer
+            : deterministicAnswer(committed);
+          emitTerminal(committed, finalAnswer);
+          return runtimeResult(committed, finalAnswer);
         }
 
         let executionResult: AgentExecutionResult;

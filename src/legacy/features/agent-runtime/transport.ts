@@ -48,18 +48,14 @@ export const normalizeAgentTransportError = (
     timeoutMs: number;
   },
 ): unknown => {
-  if (
-    error instanceof AgentTransportTimeoutError
-    || error instanceof AgentTransportCancelledError
-  ) {
-    return error;
-  }
+  if (error instanceof AgentTransportTimeoutError) return error;
 
   const reason = signal?.reason;
   if (reason instanceof AgentTransportTimeoutError) return reason;
   if (isTimeoutReason(reason)) {
     return new AgentTransportTimeoutError(timeoutMs, { cause: reason });
   }
+  if (error instanceof AgentTransportCancelledError) return error;
   if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
     return new AgentTransportCancelledError({ cause: reason ?? error });
   }

@@ -29,6 +29,30 @@ describe('agent answer grounding', () => {
     expect(audit.reasons).toContain('failed_operation_claimed_success');
   });
 
+  it('rejects a success claim when successful evidence is mixed with a failed operation', () => {
+    const audit = auditGroundedAnswer({
+      answer: '项目操作已成功完成。',
+      evidence: [
+        {
+          status: 'success',
+          message: '库存读取完成。',
+          data: {},
+          evidence: [{ field: 'count', value: 3 }],
+        },
+        {
+          status: 'error',
+          message: '删除没有执行。',
+          data: {},
+          evidence: [],
+        },
+      ],
+      requiresEvidence: true,
+    });
+
+    expect(audit.ok).toBe(false);
+    expect(audit.reasons).toContain('failed_operation_claimed_success');
+  });
+
   it('rejects quantified claims that are absent from evidence', () => {
     const audit = auditGroundedAnswer({
       answer: '当前共有 18 个订单，其中 6 个生产中。',

@@ -48,6 +48,18 @@ const evidenceItemSucceeded = (item: any) => {
   return item.ok === true || item.result?.ok === true || Boolean(item.data || item.message || item.summary);
 };
 
+const evidenceItemFailed = (item: any) => (
+  Boolean(item && typeof item === 'object')
+  && (
+    item.ok === false
+    || item.result?.ok === false
+    || (
+      typeof item.status === 'string'
+      && ['error', 'cancelled', 'timeout'].includes(item.status)
+    )
+  )
+);
+
 const isV2ToolResult = (item: unknown): item is {
   status: 'success' | 'error' | 'cancelled' | 'timeout';
   message?: unknown;
@@ -85,12 +97,13 @@ export const auditGroundedAnswer = ({
   const text = String(answer || '').trim();
   const items = expandEvidenceItems(Array.isArray(evidence) ? evidence.filter(Boolean) : []);
   const successfulEvidence = items.filter(evidenceItemSucceeded);
+  const failedEvidence = items.filter(evidenceItemFailed);
   const evidenceText = normalizeClaim(stringifyEvidence(successfulEvidence));
   const reasons: string[] = [];
 
   if (!text) reasons.push('empty_answer');
   if (requiresEvidence && !successfulEvidence.length) reasons.push('missing_evidence');
-  if (items.length && !successfulEvidence.length && SUCCESS_CLAIM_PATTERN.test(text)) {
+  if (failedEvidence.length && SUCCESS_CLAIM_PATTERN.test(text)) {
     reasons.push('failed_operation_claimed_success');
   }
 

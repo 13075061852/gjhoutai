@@ -303,12 +303,9 @@ export const buildAgentRouteClassifierMessages = ({
   },
 ];
 
-export const shouldUseProjectContextForPrompt = (prompt: unknown, activePageId = '') => {
-  const text = textOf(prompt);
-  if (!text) return false;
-  if (PROJECT_DATA_PATTERN.test(text)) return true;
-  return Boolean(activePageId && !['ai-config', 'apimart-media'].includes(activePageId));
-};
+export const shouldUseProjectContextForPrompt = (prompt: unknown) => (
+  PROJECT_DATA_PATTERN.test(String(prompt || '').trim())
+);
 
 export const shouldUseProjectAgentLoopForPrompt = (prompt: unknown) => COMPLEX_PROJECT_ANALYSIS_PATTERN.test(textOf(prompt));
 
@@ -321,143 +318,95 @@ export const shouldUseWebSearchForPrompt = (prompt: unknown, options: { projectF
   return WEB_SEARCH_PATTERN.test(text);
 };
 
-export const createAgentPlan = ({
-  prompt,
-  activePageId = '',
-  projectAccessEnabled = true,
-  webSearchEnabled = true,
-}: {
+type CreateAgentPlanInput = {
   prompt: unknown;
   activePageId?: string;
   projectAccessEnabled?: boolean;
   webSearchEnabled?: boolean;
-}): AgentPlan => {
-  const text = textOf(prompt);
-  const localSkillPlan = buildLocalSkillPlan(text, activePageId);
-  const useProjectContext = projectAccessEnabled && shouldUseProjectContextForPrompt(text, activePageId);
-  const wantsImageGeneration = IMAGE_GENERATION_PATTERN.test(text);
-  const wantsImageAnalysis = IMAGE_ANALYSIS_PATTERN.test(text);
-  const needsWebSearch = Boolean(webSearchEnabled && shouldUseWebSearchForPrompt(text, { projectFirst: useProjectContext }));
-
-  if (localSkillPlan?.skillId === 'media.generateImage') {
-    return { kind: 'image-generation', useProjectContext: false, needsWebSearch: false, wantsImageGeneration: true, wantsImageAnalysis: false, localSkillPlan, reason: localSkillPlan.reason || '图片生成' };
-  }
-  if (localSkillPlan?.skillId === 'media.analyzeImages') {
-    return { kind: 'image-analysis', useProjectContext: true, needsWebSearch: false, wantsImageGeneration: false, wantsImageAnalysis: true, localSkillPlan, reason: localSkillPlan.reason || '图片分析' };
-  }
-  if (localSkillPlan) {
-    return { kind: 'local-tool', useProjectContext: true, needsWebSearch: false, wantsImageGeneration, wantsImageAnalysis, localSkillPlan, reason: localSkillPlan.reason || '本地工具' };
-  }
-  if (needsWebSearch) {
-    return { kind: 'web-search', useProjectContext, needsWebSearch: true, wantsImageGeneration, wantsImageAnalysis, localSkillPlan: null, reason: '问题涉及实时或外部信息' };
-  }
-  return { kind: useProjectContext && shouldUseProjectAgentLoopForPrompt(text) ? 'local-tool' : 'chat', useProjectContext, needsWebSearch: false, wantsImageGeneration, wantsImageAnalysis, localSkillPlan: null, reason: useProjectContext ? '项目上下文优先' : '普通对话' };
 };
 
-export const createAgentPlanWithAi = async (input: {
-  prompt: unknown;
-  activePageId?: string;
-  projectAccessEnabled?: boolean;
-  webSearchEnabled?: boolean;
+const toCompatibilityPlan = (intent: AgentIntent): AgentPlan => {
+  const localSkillPlan = intent.toolId
+    ? {
+      skillId: intent.toolId,
+      input: intent.toolInput && typeof intent.toolInput === 'object' ? intent.toolInput : {},
+      confidence: intent.confidence,
+      reason: intent.reason,
+    }
+    : null;
+
+  if (intent.kind === 'image_generation') {
+    return { kind: 'image-generation', useProjectContext: false, needsWebSearch: false, wantsImageGeneration: true, wantsImageAnalysis: false, localSkillPlan, reason: intent.reason };
+  }
+  if (intent.kind === 'image_analysis') {
+    return { kind: 'image-analysis', useProjectContext: true, needsWebSearch: false, wantsImageGeneration: false, wantsImageAnalysis: true, localSkillPlan, reason: intent.reason };
+  }
+  if (intent.kind === 'web_search') {
+    return {
+      kind: 'web-search',
+      useProjectContext: false,
+      needsWebSearch: true,
+      wantsImageGeneration: false,
+      wantsImageAnalysis: false,
+      localSkillPlan: null,
+      searchPlan: intent.searchPlan ? { ...intent.searchPlan, reason: intent.reason } : null,
+      reason: intent.reason,
+    };
+  }
+  if (intent.kind === 'single_tool') {
+    return { kind: 'local-tool', useProjectContext: true, needsWebSearch: false, wantsImageGeneration: false, wantsImageAnalysis: false, localSkillPlan, reason: intent.reason };
+  }
+  if (intent.kind === 'complex_agent') {
+    return { kind: 'local-tool', useProjectContext: true, needsWebSearch: false, wantsImageGeneration: false, wantsImageAnalysis: false, localSkillPlan: null, reason: intent.reason };
+  }
+  return { kind: 'chat', useProjectContext: false, needsWebSearch: false, wantsImageGeneration: false, wantsImageAnalysis: false, localSkillPlan: null, reason: intent.reason };
+};
+
+export const createAgentPlan = (input: CreateAgentPlanInput): AgentPlan => {
+  const intent = classifyDeterministically(input);
+  return toCompatibilityPlan(intent);
+};
+
+export const createAgentPlanWithAi = async (input: CreateAgentPlanInput & {
   classifier?: AgentRouteClassifier | null;
 }): Promise<AgentPlan> => {
-  const fallbackPlan = createAgentPlan(input);
-  const text = textOf(input.prompt);
-  if (!text || !input.classifier || isConfidentRegexPlan(fallbackPlan)) return fallbackPlan;
+  const classifier: IntentGatewayClassifier | null = input.classifier
+    ? async ({ prompt, activePageId }) => {
+      const fallbackPlan = createAgentPlan({ ...input, prompt, activePageId });
+      const classification = await input.classifier?.({ prompt, activePageId, fallbackPlan });
+      if (!classification) return null;
+      const kind = normalizeClassifierKind(classification.kind);
+      if (!kind) return null;
+      const searchPlan = Array.isArray(classification.searchQueries) && classification.searchQueries.length
+        ? {
+          queries: classification.searchQueries.filter(Boolean).slice(0, 3),
+          maxResults: classification.maxResults || 5,
+          searchDepth: classification.searchDepth || 'basic',
+          topic: classification.topic || 'general',
+        }
+        : undefined;
+      if (kind === 'web-search') return { kind: 'web_search', confidence: classification.confidence || 0.7, reason: classification.reason || 'AI 辅助路由判断需要联网搜索', searchPlan };
+      if (kind === 'chat') return { kind: 'chat', confidence: classification.confidence || 0.7, reason: classification.reason || 'AI 辅助路由判断为普通对话', searchPlan };
 
-  try {
-    const classification = await input.classifier({
-      prompt: text,
-      activePageId: input.activePageId || '',
-      fallbackPlan,
-    });
-    if (!classification) return fallbackPlan;
-    const kind = normalizeClassifierKind(classification.kind);
-    if (!kind) return fallbackPlan;
-
-    if (fallbackPlan.needsWebSearch) {
-      const queries = Array.isArray(classification.searchQueries) ? classification.searchQueries.filter(Boolean).slice(0, 3) : [];
+      const localSkillPlan = normalizeClassifierSkillPlan(classification, prompt);
+      if (!localSkillPlan) return null;
+      const mappedKind = kind === 'image-generation'
+        ? 'image_generation'
+        : kind === 'image-analysis'
+          ? 'image_analysis'
+          : 'single_tool';
       return {
-        ...fallbackPlan,
-        kind: 'web-search',
-        needsWebSearch: Boolean(input.webSearchEnabled),
-        searchPlan: queries.length ? {
-          queries,
-          maxResults: classification.maxResults,
-          searchDepth: classification.searchDepth,
-          topic: classification.topic,
-          reason: classification.reason,
-        } : null,
-        reason: classification.reason || fallbackPlan.reason,
+        kind: mappedKind,
+        confidence: localSkillPlan.confidence || 0.7,
+        reason: classification.reason || localSkillPlan.reason || 'AI 辅助路由命中项目工具',
+        toolId: localSkillPlan.skillId,
+        toolInput: localSkillPlan.input,
       };
     }
-
-    const localSkillPlan = normalizeClassifierSkillPlan(classification, text);
-    if ((kind === 'local-tool' || kind === 'image-generation' || kind === 'image-analysis') && !localSkillPlan) {
-      return fallbackPlan;
-    }
-
-    if (kind === 'web-search') {
-      const queries = Array.isArray(classification.searchQueries) ? classification.searchQueries.filter(Boolean).slice(0, 3) : [];
-      return {
-        ...fallbackPlan,
-        kind: 'web-search',
-        needsWebSearch: Boolean(input.webSearchEnabled),
-        useProjectContext: Boolean(input.projectAccessEnabled && (classification.useProjectContext ?? fallbackPlan.useProjectContext)),
-        localSkillPlan: null,
-        searchPlan: queries.length ? {
-          queries,
-          maxResults: classification.maxResults,
-          searchDepth: classification.searchDepth,
-          topic: classification.topic,
-          reason: classification.reason,
-        } : null,
-        reason: classification.reason || 'AI 辅助路由判断需要联网搜索',
-      };
-    }
-    if (kind === 'image-generation') {
-      return {
-        kind,
-        useProjectContext: false,
-        needsWebSearch: false,
-        wantsImageGeneration: true,
-        wantsImageAnalysis: false,
-        localSkillPlan,
-        reason: classification.reason || localSkillPlan?.reason || 'AI 辅助路由判断为图片生成',
-      };
-    }
-    if (kind === 'image-analysis') {
-      return {
-        kind,
-        useProjectContext: Boolean(input.projectAccessEnabled),
-        needsWebSearch: false,
-        wantsImageGeneration: false,
-        wantsImageAnalysis: true,
-        localSkillPlan,
-        reason: classification.reason || localSkillPlan?.reason || 'AI 辅助路由判断为图片分析',
-      };
-    }
-    if (kind === 'local-tool') {
-      return {
-        kind,
-        useProjectContext: Boolean(input.projectAccessEnabled),
-        needsWebSearch: false,
-        wantsImageGeneration: fallbackPlan.wantsImageGeneration,
-        wantsImageAnalysis: fallbackPlan.wantsImageAnalysis,
-        localSkillPlan,
-        reason: classification.reason || localSkillPlan?.reason || 'AI 辅助路由判断为本地技能',
-      };
-    }
-    return {
-      ...fallbackPlan,
-      kind: 'chat',
-      needsWebSearch: false,
-      useProjectContext: Boolean(input.projectAccessEnabled && (classification.useProjectContext ?? fallbackPlan.useProjectContext)),
-      localSkillPlan: null,
-      reason: classification.reason || 'AI 辅助路由判断为普通对话',
-    };
-  } catch {
-    return fallbackPlan;
-  }
+    : null;
+  const intent = await createIntentGateway({ classifier }).route(input);
+  return toCompatibilityPlan(intent);
 };
 
+import { classifyDeterministically, createIntentGateway, type IntentGatewayClassifier } from './intent-gateway';
+import type { AgentIntent } from './protocol';

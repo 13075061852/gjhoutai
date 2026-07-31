@@ -157,6 +157,20 @@ describe('agent runtime router', () => {
     expect(plan.needsWebSearch).toBe(false);
   });
 
+  it('keeps greetings and ordinary small talk outside project context', () => {
+    for (const prompt of ['你好', '随便聊两句']) {
+      const plan = createAgentPlan({
+        prompt,
+        activePageId: 'dashboard',
+        projectAccessEnabled: true,
+        webSearchEnabled: true,
+      });
+
+      expect(plan.kind).toBe('chat');
+      expect(plan.useProjectContext).toBe(false);
+    }
+  });
+
   it('lets AI classification upgrade ambiguous wording to web search', async () => {
     const classifier = vi.fn().mockResolvedValue({
       kind: 'web-search',

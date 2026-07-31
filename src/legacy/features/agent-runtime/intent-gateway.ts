@@ -3,6 +3,8 @@ import {
   COMPLEX_PROJECT_ANALYSIS_PATTERN,
   IMAGE_ANALYSIS_PATTERN,
   IMAGE_GENERATION_PATTERN,
+  PROPERTY_MODEL_PATTERN,
+  PROPERTY_PAGE_CONTEXT_PATTERN,
   PROJECT_DATA_PATTERN,
   buildLocalSkillPlan,
   shouldUseWebSearchForPrompt,
@@ -20,6 +22,7 @@ export const ROUTE_PRIORITY = [
 
 const GREETING_PATTERN = /^(?:早|早上好|你好|您好|嗨|hello|hi)[!！。?？]*$/i;
 const CROSS_DOMAIN_ANALYSIS_PATTERN = /(?:订单|库存|配方|物性|生产|采购|客户|供应商).*(?:订单|库存|配方|物性|生产|采购|客户|供应商).*(?:分析|风险|建议|排产)|(?:分析|风险|建议|排产).*(?:订单|库存|配方|物性|生产|采购|客户|供应商).*(?:订单|库存|配方|物性|生产|采购|客户|供应商)/;
+const INDEPENDENT_PROJECT_SIGNAL_PATTERN = /(?:这个系统|这个项目|这个网站|后台|当前页面|库存|配方|订单|供应商|客户|人员|账号|账户|权限|物性|型号|批次|熔指|拉伸|弯曲|冲击|阻燃|灰份|灰分|强度|图谱|谱图|曲线|dsc|tga|抠图|识别历史|识别记录|数据识别|业务|经营|生产|采购|物料|成品|来料|样品)/i;
 
 export type IntentGatewayInput = {
   prompt: unknown;
@@ -57,6 +60,16 @@ const isComplexProjectAnalysis = (prompt: string) => (
 
 const requiresProjectAccess = (intent: AgentIntent) => (
   intent.kind === 'single_tool' || intent.kind === 'complex_agent' || intent.kind === 'image_analysis'
+);
+
+const isClassifierProjectUpgrade = (intent: AgentIntent) => (
+  intent.kind === 'single_tool' || intent.kind === 'complex_agent'
+);
+
+const hasIndependentProjectSignal = (prompt: string) => (
+  INDEPENDENT_PROJECT_SIGNAL_PATTERN.test(prompt)
+  || PROPERTY_PAGE_CONTEXT_PATTERN.test(prompt)
+  || PROPERTY_MODEL_PATTERN.test(prompt)
 );
 
 const toProjectToolIntent = (skill: NonNullable<ReturnType<typeof buildLocalSkillPlan>>): AgentIntent => ({
@@ -186,6 +199,7 @@ export const createIntentGateway = ({
     if (!classified) return deterministic;
     if (classified.kind === 'web_search' && !webSearchEnabled) return deterministic;
     if (requiresProjectAccess(classified) && !projectAccessEnabled) return deterministic;
+    if (isClassifierProjectUpgrade(classified) && !hasIndependentProjectSignal(prompt)) return deterministic;
 
     return classified;
   },

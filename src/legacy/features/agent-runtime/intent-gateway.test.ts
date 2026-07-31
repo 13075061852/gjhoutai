@@ -119,4 +119,26 @@ describe('agent intent gateway', () => {
       webSearchEnabled: true,
     })).resolves.toMatchObject({ kind: 'chat' });
   });
+
+  it('does not let a classifier use the property page alone to upgrade generic quality wording', async () => {
+    const gateway = createIntentGateway({
+      classifier: async () => ({
+        kind: 'single_tool',
+        confidence: 0.9,
+        reason: '物性查询',
+        toolId: 'property.searchRows',
+        toolInput: { query: '帮我分析一下生活质量' },
+      }),
+    });
+
+    const intent = await gateway.route({
+      prompt: '帮我分析一下生活质量',
+      activePageId: 'property-analysis',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+
+    expect(intent.kind).toBe('chat');
+    expect(intent.toolId).toBeUndefined();
+  });
 });

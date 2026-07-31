@@ -1,29 +1,26 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 import {
   buildAgentRouteClassifierMessages,
-  createAgentPlan,
-  createAgentPlanWithAi,
   parseAgentRouteClassification,
 } from './agent-runtime/router';
+import { createAgentExecutionEngine } from './agent-runtime/execution-engine';
+import { createIntentGateway } from './agent-runtime/intent-gateway';
+import { createAgentPlanner } from './agent-runtime/planner';
+import type { AgentIntent } from './agent-runtime/protocol';
+import { createProjectToolRegistry } from './agent-runtime/project-tool-definitions';
+import { createAgentRuntime } from './agent-runtime/runtime';
+import { createLocalStorageAgentRunStore } from './agent-runtime/run-store';
+import { createProjectToolAdapters } from './agent-runtime/tools';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import '../../styles/pages/dashboard-chat.css';
-import {
-  buildFallbackSearchPlan,
-  buildSearchUnavailableAnswer,
-  createChatSearchRuntime,
-  normalizeSearchSources,
-  promptRequiresEntityLookupSearch,
-  promptRequiresWebSearch,
-} from './chat/chat-search';
 import { createStreamRenderScheduler } from './chat/chat-render';
 import { canRunLocalSkillDirectly, selectRecentHistory } from './chat/chat-agent';
 import { createChatSessionStore } from './chat/chat-core';
 import { selectGroundedAnswer } from './agent-runtime/grounding';
 import {
-  evaluateAgentLoopDecision,
-  getAgentSkillCallSignature,
-  MAX_PROJECT_AGENT_TOOL_CALLS,
-} from './agent-runtime/orchestrator';
+  createChatRuntimeController,
+  type ChatRuntimeMessage,
+} from './chat/chat-runtime-controller';
 
 (function () {
   'use strict';
@@ -35,16 +32,15 @@ import {
   const NEW_CONVERSATION_TITLE = '新建对话';
   const SKILL_SYNTHESIS_TIMEOUT_MS = 90000;
   const SKILL_SYNTHESIS_CONTEXT_LIMIT = 12000;
-  const PROJECT_AGENT_LOOP_TIMEOUT_MS = 90000;
   let conversationMenuOpen = false;
   let pendingDraftImages = [];
-  let activeChatAbortController = null;
-  let activeChatRequestId = 0;
   let chatAbortRequested = false;
   let chatSubmissionLocked = false;
   let chatEventsBound = false;
   let chatEventController = null;
   let webSearchEnabled = true;
+  let chatRuntimeController = null;
+  let runtimeRequestContext = null;
   const imageUploadAuthResolvers = new Map();
 
   const nowIso = () => new Date().toISOString();
@@ -72,11 +68,6 @@ import {
     hour12: false,
   }).format(new Date());
 
-  const { searchWebForPromptDynamic } = createChatSearchRuntime({
-    getCurrentDateTimeLabel,
-    createAbortError,
-  });
-
   const shouldAnswerCurrentDateLocally = (prompt) => {
     const text = String(prompt || '').trim();
     if (!text || text.length > 30) return false;
@@ -100,7 +91,9 @@ import {
 
   let projectPageCatalogCache = '';
 
-  const createRouteClassifier = (config, model, options = {} as any) => async ({ prompt, activePageId }) => {
+  const createRouteClassifier = (config, model, options = {} as any) => async (
+    { prompt, activePageId },
+  ): Promise<AgentIntent | null> => {
     const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
@@ -115,7 +108,35 @@ import {
     }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) return null;
     const payload = await response.json();
-    return parseAgentRouteClassification(payload?.choices?.[0]?.message?.content || '');
+    const classification = parseAgentRouteClassification(payload?.choices?.[0]?.message?.content || '');
+    if (!classification?.kind) return null;
+    const kindMap = {
+      'local-tool': 'single_tool',
+      'web-search': 'web_search',
+      'image-generation': 'image_generation',
+      'image-analysis': 'image_analysis',
+      chat: 'chat',
+    } as const;
+    const kind = kindMap[classification.kind];
+    if (!kind) return null;
+    const queries = Array.isArray(classification.searchQueries)
+      ? classification.searchQueries.filter(Boolean).slice(0, 3)
+      : [];
+    return {
+      kind,
+      confidence: Math.max(0, Math.min(1, Number(classification.confidence) || 0.5)),
+      reason: String(classification.reason || 'AI 辅助意图分类'),
+      ...(classification.skillId ? { toolId: classification.skillId } : {}),
+      ...(classification.input ? { toolInput: classification.input } : {}),
+      ...(kind === 'web_search' && queries.length ? {
+        searchPlan: {
+          queries,
+          maxResults: Math.max(3, Math.min(20, Number(classification.maxResults) || 5)),
+          searchDepth: classification.searchDepth === 'advanced' ? 'advanced' : 'basic',
+          topic: classification.topic === 'news' ? 'news' : 'general',
+        },
+      } : {}),
+    };
   };
 
   const makeSessionId = () => {
@@ -212,6 +233,10 @@ import {
     actions: normalizeSkillActions(message?.actions),
     imageUploadAuth: normalizeImageUploadAuth(message?.imageUploadAuth),
     searchSources: normalizeMessageSearchSources(message?.searchSources),
+    agentSteps: Array.isArray(message?.agentSteps) ? message.agentSteps : [],
+    agentConfirmation: message?.agentConfirmation && typeof message.agentConfirmation === 'object'
+      ? message.agentConfirmation
+      : null,
   });
 
   const deriveSessionTitle = (messages) => {
@@ -631,6 +656,62 @@ import {
     return template.content.firstElementChild;
   };
 
+  const formatAgentParameter = (value) => {
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value ?? '');
+    }
+  };
+
+  const createAgentRuntimeElement = (item) => {
+    if (item?.role !== 'assistant') return null;
+    const steps = Array.isArray(item.agentSteps) ? item.agentSteps : [];
+    const confirmation = item.agentConfirmation && typeof item.agentConfirmation === 'object'
+      ? item.agentConfirmation
+      : null;
+    if (!steps.length && !confirmation) return null;
+
+    const template = document.createElement('template');
+    const stepsHtml = steps.length
+      ? `<div class="ai-agent-steps" aria-label="Agent 执行进度">${steps.map((step) => `
+          <div class="ai-agent-step" data-agent-status="${utils.escapeHtml(step?.status || 'running')}">
+            <span class="ai-agent-step-dot" aria-hidden="true"></span>
+            <span>${utils.escapeHtml(step?.label || '正在处理')}</span>
+          </div>
+        `).join('')}</div>`
+      : '';
+    const confirmationHtml = confirmation
+      ? `
+        <section class="ai-agent-confirmation" aria-label="Agent 操作确认">
+          <div class="ai-agent-confirmation-title">需要确认后继续</div>
+          <dl>
+            <div><dt>目标</dt><dd>${utils.escapeHtml(confirmation.target || '-')}</dd></div>
+            <div><dt>参数</dt><dd>${(confirmation.parameters || []).length
+              ? confirmation.parameters.map((parameter) => `<code>${utils.escapeHtml(parameter.name)}=${utils.escapeHtml(formatAgentParameter(parameter.value))}</code>`).join(' ')
+              : '无'}</dd></div>
+            <div><dt>影响</dt><dd>${utils.escapeHtml(confirmation.impact || '-')}</dd></div>
+            <div><dt>有效期</dt><dd>${utils.escapeHtml(confirmation.expiresAt || '-')}</dd></div>
+          </dl>
+          <div class="ai-agent-confirmation-actions">
+            <button class="ui-button is-primary" type="button" data-chat-agent-confirm="${utils.escapeHtml(confirmation.confirmationId || '')}" data-chat-agent-run="${utils.escapeHtml(confirmation.runId || '')}">确认执行</button>
+            <button class="ui-button" type="button" data-chat-agent-cancel="${utils.escapeHtml(confirmation.runId || '')}">取消</button>
+          </div>
+        </section>
+      `
+      : '';
+    template.innerHTML = `<div class="ai-agent-runtime">${stepsHtml}${confirmationHtml}</div>`;
+    return template.content.firstElementChild;
+  };
+
+  const syncAgentRuntimeElement = (messageNode, item) => {
+    if (!messageNode) return;
+    messageNode.querySelector('.ai-agent-runtime')?.remove();
+    const runtimeElement = createAgentRuntimeElement(item);
+    if (runtimeElement) messageNode.appendChild(runtimeElement);
+  };
+
   const stripVerboseSourceUrls = (content) => {
     let text = String(content || '');
     text = text.replace(/\]\((https?:\/\/[^)\s]+)\)/g, ']');
@@ -651,7 +732,9 @@ import {
         renderedChatMessageKeys[messageIndex] = nextKey;
         renderedChatMessageNodes[messageIndex] = createChatMessageElement(item, messageIndex);
       }
-      return renderedChatMessageNodes[messageIndex];
+      const messageNode = renderedChatMessageNodes[messageIndex];
+      syncAgentRuntimeElement(messageNode, item);
+      return messageNode;
     }).filter(Boolean);
 
     renderedChatMessageNodes.length = items.length;
@@ -1959,370 +2042,6 @@ import {
     return lines.join('\n').trim() || content;
   };
 
-  const parseProjectAgentJson = (content = '') => {
-    const text = String(content || '').trim();
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
-    const raw = fenced || text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
-    if (!raw || !raw.startsWith('{')) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const formatProjectAgentTrace = (items = [], finalAnswer = '') => {
-    return String(finalAnswer || '').trim();
-  };
-
-  const compactObservation = (execution) => {
-    const result = execution?.result || {};
-    const data = result.data && typeof result.data === 'object' ? result.data : {};
-    const compactData = Array.isArray(data.data)
-      ? data.data.slice(0, 30)
-      : Object.fromEntries(Object.entries(data).map(([key, value]) => {
-          if (key === 'images' && Array.isArray(value)) return [key, `${value.length} 张图片，已在 Observation 中省略原始数据`];
-          if (typeof value === 'string' && value.length > 8000) return [key, `${value.slice(0, 8000)}\n...（Observation 已压缩）`];
-          return [key, value];
-        }));
-    return {
-      skillId: execution?.skill?.id || data.skillId || '',
-      title: execution?.skill?.title || '',
-      ok: result.ok !== false,
-      message: result.message || '',
-      details: result.details || [],
-      pageId: data.pageId || '',
-      intent: data.intent || '',
-      rowCount: data.rowCount ?? data.data?.length ?? 0,
-      summary: data.summary || '',
-      data: compactData,
-    };
-  };
-
-  const buildProjectAgentPlannerMessages = ({ config, prompt, manifest, observations, traceItems, recommendedPlan = null, forceFinal = false }) => [
-    { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
-    {
-      role: 'system',
-      content: [
-        '你是广俊塑料科技后台的项目级 Agent 调度器。',
-        '你必须先理解用户问题，再按需调用本地项目技能获取必要数据，不要让用户重复提供项目背景。',
-        '你可以多轮调用技能，但每次只调用一个最有价值的技能；数据够用时必须 final。',
-        `单轮最多调用 ${MAX_PROJECT_AGENT_TOOL_CALLS} 个项目技能；禁止重复调用相同技能和相同参数。`,
-        '只能调用【项目能力地图】skills 中真实存在的技能，禁止编造技能、页面、字段或执行结果。',
-        '默认采用意图裁剪：数量问题只取 count，列举才取 list，最高/最低取 extrema，筛选取 filter，详情取 detail，聚合取 aggregate。',
-        '如果【系统推荐工具】不为 null，说明前端已经识别到当前页面、已选数据或专用数据源；除非用户只是闲聊，否则应优先输出 callSkill 读取事实数据，再基于 Observation final。',
-        '不要为了回答数据问题调用 assistant.openPage；只有用户明确要求打开/进入/切换页面时才调用 assistant.openPage。',
-        '如果已经有足够数据，输出 final。不要输出 Markdown，必须只输出 JSON。',
-        'final 中的每个数量、名称、状态、时间和操作结果都必须逐项来自 Observation；数据不足必须明确说明，禁止根据常识补全。',
-        '任何 Observation 的 ok=false 都不得描述成执行成功。confidence 只有在事实完整且直接命中时才允许 high。',
-        '最终回答只处理用户实际询问的重点。用户没问页面数量、关系数量、技能调用、执行状态、数据源清单或内部调度过程时，不要主动输出这些内容。',
-        '用自然、简洁的对话方式回答，不套固定模板，不机械罗列所有已读取字段；回答长度和结构应随问题变化。',
-        '不要在用户可见回答中出现“已调用项目技能”“Observation”“能力地图”“执行状态”等内部术语。',
-        forceFinal ? '现在必须基于已有 Observation 给出最终答案；如果数据不足，说明缺口。' : '',
-        '',
-        '允许输出：',
-        '{"action":"callSkill","thoughtSummary":"...","skillId":"business.queryPageData","input":{...}}',
-        '{"action":"final","thoughtSummary":"...","answer":"...","usedPages":["..."],"evidenceSkillIds":["..."],"confidence":"high|medium|low"}',
-      ].filter(Boolean).join('\n'),
-    },
-    {
-      role: 'user',
-      content: [
-        '【用户问题】',
-        prompt,
-        '',
-        '【项目能力地图，不含业务明细】',
-        JSON.stringify(manifest || {}, null, 2),
-        '',
-        '【系统推荐工具，不是最终答案】',
-        recommendedPlan ? JSON.stringify(recommendedPlan, null, 2) : 'null',
-        '',
-        '【已执行 Observation】',
-        observations.length ? JSON.stringify(observations, null, 2) : '[]',
-        '',
-        '【已展示调度轨迹】',
-        traceItems.length ? traceItems.join('\n') : '理解问题',
-      ].join('\n'),
-    },
-  ];
-
-  const callProjectAgentPlanner = async ({ config, model, prompt, manifest, observations, traceItems, recommendedPlan = null, signal, forceFinal = false }) => {
-    const messages = buildProjectAgentPlannerMessages({ config, prompt, manifest, observations, traceItems, recommendedPlan, forceFinal });
-    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: App.config.getRequestHeaders(config),
-      signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: Math.min(Number(config.temperature) || 0.2, 0.3),
-        max_tokens: Math.min(Math.max(Number(config.maxTokens) || 0, 1200), 2400),
-        stream: false,
-      }),
-    }, AI_FETCH_TIMEOUT_MS);
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
-    }
-    const data = await response.json();
-    return {
-      decision: parseProjectAgentJson(data?.choices?.[0]?.message?.content || ''),
-      usage: data?.usage || null,
-      messages,
-      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
-    };
-  };
-
-  const waitForRetry = (ms, signal = null) => new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(createAbortError());
-      return;
-    }
-    const timer = window.setTimeout(resolve, ms);
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        window.clearTimeout(timer);
-        reject(createAbortError());
-      }, { once: true });
-    }
-  });
-
-  const executeProjectSkillWithRetry = async (skillId, input, meta = {} as any, options = {} as any) => {
-    let lastExecution = null;
-    let lastError = null;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      if (options.signal?.aborted) throw createAbortError();
-      try {
-        lastExecution = await App.projectSkills.executeSkill(skillId, input, {
-          ...meta,
-          retryAttempt: attempt,
-        });
-        if (lastExecution?.result?.ok) return { execution: lastExecution, recovered: attempt > 1, failed: false };
-        lastError = new Error(lastExecution?.result?.message || '项目技能返回失败状态。');
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        lastError = error;
-      }
-      if (attempt < 2) await waitForRetry(1500, options.signal);
-    }
-    return {
-      execution: lastExecution,
-      recovered: false,
-      failed: true,
-      error: lastError,
-    };
-  };
-
-  const runPlainChatFallback = async ({ config, model, prompt, signal }) => {
-    const messages = [
-      { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
-      {
-        role: 'system',
-        content: [
-          `当前日期时间是 ${getCurrentDateTimeLabel()}（北京时间，Asia/Shanghai）。`,
-          '项目技能或项目数据读取暂时不可用时，请只基于用户问题做普通回答；不要声称已经读取或修改后台数据。',
-        ].join('\n'),
-      },
-      { role: 'user', content: buildPromptWithCurrentDate(prompt) },
-    ];
-    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: App.config.getRequestHeaders(config),
-      signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: config.temperature,
-        max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 2048),
-        stream: false,
-      }),
-    }, AI_FETCH_TIMEOUT_MS);
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`纯聊天降级失败：HTTP ${response.status}${errorText ? `：${errorText.slice(0, 220)}` : ''}`);
-    }
-    const data = await response.json();
-    return {
-      content: String(data?.choices?.[0]?.message?.content || '').trim(),
-      usage: data?.usage || null,
-      messages,
-      finishReason: String(data?.choices?.[0]?.finish_reason || ''),
-    };
-  };
-
-  const runProjectAgentLoop = async ({ config, model, prompt, pendingIndex, localPlan = null, signal = null }) => {
-    const timer = createAbortTimer('项目级 Agent 调度', PROJECT_AGENT_LOOP_TIMEOUT_MS, signal);
-    const traceItems = ['理解问题'];
-    const observations = [];
-    const executions = [];
-    const calledSignatures = [];
-    let apiUsage = null;
-    let apiMessages = [];
-    let finishReason = '';
-
-    try {
-      flushStreamRender(pendingIndex, '正在理解问题并读取项目能力...', {
-        pending: true,
-        pendingStatus: '正在理解问题',
-      });
-
-      const manifestRetry = await executeProjectSkillWithRetry('project.getManifest', { includeFields: true }, {
-        source: 'agent-loop',
-        prompt,
-      }, {
-        signal: timer.signal,
-      });
-      const manifestExecution = manifestRetry.execution;
-      if (manifestRetry.failed || !manifestExecution) {
-        return {
-          content: [
-            '项目能力地图读取失败，我无法确认当前页面、数据源和可用技能，因此本次没有生成推测性答案。',
-            '',
-            `失败原因：${manifestRetry.error?.message || '项目能力接口未返回可用结果。'}`,
-            '请检查 AI 技能面板中的“审计 Agent 运行能力”，修复后再试。',
-          ].join('\n'),
-          usage: apiUsage,
-          messages: apiMessages,
-          finishReason: 'agent_manifest_failed',
-        };
-      }
-      observations.push(compactObservation(manifestExecution));
-      traceItems.push('读取项目页面说明书');
-
-      const recommendedPlan = localPlan || App.projectSkills?.routePrompt?.(prompt) || null;
-      const manifest = observations[0]?.data || App.projectSkills.getProjectManifest?.() || {};
-      const allowedSkillIds = (App.projectSkills?.getSkillRegistry?.() || [])
-        .map((skill) => String(skill?.id || '').trim())
-        .filter(Boolean);
-      calledSignatures.push(getAgentSkillCallSignature('project.getManifest', { includeFields: true }));
-
-      const buildDeterministicFallback = () => executions.length
-        ? executions.map((execution) => App.projectSkills.formatSkillMessage(execution)).join('\n\n')
-        : '当前没有取得足够的项目事实数据，无法给出可靠结论。请明确要处理的页面、对象或数据范围。';
-      const finalizeAnswer = (answer = '') => {
-        const selected = selectGroundedAnswer({
-          answer,
-          evidence: executions.map((execution) => execution?.result || {}),
-          fallback: buildDeterministicFallback(),
-          requiresEvidence: true,
-        });
-        return selected.content;
-      };
-
-      for (let toolCallCount = 0; toolCallCount < MAX_PROJECT_AGENT_TOOL_CALLS; toolCallCount += 1) {
-        flushStreamRender(pendingIndex, `正在规划第 ${toolCallCount + 1} 步...`, {
-          pending: true,
-          pendingStatus: '正在规划',
-        });
-        let planner = null;
-        try {
-          planner = await callProjectAgentPlanner({
-            config,
-            model,
-            prompt,
-            manifest,
-            observations,
-            traceItems,
-            recommendedPlan: toolCallCount === 0 ? recommendedPlan : null,
-            signal: timer.signal,
-          });
-        } catch (error) {
-          if (isAbortError(error)) throw error;
-        }
-        apiUsage = planner?.usage || apiUsage;
-        apiMessages = planner?.messages || apiMessages;
-        finishReason = planner?.finishReason || finishReason;
-
-        let decision = planner?.decision || null;
-        if (toolCallCount === 0 && recommendedPlan?.skillId && decision?.action !== 'callSkill') {
-          decision = {
-            action: 'callSkill',
-            skillId: recommendedPlan.skillId,
-            input: recommendedPlan.input || {},
-          };
-        }
-        const evaluated = evaluateAgentLoopDecision(decision, {
-          allowedSkillIds,
-          calledSignatures,
-          toolCallCount,
-          maxToolCalls: MAX_PROJECT_AGENT_TOOL_CALLS,
-          observationCount: executions.length,
-          requiresEvidence: true,
-        });
-        if (evaluated.ok && evaluated.kind === 'final') {
-          return {
-            content: finalizeAnswer(evaluated.answer),
-            usage: apiUsage,
-            messages: apiMessages,
-            finishReason,
-          };
-        }
-        if (!evaluated.ok || evaluated.kind !== 'callSkill') break;
-
-        calledSignatures.push(evaluated.signature);
-        traceItems.push(`调用项目技能：${evaluated.skillId}`);
-        flushStreamRender(pendingIndex, `正在执行项目技能 ${toolCallCount + 1}/${MAX_PROJECT_AGENT_TOOL_CALLS}...`, {
-          pending: true,
-          pendingStatus: '正在读取项目数据',
-        });
-        const skillRetry = await executeProjectSkillWithRetry(evaluated.skillId, evaluated.input, {
-          source: planner?.decision ? 'agent-planner' : 'agent-planner-fallback',
-          prompt,
-        }, {
-          signal: timer.signal,
-        });
-        const execution = skillRetry.execution;
-        if (skillRetry.failed || !execution) {
-          return {
-            content: [
-              `项目技能 ${evaluated.skillId} 连续执行失败，因此本次没有生成推测性答案。`,
-              skillRetry.error?.message ? `失败原因：${skillRetry.error.message}` : '',
-              '请检查对应页面数据和技能接口后重试。',
-            ].filter(Boolean).join('\n'),
-            usage: apiUsage,
-            messages: apiMessages,
-            finishReason: 'agent_skill_failed',
-          };
-        }
-        executions.push(execution);
-        observations.push(compactObservation(execution));
-      }
-
-      flushStreamRender(pendingIndex, '正在基于已取得的数据生成最终答案...', {
-        pending: true,
-        pendingStatus: '正在复盘答案',
-      });
-      let finalPlanner = null;
-      try {
-        finalPlanner = await callProjectAgentPlanner({
-          config,
-          model,
-          prompt,
-          manifest,
-          observations,
-          traceItems,
-          recommendedPlan: null,
-          signal: timer.signal,
-          forceFinal: true,
-        });
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-      }
-      apiUsage = finalPlanner?.usage || apiUsage;
-      apiMessages = finalPlanner?.messages || apiMessages;
-      finishReason = finalPlanner?.finishReason || finishReason || 'agent_force_final';
-      return {
-        content: finalizeAnswer(finalPlanner?.decision?.answer || ''),
-        usage: apiUsage,
-        messages: apiMessages,
-        finishReason,
-      };
-    } finally {
-      timer.clear();
-    }
-  };
-
   const synthesizeCompositeAgentResults = async ({
     config,
     model,
@@ -2781,6 +2500,263 @@ import {
     renderChat();
   };
 
+  const addRuntimeAssistantMessage = (message: ChatRuntimeMessage) => {
+    const session = getActiveSession();
+    if (!session) return -1;
+    session.messages.push({
+      ...message,
+      role: 'assistant',
+      images: normalizeImages(message.images),
+      actions: normalizeSkillActions(message.actions),
+      searchSources: normalizeMessageSearchSources(message.searchSources),
+    });
+    session.updatedAt = nowIso();
+    state.chatHistory = session.messages;
+    saveChatState();
+    renderChatMessages({ autoScroll: true });
+    return session.messages.length - 1;
+  };
+
+  const updateRuntimeAssistantMessage = (messageIndex, message: ChatRuntimeMessage) => {
+    if (!Number.isInteger(messageIndex) || messageIndex < 0 || !state.chatHistory[messageIndex]) return;
+    state.chatHistory[messageIndex] = {
+      ...message,
+      role: 'assistant',
+      images: normalizeImages(message.images),
+      actions: normalizeSkillActions(message.actions),
+      searchSources: normalizeMessageSearchSources(message.searchSources),
+    };
+    const session = getActiveSession();
+    if (session) session.updatedAt = nowIso();
+    saveChatState();
+    renderChatMessages({ autoScroll: true });
+  };
+
+  const getRuntimeRunConfig = () => {
+    const config = App.config?.getFormConfig?.();
+    if (!config) throw new Error('AI 配置尚未初始化。');
+    if (config.aiProvider !== 'lmstudio' && !String(config.apiKey || '').trim()) {
+      throw new Error('请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。');
+    }
+    const model = String(App.config?.getResolvedModel?.() || '').trim();
+    if (!model) throw new Error('请先选择一个模型。');
+    const projectAccessEnabled = isProjectAccessEnabled();
+    runtimeRequestContext = {
+      config,
+      model,
+      projectAccessEnabled,
+      attachedImages: [],
+      attachedDataFile: null,
+      attachedDataContext: '',
+    };
+    return {
+      projectAccessEnabled,
+      webSearchEnabled,
+    };
+  };
+
+  const prepareRuntimeAttachments = async ({ prompt, signal, messageRef }) => {
+    const context = runtimeRequestContext;
+    if (!context) throw new Error('本次运行配置未就绪。');
+    const selectedModelOption = Array.from(refs.modelSelect?.options || [])
+      .find((option) => option.value === context.model);
+    const inputModalities = JSON.parse(selectedModelOption?.dataset?.inputModalities || '[]');
+    const modelCategory = String(selectedModelOption?.dataset?.category || '');
+    const supportsImageInput = (
+      Array.isArray(inputModalities)
+      && inputModalities.includes('image')
+    ) || modelCategory.includes('图像')
+      || /(?:vision|visual|image|vl|multimodal)/i.test(context.model);
+    const rawImages = supportsImageInput
+      ? [
+          ...pendingDraftImages,
+          ...(context.projectAccessEnabled ? getAttachedDataImages(prompt) : []),
+        ].slice(0, 8)
+      : [];
+    pendingDraftImages = [];
+    context.attachedDataFile = context.projectAccessEnabled ? getAttachedDataFile(prompt) : null;
+    context.attachedDataContext = context.projectAccessEnabled ? getAttachedDataContext(prompt) : '';
+
+    if (!rawImages.length) return undefined;
+    const approved = await requestImageUploadAuthorization(rawImages, {
+      pendingIndex: Number(messageRef),
+      source: '本次消息',
+      signal,
+    });
+    if (!approved) {
+      return {
+        terminalMessage: `已取消上传 ${rawImages.length} 张图片，本次未向 AI 发送图片。`,
+      };
+    }
+    context.attachedImages = await compressImagesForAi(rawImages, { prompt });
+    const userMessage = state.chatHistory[Number(messageRef) - 1];
+    if (userMessage?.role === 'user') {
+      userMessage.images = context.attachedImages;
+      saveChatState();
+      renderChatMessages({ autoScroll: true });
+    }
+    return undefined;
+  };
+
+  const requestRuntimeCompletion = async (request) => {
+    const context = runtimeRequestContext;
+    if (!context) throw new Error('本次运行配置未就绪。');
+    const { config, model } = context;
+    let messages = [];
+
+    if (request.purpose === 'grounded_response') {
+      messages = [
+        { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
+        ...request.messages,
+      ];
+    } else {
+      const history = selectRecentHistory(
+        state.chatHistory.filter((item) => (
+          (item.role === 'user' || item.role === 'assistant')
+          && !item.pending
+        )),
+      );
+      messages = [
+        ...getContextMessages(config, '', false),
+        ...history.map((item, index, items) => {
+          const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
+          const datedPrompt = isCurrentUserMessage
+            ? buildPromptWithCurrentDate(item.content)
+            : item.content;
+          const content = isCurrentUserMessage
+            ? (
+                context.attachedDataFile
+                  ? buildUserPromptWithFile(datedPrompt, context.attachedDataFile)
+                  : buildUserPromptWithData(datedPrompt, context.attachedDataContext)
+              )
+            : item.content;
+          return toApiMessage(item, {
+            content,
+            files: isCurrentUserMessage && context.attachedDataFile
+              ? [context.attachedDataFile]
+              : [],
+            images: isCurrentUserMessage ? context.attachedImages : item.images,
+          });
+        }),
+      ];
+    }
+
+    const startedAt = nowIso();
+    const startedMs = window.performance?.now?.() ?? Date.now();
+    const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(config),
+      signal: request.signal,
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: config.temperature,
+        max_tokens: Math.max(
+          Number(config.maxTokens) || 0,
+          constants.DEFAULT_CONFIG.maxTokens || 4096,
+        ),
+        stream: false,
+      }),
+    }, AI_FETCH_TIMEOUT_MS);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+    }
+    const payload = await response.json();
+    const content = String(payload?.choices?.[0]?.message?.content || '').trim();
+    recordAiCall({
+      source: request.purpose === 'grounded_response' ? 'chat-runtime-grounded' : 'chat-runtime',
+      provider: config.aiProvider,
+      model,
+      endpoint: `${config.baseUrl}/chat/completions`,
+      pageId: getActivePageId(),
+      sessionId: state.chatSessionId,
+      startedAt,
+      endedAt: nowIso(),
+      durationMs: (window.performance?.now?.() ?? Date.now()) - startedMs,
+      status: 'success',
+      prompt: request.question,
+      responsePreview: content,
+      apiUsage: payload?.usage || null,
+      requestMessages: messages,
+      completionText: content,
+      requestMeta: {
+        messages: messages.length,
+        images: context.attachedImages.length,
+        files: context.attachedDataFile ? 1 : 0,
+        attachedData: Boolean(context.attachedDataContext || context.attachedDataFile),
+        stream: false,
+      },
+    });
+    return { content };
+  };
+
+  const requestRuntimePlan = async (messages, signal) => {
+    const context = runtimeRequestContext;
+    if (!context) throw new Error('本次运行配置未就绪。');
+    const response = await fetchWithTimeout(`${context.config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: App.config.getRequestHeaders(context.config),
+      signal,
+      body: JSON.stringify({
+        model: context.model,
+        messages,
+        temperature: 0,
+        max_tokens: Math.min(
+          Math.max(Number(context.config.maxTokens) || 0, 1200),
+          2400,
+        ),
+        stream: false,
+      }),
+    }, AI_FETCH_TIMEOUT_MS);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
+    }
+    const payload = await response.json();
+    return payload?.choices?.[0]?.message?.content || '';
+  };
+
+  const classifyRuntimeIntent = async ({ prompt, activePageId, signal }) => {
+    const context = runtimeRequestContext;
+    if (!context) throw new Error('本次运行配置未就绪。');
+    return createRouteClassifier(context.config, context.model, { signal })({
+      prompt,
+      activePageId,
+    });
+  };
+
+  const initializeChatRuntime = () => {
+    const registry = createProjectToolRegistry(App, createProjectToolAdapters(App));
+    const store = createLocalStorageAgentRunStore();
+    const executionEngine = createAgentExecutionEngine({ registry, store });
+    const gateway = createIntentGateway({ classifier: classifyRuntimeIntent });
+    const planner = createAgentPlanner({
+      registry,
+      requestPlan: requestRuntimePlan,
+    });
+    const runtime = createAgentRuntime({
+      gateway,
+      planner,
+      registry,
+      executionEngine,
+      store,
+      chatModel: requestRuntimeCompletion,
+    });
+    App.agentToolRegistry = registry;
+    App.agentRuntime = runtime;
+    chatRuntimeController = createChatRuntimeController({
+      runtime,
+      getActivePageId,
+      getRunConfig: getRuntimeRunConfig,
+      prepareAttachments: prepareRuntimeAttachments,
+      addAssistantMessage: addRuntimeAssistantMessage,
+      updateAssistantMessage: updateRuntimeAssistantMessage,
+      setBusy: setChatBusyState,
+      focusInput: () => refs.chatInput?.focus(),
+    });
+  };
+
   const renderDataAttachmentState = () => {
     if (!refs.assistantDataToggleBtn) return;
     const enabled = isProjectAccessEnabled();
@@ -2874,31 +2850,13 @@ import {
     renderChatSubmitState();
   };
 
-  const cancelActiveChatRequest = () => {
-    cancelScheduledStreamRender();
-    if (activeChatAbortController && !activeChatAbortController.signal?.aborted) {
-      activeChatAbortController.abort();
-    }
-  };
-
-  const beginChatRequest = () => {
-    cancelActiveChatRequest();
-    const controller = typeof AbortController === 'function' ? new AbortController() : null;
-    const requestId = activeChatRequestId + 1;
-    activeChatRequestId = requestId;
-    activeChatAbortController = controller;
-    chatAbortRequested = false;
-    return {
-      signal: controller?.signal || null,
-      requestId,
-    };
-  };
-
   const stopCurrentChatAnalysis = () => {
     if (!state.chatBusy || chatAbortRequested) return;
     chatAbortRequested = true;
     renderChatSubmitState();
-    cancelActiveChatRequest();
+    void chatRuntimeController?.cancel?.().catch((error) => {
+      console.warn('[chat] Failed to cancel Agent runtime:', error);
+    });
   };
 
   const getRecentBusinessTopic = () => {
@@ -2930,571 +2888,43 @@ import {
       return;
     }
     if (chatSubmissionLocked) return;
-    const prompt = (refs.chatInput?.value || '').trim();
+    const prompt = String(refs.chatInput?.value || '').trim();
     if (!prompt) return;
-    chatSubmissionLocked = true;
 
-    const projectAccessEnabled = isProjectAccessEnabled();
-    const activePageId = getActivePageId();
-    let agentPlan = createAgentPlan({
-      prompt,
-      activePageId,
-      projectAccessEnabled,
-      webSearchEnabled,
-    });
-    let projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
-    if (shouldAnswerCurrentDateLocally(prompt)) {
+    chatSubmissionLocked = true;
+    try {
+      if (!chatRuntimeController) initializeChatRuntime();
       pushChatMessage('user', prompt);
       if (refs.chatInput) refs.chatInput.value = '';
-      pushChatMessage('assistant', buildCurrentDateLocalAnswer());
-      chatSubmissionLocked = false;
-      return;
-    }
-
-    let localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
-    const {
-      signal: chatAbortSignal,
-      requestId: chatRequestId,
-    } = beginChatRequest();
-    setChatBusyState(true);
-    chatSubmissionLocked = false;
-
-    pushChatMessage('user', prompt);
-    if (refs.chatInput) refs.chatInput.value = '';
-    pushChatMessage('assistant', '正在思考...');
-    const pendingIndex = state.chatHistory.length - 1;
-    flushStreamRender(pendingIndex, '正在理解问题...', { pending: true, pendingStatus: '正在理解问题' });
-
-    if (shouldRunLocalPlanDirectly(localPlan, prompt)) {
-      pendingDraftImages = [];
-      await runLocalSkillPlan(prompt, localPlan, { pendingIndex });
-      return;
-    }
-
-    const config = App.config.getFormConfig();
-    if (config.aiProvider !== 'lmstudio' && !config.apiKey) {
-      state.chatHistory[pendingIndex] = {
-        role: 'assistant',
-        content: '请先在配置中心填入模型 API 密钥，或切换到 LM Studio 本地模型。',
-        images: [],
-        pending: false,
-      };
-      const session = getActiveSession();
-      if (session) session.updatedAt = nowIso();
-      saveChatState();
-      renderChat();
-      setChatBusyState(false);
-      return;
-    }
-
-    const model = App.config.getResolvedModel();
-    if (!model) {
-      state.chatHistory[pendingIndex] = {
-        role: 'assistant',
-        content: '请先选择一个模型。',
-        images: [],
-        pending: false,
-      };
-      const session = getActiveSession();
-      if (session) session.updatedAt = nowIso();
-      saveChatState();
-      renderChat();
-      setChatBusyState(false);
-      return;
-    }
-
-    flushStreamRender(pendingIndex, '正在规划分析方式...', { pending: true, pendingStatus: '正在规划分析方式' });
-    agentPlan = await createAgentPlanWithAi({
-      prompt,
-      activePageId,
-      projectAccessEnabled,
-      webSearchEnabled,
-      classifier: createRouteClassifier(config, model, { signal: chatAbortSignal }),
-    });
-    projectContextEnabled = projectAccessEnabled && agentPlan.useProjectContext;
-    localPlan = agentPlan.localSkillPlan || (projectContextEnabled ? App.projectSkills?.routePrompt?.(prompt) : null);
-    if (shouldRunLocalPlanDirectly(localPlan, prompt)) {
-      pendingDraftImages = [];
-      await runLocalSkillPlan(prompt, localPlan, { pendingIndex });
-      return;
-    }
-
-    const selectedModelOption = Array.from(refs.modelSelect?.options || []).find((option) => option.value === model);
-    const inputModalities = JSON.parse(selectedModelOption?.dataset?.inputModalities || '[]');
-    const outputModalities = JSON.parse(selectedModelOption?.dataset?.outputModalities || '[]');
-    const modelCategory = String(selectedModelOption?.dataset?.category || '');
-    const supportsImageInput = (Array.isArray(inputModalities) && inputModalities.includes('image'))
-      || modelCategory.includes('图像')
-      || /(?:vision|visual|image|vl|multimodal)/i.test(model);
-    const supportsImageOutput = Array.isArray(outputModalities) && outputModalities.includes('image');
-    const rawAttachedImages = supportsImageInput
-      ? [
-          ...pendingDraftImages,
-          ...(projectContextEnabled ? getAttachedDataImages(prompt) : []),
-        ]
-        .slice(0, 8)
-      : [];
-    let attachedImages = [];
-    let wantsImages = false;
-    pendingDraftImages = [];
-    flushStreamRender(pendingIndex, '正在思考...', { pending: true, pendingStatus: '正在思考' });
-    const isLmStudioProvider = config.aiProvider === 'lmstudio';
-    const streamEnabled = isLmStudioProvider || Boolean(config.streamEnabled);
-    let streamedContent = '';
-    let streamedImages = [];
-    let apiUsage = null;
-    let apiMessages = [];
-    let finishReason = '';
-    let attachedDataFile = null;
-    let attachedDataContext = '';
-    let webSearchContext = '';
-    let webSearchResults = [];
-    let webSearchPlan = null;
-    let searchDecision = null;
-    let needsWebSearch = false;
-    let usedStream = false;
-    let skillExecution = null;
-    let skipAiRequest = false;
-    const callStartedAt = nowIso();
-    const callStartMs = window.performance?.now?.() ?? Date.now();
-    const isCurrentChatRequest = () => activeChatRequestId === chatRequestId;
-    const assertCurrentChatRequest = () => {
-      if (!isCurrentChatRequest()) throw createAbortError('本次分析已被新的请求取代。');
-      if (chatAbortSignal?.aborted) throw createAbortError();
-    };
-
-    try {
-      attachedDataFile = projectContextEnabled ? getAttachedDataFile(prompt) : null;
-      attachedDataContext = projectContextEnabled ? getAttachedDataContext(prompt) : '';
-      if (webSearchEnabled) {
-        searchDecision = {
-          needsSearch: Boolean(agentPlan.needsWebSearch),
-          reason: agentPlan.reason || (agentPlan.useProjectContext ? '项目本地数据优先' : '统一意图规划结果'),
-        };
-        const localSearchRequired = agentPlan.needsWebSearch || (!agentPlan.useProjectContext && (promptRequiresWebSearch(prompt) || promptRequiresEntityLookupSearch(prompt)));
-        needsWebSearch = Boolean(searchDecision?.needsSearch || localSearchRequired);
-      } else {
-        searchDecision = { needsSearch: false, reason: 'Web search disabled by chat toggle' };
-        needsWebSearch = false;
-      }
-
-      if (needsWebSearch && !webSearchEnabled) {
-        streamedContent = buildSearchUnavailableAnswer('聊天框的“联网搜索”已关闭');
-        finishReason = 'web_search_disabled';
-        skipAiRequest = true;
-        flushStreamRender(pendingIndex, streamedContent);
-      } else if (needsWebSearch && !config.searchApiKey) {
-        streamedContent = buildSearchUnavailableAnswer('未配置 Tavily API Key');
-        finishReason = 'web_search_missing_key';
-        skipAiRequest = true;
-        flushStreamRender(pendingIndex, streamedContent);
-      } else if (needsWebSearch) {
-        flushStreamRender(pendingIndex, '正在联网搜索...', { pending: true, pendingStatus: '正在联网搜索' });
-        webSearchPlan = agentPlan.searchPlan || buildFallbackSearchPlan(prompt, config);
-        const updateSearchProgress = ({ resultCount = 0, targetResults = 0 } = {} as any) => {
-          const targetLabel = targetResults ? ` / 目标 ${targetResults} 条` : '';
-          const status = `正在联网搜索 · 已获取 ${resultCount} 条${targetLabel}`;
-          flushStreamRender(pendingIndex, status, {
-            pending: true,
-            pendingStatus: status,
-          });
-        };
-        const searchResult = await searchWebForPromptDynamic(config, prompt, {
-          signal: chatAbortSignal,
-          searchPlan: webSearchPlan,
-          onProgress: updateSearchProgress,
-        });
-        webSearchContext = searchResult.context || '';
-        webSearchResults = searchResult.results || [];
-        webSearchPlan = searchResult.plan || webSearchPlan;
-        if (!webSearchResults.length) {
-          streamedContent = [
-            '联网搜索没有返回可用结果，因此本次不继续让 AI 直接猜测。',
-            '',
-            '请稍后重试，或换一个更具体的关键词。',
-          ].join('\n');
-          finishReason = 'web_search_empty';
-          skipAiRequest = true;
-          flushStreamRender(pendingIndex, streamedContent);
-        } else {
-          flushStreamRender(
-            pendingIndex,
-            `已获取 ${webSearchResults.length} 条联网资料，正在整理回答...`,
-            {
-              pending: true,
-              pendingStatus: '正在整理联网资料',
-            }
-          );
-        }
-      }
-      if (!skipAiRequest && !needsWebSearch) {
-        flushStreamRender(pendingIndex, '正在思考...', { pending: true, pendingStatus: '正在思考' });
-      }
-      if (!skipAiRequest && rawAttachedImages.length) {
-        const approved = await requestImageUploadAuthorization(rawAttachedImages, {
-          pendingIndex,
-          source: '本次消息',
-          signal: chatAbortSignal,
-        });
-        if (!approved) {
-          streamedContent = `已取消上传 ${rawAttachedImages.length} 张图片，本次未向 AI 发送图片。`;
-          finishReason = 'image_upload_cancelled';
-          skipAiRequest = true;
-        } else {
-          flushStreamRender(pendingIndex, `已授权上传 ${rawAttachedImages.length} 张图片，正在准备发送...`, {
-            pending: true,
-            pendingStatus: '准备上传图片',
-          });
-          attachedImages = await compressImagesForAi(rawAttachedImages, { prompt });
-          const userMessage = state.chatHistory[pendingIndex - 1];
-          if (userMessage?.role === 'user') {
-            userMessage.images = attachedImages;
-            saveChatState();
-          }
-        }
-      }
-
-      wantsImages = supportsImageOutput && !attachedImages.length && agentPlan.wantsImageGeneration;
-
-      if (
-        !skipAiRequest
-        && projectContextEnabled
-        && !needsWebSearch
-        && !attachedDataFile
-        && !attachedImages.length
-        && !wantsImages
-        && agentPlan.kind !== 'image-analysis'
-        && localPlan?.skillId !== 'analysis.buildJointPackage'
-      ) {
-        const loopResult = await runProjectAgentLoop({
-          config,
-          model,
-          prompt,
-          pendingIndex,
-          localPlan,
-          signal: chatAbortSignal,
-        });
-        streamedContent = loopResult.content;
-        apiUsage = loopResult.usage || apiUsage;
-        finishReason = loopResult.finishReason || finishReason;
-        apiMessages = loopResult.messages || apiMessages;
-        usedStream = false;
-        skipAiRequest = true;
-        flushStreamRender(pendingIndex, streamedContent);
-      }
-
-      if (!skipAiRequest) {
-      if (localPlan?.skillId === 'analysis.buildJointPackage') {
-        const compositeResult = await runCompositeAgentAnalysis({
-          config,
-          mainModel: model,
-          prompt,
-          pendingIndex,
-          signal: chatAbortSignal,
-        });
-        streamedContent = compositeResult.content;
-        apiUsage = compositeResult.usage || apiUsage;
-        finishReason = compositeResult.finishReason || finishReason;
-        apiMessages = compositeResult.messages || apiMessages;
-        usedStream = usedStream || Boolean(compositeResult.usedStream);
-      } else {
-      const requestMessages = selectRecentHistory(state.chatHistory
-        .slice(0, pendingIndex)
-        .filter((item) => item.role === 'user' || item.role === 'assistant'))
-        .map((item, index, items) => {
-          const isCurrentUserMessage = index === items.length - 1 && item.role === 'user';
-          return toApiMessage(item, {
-            content: isCurrentUserMessage
-              ? (attachedDataFile
-                ? buildUserPromptWithFile(buildPromptWithCurrentDate(item.content), attachedDataFile)
-                : buildUserPromptWithData(buildPromptWithCurrentDate(item.content), attachedDataContext))
-              : item.content,
-            files: isCurrentUserMessage && attachedDataFile ? [attachedDataFile] : [],
-            images: isCurrentUserMessage ? attachedImages : item.images,
-          });
-        });
-      apiMessages = [
-        ...getContextMessages(config, '', projectContextEnabled, { agentPlan }),
-        ...(webSearchContext ? [
-          { role: 'user', content: webSearchContext },
-          { role: 'assistant', content: '已读取联网搜索资料。我会结合资料回答，并用 [来源 N] 标注引用。' },
-        ] : []),
-        ...requestMessages,
-      ];
-
-      const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: App.config.getRequestHeaders(config),
-        signal: chatAbortSignal,
-        body: JSON.stringify({
-          model,
-          messages: apiMessages,
-          temperature: config.temperature,
-          max_tokens: Math.max(Number(config.maxTokens) || 0, constants.DEFAULT_CONFIG.maxTokens || 4096),
-          modalities: wantsImages ? ['image', 'text'] : undefined,
-          stream: (wantsImages || attachedDataFile) ? false : streamEnabled,
-        }),
-      }, AI_FETCH_TIMEOUT_MS);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
-      }
-      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      usedStream = !wantsImages
-        && !attachedDataFile
-        && streamEnabled
-        && response.body
-        && (isLmStudioProvider || contentType.includes('text/event-stream'));
-
-      if (usedStream) {
-        const streamResult = await consumeChatCompletionStream(response, (delta) => {
-          if (!isCurrentChatRequest() || chatAbortSignal?.aborted) return;
-          streamedContent += delta;
-          scheduleStreamRender(pendingIndex, streamedContent);
-        }, { signal: chatAbortSignal });
-        if (!streamResult.receivedDelta) {
-          throw new Error('本地模型没有返回流式内容，请确认 LM Studio 已启用 OpenAI Compatible Server。');
-        }
-        apiUsage = streamResult.usage || apiUsage;
-        finishReason = streamResult.finishReason || finishReason;
-        flushStreamRender(pendingIndex, streamedContent);
-      } else {
-        assertCurrentChatRequest();
-        const data = await response.json();
-        assertCurrentChatRequest();
-        streamedContent = data?.choices?.[0]?.message?.content?.trim() || '我暂时没有返回内容。';
-        finishReason = String(data?.choices?.[0]?.finish_reason || '');
-        apiUsage = data?.usage || null;
-        streamedImages = Array.isArray(data?.choices?.[0]?.message?.images)
-          ? data.choices[0].message.images.map((image) => ({
-              type: String(image?.type || 'image_url'),
-              image_url: {
-                url: String(image?.image_url?.url || image?.url || ''),
-              },
-            })).filter((image) => image.image_url.url)
-          : [];
-      }
-
-      skillExecution = projectContextEnabled
-        ? await App.projectSkills?.executeSkillCallFromText?.(streamedContent, {
-            source: 'assistant-skill-call',
-            prompt,
-            onBeforeExecute: () => flushStreamRender(pendingIndex, '正在获取项目数据...', { pending: true, pendingStatus: '正在获取项目数据' }),
-          })
-        : null;
-      }
-      assertCurrentChatRequest();
-      if (skillExecution) {
-        const needsSynthesis = shouldSynthesizeSkillResult(skillExecution);
-        const displayPrefix = getSkillDisplayPrefix(skillExecution);
-        flushStreamRender(
-          pendingIndex,
-          needsSynthesis
-            ? [displayPrefix, '正在分析...'].filter(Boolean).join('\n\n')
-            : '项目技能已执行，正在整理结果...',
-          {
-            pending: true,
-            pendingStatus: needsSynthesis ? '正在分析' : '项目技能已执行，正在整理结果',
-          }
-        );
-        if (needsSynthesis) {
-          try {
-            const rawSkillImages = getSkillResultImages(skillExecution);
-            const isSpectrumImageSearch = skillExecution?.skill?.id === 'spectrum.manageImages'
-              && skillExecution?.result?.data?.action === 'search';
-            if (isSpectrumImageSearch && !rawSkillImages.length) {
-              streamedContent = [
-                App.projectSkills.formatSkillMessage(skillExecution),
-                '',
-                '【提示】检索结果没有可上传的图谱图片，无法进行曲线、峰形或标注的视觉分析。',
-              ].join('\n');
-            } else {
-              if (rawSkillImages.length) {
-                const skillUploadApproved = await requestImageUploadAuthorization(rawSkillImages, {
-                  pendingIndex,
-                  displayPrefix,
-                  source: '图谱检索结果',
-                  signal: chatAbortSignal,
-                });
-                if (!skillUploadApproved) {
-                  streamedContent = [
-                    displayPrefix,
-                    `已取消上传 ${rawSkillImages.length} 张图谱图片，本次未继续进行视觉图谱分析。`,
-                  ].filter(Boolean).join('\n\n');
-                } else {
-                  flushStreamRender(
-                    pendingIndex,
-                    [displayPrefix, `已授权上传 ${rawSkillImages.length} 张图谱图片，正在交给 AI 分析...`].filter(Boolean).join('\n\n'),
-                    { pending: true, pendingStatus: '正在分析图谱图片' }
-                  );
-                  const skillImages = await compressImagesForAi(rawSkillImages, { prompt });
-                  const imageNotice = rawSkillImages.length && !skillImages.length
-                    ? '\n\n【提示】本次没有可上传的图谱图片，因此无法做曲线图片分析。请确认图谱记录里有图片。'
-                    : '';
-                  const synthesized = await synthesizeSkillResult({
-                    config,
-                    model,
-                    prompt,
-                    execution: skillExecution,
-                    pendingIndex,
-                    displayPrefix,
-                    signal: chatAbortSignal,
-                    images: skillImages,
-                  });
-                  streamedContent = `${synthesized.content || App.projectSkills.formatSkillMessage(skillExecution)}${imageNotice}`;
-                  apiUsage = synthesized.usage || apiUsage;
-                  finishReason = synthesized.finishReason || finishReason;
-                  apiMessages = synthesized.messages || apiMessages;
-                  usedStream = usedStream || Boolean(synthesized.usedStream);
-                }
-              } else {
-                const synthesized = await synthesizeSkillResult({
-                  config,
-                  model,
-                  prompt,
-                  execution: skillExecution,
-                  pendingIndex,
-                  displayPrefix,
-                  signal: chatAbortSignal,
-                  images: [],
-                });
-                streamedContent = synthesized.content || App.projectSkills.formatSkillMessage(skillExecution);
-                apiUsage = synthesized.usage || apiUsage;
-                finishReason = synthesized.finishReason || finishReason;
-                apiMessages = synthesized.messages || apiMessages;
-                usedStream = usedStream || Boolean(synthesized.usedStream);
-              }
-            }
-          } catch (error) {
-            if (isAbortError(error)) throw error;
-            const skillImageCount = getSkillResultImages(skillExecution).length;
-            streamedContent = skillExecution?.skill?.id === 'spectrum.manageImages'
-              && skillExecution?.result?.data?.action === 'search'
-              && skillImageCount
-              ? [
-                  `已找到 ${skillImageCount} 张相关图谱，并已尝试上传图谱图片给 AI 做曲线对比分析。`,
-                  '',
-                  `【提示】图片分析失败：${error?.message || '未知错误'}`,
-                  '请确认当前模型支持图像输入；如果不支持，请切换到图像理解模型后重试。',
-                ].join('\n')
-              : [
-                  App.projectSkills.formatSkillMessage(skillExecution),
-                  '',
-                  `【提示】技能结果已生成，但二次分析失败：${error?.message || '未知错误'}`,
-                ].join('\n');
-          }
-        } else {
-          streamedContent = App.projectSkills.formatSkillMessage(skillExecution);
-        }
-        streamedImages = [];
-      }
-      }
-      assertCurrentChatRequest();
-      streamedContent = formatInternalJsonAnswer(streamedContent);
-      const skillActions = skillExecution
-        ? (App.projectSkills.getResultActions?.(skillExecution) || [])
-        : [];
-      const tokenUsage = buildTokenUsageMeta({
-        apiUsage,
-        requestMessages: apiMessages,
-        completionText: streamedContent,
-        model,
-      });
-
-      state.chatHistory[pendingIndex] = {
-        role: 'assistant',
-        content: finishReason === 'length'
-          ? `${streamedContent || '我暂时没有返回内容。'}\n\n【提示】本次回答达到模型输出上限，内容可能未完整结束。可以继续追问“继续”。`
-          : streamedContent || '我暂时没有返回内容。',
-        images: streamedImages,
-        actions: normalizeSkillActions(skillActions),
-        tokenUsage,
-        searchSources: normalizeSearchSources(webSearchResults),
-      };
-      const session = getActiveSession();
-      if (session) session.updatedAt = nowIso();
-      saveChatState();
-      renderChat();
-      recordAiCall({
-        source: 'chat',
-        provider: config.aiProvider,
-        model,
-        endpoint: `${config.baseUrl}/chat/completions`,
-        pageId: getActivePageId(),
-        sessionId: state.chatSessionId,
-        startedAt: callStartedAt,
-        endedAt: nowIso(),
-        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: skipAiRequest ? 'cancelled' : 'success',
-        statusText: finishReason,
-        prompt,
-        responsePreview: streamedContent,
-        tokenUsage,
-        requestMeta: {
-          messages: apiMessages.length,
-          images: attachedImages.length,
-          files: attachedDataFile ? 1 : 0,
-          attachedData: Boolean(attachedDataContext || attachedDataFile),
-          webSearch: webSearchResults.length,
-          webSearchNeeded: needsWebSearch,
-          webSearchDecision: searchDecision,
-          webSearchPlan,
-          stream: usedStream,
-        },
-      });
-    } catch (error) {
-      if (!isCurrentChatRequest()) return;
-      cancelScheduledStreamRender();
-      const wasStopped = chatAbortRequested || isAbortError(error);
-      const currentMessage = state.chatHistory[pendingIndex] || {};
-      const currentContent = stripPendingStatus(String(currentMessage.content || '').trim(), currentMessage.pendingStatus);
-      const fallbackMessage = wasStopped ? '【已终止】本次 AI 分析已停止。' : `发送失败：${error?.message || '网络或权限错误'}`;
-      state.chatHistory[pendingIndex] = {
-        role: 'assistant',
-        content: currentContent ? `${currentContent}\n\n${fallbackMessage}` : fallbackMessage,
-        images: [],
-        pending: false,
-      };
-      const session = getActiveSession();
-      if (session) session.updatedAt = nowIso();
-      saveChatState();
-      renderChat();
-      recordAiCall({
-        source: 'chat',
-        provider: config.aiProvider,
-        model,
-        endpoint: `${config.baseUrl}/chat/completions`,
-        pageId: getActivePageId(),
-        sessionId: state.chatSessionId,
-        startedAt: callStartedAt,
-        endedAt: nowIso(),
-        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: wasStopped ? 'cancelled' : 'failed',
-        error: wasStopped ? '用户终止' : (error?.message || '网络或权限错误'),
-        prompt,
-        responsePreview: currentContent,
-        requestMessages: apiMessages,
-        completionText: currentContent,
-        requestMeta: {
-          messages: apiMessages.length,
-          images: attachedImages.length,
-          files: attachedDataFile ? 1 : 0,
-          attachedData: Boolean(attachedDataContext || attachedDataFile),
-          webSearch: webSearchResults.length,
-          webSearchNeeded: needsWebSearch,
-          webSearchDecision: searchDecision,
-          webSearchPlan,
-          stream: usedStream,
-        },
-      });
+      await chatRuntimeController.submit({ prompt });
     } finally {
-      if (activeChatRequestId === chatRequestId) {
-        activeChatAbortController = null;
-        setChatBusyState(false);
-        if (refs.chatInput) refs.chatInput.focus();
-      }
+      chatSubmissionLocked = false;
     }
+  };
+
+  const handleAgentRuntimeActionClick = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !chatRuntimeController) return false;
+    const confirmButton = target.closest('[data-chat-agent-confirm]');
+    if (confirmButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const confirmationId = String(confirmButton.getAttribute('data-chat-agent-confirm') || '');
+      const runId = String(confirmButton.getAttribute('data-chat-agent-run') || '');
+      if (runId && confirmationId) {
+        void chatRuntimeController.confirm({ runId, confirmationId });
+      }
+      return true;
+    }
+    const cancelButton = target.closest('[data-chat-agent-cancel]');
+    if (cancelButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const runId = String(cancelButton.getAttribute('data-chat-agent-cancel') || '');
+      if (runId) void chatRuntimeController.cancel(runId);
+      return true;
+    }
+    return false;
   };
 
   const handleImageUploadAuthClick = (event) => {
@@ -3585,6 +3015,7 @@ import {
     document.addEventListener('click', handleImageUploadAuthClick, { capture: true, signal: eventSignal });
 
     refs.chatMessages?.addEventListener('click', (event) => {
+      if (handleAgentRuntimeActionClick(event)) return;
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
 
@@ -3639,6 +3070,7 @@ import {
     const activeSession = getActiveSession();
     state.chatHistory = activeSession?.messages || [];
     if (loaded.needsMigration) saveChatState();
+    if (!chatRuntimeController) initializeChatRuntime();
     bindChat();
     renderChat();
     renderDataAttachmentState();
@@ -3653,8 +3085,11 @@ import {
     chatEventController = null;
     chatEventsBound = false;
     cancelScheduledStreamRender();
-    activeChatAbortController?.abort();
-    activeChatAbortController = null;
+    void chatRuntimeController?.cancel?.();
+    chatRuntimeController = null;
+    App.agentRuntime = undefined;
+    App.agentToolRegistry = undefined;
+    runtimeRequestContext = null;
     closeConversationMenu();
     closeChatImagePreview();
     Array.from(imageUploadAuthResolvers.values()).forEach((resolver) => {
@@ -3673,4 +3108,3 @@ import {
     cleanup,
   };
 })();
-

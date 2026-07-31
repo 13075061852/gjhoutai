@@ -168,6 +168,24 @@ const createCompletionRaceStore = () => {
 describe('agent runtime coordinator', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('includes the actual runtime run id on every progress event', async () => {
+    const events: AgentProgressEvent[] = [];
+    const harness = createHarness({
+      intent: { kind: 'chat', confidence: 0.99, reason: 'greeting' },
+    });
+
+    const result = await harness.runtime.run({
+      prompt: '早',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+      onProgress: (event) => events.push(event),
+    });
+
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((event) => event.runId === result.run.id)).toBe(true);
+  });
+
   it('routes an ordinary early greeting through exactly one chat model request', async () => {
     const projectManifestTool = vi.fn(async () => completedResult(
       '项目清单读取完成。',

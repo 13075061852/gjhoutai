@@ -69,6 +69,7 @@ export const agentConfirmationHistoryEntrySchema = z.object({
 });
 
 export const agentProgressEventSchema = z.object({
+  runId: z.string().min(1).optional(),
   at: z.string().datetime(),
   phase: agentRunStateSchema,
   label: z.string().min(1),

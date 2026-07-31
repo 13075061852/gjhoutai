@@ -552,9 +552,108 @@
       background:var(--surface);
       box-shadow:none;
     }
+    .ai-agent-runtime{
+      margin-top:12px;
+    }
+    .ai-agent-steps{
+      min-height:40px;
+      display:flex;
+      align-items:center;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .ai-agent-step{
+      min-height:22px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--text-2);
+      font-size:12px;
+      font-weight:800;
+      line-height:1.35;
+    }
+    .ai-agent-step-dot{
+      width:8px;
+      height:8px;
+      flex:0 0 8px;
+      border-radius:50%;
+      background:var(--accent);
+    }
+    .ai-agent-step[data-agent-status="completed"] .ai-agent-step-dot{
+      background:var(--success);
+    }
+    .ai-agent-step[data-agent-status="failed"] .ai-agent-step-dot{
+      background:var(--danger);
+    }
+    .ai-agent-confirmation{
+      margin-top:10px;
+      padding:14px;
+      border:1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+      border-radius:8px;
+      background:var(--surface-2);
+      color:var(--text);
+    }
+    .ai-agent-confirmation-title{
+      margin-bottom:10px;
+      font-size:13px;
+      font-weight:900;
+    }
+    .ai-agent-confirmation dl{
+      display:grid;
+      gap:8px;
+      margin:0;
+    }
+    .ai-agent-confirmation dl > div{
+      display:grid;
+      grid-template-columns:56px minmax(0,1fr);
+      gap:10px;
+      align-items:start;
+    }
+    .ai-agent-confirmation dt{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+    .ai-agent-confirmation dd{
+      min-width:0;
+      margin:0;
+      color:var(--text-2);
+      font-size:12px;
+      line-height:1.5;
+      overflow-wrap:anywhere;
+    }
+    .ai-agent-confirmation code{
+      display:inline-block;
+      margin:0 4px 4px 0;
+      padding:2px 5px;
+      border:1px solid var(--border);
+      border-radius:5px;
+      background:var(--surface);
+      color:var(--text);
+      font-family:var(--font-mono, ui-monospace, monospace);
+    }
+    .ai-agent-confirmation-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-top:12px;
+    }
+    .ai-agent-confirmation-actions .ui-button{
+      min-width:88px;
+    }
     @media (max-width:420px){
       .ai-upload-auth-actions{
         grid-template-columns:1fr;
+      }
+      .ai-agent-confirmation dl > div{
+        grid-template-columns:1fr;
+        gap:2px;
+      }
+      .ai-agent-confirmation-actions{
+        display:grid;
+        grid-template-columns:1fr 1fr;
       }
     }
     .chat-image-preview{

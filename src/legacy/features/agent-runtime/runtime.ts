@@ -260,9 +260,10 @@ export const createAgentRuntime = ({
     const callbacks = new Set<(progress: AgentProgressEvent) => void>();
     if (onProgress) callbacks.add(onProgress);
     callbacksByRun.get(runId)?.forEach((callback) => callbacks.add(callback));
+    const progress = { ...event, runId };
     callbacks.forEach((callback) => {
       try {
-        callback(event);
+        callback(progress);
       } catch {
         // Progress observers cannot alter runtime semantics.
       }

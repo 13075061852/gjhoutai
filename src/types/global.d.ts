@@ -183,6 +183,90 @@ declare global {
     cleanup: () => void;
   };
 
+  type LegacyAgentRunState =
+    | 'routing'
+    | 'planning'
+    | 'executing'
+    | 'awaiting_confirmation'
+    | 'composing'
+    | 'completed'
+    | 'failed'
+    | 'timed_out'
+    | 'cancelled';
+
+  type LegacyAgentProgressEvent = {
+    runId?: string;
+    at: string;
+    phase: LegacyAgentRunState;
+    label: string;
+    status: 'started' | 'running' | 'completed' | 'failed' | 'waiting_confirmation';
+    toolId?: string;
+    stepId?: string;
+    durationMs?: number;
+  };
+
+  type LegacyAgentRunRecord = {
+    version: 2;
+    id: string;
+    prompt: string;
+    state: LegacyAgentRunState;
+    pendingConfirmation?: {
+      version: 2;
+      id: string;
+      runId: string;
+      stepId: string;
+      toolId: string;
+      riskLevel: 'read' | 'create' | 'update' | 'delete';
+      expiresAt: string;
+    };
+    [key: string]: any;
+  };
+
+  type LegacyAgentRuntimeResult = {
+    run: LegacyAgentRunRecord;
+    state: LegacyAgentRunState;
+    answer: string;
+    images: unknown[];
+    actions: unknown[];
+  };
+
+  type LegacyAgentRuntime = {
+    run: (input: {
+      prompt: string;
+      activePageId: string;
+      projectAccessEnabled: boolean;
+      webSearchEnabled: boolean;
+      signal?: AbortSignal;
+      onProgress?: (event: LegacyAgentProgressEvent) => void;
+    }) => Promise<LegacyAgentRuntimeResult>;
+    confirm: (input: {
+      runId: string;
+      confirmationId: string;
+      signal?: AbortSignal;
+    }) => Promise<LegacyAgentRuntimeResult>;
+    cancel: (runId: string) => Promise<LegacyAgentRunRecord | null>;
+  };
+
+  type LegacyAgentToolRegistry = {
+    register: (definition: Record<string, unknown>) => void;
+    get: (toolId: string) => Record<string, unknown> | null;
+    list: () => Array<Record<string, unknown>>;
+    getPlannerCatalog: () => Array<Record<string, unknown>>;
+    prepareCall: (
+      toolId: string,
+      input: unknown,
+      context: { runId: string; stepId: string },
+    ) => Record<string, unknown>;
+    validateResult: (toolId: string, result: unknown) => Record<string, unknown>;
+  };
+
+  type LegacyProjectSkillsApi = LegacyLifecycleModule & {
+    getToolRegistry?: () => LegacyAgentToolRegistry;
+    getToolCatalog?: () => Array<Record<string, unknown>>;
+    resumeConfirmedRun?: (...args: any[]) => Promise<unknown>;
+    executeSkill?: (...args: any[]) => Promise<unknown>;
+  };
+
   interface LegacyAppNamespace extends Record<string, any> {
     currentUser?: {
       id: string;
@@ -199,6 +283,8 @@ declare global {
     aiCallAnalysis?: LegacyLifecycleModule;
     apimartMedia?: LegacyLifecycleModule;
     animations?: LegacyAnimationApi;
+    agentRuntime?: LegacyAgentRuntime;
+    agentToolRegistry?: LegacyAgentToolRegistry;
     businessPages?: LegacyLifecycleModule;
     chat?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;
@@ -210,7 +296,7 @@ declare global {
     motionEffects?: LegacyMotionEffectsApi;
     navigation?: LegacyLifecycleModule;
     notify?: Record<string, any>;
-    projectSkills?: LegacyLifecycleModule;
+    projectSkills?: LegacyProjectSkillsApi;
     propertyAnalysis?: LegacyLifecycleModule;
     spectrumAnalysis?: LegacyLifecycleModule;
     themeSettings?: LegacyLifecycleModule;

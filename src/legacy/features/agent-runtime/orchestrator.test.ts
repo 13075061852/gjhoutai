@@ -58,4 +58,46 @@ describe('project agent planner compatibility', () => {
     expect(getAgentSkillCallSignature('business.queryPageData', { intent: 'count', pageId: 'order-management' }))
       .toBe(getAgentSkillCallSignature('business.queryPageData', { pageId: 'order-management', intent: 'count' }));
   });
+
+  it('keeps accepting legacy callSkill decisions for registered skills', () => {
+    const result = evaluateAgentLoopDecision(
+      { action: 'callSkill', skillId: 'business.queryPageData', input: { pageId: 'order-management' } },
+      { allowedSkillIds },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      kind: 'callSkill',
+      skillId: 'business.queryPageData',
+      input: { pageId: 'order-management' },
+    });
+    expect(result.signature).toBe(getAgentSkillCallSignature('business.queryPageData', { pageId: 'order-management' }));
+  });
+
+  it('keeps legacy final evidence requirements intact', () => {
+    expect(evaluateAgentLoopDecision(
+      { action: 'final', answer: '已完成分析' },
+      { requiresEvidence: true, observationCount: 0 },
+    )).toMatchObject({ ok: false, kind: 'final', reason: 'final_without_evidence' });
+
+    expect(evaluateAgentLoopDecision(
+      { action: 'final', answer: '已完成分析' },
+      { requiresEvidence: true, observationCount: 1 },
+    )).toMatchObject({ ok: true, kind: 'final', answer: '已完成分析' });
+  });
+
+  it('keeps legacy call limits and duplicate-call prevention intact', () => {
+    const duplicate = getAgentSkillCallSignature('business.queryPageData', { pageId: 'order-management' });
+    const decision = { action: 'callSkill', skillId: 'business.queryPageData', input: { pageId: 'order-management' } };
+
+    expect(evaluateAgentLoopDecision(decision, {
+      allowedSkillIds,
+      toolCallCount: 4,
+      maxToolCalls: 4,
+    })).toMatchObject({ ok: false, kind: 'callSkill', reason: 'tool_call_limit' });
+    expect(evaluateAgentLoopDecision(decision, {
+      allowedSkillIds,
+      calledSignatures: [duplicate],
+    })).toMatchObject({ ok: false, kind: 'callSkill', reason: 'duplicate_skill_call', signature: duplicate });
+  });
 });

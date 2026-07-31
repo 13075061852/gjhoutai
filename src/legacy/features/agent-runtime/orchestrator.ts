@@ -38,6 +38,40 @@ export const evaluateAgentLoopDecision = (decision: unknown, options: {
   observationCount?: number;
   requiresEvidence?: boolean;
 } = {}): AgentLoopDecisionCompatibilityResult => {
+  const legacyDecision = decision && typeof decision === 'object' && !Array.isArray(decision)
+    && Object.prototype.hasOwnProperty.call(decision, 'action');
+  if (legacyDecision) {
+    const reactDecision = decision as Record<string, unknown>;
+    const action = String(reactDecision.action || '').trim();
+    if (action === 'final') {
+      const answer = String(reactDecision.answer || '').trim();
+      if (!answer) return { ok: false, kind: 'final', reason: 'empty_final_answer' };
+      if (options.requiresEvidence && !Number(options.observationCount || 0)) {
+        return { ok: false, kind: 'final', reason: 'final_without_evidence' };
+      }
+      return { ok: true, kind: 'final', reason: '', answer };
+    }
+    if (action !== 'callSkill') return { ok: false, kind: 'invalid', reason: 'invalid_action' };
+
+    const skillId = String(reactDecision.skillId || '').trim();
+    const allowedSkillIds = Array.isArray(options.allowedSkillIds) ? options.allowedSkillIds : [];
+    if (!skillId || !allowedSkillIds.includes(skillId)) {
+      return { ok: false, kind: 'callSkill', reason: 'unknown_skill', skillId };
+    }
+    const maxToolCalls = Math.max(1, Number(options.maxToolCalls || MAX_PROJECT_AGENT_TOOL_CALLS));
+    if (Number(options.toolCallCount || 0) >= maxToolCalls) {
+      return { ok: false, kind: 'callSkill', reason: 'tool_call_limit', skillId };
+    }
+    const input = reactDecision.input && typeof reactDecision.input === 'object' && !Array.isArray(reactDecision.input)
+      ? reactDecision.input as Record<string, unknown>
+      : {};
+    const signature = getAgentSkillCallSignature(skillId, input);
+    if ((options.calledSignatures || []).includes(signature)) {
+      return { ok: false, kind: 'callSkill', reason: 'duplicate_skill_call', skillId, signature };
+    }
+    return { ok: true, kind: 'callSkill', reason: '', skillId, input, signature };
+  }
+
   const allowedToolIds = new Set(Array.isArray(options.allowedSkillIds) ? options.allowedSkillIds : []);
   const validation = validatePlanDependencies(decision, allowedToolIds);
   if (!validation.ok) return { ok: false, kind: 'invalid', reason: validation.reason };

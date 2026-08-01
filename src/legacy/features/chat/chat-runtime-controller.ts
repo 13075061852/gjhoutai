@@ -197,6 +197,7 @@ export const createChatRuntimeController = ({
 }: CreateChatRuntimeControllerOptions) => {
   let invocationSequence = 0;
   let activeInvocationId = '';
+  let activePrompt = '';
   let activeRunId = '';
   let activeController: AbortController | null = null;
   const messageByRunId = new Map<string, MessageReference>();
@@ -344,10 +345,12 @@ export const createChatRuntimeController = ({
   };
 
   const submit = async ({ prompt }: ChatRuntimeSubmitInput): Promise<void> => {
+    if (activeInvocationId && activePrompt === prompt.trim()) return;
     setBusy(true);
     const invocationId = `chat-invocation-${++invocationSequence}`;
     const controller = new AbortController();
     activeInvocationId = invocationId;
+    activePrompt = prompt.trim();
     activeRunId = '';
     activeController = controller;
     const sessionContext = getSessionContext();
@@ -387,6 +390,14 @@ export const createChatRuntimeController = ({
           messageRef,
           progress as ProgressWithRunId,
         ),
+        onToken: (content) => {
+          if (activeInvocationId !== invocationId) return;
+          replaceMessage(messageRef, {
+            content,
+            pending: true,
+            pendingStatus: '正在生成回复',
+          });
+        },
       });
       applyRunResult(invocationId, messageRef, result);
     } catch (error) {
@@ -394,6 +405,7 @@ export const createChatRuntimeController = ({
     } finally {
       if (activeInvocationId === invocationId) {
         activeInvocationId = '';
+        activePrompt = '';
         activeRunId = '';
         activeController = null;
         setBusy(false);
@@ -451,6 +463,7 @@ export const createChatRuntimeController = ({
       confirmationActionRunIds.delete(runId);
       if (activeInvocationId === invocationId) {
         activeInvocationId = '';
+        activePrompt = '';
         activeRunId = '';
         activeController = null;
         setBusy(false);
@@ -522,6 +535,7 @@ export const createChatRuntimeController = ({
       if (guardsConfirmationAction) confirmationActionRunIds.delete(runtimeRunId);
       if (resumesPersistedRun && activeInvocationId === storedInvocationId) {
         activeInvocationId = '';
+        activePrompt = '';
         activeRunId = '';
         setBusy(false);
         focusInput();

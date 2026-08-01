@@ -23,6 +23,7 @@ export type AgentChatModelRequest = {
   history?: unknown[];
   messages: Array<{ role: 'system' | 'user'; content: string }>;
   signal?: AbortSignal;
+  onToken?: (content: string) => void;
 };
 
 export type AgentChatModelAdapter = (request: AgentChatModelRequest) => Promise<unknown>;

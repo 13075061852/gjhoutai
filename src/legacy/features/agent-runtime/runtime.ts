@@ -71,6 +71,7 @@ export interface AgentRuntime {
     };
     signal?: AbortSignal;
     onProgress?: (event: AgentProgressEvent) => void;
+    onToken?: (content: string) => void;
   }): Promise<AgentRuntimeResult>;
   confirm(input: {
     runId: string;
@@ -79,6 +80,7 @@ export interface AgentRuntime {
     history?: unknown[];
     signal?: AbortSignal;
     onProgress?: (event: AgentProgressEvent) => void;
+    onToken?: (content: string) => void;
   }): Promise<AgentRuntimeResult>;
   cancel(runId: string): Promise<AgentRunRecord | null>;
 }
@@ -385,6 +387,7 @@ export const createAgentRuntime = ({
     images = [],
     sessionId = '',
     history = [],
+    onToken,
   }: {
     runId: string;
     intent: AgentIntent;
@@ -393,6 +396,7 @@ export const createAgentRuntime = ({
     images?: unknown[];
     sessionId?: string;
     history?: unknown[];
+    onToken?: (content: string) => void;
   }): Promise<AgentRuntimeResult> => {
     let run = await persistIntent(runId, intent) ?? await store.get(runId);
     if (!run) throw new Error(`Execution engine did not persist run ${runId}.`);
@@ -411,6 +415,7 @@ export const createAgentRuntime = ({
           ...(intent.kind === 'image_analysis' && images.length ? { images } : {}),
           ...(sessionId ? { sessionId } : {}),
           ...(history.length ? { history } : {}),
+          ...(onToken ? { onToken } : {}),
         }),
         signal,
       });
@@ -523,6 +528,7 @@ export const createAgentRuntime = ({
               ? { images: input.attachments.images }
               : {}),
             signal: linked.controller.signal,
+            ...(input.onToken ? { onToken: input.onToken } : {}),
           });
           if (linked.controller.signal.aborted) {
             throw new AgentTransportCancelledError({
@@ -585,6 +591,7 @@ export const createAgentRuntime = ({
             : [],
           sessionId: input.sessionId,
           history: Array.isArray(input.history) ? input.history : [],
+          onToken: input.onToken,
         });
       } catch (error) {
         const signal = linked?.controller.signal ?? input.signal;
@@ -648,6 +655,7 @@ export const createAgentRuntime = ({
           signal: linked.controller.signal,
           sessionId: input.sessionId,
           history: Array.isArray(input.history) ? input.history : [],
+          onToken: input.onToken,
         });
       } catch (error) {
         const signal = linked?.controller.signal ?? input.signal;

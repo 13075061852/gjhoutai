@@ -177,6 +177,36 @@ describe('chat runtime controller', () => {
     expect(harness.runtime.run).toHaveBeenCalledOnce();
   });
 
+  it('ignores a duplicate submit while the first run is active', async () => {
+    const pending = deferred<AgentRuntimeResult>();
+    const harness = createHarness({ run: vi.fn().mockReturnValue(pending.promise) });
+
+    const first = harness.controller.submit({ prompt: '鏃?' });
+    const second = harness.controller.submit({ prompt: '鏃?' });
+    await vi.waitFor(() => expect(harness.runtime.run).toHaveBeenCalledOnce());
+
+    expect(harness.messages).toHaveLength(1);
+    pending.resolve(runtimeResult('run-duplicate-guard', 'completed'));
+    await Promise.all([first, second]);
+  });
+
+  it('updates the same assistant message as streamed tokens arrive', async () => {
+    const harness = createHarness({
+      run: vi.fn(async (input) => {
+        input.onToken?.('早');
+        input.onToken?.('早上好');
+        return runtimeResult('run-stream', 'completed', { answer: '早上好，已完成。' });
+      }),
+    });
+
+    await harness.controller.submit({ prompt: '鏃?' });
+
+    expect(harness.messages).toHaveLength(1);
+    expect(harness.messageUpdates.map((message) => message.content)).toContain('早');
+    expect(harness.messageUpdates.map((message) => message.content)).toContain('早上好');
+    expect(harness.messages[0].content).toBe('早上好，已完成。');
+  });
+
   it('replaces the current progress step without adding assistant messages', async () => {
     let emitProgress!: (event: AgentProgressEvent) => void;
     const harness = createHarness({

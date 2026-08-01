@@ -121,7 +121,7 @@ npm run preview
 
 ## 外部依赖和网络请求
 
-- 配置中心和 Gjun AI 会根据本地配置请求 OpenRouter 或 LM Studio 兼容接口。
+- 配置中心和 Gjun AI 会根据本地配置请求 DeepSeek、SiliconFlow 或 LM Studio 兼容接口。
 - 物性分析导入 Excel 时会运行时加载 SheetJS CDN。
 - 图谱分析导入/导出压缩包时会运行时加载 JSZip CDN。
 - 汇率估算会请求公开汇率接口。

@@ -97,6 +97,70 @@ const createHarness = (
   };
 };
 
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+};
+
+const createPersistedConfirmationActionHarness = ({
+  confirm,
+  cancel,
+}: {
+  confirm: AgentRuntime['confirm'];
+  cancel: AgentRuntime['cancel'];
+}) => {
+  const messages: ChatRuntimeMessage[] = [{
+    role: 'assistant',
+    id: 'assistant-confirm-action',
+    agentRunId: 'run-confirm-action',
+    content: '此操作需要确认后才能执行。',
+    pending: false,
+    agentConfirmation: {
+      runId: 'run-confirm-action',
+      confirmationId: 'confirmation-action',
+      target: 'inventory.delete',
+      parameters: [],
+      impact: '将删除项目数据，此操作可能无法恢复',
+      expiresAt: '2026-07-31T08:10:00.000Z',
+      actions: [
+        { id: 'confirm', label: '确认执行' },
+        { id: 'cancel', label: '取消' },
+      ],
+    },
+  }];
+  const runtime: AgentRuntime = {
+    run: vi.fn(),
+    confirm,
+    cancel,
+  };
+  const controller = createChatRuntimeController({
+    runtime,
+    getActivePageId: () => 'dashboard',
+    getRunConfig: () => ({
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    }),
+    getSessionContext: () => ({ sessionId: 'session-a', history: [] }),
+    findAssistantMessageByRunId: () => ({
+      messageRef: {
+        sessionId: 'session-a',
+        messageId: 'assistant-confirm-action',
+      },
+      message: messages[0],
+    }),
+    addAssistantMessage: vi.fn(),
+    updateAssistantMessage(_messageRef, message) {
+      messages[0] = message;
+    },
+    setBusy: vi.fn(),
+    focusInput: vi.fn(),
+  });
+  return { controller, messages, runtime };
+};
+
 describe('chat runtime controller', () => {
   it('replaces one pending assistant message with the completed answer', async () => {
     const harness = createHarness();
@@ -343,6 +407,24 @@ describe('chat runtime controller', () => {
       pending: false,
     });
     expect(harness.busy).toEqual([true, false]);
+  });
+
+  it('releases message tracking after repeated attachment-upload rejections', async () => {
+    const harness = createHarness({}, {
+      prepareAttachments: async () => ({
+        terminalMessage: '已取消上传图片，本次未向 AI 发送图片。',
+      }),
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      await harness.controller.submit({ prompt: `分析图片 ${index}` });
+    }
+
+    expect(harness.runtime.run).not.toHaveBeenCalled();
+    expect(harness.controller.getRetainedStateSize()).toEqual({
+      messages: 0,
+      runs: 0,
+    });
   });
 
   it('passes prepared authorized attachments and the originating session snapshot into runtime.run', async () => {
@@ -614,6 +696,78 @@ describe('chat runtime controller', () => {
       );
     },
   );
+
+  it('removes a persisted confirmation before cancellation settles and ignores repeated actions', async () => {
+    const cancellation = deferred<AgentRunRecord | null>();
+    const cancel = vi.fn().mockReturnValue(cancellation.promise);
+    const confirm = vi.fn();
+    const harness = createPersistedConfirmationActionHarness({ cancel, confirm });
+
+    const firstCancel = harness.controller.cancel('run-confirm-action');
+
+    expect(harness.messages[0]).toMatchObject({
+      content: '正在取消 Agent 运行...',
+      pending: true,
+      agentConfirmation: null,
+    });
+    const repeatedCancel = harness.controller.cancel('run-confirm-action');
+    const competingConfirm = harness.controller.confirm({
+      runId: 'run-confirm-action',
+      confirmationId: 'confirmation-action',
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
+
+    cancellation.resolve(runRecord('run-confirm-action', 'cancelled', {
+      terminalError: {
+        code: 'AGENT_RUNTIME_CANCELLED',
+        message: 'Agent 运行已取消。',
+      },
+    }));
+    await Promise.all([firstCancel, repeatedCancel, competingConfirm]);
+
+    expect(harness.messages[0]).toMatchObject({
+      content: 'Agent 运行已取消。',
+      pending: false,
+      agentConfirmation: null,
+    });
+  });
+
+  it('uses the same in-flight guard for confirmation and blocks competing actions', async () => {
+    const confirmation = deferred<AgentRuntimeResult>();
+    const confirm = vi.fn().mockReturnValue(confirmation.promise);
+    const cancel = vi.fn();
+    const harness = createPersistedConfirmationActionHarness({ cancel, confirm });
+
+    const firstConfirm = harness.controller.confirm({
+      runId: 'run-confirm-action',
+      confirmationId: 'confirmation-action',
+    });
+    const repeatedConfirm = harness.controller.confirm({
+      runId: 'run-confirm-action',
+      confirmationId: 'confirmation-action',
+    });
+    const competingCancel = harness.controller.cancel('run-confirm-action');
+
+    expect(harness.messages[0]).toMatchObject({
+      content: '已确认，正在继续执行...',
+      pending: true,
+      agentConfirmation: null,
+    });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(cancel).not.toHaveBeenCalled();
+
+    confirmation.resolve(runtimeResult('run-confirm-action', 'completed', {
+      answer: '删除完成。',
+    }));
+    await Promise.all([firstConfirm, repeatedConfirm, competingCancel]);
+
+    expect(harness.messages[0]).toMatchObject({
+      content: '删除完成。',
+      pending: false,
+      agentConfirmation: null,
+    });
+  });
 
   it('releases terminal message and run tracking while retaining an awaiting confirmation', async () => {
     const completedHarness = createHarness();

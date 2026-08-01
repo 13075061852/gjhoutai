@@ -201,6 +201,7 @@ export const createChatRuntimeController = ({
   let activeController: AbortController | null = null;
   const messageByRunId = new Map<string, MessageReference>();
   const latestMessageByRef = new Map<MessageReference, ChatRuntimeMessage>();
+  const confirmationActionRunIds = new Set<string>();
 
   const releaseTracking = (
     runId: string,
@@ -366,6 +367,7 @@ export const createChatRuntimeController = ({
           images: [],
           agentConfirmation: null,
         });
+        releaseTracking('', messageRef);
         return;
       }
       const attachments = prepared && 'attachments' in prepared
@@ -407,6 +409,8 @@ export const createChatRuntimeController = ({
     runId: string;
     confirmationId: string;
   }): Promise<void> => {
+    if (confirmationActionRunIds.has(runId)) return;
+    confirmationActionRunIds.add(runId);
     setBusy(true);
     const invocationId = `chat-confirmation-${++invocationSequence}`;
     const controller = new AbortController();
@@ -444,6 +448,7 @@ export const createChatRuntimeController = ({
     } catch (error) {
       applyTerminalError(invocationId, messageRef, error);
     } finally {
+      confirmationActionRunIds.delete(runId);
       if (activeInvocationId === invocationId) {
         activeInvocationId = '';
         activeRunId = '';
@@ -456,6 +461,9 @@ export const createChatRuntimeController = ({
 
   const cancel = async (requestedRunId = ''): Promise<void> => {
     const runtimeRunId = String(requestedRunId || activeRunId || '').trim();
+    const guardsConfirmationAction = Boolean(requestedRunId && runtimeRunId);
+    if (guardsConfirmationAction && confirmationActionRunIds.has(runtimeRunId)) return;
+    if (guardsConfirmationAction) confirmationActionRunIds.add(runtimeRunId);
     const recovered = runtimeRunId ? findTrackedMessage(runtimeRunId) : null;
     const messageRef = recovered?.messageRef;
     if (recovered && messageRef !== undefined) {
@@ -477,6 +485,14 @@ export const createChatRuntimeController = ({
       activeInvocationId = storedInvocationId;
       activeRunId = runtimeRunId;
       setBusy(true);
+    }
+    if (messageRef !== undefined) {
+      replaceMessage(messageRef, {
+        content: '正在取消 Agent 运行...',
+        pending: true,
+        pendingStatus: '正在取消',
+        agentConfirmation: null,
+      });
     }
     if (activeController && !activeController.signal.aborted) {
       activeController.abort(new DOMException('用户已取消运行。', 'AbortError'));
@@ -503,6 +519,7 @@ export const createChatRuntimeController = ({
         applyTerminalError(storedInvocationId, messageRef, error);
       }
     } finally {
+      if (guardsConfirmationAction) confirmationActionRunIds.delete(runtimeRunId);
       if (resumesPersistedRun && activeInvocationId === storedInvocationId) {
         activeInvocationId = '';
         activeRunId = '';

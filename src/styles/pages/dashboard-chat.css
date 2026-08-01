@@ -183,7 +183,7 @@
     }
     .ai-message.user{
       background:var(--accent-soft);
-      border-color:color-mix(in srgb, var(--accent) 32%, var(--border));
+      border:0;
       align-self:flex-end;
       max-width:min(76%, 720px);
       width:fit-content;

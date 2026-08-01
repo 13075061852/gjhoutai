@@ -2724,6 +2724,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
 
     const startedAt = nowIso();
     const startedMs = window.performance?.now?.() ?? Date.now();
+    const streamEnabled = config.aiProvider === 'lmstudio' || Boolean(config.streamEnabled);
     const response = await fetchWithTimeout(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: App.config.getRequestHeaders(config),
@@ -2736,15 +2737,41 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
           Number(config.maxTokens) || 0,
           constants.DEFAULT_CONFIG.maxTokens || 4096,
         ),
-        stream: false,
+        stream: streamEnabled,
       }),
     }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
       throw new Error(`HTTP ${response.status}${errorText ? `：${errorText.slice(0, 300)}` : ''}`);
     }
-    const payload = await response.json();
-    const content = String(payload?.choices?.[0]?.message?.content || '').trim();
+    const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+    const useStream = Boolean(
+      streamEnabled
+      && response.body
+      && (config.aiProvider === 'lmstudio' || contentType.includes('text/event-stream')),
+    );
+    let payload = null;
+    let content = '';
+    let apiUsage = null;
+    if (useStream) {
+      let accumulated = '';
+      const streamResult = await consumeChatCompletionStream(
+        response,
+        (delta) => {
+          accumulated += delta;
+          request.onToken?.(accumulated);
+        },
+        { signal: request.signal },
+      );
+      if (!streamResult.receivedDelta) throw new Error('流式响应未返回有效内容。');
+      content = accumulated.trim();
+      apiUsage = streamResult.usage;
+    } else {
+      payload = await response.json();
+      content = String(payload?.choices?.[0]?.message?.content || '').trim();
+      apiUsage = payload?.usage || null;
+      if (content) request.onToken?.(content);
+    }
     recordAiCall({
       source: request.purpose === 'grounded_response' ? 'chat-runtime-grounded' : 'chat-runtime',
       provider: config.aiProvider,
@@ -2758,7 +2785,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
       status: 'success',
       prompt: request.question,
       responsePreview: content,
-      apiUsage: payload?.usage || null,
+      apiUsage,
       requestMessages: messages,
       completionText: content,
       requestMeta: {
@@ -2766,7 +2793,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
         images: requestImages.length,
         files: context.attachedDataFile ? 1 : 0,
         attachedData: Boolean(context.attachedDataContext || context.attachedDataFile),
-        stream: false,
+        stream: useStream,
       },
     });
     return { content };

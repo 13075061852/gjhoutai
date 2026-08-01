@@ -597,8 +597,8 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
     const hasExplicitStatus = Boolean(String(item?.pendingStatus || '').trim());
     const isShortStatusBody = hasExplicitStatus && body && !/[\r\n]/.test(body) && body.length <= 48;
     const bodyHtml = body && !isShortStatusBody ? utils.markdownLite(body) : '';
+    if (bodyHtml) return bodyHtml;
     return `
-      ${bodyHtml}
       <div class="ai-waiting-row" role="status" aria-live="polite">
         <span class="ai-waiting-pulse" aria-hidden="true"></span>
         <span class="ai-waiting-text">${utils.escapeHtml(status)}</span>

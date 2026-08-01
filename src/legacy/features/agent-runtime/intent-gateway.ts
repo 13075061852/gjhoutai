@@ -41,6 +41,7 @@ export type IntentGatewayClassifier = (input: {
 type IntentGatewayOptions = {
   classifier?: IntentGatewayClassifier | null;
   classifyTimeoutMs?: number;
+  skipClassifierForPlainChat?: boolean;
 };
 
 const textOf = (value: unknown) => String(value || '').trim();
@@ -188,6 +189,7 @@ const parseClassifierIntent = (value: AgentIntent | null): AgentIntent | null =>
 export const createIntentGateway = ({
   classifier = null,
   classifyTimeoutMs = 12_000,
+  skipClassifierForPlainChat = false,
 }: IntentGatewayOptions = {}) => ({
   route: async (input: IntentGatewayInput): Promise<AgentIntent> => {
     const deterministic = classifyDeterministically(input);
@@ -212,6 +214,7 @@ export const createIntentGateway = ({
     }
 
     if (deterministic.kind !== 'chat') return deterministic;
+    if (skipClassifierForPlainChat && !hasIndependentProjectSignal(prompt)) return deterministic;
 
     const classified = parseClassifierIntent(await classifyWithinDeadline(
       classifier,

@@ -45,6 +45,21 @@ describe('agent intent gateway', () => {
     })).resolves.toMatchObject({ kind: 'chat' });
   });
 
+  it('can skip the remote classifier for plain chat prompts', async () => {
+    const classifier = vi.fn();
+    const gateway = createIntentGateway({ classifier, skipClassifierForPlainChat: true });
+
+    const intent = await gateway.route({
+      prompt: '请介绍一下人工智能',
+      activePageId: 'dashboard',
+      projectAccessEnabled: true,
+      webSearchEnabled: true,
+    });
+
+    expect(intent.kind).toBe('chat');
+    expect(classifier).not.toHaveBeenCalled();
+  });
+
   it('uses the property page to disambiguate an independently material-specific prompt', async () => {
     const gateway = createIntentGateway();
 

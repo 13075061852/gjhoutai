@@ -2829,7 +2829,10 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
     const registry = createProjectToolRegistry(App, createProjectToolAdapters(App));
     const store = createLocalStorageAgentRunStore();
     const executionEngine = createAgentExecutionEngine({ registry, store });
-    const gateway = createIntentGateway({ classifier: classifyRuntimeIntent });
+    const gateway = createIntentGateway({
+      classifier: classifyRuntimeIntent,
+      skipClassifierForPlainChat: true,
+    });
     const planner = createAgentPlanner({
       registry,
       requestPlan: requestRuntimePlan,

@@ -241,6 +241,25 @@ describe('chat runtime controller', () => {
     expect(emitProgress).toBeTypeOf('function');
   });
 
+  it('does not render the terminal answer again as an execution step', async () => {
+    const harness = createHarness({
+      run: vi.fn(async (input) => {
+        input.onProgress?.({
+          at: now,
+          phase: 'completed',
+          label: '早上好，已完成。',
+          status: 'completed',
+        });
+        return runtimeResult('run-terminal-render', 'completed', { answer: '早上好，已完成。' });
+      }),
+    });
+
+    await harness.controller.submit({ prompt: '测试终态显示' });
+
+    expect(harness.messages[0].content).toBe('早上好，已完成。');
+    expect(harness.messages[0].agentSteps).toEqual([]);
+  });
+
   it('shows each real execution-engine tool step once through the runtime bridge', async () => {
     let finishTool!: () => void;
     const toolFinished = new Promise<void>((resolve) => {

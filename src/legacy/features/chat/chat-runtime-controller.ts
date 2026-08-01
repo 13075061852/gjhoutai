@@ -272,6 +272,7 @@ export const createChatRuntimeController = ({
     progress: ProgressWithRunId,
   ): void => {
     if (activeInvocationId !== invocationId) return;
+    if (progress.phase === 'completed' || progress.phase === 'failed' || progress.phase === 'cancelled') return;
     const runtimeRunId = String(progress.runId || '').trim();
     if (runtimeRunId) {
       activeRunId = runtimeRunId;

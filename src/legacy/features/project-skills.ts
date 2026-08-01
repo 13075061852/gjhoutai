@@ -355,27 +355,6 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
 
   const normalizeResult = normalizeAgentToolResult;
 
-  const SKILL_CALL_EXAMPLE = {
-    gjhSkillCall: {
-      skillId: 'spectrum.manageImages',
-      input: {
-        action: 'delete',
-        target: '图谱名称',
-        mode: 'target',
-      },
-      reason: '用户要求删除指定图谱',
-    },
-  };
-
-  const SKILL_RESULT_EXAMPLE = {
-    ok: true,
-    message: '技能已执行',
-    details: ['执行结果说明'],
-    data: {
-      deleted: 1,
-    },
-  };
-
   const normalizeJsonSpec = (value) => {
     if (value && typeof value === 'object') return value;
     try {
@@ -1071,6 +1050,10 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     };
   };
   const getSkillById = (skillId) => getSkillRegistry().find((skill) => skill.id === skillId);
+  const isLegacySpectrumCompatibilityCall = (invocation) => (
+    invocation?.skillId === 'spectrum.manageImages'
+    && ['create', 'update', 'select', 'tag', 'categorize'].includes(String(invocation.input?.action || ''))
+  );
 
   const routePrompt = (prompt = '') => {
     const plans = getSkillRegistry()
@@ -1151,7 +1134,9 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     const startedAt = nowMs();
     const inputSize = measureJsonSize(normalizedInvocation.input);
     const v2Invocation = resolveV2Invocation(normalizedInvocation);
-    const legacySkill = getSkillById(normalizedInvocation.skillId);
+    const legacySkill = isLegacySpectrumCompatibilityCall(normalizedInvocation)
+      ? getSkillById(normalizedInvocation.skillId)
+      : null;
     const skill = v2Invocation
       ? getToolCatalog().find((tool) => tool.id === v2Invocation.skillId)
       : legacySkill;
@@ -1189,8 +1174,9 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
           pendingConfirmation: getAwaitingConfirmation(run),
         };
       } else {
-        // create/update/select/tag/categorize remain on the legacy spectrum
-        // compatibility path until their V2 migration is assigned.
+        // These five spectrum mutations remain an explicit compatibility bridge
+        // until their dedicated V2 tool IDs are assigned; arbitrary legacy skills
+        // never execute through this entry point.
         result = normalizeResult(await (legacySkill.handler as any)(normalizedInvocation.input, meta));
       }
     } catch (error) {
@@ -1360,123 +1346,6 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     }
   };
 
-  const normalizeSkillCallText = (value) => String(value || '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .trim();
-
-  const extractBalancedObjectText = (text, startIndex) => {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let index = startIndex; index < text.length; index += 1) {
-      const char = text[index];
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-        } else if (char === '\\') {
-          escaped = true;
-        } else if (char === '"') {
-          inString = false;
-        }
-        continue;
-      }
-      if (char === '"') {
-        inString = true;
-      } else if (char === '{') {
-        depth += 1;
-      } else if (char === '}') {
-        depth -= 1;
-        if (depth === 0) return text.slice(startIndex, index + 1);
-      }
-    }
-    return '';
-  };
-
-  const parseLooseSkillCall = (text = '') => {
-    const value = normalizeSkillCallText(text);
-    const skillId = value.match(/"skillId"\s*:\s*"([^"]+)"/)?.[1]
-      || value.match(/'skillId'\s*:\s*'([^']+)'/)?.[1];
-    if (!skillId) return null;
-
-    const inputKeyMatch = value.match(/["']input["']\s*:/);
-    const inputStart = inputKeyMatch ? value.indexOf('{', inputKeyMatch.index + inputKeyMatch[0].length) : -1;
-    const inputText = inputStart >= 0 ? extractBalancedObjectText(value, inputStart) : '';
-    const input = inputText ? (tryParseJson(inputText) || {}) : {};
-    const reason = value.match(/"reason"\s*:\s*"([^"]*)"/)?.[1]
-      || value.match(/'reason'\s*:\s*'([^']*)'/)?.[1]
-      || '';
-
-    return { skillId: String(skillId), input: input && typeof input === 'object' ? input : {}, reason: String(reason) };
-  };
-
-  const parseSkillCallFromText = (text = '') => {
-    const value = normalizeSkillCallText(text);
-    if (!value || !value.includes('gjhSkillCall')) return null;
-
-    const candidates = [];
-    const fenced = [...value.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1].trim());
-    candidates.push(...fenced);
-    const firstBrace = value.indexOf('{');
-    const lastBrace = value.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(value.slice(firstBrace, lastBrace + 1));
-
-    for (const candidate of candidates) {
-      const parsed = tryParseJson(candidate);
-      const call = parsed?.gjhSkillCall || parsed?.skillCall || null;
-      if (call?.skillId) {
-        return {
-          skillId: String(call.skillId),
-          input: call.input && typeof call.input === 'object' ? call.input : {},
-          reason: String(call.reason || ''),
-        };
-      }
-    }
-    return parseLooseSkillCall(value);
-  };
-
-  const executeSkillCallFromText = async (text = '', meta = {} as any) => {
-    const call = parseSkillCallFromText(text);
-    if (!call) return null;
-    const normalizedCall = normalizeSkillInvocation(call.skillId, call.input);
-    call.skillId = normalizedCall.skillId;
-    call.input = normalizedCall.input;
-    if (
-      call.skillId === 'spectrum.manageImages'
-      && call.input?.action === 'select'
-      && hasSpectrumVisualAnalysisIntent(meta.prompt)
-    ) {
-      call.input = {
-        ...extractSpectrumSearchInput(meta.prompt),
-        ...call.input,
-        action: 'search',
-        mode: call.input?.mode === 'filtered' || call.input?.mode === 'active'
-          ? call.input.mode
-          : 'selected',
-      };
-    }
-    if (call.skillId === 'spectrum.manageImages' && call.input?.action === 'search') {
-      call.input = fillSpectrumSearchInputFallback(call.input, meta.prompt);
-    }
-    if (call.skillId === 'assistant.openPage' && isDataQueryIntent(meta.prompt)) {
-      console.info('[project-skills] Ignored accidental openPage skill call for data query:', meta.prompt);
-      return null;
-    }
-    if (typeof meta.onBeforeExecute === 'function') {
-      try {
-        meta.onBeforeExecute(call);
-      } catch (error) {
-        console.warn('[project-skills] onBeforeExecute failed:', error);
-      }
-    }
-    return executeSkill(call.skillId, call.input, {
-      ...meta,
-      source: meta.source || 'assistant-skill-call',
-      reason: call.reason,
-    });
-  };
-
   const getAiProtocolContext = (options = {} as any) => {
     const kind = String(options.kind || options.plan?.kind || '').trim();
     if (kind === 'chat' || kind === 'web-search') return '';
@@ -1497,9 +1366,7 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
       '【项目技能调用协议】',
       '你是项目技能调度器：先理解用户真实意图，再从可用技能中选择最合适的技能和参数。',
       '当用户要求执行项目内操作、修改页面数据、整理/删除/归类/打标/跳转/查询项目数据时，优先调用项目技能，不要凭空声称已经操作。',
-      '如果需要让前端执行技能，只输出严格 JSON，不要混入解释、Markdown 或自然语言：',
-      formatCompactJsonSpec(SKILL_CALL_EXAMPLE),
-      '技能执行后，前端会把执行结果回写给用户。',
+      '工具调用由版本化 Agent Runtime 负责校验、执行和回写；不要通过自然语言或自定义 JSON 协议模拟调用。',
     ];
     const localRules = [
       `用户明确要求打开、进入、切换、跳转或查看某个“页面/面板/中心”时，才调用 assistant.openPage。可切换页面：${getPageCatalog()}`,
@@ -1833,7 +1700,6 @@ import { normalizeAgentToolResult } from './agent-runtime/grounding';
     executePrompt,
     executeSkill,
     resumeConfirmedRun,
-    executeSkillCallFromText,
     formatSkillMessage,
     getResultActions,
   };

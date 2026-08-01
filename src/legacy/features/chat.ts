@@ -676,11 +676,12 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
 
   const createAgentRuntimeElement = (item) => {
     if (item?.role !== 'assistant') return null;
-    const messageContent = String(item.content || '').trim();
-    const pendingStatus = String(item.pendingStatus || '').trim();
+    const normalizeStepLabel = (value) => String(value || '').trim().replace(/[.。!！?？…]+$/g, '');
+    const messageContent = normalizeStepLabel(item.content);
+    const pendingStatus = normalizeStepLabel(item.pendingStatus);
     const steps = (Array.isArray(item.agentSteps) ? item.agentSteps : [])
       .filter((step) => {
-        const label = String(step?.label || '').trim();
+        const label = normalizeStepLabel(step?.label);
         return label && label !== messageContent && label !== pendingStatus;
       });
     const confirmation = item.agentConfirmation && typeof item.agentConfirmation === 'object'

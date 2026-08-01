@@ -89,12 +89,24 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     refs.deleteSelectedBtn = document.getElementById('spectrumDeleteSelectedBtn');
     refs.selectedList = document.getElementById('spectrumSelectedList');
     refs.galleryCount = document.getElementById('spectrumGalleryCount');
+    refs.uploadStatus = document.getElementById('spectrumUploadStatus');
+    if (!refs.uploadStatus && refs.galleryCount?.parentElement) {
+      const status = document.createElement('div');
+      status.id = 'spectrumUploadStatus';
+      status.className = 'spectrum-gallery-upload-status';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      status.hidden = true;
+      refs.galleryCount.after(status);
+      refs.uploadStatus = status;
+    }
     refs.galleryTitle = document.querySelector('.spectrum-gallery-title-row .spectrum-panel-title');
     refs.sortSelect = document.getElementById('spectrumSortSelect');
     refs.toggleDetailBtn = document.getElementById('spectrumToggleDetailBtn');
     refs.gallery = document.getElementById('spectrumGallery');
     refs.workbench = refs.gallery?.closest('.spectrum-workbench');
     refs.galleryPanel = refs.gallery?.closest('.spectrum-gallery-panel');
+    refs.galleryPanel?.querySelectorAll('.spectrum-upload-progress').forEach((node) => node.remove());
     refs.detailPanel = document.getElementById('spectrumDetailPanel');
     refs.viewButtons = document.querySelectorAll('[data-spectrum-view]');
     refs.modeButtons = document.querySelectorAll('[data-spectrum-mode]');
@@ -618,7 +630,25 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     });
   };
 
-  const revealItemInGallery = (item) => {
+  const captureFilterState = () => ({
+    query: state.query || '',
+    mode: state.mode || 'ALL',
+    category: state.category || '全部',
+    tag: state.tag || '全部',
+  });
+
+  const restoreFilterState = (snapshot) => {
+    if (!snapshot) return;
+    state.query = snapshot.query || '';
+    state.mode = snapshot.mode || 'ALL';
+    state.category = snapshot.category || '全部';
+    state.tag = snapshot.tag || '全部';
+    if (refs.searchInput) refs.searchInput.value = state.query;
+    syncModeButtons();
+    saveFilterState();
+  };
+
+  const revealItemInGallery = (item, filterSnapshot = null) => {
     state.query = '';
     state.mode = 'ALL';
     state.category = item?.category || '全部';
@@ -626,6 +656,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     state.activeId = item?.id || state.activeId;
     if (refs.searchInput) refs.searchInput.value = '';
     syncModeButtons();
+    restoreFilterState(filterSnapshot);
     saveFilterState();
   };
 
@@ -1449,15 +1480,15 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const savedConfig = await (App.config?.loadSavedConfig?.() || {});
     const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaults = App.constants?.DEFAULT_CONFIG || {};
-    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase();
-    const provider = ['lmstudio', 'deepseek', 'siliconflow', 'openrouter'].includes(rawProvider) ? rawProvider : 'openrouter';
+    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'deepseek').toLowerCase();
+    const provider = ['lmstudio', 'deepseek', 'siliconflow'].includes(rawProvider) ? rawProvider : 'deepseek';
     const providerConfig = provider === 'lmstudio'
       ? saved.lmStudioConfig
       : provider === 'deepseek'
         ? saved.deepseekConfig
         : provider === 'siliconflow'
           ? saved.siliconflowConfig
-      : saved.openrouterConfig;
+      : saved.deepseekConfig;
     const activeProviderConfig = providerConfig && typeof providerConfig === 'object' ? providerConfig : {};
     const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
     const modelChoice = spectrumModel
@@ -3598,31 +3629,12 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     image.src = dataUrl;
   });
 
-  const ensureUploadProgressNode = () => {
-    if (!refs.galleryPanel) return null;
-    if (refs.uploadProgress && refs.uploadProgress.isConnected) return refs.uploadProgress;
-
-    const progress = document.createElement('div');
-    progress.className = 'spectrum-upload-progress';
-    progress.setAttribute('role', 'status');
-    progress.setAttribute('aria-live', 'polite');
-    progress.innerHTML = `
-      <span class="spectrum-upload-progress-icon"><i class="ti ti-loader-2" aria-hidden="true"></i></span>
-      <span class="spectrum-upload-progress-body">
-        <strong>\u6b63\u5728\u4e0a\u4f20\u56fe\u8c31</strong>
-        <span data-spectrum-upload-progress-text>\u6b63\u5728\u51c6\u5907\u56fe\u7247...</span>
-      </span>
-    `;
-    refs.galleryPanel.appendChild(progress);
-    refs.uploadProgress = progress;
-    return progress;
-  };
-
   const setUploadProgress = (active, message = '') => {
     if (!refs.galleryPanel) return;
-    const progress = ensureUploadProgressNode();
-    const text = progress?.querySelector('[data-spectrum-upload-progress-text]');
-    if (text) text.textContent = message || '\u6b63\u5728\u5904\u7406\u56fe\u7247...';
+    if (refs.uploadStatus) {
+      refs.uploadStatus.hidden = !active;
+      refs.uploadStatus.textContent = active ? (message || '\u6b63\u5728\u5904\u7406\u56fe\u7247...') : '';
+    }
 
     refs.galleryPanel.classList.toggle('is-uploading', active);
     refs.galleryPanel.setAttribute('aria-busy', active ? 'true' : 'false');
@@ -3940,6 +3952,11 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
     const selectedFiles = [...(fileList || [])];
     if (!selectedFiles.length) return;
 
+    // Capture once so revealItemInGallery cannot change the metadata inherited by later files.
+    const uploadFilterState = captureFilterState();
+    const inheritedCategory = uploadFilterState.category === '全部' ? '' : uploadFilterState.category;
+    const inheritedTags = uploadFilterState.tag === '全部' ? [] : [uploadFilterState.tag];
+
     const issues = [];
     const files = selectedFiles.filter((file) => {
       if (isImageUploadFile(file)) return true;
@@ -4012,10 +4029,8 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
           imageVersion,
           uploaded: true,
         };
-        revealItemInGallery(state.items[index]);
+        revealItemInGallery(state.items[index], uploadFilterState);
       } else {
-        const inheritedCategory = state.category === '全部' ? '' : state.category;
-        const inheritedTags = state.tag === '全部' ? [] : [state.tag];
         const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const imageVersion = new Date().toISOString();
         const imageStored = await putStoredImage(id, image, imageVersion);
@@ -4035,7 +4050,7 @@ import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
           uploaded: true,
         };
         state.items.unshift(item);
-        revealItemInGallery(item);
+        revealItemInGallery(item, uploadFilterState);
       }
           await saveUploadedItems();
           completed += 1;

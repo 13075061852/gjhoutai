@@ -909,15 +909,15 @@ import { parseJsonMaybe } from '../../utils/json';
     const savedConfig = await (App.config?.loadSavedConfig?.() || {});
     const saved = savedConfig && typeof savedConfig === 'object' ? savedConfig : {};
     const defaults = App.constants?.DEFAULT_CONFIG || {};
-    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'openrouter').toLowerCase();
-    const provider = ['lmstudio', 'deepseek', 'siliconflow', 'openrouter'].includes(rawProvider) ? rawProvider : 'openrouter';
+    const rawProvider = String(saved.aiProvider || defaults.aiProvider || 'deepseek').toLowerCase();
+    const provider = ['lmstudio', 'deepseek', 'siliconflow'].includes(rawProvider) ? rawProvider : 'deepseek';
     const providerConfig = provider === 'lmstudio'
       ? saved.lmStudioConfig
       : provider === 'deepseek'
         ? saved.deepseekConfig
         : provider === 'siliconflow'
           ? saved.siliconflowConfig
-      : saved.openrouterConfig;
+      : saved.deepseekConfig;
     const activeProviderConfig = providerConfig && typeof providerConfig === 'object' ? providerConfig : {};
     const spectrumModel = String(saved.agentModels?.spectrum || '').trim();
     const modelChoice = spectrumModel

@@ -44,7 +44,7 @@ declare global {
     | 'theme-settings'
     | 'ai-config';
 
-  type LegacyAiProvider = 'openrouter' | 'deepseek' | 'siliconflow' | 'lmstudio';
+  type LegacyAiProvider = 'deepseek' | 'siliconflow' | 'lmstudio';
   type LegacySearchProvider = 'tavily' | 'serpapi' | 'bing' | 'none';
   type LegacySearchDepth = 'basic' | 'advanced';
   type LegacySearchTopic = 'general' | 'news' | 'finance';

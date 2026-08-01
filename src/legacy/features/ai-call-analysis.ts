@@ -245,7 +245,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const getProviderLabel = (provider) => {
     const value = String(provider || '').toLowerCase();
     if (value === 'lmstudio') return 'LM Studio';
-    if (value === 'openrouter') return 'OpenRouter';
+    if (value === 'deepseek') return 'DeepSeek';
     return provider || '未知供应商';
   };
   const getModelDisplayName = (model) => {

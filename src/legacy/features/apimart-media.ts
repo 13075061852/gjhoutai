@@ -598,9 +598,9 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     }
     const config = App.config?.getFormConfig?.() || App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG;
     const apiKey = String(config.apiKey || '').trim();
-    const baseUrl = String(config.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    const baseUrl = String(config.baseUrl || 'https://api.deepseek.com').replace(/\/+$/, '');
     if (!apiKey) {
-      App.notify?.warn?.('请先在配置中心填写 OpenRouter API 密钥', { key: 'apimart-optimize-no-key' });
+      App.notify?.warn?.('请先在配置中心填写 AI API 密钥', { key: 'apimart-optimize-no-key' });
       return;
     }
     const type = uiState.type || 'image';

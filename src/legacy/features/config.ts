@@ -129,7 +129,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   };
   const SILICONFLOW_MODEL_OPTIONS = buildSiliconFlowStaticModelOptions();
   const SENSITIVE_CONFIG_PLACEHOLDER = '__REDACTED__';
-  let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_OPENROUTER;
+  let activeProvider = constants.DEFAULT_CONFIG.aiProvider || PROVIDER_DEEPSEEK;
   const providerDrafts = {};
   let openRouterModelRefreshTimer = null;
   let lastLoadedOpenRouterApiKey = '';
@@ -757,7 +757,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
 
   const getModelProviderLabel = (modelValue = '') => {
     const raw = String(modelValue || '').trim();
-    if (!raw) return 'OpenRouter';
+    if (!raw) return 'DeepSeek';
     const provider = raw.split('/')[0] || raw;
     const normalized = provider.replace(/[-_]/g, ' ').trim().toLowerCase();
     const aliases = {
@@ -773,7 +773,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       perplexity: 'Perplexity',
       xai: 'xAI',
       'x ai': 'xAI',
-      openrouter: 'OpenRouter',
     };
     if (aliases[normalized]) return aliases[normalized];
     return normalized
@@ -800,7 +799,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     const raw = String(provider || '').toLowerCase();
     if (raw === PROVIDER_DEEPSEEK) return PROVIDER_DEEPSEEK;
     if (raw === PROVIDER_SILICONFLOW) return PROVIDER_SILICONFLOW;
-    return isLmStudioProvider(raw) ? PROVIDER_LM_STUDIO : PROVIDER_OPENROUTER;
+    return isLmStudioProvider(raw) ? PROVIDER_LM_STUDIO : PROVIDER_DEEPSEEK;
   };
 
   const getAiProvider = () => {
@@ -832,9 +831,9 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       };
     }
     return {
-      baseUrl: constants.DEFAULT_BASE_URL,
-      appTitle: 'OpenRouter',
-      modelChoice: constants.DEFAULT_CONFIG.modelChoice,
+      baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
+      appTitle: 'DeepSeek',
+      modelChoice: DEFAULT_DEEPSEEK_MODEL,
     };
   };
 
@@ -1059,7 +1058,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (isLmStudioProvider(normalizedProvider)) return normalizeLmStudioBaseUrl(value);
     if (isDeepSeekProvider(normalizedProvider)) return normalizeDeepSeekBaseUrl(value);
     if (isSiliconFlowProvider(normalizedProvider)) return normalizeSiliconFlowBaseUrl(value);
-    return normalizeOpenRouterBaseUrl(value);
+    return normalizeDeepSeekBaseUrl(value);
   };
 
   const makeProviderDraft = (provider, config = {} as any) => {
@@ -1103,7 +1102,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
         ? PROVIDER_DEEPSEEK
         : String(config.baseUrl || '').includes('api.siliconflow.cn')
           ? PROVIDER_SILICONFLOW
-      : PROVIDER_OPENROUTER;
+      : PROVIDER_DEEPSEEK;
   };
 
   const readProviderFields = (provider = activeProvider) => {
@@ -1138,11 +1137,9 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
 
   const setProviderRadio = (provider) => {
     const normalizedProvider = normalizeProvider(provider);
-    const openRouterInput = refs.aiProviderOpenRouter || document.getElementById('aiProviderOpenRouter');
     const deepSeekInput = document.getElementById('aiProviderDeepSeek');
     const siliconFlowInput = document.getElementById('aiProviderSiliconFlow');
     const lmStudioInput = refs.aiProviderLmStudio || document.getElementById('aiProviderLmStudio');
-    if (openRouterInput) openRouterInput.checked = normalizedProvider === PROVIDER_OPENROUTER;
     if (deepSeekInput) deepSeekInput.checked = normalizedProvider === PROVIDER_DEEPSEEK;
     if (siliconFlowInput) siliconFlowInput.checked = normalizedProvider === PROVIDER_SILICONFLOW;
     if (lmStudioInput) lmStudioInput.checked = normalizedProvider === PROVIDER_LM_STUDIO;
@@ -1287,9 +1284,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next.deepseekConfig || {});
     providerDrafts[PROVIDER_SILICONFLOW] = makeProviderDraft(PROVIDER_SILICONFLOW, next.siliconflowConfig || {});
     providerDrafts[PROVIDER_LM_STUDIO] = makeProviderDraft(PROVIDER_LM_STUDIO, next.lmStudioConfig || {});
-    if (!next.openrouterConfig && provider === PROVIDER_OPENROUTER) {
-      providerDrafts[PROVIDER_OPENROUTER] = makeProviderDraft(PROVIDER_OPENROUTER, next);
-    }
     if (!next.deepseekConfig && isDeepSeekProvider(provider)) {
       providerDrafts[PROVIDER_DEEPSEEK] = makeProviderDraft(PROVIDER_DEEPSEEK, next);
     }
@@ -1415,7 +1409,12 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     segment.insertBefore(option, lmStudioOption || null);
   };
 
+  const removeOpenRouterProviderOption = () => {
+    document.getElementById('aiProviderOpenRouter')?.closest('.provider-option')?.remove();
+  };
+
   const mountDeepSeekProviderOption = () => {
+    removeOpenRouterProviderOption();
     if (document.getElementById('aiProviderDeepSeek')) return;
     mountProviderOption({ id: 'aiProviderDeepSeek', value: PROVIDER_DEEPSEEK, label: 'DeepSeek' });
   };
@@ -1457,7 +1456,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
           ? 'DeepSeek API 密钥'
           : isSiliconFlow
             ? '硅基流动 API 密钥'
-        : 'OpenRouter API 密钥';
+          : 'API 密钥';
     }
     if (refs.apiKeyNoteText) {
       refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '仅保存在本机浏览器';
@@ -1474,7 +1473,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
         ? { href: 'https://api-docs.deepseek.com/', label: 'DeepSeek 接入文档' }
         : isSiliconFlow
           ? { href: 'https://api-docs.siliconflow.cn/docs/userguide/get_started/introduction', label: 'SiliconFlow 接入文档' }
-          : { href: 'https://openrouter.ai/docs/api/api-reference/models/get-models', label: 'OpenRouter 接入文档' };
+          : { href: 'https://api-docs.deepseek.com/', label: 'DeepSeek 接入文档' };
       refs.aiProviderHelp.href = helpMeta.href;
       refs.aiProviderHelp.textContent = helpMeta.label;
       refs.aiProviderHelp.title = helpMeta.label;
@@ -1553,25 +1552,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (!preferred) throw new Error('未返回余额信息');
     const currency = preferred.currency || 'USD';
     return formatProviderBalance('DeepSeek', preferred.total_balance, currency);
-  };
-
-  const formatOpenRouterCredits = (payload = {} as any) => {
-    const data = payload.data || payload;
-    const total = Number.parseFloat(data.total_credits);
-    const usage = Number.parseFloat(data.total_usage);
-    if (Number.isFinite(total) && Number.isFinite(usage)) {
-      return formatProviderBalance('OpenRouter', Math.max(0, total - usage));
-    }
-    const limit = Number.parseFloat(data.limit);
-    const used = Number.parseFloat(data.usage ?? data.used);
-    const remaining = Number.parseFloat(data.limit_remaining ?? data.remaining);
-    if (Number.isFinite(remaining)) {
-      return formatProviderBalance('OpenRouter', remaining);
-    }
-    if (Number.isFinite(limit) && Number.isFinite(used)) {
-      return formatProviderBalance('OpenRouter', Math.max(0, limit - used));
-    }
-    throw new Error('未返回余额信息');
   };
 
   const formatSiliconFlowUserInfo = (payload = {} as any) => {
@@ -2342,7 +2322,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
           ? `已加载 DeepSeek 模型列表：${models.length || 0} 项`
           : isSiliconFlow
             ? `已加载硅基流动模型列表：${models.length || 0} 项`
-        : `已加载 OpenRouter 官方模型列表：${models.length || 0} 项`, 'success');
+        : `已加载模型列表：${models.length || 0} 项`, 'success');
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
       return true;
     } catch (error) {
@@ -2464,13 +2444,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
         const payload = await fetchBalanceJson(`${baseUrl}/user/info`, config, controller.signal);
         setBalanceStatus(formatSiliconFlowUserInfo(payload));
       } else {
-        try {
-          const payload = await fetchBalanceJson(`${baseUrl}/credits`, config, controller.signal);
-          setBalanceStatus(formatOpenRouterCredits(payload));
-        } catch (creditsError) {
-          const payload = await fetchBalanceJson(`${baseUrl}/key`, config, controller.signal);
-          setBalanceStatus(formatOpenRouterCredits(payload));
-        }
+        setBalanceStatus('余额：当前接入暂不支持余额查询');
       }
     } catch (error) {
       setBalanceStatus(`余额：读取失败（${error?.message || '未知错误'}）`, 'warn');
@@ -2596,7 +2570,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   };
 
   const exportConfig = () => {
-    utils.downloadUtf8Json(`openrouter-config-${new Date().toISOString().slice(0, 10)}.json`, redactSensitiveConfig(getFormConfig()));
+    utils.downloadUtf8Json(`ai-config-${new Date().toISOString().slice(0, 10)}.json`, redactSensitiveConfig(getFormConfig()));
     setStatus('已导出配置（密钥已脱敏）', 'success');
     App.notify?.success?.('已导出配置（密钥已脱敏）', { key: 'config-export' });
   };

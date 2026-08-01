@@ -679,7 +679,13 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
     const normalizeStepLabel = (value) => String(value || '').trim().replace(/[.。!！?？…]+$/g, '');
     const messageContent = normalizeStepLabel(item.content);
     const pendingStatus = normalizeStepLabel(item.pendingStatus);
-    const steps = (Array.isArray(item.agentSteps) ? item.agentSteps : [])
+    const hasStreamedResponse = Boolean(
+      item.pending
+      && messageContent
+      && messageContent !== pendingStatus
+      && !PENDING_STATUS_RE.test(messageContent),
+    );
+    const steps = (hasStreamedResponse ? [] : (Array.isArray(item.agentSteps) ? item.agentSteps : []))
       .filter((step) => {
         const label = normalizeStepLabel(step?.label);
         return label && label !== messageContent && label !== pendingStatus;

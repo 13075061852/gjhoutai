@@ -676,34 +676,12 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
 
   const createAgentRuntimeElement = (item) => {
     if (item?.role !== 'assistant') return null;
-    const normalizeStepLabel = (value) => String(value || '').trim().replace(/[.。!！?？…]+$/g, '');
-    const messageContent = normalizeStepLabel(item.content);
-    const pendingStatus = normalizeStepLabel(item.pendingStatus);
-    const hasStreamedResponse = Boolean(
-      item.pending
-      && messageContent
-      && messageContent !== pendingStatus
-      && !PENDING_STATUS_RE.test(messageContent),
-    );
-    const steps = (hasStreamedResponse ? [] : (Array.isArray(item.agentSteps) ? item.agentSteps : []))
-      .filter((step) => {
-        const label = normalizeStepLabel(step?.label);
-        return label && label !== messageContent && label !== pendingStatus;
-      });
     const confirmation = item.agentConfirmation && typeof item.agentConfirmation === 'object'
       ? item.agentConfirmation
       : null;
-    if (!steps.length && !confirmation) return null;
+    if (!confirmation) return null;
 
     const template = document.createElement('template');
-    const stepsHtml = steps.length
-      ? `<div class="ai-agent-steps" aria-label="Agent 执行进度">${steps.map((step) => `
-          <div class="ai-agent-step" data-agent-status="${utils.escapeHtml(step?.status || 'running')}">
-            <span class="ai-agent-step-dot" aria-hidden="true"></span>
-            <span>${utils.escapeHtml(step?.label || '正在处理')}</span>
-          </div>
-        `).join('')}</div>`
-      : '';
     const confirmationHtml = confirmation
       ? `
         <section class="ai-agent-confirmation" aria-label="Agent 操作确认">
@@ -723,7 +701,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
         </section>
       `
       : '';
-    template.innerHTML = `<div class="ai-agent-runtime">${stepsHtml}${confirmationHtml}</div>`;
+    template.innerHTML = `<div class="ai-agent-runtime">${confirmationHtml}</div>`;
     return template.content.firstElementChild;
   };
 

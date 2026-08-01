@@ -676,7 +676,13 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
 
   const createAgentRuntimeElement = (item) => {
     if (item?.role !== 'assistant') return null;
-    const steps = Array.isArray(item.agentSteps) ? item.agentSteps : [];
+    const messageContent = String(item.content || '').trim();
+    const pendingStatus = String(item.pendingStatus || '').trim();
+    const steps = (Array.isArray(item.agentSteps) ? item.agentSteps : [])
+      .filter((step) => {
+        const label = String(step?.label || '').trim();
+        return label && label !== messageContent && label !== pendingStatus;
+      });
     const confirmation = item.agentConfirmation && typeof item.agentConfirmation === 'object'
       ? item.agentConfirmation
       : null;

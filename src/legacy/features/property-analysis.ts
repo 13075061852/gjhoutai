@@ -3,6 +3,12 @@ import '../../styles/pages/property-analysis.css';
 import { cloudStorage } from '../../services/cloud-storage';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
+import {
+  IMPACT_STRENGTH_HEADER_ALIASES,
+  IMPACT_STRENGTH_METRIC_KEY,
+  normalizePropertyMetricRow,
+  normalizePropertyReportRange,
+} from './property-analysis-metrics';
 
 (function () {
   'use strict';
@@ -32,7 +38,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     '断裂伸长率[%]': '断裂伸长率(%)',
     '弯曲强度[Mpa]': '弯曲强度(MPa)',
     '弯曲模量[Mpa]': '弯曲模量(MPa)',
-    '冲击强度[Mpa]': '冲击强度(kJ/m²)',
+    [IMPACT_STRENGTH_METRIC_KEY]: IMPACT_STRENGTH_METRIC_KEY,
     灼热丝: '灼热丝',
     '灼热丝[1.6mm]': '灼热丝[1.6mm]',
     '灼热丝[0.8mm]': '灼热丝[0.8mm]',
@@ -49,7 +55,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     '断裂伸长率[%]',
     '弯曲强度[Mpa]',
     '弯曲模量[Mpa]',
-    '冲击强度[Mpa]',
+    IMPACT_STRENGTH_METRIC_KEY,
     '灰份',
     '灼热丝[1.6mm]',
     '灼热丝[0.8mm]',
@@ -68,7 +74,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     '断裂伸长率[%]',
     '弯曲强度[Mpa]',
     '弯曲模量[Mpa]',
-    '冲击强度[Mpa]',
+    IMPACT_STRENGTH_METRIC_KEY,
     '灼热丝',
     '灼热丝[1.6mm]',
     '灼热丝[0.8mm]',
@@ -80,12 +86,13 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     { key: '拉伸强度[Mpa]', item: '拉伸强度', unit: 'MPa' },
     { key: '弯曲强度[Mpa]', item: '弯曲强度', unit: 'MPa' },
     { key: '弯曲模量[Mpa]', item: '弯曲模量', unit: 'MPa' },
-    { key: '冲击强度[Mpa]', item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
+    { key: IMPACT_STRENGTH_METRIC_KEY, item: '缺口冲击强度（悬臂）', unit: 'kJ/m²' },
     { key: '灼热丝', item: '灼热丝', unit: '℃', required: false },
   ];
   const REPORT_METRIC_ALIASES = {
     灰份: ['灰份', '灰分', '灰份(%)', '灰分(%)', '灰份[%]', '灰分[%]', '灰份（%）', '灰分（%）'],
     灼热丝: ['灼热丝', '灼热丝[1.6mm]', '灼热丝[0.8mm]', '灼热丝（1.6mm）', '灼热丝（0.8mm）'],
+    [IMPACT_STRENGTH_METRIC_KEY]: [...IMPACT_STRENGTH_HEADER_ALIASES],
   };
   const normalizeMetricHeaderIdentity = (value) => String(value ?? '')
     .replace(/\s+/g, '')
@@ -287,7 +294,9 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 
   const normalizeRows = (value) => {
     if (!Array.isArray(value)) return [];
-    return value.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+    return value
+      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => normalizePropertyMetricRow(item));
   };
 
   const valueToText = (value) => {
@@ -719,14 +728,17 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     return match?.[1] || normalizeReportText(row?.色号 || row?.颜色 || '');
   };
 
-  const normalizeReportRanges = (value) => (Array.isArray(value) ? value.map((item, index) => ({
-    id: normalizeReportText(item.id) || `range-${Date.now()}-${index}`,
-    model: normalizeReportText(item.model),
-    metricKey: normalizeReportText(item.metricKey),
-    item: normalizeReportText(item.item),
-    unit: normalizeReportText(item.unit),
-    range: normalizeReportText(item.range),
-  })).filter((item) => item.model && item.metricKey && item.range) : []);
+  const normalizeReportRanges = (value) => (Array.isArray(value) ? value.map((item, index) => {
+    const normalizedItem = normalizePropertyReportRange(item || {});
+    return {
+      id: normalizeReportText(normalizedItem.id) || `range-${Date.now()}-${index}`,
+      model: normalizeReportText(normalizedItem.model),
+      metricKey: normalizeReportText(normalizedItem.metricKey),
+      item: normalizeReportText(normalizedItem.item),
+      unit: normalizeReportText(normalizedItem.unit),
+      range: normalizeReportText(normalizedItem.range),
+    };
+  }).filter((item) => item.model && item.metricKey && item.range) : []);
 
   const loadReportRanges = () => {
     try {
@@ -792,7 +804,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     if (text.includes('拉伸')) return getReportMetricConfig('拉伸强度[Mpa]');
     if (text.includes('弯曲') && text.includes('强度')) return getReportMetricConfig('弯曲强度[Mpa]');
     if (text.includes('弯曲') && text.includes('模量')) return getReportMetricConfig('弯曲模量[Mpa]');
-    if (text.includes('冲击')) return getReportMetricConfig('冲击强度[Mpa]');
+    if (text.includes('冲击')) return getReportMetricConfig(IMPACT_STRENGTH_METRIC_KEY);
     return null;
   };
 
@@ -960,7 +972,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
   };
 
   const canReportValueKeepDecimal = (metricKey) => (
-    metricKey === MELT_INDEX_METRIC_KEY || metricKey === '冲击强度[Mpa]'
+    metricKey === MELT_INDEX_METRIC_KEY || metricKey === IMPACT_STRENGTH_METRIC_KEY
   );
 
   const parseReportRangeBounds = (rangeText = '') => {
@@ -3156,7 +3168,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
       '断裂伸长率[%]',
       '弯曲强度[Mpa]',
       '弯曲模量[Mpa]',
-      '冲击强度[Mpa]',
+      IMPACT_STRENGTH_METRIC_KEY,
       '灰份',
     ].map((key) => summarizeMetric(targetRows, key)).filter(Boolean);
 
@@ -3406,7 +3418,7 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
     '断裂伸长率[%]',
     '弯曲强度[Mpa]',
     '弯曲模量[Mpa]',
-    '冲击强度[Mpa]',
+    IMPACT_STRENGTH_METRIC_KEY,
     '灰份',
   ].map((key) => summarizeMetric(rows, key)).filter(Boolean);
 

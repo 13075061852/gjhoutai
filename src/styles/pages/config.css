@@ -896,14 +896,6 @@
       border-color:var(--border);
       color:var(--muted);
     }
-    body[data-theme="dark"] .ai-token-meta{
-      color:var(--muted);
-    }
-    body[data-theme="dark"] .ai-token-meta span{
-      background:var(--surface-3);
-      border-color:var(--border);
-      color:var(--muted);
-    }
     .field textarea{
       min-height:132px;
       resize:vertical;

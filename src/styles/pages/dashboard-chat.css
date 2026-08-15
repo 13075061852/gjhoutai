@@ -714,27 +714,6 @@
       font-size:12px;
       font-weight:800;
     }
-    .ai-token-meta{
-      display:flex;
-      align-items:center;
-      flex-wrap:wrap;
-      gap:12px;
-      margin-top:10px;
-      color:#64748b;
-      font-size:11px;
-      font-weight:800;
-      line-height:1.2;
-    }
-    .ai-token-meta span{
-      display:inline-flex;
-      align-items:center;
-      min-height:24px;
-      padding:0 8px;
-      border:1px solid #e3e9f2;
-      border-radius:999px;
-      background:#f8fafc;
-      white-space:nowrap;
-    }
     .ai-chips{display:flex;gap:12px;flex-wrap:wrap}
     .ai-chip{
       height:30px;

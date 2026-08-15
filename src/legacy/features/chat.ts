@@ -411,60 +411,9 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
     });
   };
 
-  const formatNumber = (value) => {
-    const number = Number(value || 0);
-    return Number.isFinite(number) ? number.toLocaleString('zh-CN') : '0';
-  };
-
   const parseUsdPricing = (value) => {
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? number : null;
-  };
-
-  const formatUsdCost = (value) => {
-    const amount = Number(value || 0);
-    if (!Number.isFinite(amount)) return '$0.000000';
-    if (amount === 0) return '$0';
-    if (amount < 0.000001) return `<$0.000001`;
-    return `$${amount.toFixed(amount < 0.01 ? 6 : 4)}`;
-  };
-
-  const formatCnyCost = (value) => {
-    const amount = Number(value || 0);
-    if (!Number.isFinite(amount)) return '¥0.0000';
-    if (amount === 0) return '¥0';
-    if (amount < 0.0001) return '<¥0.0001';
-    return `¥${amount.toFixed(amount < 0.1 ? 4 : 2)}`;
-  };
-
-  const formatCostLabel = (cost) => {
-    const normalized = normalizeCostUsage(cost);
-    if (!normalized) return '';
-    return `${formatCnyCost(normalized.totalCny)} / ${formatUsdCost(normalized.totalUsd)}`;
-  };
-
-  const renderTokenUsage = (usage) => {
-    if (!usage || !Number(usage.totalTokens)) return '';
-    const contextLength = Number(usage.contextLength || 0);
-    const remaining = Number(usage.remainingContext || 0);
-    const contextText = contextLength
-      ? `剩余上下文 ${formatNumber(Math.max(0, remaining))} / ${formatNumber(contextLength)}`
-      : '上下文上限未知';
-    const estimateText = usage.estimated ? '估算' : '接口返回';
-    const costLabel = formatCostLabel(usage.cost);
-    const costTitle = usage.cost
-      ? `费用按当前模型 prompt/completion token 单价估算，汇率约 ${Number(usage.cost.usdToCny || 0).toFixed(4)}。`
-      : '当前模型没有价格信息，暂不能估算费用。';
-    return `
-      <div class="ai-token-meta" title="Token ${estimateText}。输入包含系统提示词、聊天历史、管家检索上下文和当前问题。">
-        <span>本轮 ${formatNumber(usage.totalTokens)} tokens</span>
-        <span>输入 ${formatNumber(usage.promptTokens)}</span>
-        <span>输出 ${formatNumber(usage.completionTokens)}</span>
-        ${costLabel ? `<span title="${utils.escapeHtml(costTitle)}">费用 ${utils.escapeHtml(costLabel)}</span>` : ''}
-        <span>${contextText}</span>
-        <span>${estimateText}</span>
-      </div>
-    `;
   };
 
   const renderSkillActions = (actions, messageIndex) => {
@@ -633,7 +582,6 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
     pendingStatus: item?.pendingStatus || '',
     content: item?.content || '',
     images: item?.images || [],
-    tokenUsage: item?.tokenUsage || null,
     actions: item?.actions || null,
     imageUploadAuth: item?.imageUploadAuth || null,
     searchSources: item?.searchSources || null,
@@ -651,7 +599,6 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
           return `<button class="ai-message-image-btn" type="button" data-chat-image-preview="${utils.escapeHtml(previewUrl)}" aria-label="放大查看原图"><img class="ai-message-image" src="${utils.escapeHtml(imageUrl)}" alt="AI 生成图片" /></button>`;
         }).join('')}</div>`
       : '';
-    const tokenMeta = item.role === 'assistant' ? renderTokenUsage(item.tokenUsage) : '';
     const actions = item.role === 'assistant' ? renderSkillActions(item.actions, messageIndex) : '';
     const imageUploadAuth = item.role === 'assistant' ? renderImageUploadAuthorization(item.imageUploadAuth) : '';
     const pending = item.role === 'assistant' && item.pending;
@@ -661,7 +608,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
       ? renderSearchSourceReferences(rawContentHtml, item.searchSources)
       : rawContentHtml;
     const template = document.createElement('template');
-    template.innerHTML = `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}${tokenMeta}</div>`;
+    template.innerHTML = `<div class="ai-message ${item.role === 'user' ? 'user' : ''} ${pending ? 'is-pending' : ''}"><div class="ai-message-content">${contentHtml}</div>${imageUploadAuth}${images}${actions}</div>`;
     return template.content.firstElementChild;
   };
 
@@ -746,7 +693,7 @@ import { createChatRuntimeMessageStore } from './chat/chat-runtime-message-store
       const resolvedModel = App.config.getResolvedModel();
       intro.textContent = hasKey
         ? `已连接到 ${resolvedModel || '未选择模型'}，可以直接在这里对话。`
-        : '先保存 OpenRouter 配置，然后就可以在这里直接发起分析。';
+        : '先保存 AI 接入配置，然后就可以在这里直接发起分析。';
     }
 
     if (shouldStickToBottom) scrollChatToBottom();

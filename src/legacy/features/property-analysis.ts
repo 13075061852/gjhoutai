@@ -20,6 +20,7 @@ import {
   const PAGE_SIZE_DEFAULT = 20;
   const ALL_PROPERTY_SHEETS_KEY = '__all_property_sheets__';
   const ALL_PROPERTY_SHEETS_LABEL = '全部分类';
+  const COMPARE_VALUE_MODE_DEFAULT = 'average';
   const REPORT_RANGE_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportRanges;
   const REPORT_COMPANY_NAME = '宁波广俊塑料科技有限公司';
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
@@ -2949,9 +2950,9 @@ import {
                 </button>
               </div>
               <div class="analysis-compare-view-toggle analysis-compare-data-toggle" aria-label="数据显示范围">
-                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-value-toggle aria-label="当前全部数据，点击切换平均数">
-                  <i class="ti ti-list-details" aria-hidden="true"></i>
-                  <span>全部数据</span>
+                <button class="analysis-compare-view-btn is-active" type="button" data-analysis-compare-value-toggle aria-label="当前平均数，点击切换全部数据">
+                  <i class="ti ti-percentage" aria-hidden="true"></i>
+                  <span>平均数</span>
                 </button>
               </div>
               <div class="analysis-compare-param-settings">
@@ -2989,7 +2990,7 @@ import {
           <div class="analysis-compare-body">
             <section class="analysis-compare-section">
               <div class="analysis-compare-table-wrap" data-analysis-compare-table-host>
-                ${buildCompareTableHtml(rows, columns, 'vertical')}
+                ${buildCompareTableHtml(rows, columns, 'vertical', COMPARE_VALUE_MODE_DEFAULT)}
               </div>
             </section>
           </div>
@@ -3016,7 +3017,7 @@ import {
     const dialog = document.querySelector('.analysis-compare-dialog');
     const columns = getCompareColumns(rows);
     let tableView = 'vertical';
-    let valueMode = 'all';
+    let valueMode = COMPARE_VALUE_MODE_DEFAULT;
     let tableSwitchTimer = null;
     const getSelectedCompareColumns = () => Array.from(dialog.querySelectorAll('[data-analysis-compare-param]:checked'))
       .map((input) => input.value)
@@ -4327,5 +4328,4 @@ import {
     getAgentCapabilities: () => [...PROPERTY_AGENT_CAPABILITIES],
   };
 })();
-
 

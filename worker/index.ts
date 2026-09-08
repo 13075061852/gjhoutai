@@ -1,3 +1,5 @@
+import { contentDisposition, isPublicStorageKey, isTrustedMutation, prepareJsonRequest, readLimitedBody, RequestError } from './security';
+
 export interface Env {
   DB: D1Database;
   FILES: R2Bucket;
@@ -194,13 +196,20 @@ const normalizeAiCallLogValue = (value: unknown) => {
 };
 const mergeAiCallLogs = (currentValue: unknown, nextValue: unknown, user: SessionUser) => {
   const currentLogs = normalizeAiCallLogValue(currentValue);
-  const nextLogs = normalizeAiCallLogValue(nextValue).map((item) => item && typeof item === 'object' ? {
-    ...item,
-    actorUserId: (item as any).actorUserId || user.id,
-    actorUsername: (item as any).actorUsername || user.username,
-    actorDisplayName: (item as any).actorDisplayName || user.displayName,
-    actorDepartment: (item as any).actorDepartment || user.department,
-  } : item);
+  const existing = new Map(currentLogs.filter((item) => item && typeof item === 'object').map((item: any) => [String(item.id), item]));
+  const nextLogs = normalizeAiCallLogValue(nextValue).map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const previous = existing.get(String((item as any).id));
+    // Shared client log snapshots must not rewrite another user's identity or evidence.
+    if (previous && previous.actorUserId !== user.id) return previous;
+    return {
+      ...item,
+      actorUserId: user.id,
+      actorUsername: user.username,
+      actorDisplayName: user.displayName,
+      actorDepartment: user.department,
+    };
+  });
   const merged = [...nextLogs, ...currentLogs].filter((item) => item && typeof item === 'object');
   const seen = new Set<string>();
   return merged.filter((item: any) => {
@@ -330,7 +339,12 @@ const parseCookies = (request: Request) => Object.fromEntries(
     .filter(Boolean)
     .map((part) => {
       const separator = part.indexOf('=');
-      return separator === -1 ? [part, ''] : [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
+      if (separator === -1) return [part, ''];
+      try {
+        return [part.slice(0, separator), decodeURIComponent(part.slice(separator + 1))];
+      } catch {
+        return [part.slice(0, separator), ''];
+      }
     }),
 );
 const getCookieAttributes = (request: Request) => {
@@ -367,13 +381,14 @@ const audit = async (env: Env, actorUserId: string | null, action: string, targe
 };
 const normalizeDepartment = (department: unknown, legacyRole?: unknown): Department => {
   const value = String(department || '').trim();
-  if (value in DEPARTMENT_PERMISSIONS) return value as Department;
+  if (Object.hasOwn(DEPARTMENT_PERMISSIONS, value)) return value as Department;
   const role = String(legacyRole || '') as LegacyRole;
-  return LEGACY_ROLE_DEPARTMENTS[role] || '研发部';
+  return Object.hasOwn(LEGACY_ROLE_DEPARTMENTS, role) ? LEGACY_ROLE_DEPARTMENTS[role] : '生产部';
 };
 const getLegacyRoleForDepartment = (department: Department): LegacyRole => DEPARTMENT_LEGACY_ROLES[department] || 'system_admin';
 const can = (user: SessionUser, permission: Permission) => DEPARTMENT_PERMISSIONS[user.department]?.includes(permission);
-const validatePassword = (password: string) => password.length >= 10 && password.length <= 128;
+const validatePassword = (password: unknown): password is string => typeof password === 'string' && password.length >= 10 && password.length <= 128;
+const validText = (value: unknown, max = 128): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 const getClientIp = (request: Request) => request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 const getLoginRateLimitKeys = (request: Request, username: string) => [
   `user:${username.trim().toLowerCase()}`,
@@ -449,7 +464,7 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
     const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     if (!env.BOOTSTRAP_ADMIN_TOKEN || !token || !constantTimeEqual(token, env.BOOTSTRAP_ADMIN_TOKEN)) return forbidden();
     const payload = await request.json<{ username?: string; displayName?: string; password?: string }>();
-    if (!payload.username || !payload.displayName || !payload.password || !validatePassword(payload.password)) return badRequest('invalid_bootstrap_payload');
+    if (!validText(payload.username) || !validText(payload.displayName) || !validatePassword(payload.password)) return badRequest('invalid_bootstrap_payload');
     const password = await hashPassword(payload.password);
     const id = randomId();
     await env.DB.prepare(`
@@ -461,7 +476,7 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
   }
   if (url.pathname === '/api/auth/login' && request.method === 'POST') {
     const payload = await request.json<{ username?: string; password?: string }>();
-    if (!payload.username || !payload.password) return badRequest('missing_credentials');
+    if (!validText(payload.username) || !validText(payload.password)) return badRequest('missing_credentials');
     const rateLimitKeys = getLoginRateLimitKeys(request, payload.username);
     if (await isLoginRateLimited(env, rateLimitKeys)) return tooManyRequests();
     const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?1').bind(payload.username).first<UserRow>();
@@ -508,17 +523,22 @@ async function handleAuth(request: Request, env: Env, url: URL): Promise<Respons
     const user = await getSessionUser(request, env);
     if (!user) return unauthorized();
     const payload = await request.json<{ currentPassword?: string; nextPassword?: string }>();
-    if (!payload.currentPassword || !payload.nextPassword || !validatePassword(payload.nextPassword)) return badRequest('invalid_password_payload');
+    if (!validText(payload.currentPassword) || !validatePassword(payload.nextPassword) || payload.currentPassword === payload.nextPassword) return badRequest('invalid_password_payload');
     const row = await env.DB.prepare('SELECT password_hash, password_salt FROM users WHERE id = ?1').bind(user.id).first<{ password_hash: string; password_salt: string }>();
     if (!row) return unauthorized();
     const current = await hashPassword(payload.currentPassword, row.password_salt);
     if (!constantTimeEqual(current.hash, row.password_hash)) return unauthorized();
     const next = await hashPassword(payload.nextPassword);
-    await env.DB.prepare(`
-      UPDATE users
-      SET password_hash = ?1, password_salt = ?2, must_change_password = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?3
-    `).bind(next.hash, next.salt, user.id).run();
+    // Change credentials and revoke other sessions in the same D1 transaction.
+    const currentTokenHash = await sha256(parseCookies(request)[SESSION_COOKIE] || '');
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE users
+        SET password_hash = ?1, password_salt = ?2, must_change_password = 0, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?3
+      `).bind(next.hash, next.salt, user.id),
+      env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1 AND token_hash != ?2').bind(user.id, currentTokenHash),
+    ]);
     await audit(env, user.id, 'auth.change_password', 'user', user.id);
     return json({ ok: true });
   }
@@ -529,7 +549,7 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
   if (!url.pathname.startsWith('/api/users')) return null;
   const user = await getSessionUser(request, env);
   if (!user) return unauthorized();
-  if (!can(user, 'users:manage')) return forbidden();
+  if (user.mustChangePassword || !can(user, 'users:manage')) return forbidden();
   if (url.pathname === '/api/users' && request.method === 'GET') {
     const rows = await env.DB.prepare(`
       SELECT id, username, display_name, role, department, must_change_password, is_active, created_at, last_login_at
@@ -545,8 +565,8 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
   if (url.pathname === '/api/users' && request.method === 'POST') {
     const payload = await request.json<{ username?: string; displayName?: string; department?: Department; role?: LegacyRole; password?: string }>();
     const department = normalizeDepartment(payload.department, payload.role);
-    if (!payload.username || !payload.displayName || !payload.password) return badRequest('invalid_user_payload');
-    if (!(department in DEPARTMENT_PERMISSIONS) || !validatePassword(payload.password)) return badRequest('invalid_user_payload');
+    if (!validText(payload.username) || !validText(payload.displayName) || !validatePassword(payload.password)) return badRequest('invalid_user_payload');
+    if (payload.department !== undefined && !Object.hasOwn(DEPARTMENT_PERMISSIONS, payload.department)) return badRequest('invalid_user_payload');
     const password = await hashPassword(payload.password);
     const id = randomId();
     await env.DB.prepare(`
@@ -560,11 +580,13 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
     const targetUserId = decodeURIComponent(url.pathname.slice('/api/users/'.length));
     const payload = await request.json<{ username?: string; displayName?: string; department?: Department; role?: LegacyRole; password?: string }>();
     const department = normalizeDepartment(payload.department, payload.role);
-    if (!targetUserId || !(department in DEPARTMENT_PERMISSIONS)) return badRequest('invalid_user_payload');
+    if (!targetUserId || (payload.department !== undefined && !Object.hasOwn(DEPARTMENT_PERMISSIONS, payload.department))) return badRequest('invalid_user_payload');
+    if (payload.username !== undefined && !validText(payload.username)) return badRequest('invalid_user_payload');
+    if (payload.displayName !== undefined && !validText(payload.displayName)) return badRequest('invalid_user_payload');
     const username = payload.username?.trim();
     if (payload.password && !validatePassword(payload.password)) return badRequest('invalid_password_payload');
     const password = payload.password ? await hashPassword(payload.password) : null;
-    await env.DB.prepare(`
+    const updateUser = env.DB.prepare(`
       UPDATE users
       SET username = COALESCE(?1, username),
           display_name = COALESCE(?2, display_name),
@@ -574,12 +596,16 @@ async function handleUsers(request: Request, env: Env, url: URL): Promise<Respon
           password_salt = COALESCE(?6, password_salt),
           must_change_password = CASE
             WHEN ?5 IS NULL THEN must_change_password
-            WHEN id = ?7 THEN 0
+            WHEN id = ?8 THEN 0
             ELSE 1
           END,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?7
-    `).bind(username || null, payload.displayName || null, getLegacyRoleForDepartment(department), department, password?.hash || null, password?.salt || null, targetUserId).run();
+    `).bind(username || null, payload.displayName || null, getLegacyRoleForDepartment(department), department, password?.hash || null, password?.salt || null, targetUserId, user.id);
+    await env.DB.batch([
+      updateUser,
+      ...(password ? [env.DB.prepare('DELETE FROM sessions WHERE user_id = ?1').bind(targetUserId)] : []),
+    ]);
     await audit(env, user.id, 'users.update', 'user', targetUserId, { username: username || undefined, department, passwordReset: Boolean(password) });
     return json({ ok: true });
   }
@@ -590,6 +616,7 @@ async function handleProfile(request: Request, env: Env, url: URL): Promise<Resp
   if (url.pathname !== '/api/profile/avatar') return null;
   const user = await getSessionUser(request, env);
   if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
   const objectKey = `avatars/${user.id}`;
 
   if (request.method === 'GET') {
@@ -597,7 +624,7 @@ async function handleProfile(request: Request, env: Env, url: URL): Promise<Resp
     if (!object) return new Response(null, { status: 204 });
     return new Response(object.body, {
       headers: {
-        'content-type': object.httpMetadata?.contentType || 'application/octet-stream',
+        'content-type': getSafeBlobContentType(object.httpMetadata?.contentType),
         etag: object.httpEtag,
       },
     });
@@ -606,7 +633,7 @@ async function handleProfile(request: Request, env: Env, url: URL): Promise<Resp
   if (request.method === 'PUT') {
     const contentType = request.headers.get('content-type') || '';
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(contentType)) return badRequest('invalid_avatar_type');
-    const body = await request.arrayBuffer();
+    const body = await readLimitedBody(request, 2 * 1024 * 1024);
     if (body.byteLength === 0 || body.byteLength > 2 * 1024 * 1024) return badRequest('invalid_avatar_size');
     await env.FILES.put(objectKey, body, { httpMetadata: { contentType } });
     await audit(env, user.id, 'profile.avatar_update', 'user', user.id);
@@ -714,6 +741,8 @@ async function handleLiblibAiProxy(request: Request, env: Env, url: URL): Promis
       accept: 'application/json',
     },
     body: upstreamBody,
+    redirect: 'error',
+    signal: AbortSignal.timeout(60_000),
   });
   return new Response(upstream.body, {
     status: upstream.status,
@@ -981,7 +1010,7 @@ async function handleInspectionReports(request: Request, env: Env, url: URL): Pr
     return new Response(object.body, {
       headers: {
         'content-type': 'application/pdf',
-        'content-disposition': `inline; filename="${getSafeFileName(row.file_name, 'report.pdf')}"`,
+        'content-disposition': contentDisposition('inline', getSafeFileName(row.file_name, 'report.pdf')),
         etag: object.httpEtag,
       },
     });
@@ -998,7 +1027,7 @@ async function handleInspectionReports(request: Request, env: Env, url: URL): Pr
   return notFound();
 }
 
-export default {
+const application = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return withCors(request, env, new Response(null, { status: 204 }));
@@ -1077,8 +1106,14 @@ export default {
 
     if (url.pathname.startsWith('/api/state/')) {
       const key = decodeURIComponent(url.pathname.slice('/api/state/'.length));
-      if (!key) return withCors(request, env, notFound());
+      if (!isPublicStorageKey(key)) return withCors(request, env, badRequest('invalid_state_key'));
       const storageKey = getStateStorageKey(user, key);
+      if (key === 'gjh-role-page-permissions-v1' && request.method !== 'GET' && !can(user, 'users:manage')) {
+        return withCors(request, env, forbidden());
+      }
+      if (key === GLOBAL_AI_CALL_LOG_KEY && request.method === 'DELETE' && !can(user, 'users:manage')) {
+        return withCors(request, env, forbidden());
+      }
       if (request.method === 'GET') {
         if (!can(user, 'state:read')) return withCors(request, env, forbidden());
         const row = await env.DB.prepare('SELECT value FROM app_state WHERE key = ?1').bind(storageKey).first<{ value: string }>();
@@ -1087,6 +1122,7 @@ export default {
       if (request.method === 'PUT') {
         if (!can(user, 'state:write')) return withCors(request, env, forbidden());
         const payload = await request.json<{ value: unknown }>();
+        if (!Object.hasOwn(payload, 'value')) return withCors(request, env, badRequest('invalid_state_payload'));
         let nextValue = payload.value;
         if (key === GLOBAL_AI_CALL_LOG_KEY) {
           const current = await env.DB.prepare('SELECT value FROM app_state WHERE key = ?1').bind(storageKey).first<{ value: string }>();
@@ -1112,7 +1148,9 @@ export default {
       const [, , , rawNamespace, ...rawKeyParts] = url.pathname.split('/');
       const namespace = decodeURIComponent(rawNamespace || '');
       const key = decodeURIComponent(rawKeyParts.join('/'));
-      if (!namespace || !key) return withCors(request, env, notFound());
+      if (!['spectrum', 'cutout'].includes(namespace) || !isPublicStorageKey(key)) {
+        return withCors(request, env, badRequest('invalid_blob_key'));
+      }
       const objectKey = getBlobKey(namespace, key);
       if (request.method === 'GET') {
         if (!can(user, 'blob:read')) return withCors(request, env, forbidden());
@@ -1124,7 +1162,7 @@ export default {
           etag: object.httpEtag,
         };
         if (contentType === 'application/octet-stream') {
-          headers['content-disposition'] = `attachment; filename="${getAttachmentFileName(key)}"`;
+          headers['content-disposition'] = contentDisposition('attachment', getAttachmentFileName(key));
         }
         return withCors(request, env, new Response(object.body, {
           headers,
@@ -1148,5 +1186,22 @@ export default {
       }
     }
     return withCors(request, env, notFound());
+  },
+};
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    try {
+      if (!isTrustedMutation(request, env.CORS_ORIGINS)) return withCors(request, env, forbidden());
+      return await application.fetch(await prepareJsonRequest(request), env);
+    } catch (error) {
+      if (error instanceof RequestError) {
+        return withCors(request, env, json({ error: error.message }, { status: error.status }));
+      }
+      if (error instanceof URIError) return withCors(request, env, badRequest('invalid_encoding'));
+      // Never expose database errors, signed URLs, credentials or request bodies to clients/logs.
+      console.error('[api] request failed', { method: request.method, errorType: error instanceof Error ? error.name : 'unknown' });
+      return withCors(request, env, json({ error: 'internal_error' }, { status: 500 }));
+    }
   },
 };

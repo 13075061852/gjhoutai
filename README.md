@@ -148,6 +148,17 @@ npm run preview
 
 API 凭据仍只从现有本地配置路径读取；模型回答只接收脱敏后的工具证据，不会收到处理器、确认令牌、密钥或原始图片数据。
 
+## UI 规范与质量检查
+
+公共 UI 变量位于 `src/styles/foundation/base.css`，跨页控件规范位于 `src/styles/components/design-system.css`，React 通用组件位于 `src/components/ui/`。
+
+```bash
+npm run check       # 锁文件、UI、Worker 类型、测试、前端构建
+npm audit           # 已知依赖漏洞检查
+```
+
+已修复问题、部署注意事项及尚待验收范围见 [框架与安全检查记录](docs/architecture-and-security-review.md)。
+
 ## 开发约定
 
 - 新的 React 代码优先放入 `src/pages/`、`src/components/`、`src/utils/` 和 `src/types/`。

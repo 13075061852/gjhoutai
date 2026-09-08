@@ -19,6 +19,7 @@ const SESSION_MARKER_STORAGE_KEY = 'gjh-auth-session-present';
 const AUTH_ME_CACHE_TTL_MS = 30_000;
 let authMeCache: { user: AppUser | null; expiresAt: number } | null = null;
 let authMeRequest: Promise<AppUser | null> | null = null;
+let authGeneration = 0;
 const isSameOriginApi = () => {
   if (typeof window === 'undefined' || !API_BASE) return true;
   try {
@@ -40,6 +41,7 @@ const clearSessionMarker = () => {
   if (typeof window !== 'undefined') localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
 };
 const clearAuthMeCache = () => {
+  authGeneration += 1;
   authMeCache = null;
   authMeRequest = null;
 };
@@ -74,17 +76,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | null> {
 
 export const authClient = {
   hasSessionMarker,
-  async me(): Promise<AppUser | null> {
+  async me(force = false): Promise<AppUser | null> {
+    if (force) clearAuthMeCache();
     if (!hasSessionMarker()) return null;
     if (authMeCache && authMeCache.expiresAt > Date.now()) return authMeCache.user;
     if (!authMeRequest) {
+      const generation = authGeneration;
       authMeRequest = requestAuthMe()
         .then((user) => {
+          if (generation !== authGeneration) return authMeCache?.user ?? null;
           if (!user) clearSessionMarker();
           return cacheAuthMe(user);
         })
         .finally(() => {
-          authMeRequest = null;
+          if (generation === authGeneration) authMeRequest = null;
         });
     }
     return authMeRequest;
@@ -96,6 +101,7 @@ export const authClient = {
     });
     const user = payload?.user ?? null;
     if (user) {
+      clearAuthMeCache();
       rememberSessionMarker();
       cacheAuthMe(user);
     }
@@ -103,9 +109,10 @@ export const authClient = {
   },
   async logout(): Promise<boolean> {
     const payload = await request<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' });
+    if (!payload?.ok) return false;
     clearSessionMarker();
     clearAuthMeCache();
-    return Boolean(payload?.ok);
+    return true;
   },
   async changePassword(currentPassword: string, nextPassword: string): Promise<boolean> {
     const payload = await request<{ ok: boolean }>('/api/auth/change-password', {

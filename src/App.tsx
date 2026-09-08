@@ -1,5 +1,6 @@
 import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
 import { LegacyShell } from './pages/LegacyShell';
+import { Button } from './components/ui/Button';
 import { authClient, type AppUser } from './services/auth';
 import { hydrateCloudBackedLocalStorage } from './services/cloud-sync';
 import { normalizeSafeAvatarUrl } from './utils/avatarSecurity';
@@ -92,6 +93,7 @@ function AuthParticleTrail() {
       }
       lastX = x;
       lastY = y;
+      if (!animationFrame) animationFrame = window.requestAnimationFrame(render);
     };
 
     const handlePointerLeave = () => {
@@ -99,6 +101,8 @@ function AuthParticleTrail() {
     };
 
     const render = () => {
+      animationFrame = 0;
+      if (reducedMotion.matches || document.hidden) particles = [];
       context.clearRect(0, 0, width, height);
       particles = particles.filter((particle) => particle.life < particle.maxLife);
       for (const particle of particles) {
@@ -114,11 +118,10 @@ function AuthParticleTrail() {
         context.arc(particle.x, particle.y, particle.size * (1 - progress * 0.35), 0, Math.PI * 2);
         context.fill();
       }
-      animationFrame = window.requestAnimationFrame(render);
+      if (particles.length) animationFrame = window.requestAnimationFrame(render);
     };
 
     resize();
-    render();
     window.addEventListener('resize', resize);
     shell.addEventListener('pointermove', handlePointerMove);
     shell.addEventListener('pointerleave', handlePointerLeave);
@@ -142,15 +145,18 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
     setError('');
-    const user = await authClient.login(username.trim(), password);
-    if (!user) {
-      setError('账号或密码不正确');
+    try {
+      const user = await authClient.login(username.trim(), password);
+      if (!user) return setError('账号或密码不正确，或登录尝试过多，请稍后重试');
+      onAuthenticated(user);
+    } catch {
+      setError('无法连接服务器，请检查网络后重试');
+    } finally {
       setSubmitting(false);
-      return;
     }
-    onAuthenticated(user);
   }
 
   return (
@@ -183,8 +189,8 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
               <span>密码</span>
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
             </label>
-            {error ? <div className="auth-error">{error}</div> : null}
-            <button type="submit" disabled={submitting}>{submitting ? '登录中…' : '登录'}</button>
+            {error ? <div className="auth-error" role="alert">{error}</div> : null}
+            <Button type="submit" variant="primary" loading={submitting}>{submitting ? '登录中…' : '登录'}</Button>
           </form>
         </section>
       </section>
@@ -197,12 +203,22 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     setError('');
-    const ok = await authClient.changePassword(currentPassword, nextPassword);
-    if (!ok) return setError('修改失败，请确认原密码正确，且新密码至少 10 位。');
-    onComplete({ ...user, mustChangePassword: false });
+    if (currentPassword === nextPassword) return setError('新密码不能与当前密码相同');
+    setSubmitting(true);
+    try {
+      const ok = await authClient.changePassword(currentPassword, nextPassword);
+      if (!ok) return setError('修改失败，请确认原密码正确，且新密码为 10–128 位。');
+      onComplete({ ...user, mustChangePassword: false });
+    } catch {
+      setError('无法连接服务器，请检查网络后重试');
+    } finally {
+      setSubmitting(false);
+    }
   }
   return (
     <main className="auth-shell">
@@ -225,10 +241,10 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
             <p>首次登录需要完成安全设置</p>
           </div>
           <form onSubmit={handleSubmit}>
-            <label><span>当前密码</span><input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" required /></label>
-            <label><span>新密码</span><input value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} type="password" minLength={10} required /></label>
-            {error ? <div className="auth-error">{error}</div> : null}
-            <button type="submit">保存新密码</button>
+            <label><span>当前密码</span><input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" maxLength={128} required /></label>
+            <label><span>新密码</span><input value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} type="password" autoComplete="new-password" minLength={10} maxLength={128} required /></label>
+            {error ? <div className="auth-error" role="alert">{error}</div> : null}
+            <Button type="submit" variant="primary" loading={submitting}>{submitting ? '保存中…' : '保存新密码'}</Button>
           </form>
         </section>
       </section>
@@ -239,6 +255,7 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
 
 function App() {
   const [user, setUser] = useState<AuthUserState>(undefined);
+  const [startupError, setStartupError] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const avatarUrlRef = useRef<string | null>(null);
   const accountAvatarRendererRef = useRef<((url: string | null) => void) | null>(null);
@@ -262,7 +279,7 @@ function App() {
     void authClient.me().then((nextUser) => {
       if (!disposed) setUser(nextUser);
     }).catch(() => {
-      if (!disposed && !authClient.hasSessionMarker()) setUser(null);
+      if (!disposed) setStartupError('暂时无法验证登录状态，请检查网络后重试。');
     });
     return () => {
       disposed = true;
@@ -272,8 +289,10 @@ function App() {
   useEffect(() => {
     let disposed = false;
     const refreshCurrentUser = () => {
-      void authClient.me().then((nextUser) => {
-        if (!disposed && nextUser) setUser(nextUser);
+      void authClient.me(true).then((nextUser) => {
+        if (!disposed) setUser(nextUser);
+      }).catch(() => {
+        if (!disposed) setStartupError('无法刷新账户状态，请重新验证登录。');
       });
     };
     window.addEventListener('gjh:auth-users-changed', refreshCurrentUser);
@@ -294,6 +313,8 @@ function App() {
         return;
       }
       setManagedAvatarUrl(nextUrl);
+    }).catch(() => {
+      if (!disposed) setManagedAvatarUrl(null);
     });
     return () => {
       disposed = true;
@@ -303,14 +324,15 @@ function App() {
     accountAvatarRendererRef.current?.(avatarUrl);
   }, [avatarUrl]);
   useEffect(() => {
-    if (!user || user.mustChangePassword) return;
+    if (!user || user.mustChangePassword || startupError) return;
     let cleanup: (() => void) | undefined;
     let cleanupTopActionsPlacement: (() => void) | undefined;
+    const events = new AbortController();
     let disposed = false;
     const cleanupIcons = mountIconParkAdapter();
     window.GJHApp = window.GJHApp || {};
     window.GJHApp.currentUser = user;
-    void hydrateCloudBackedLocalStorage().then((result) => {
+    void hydrateCloudBackedLocalStorage(events.signal).then((result) => {
       if (disposed || !result.changedKeys.length) return;
       window.GJHApp?.businessPages?.refreshFromLocalStorage?.(result.changedKeys);
     }).catch((error) => {
@@ -321,6 +343,10 @@ function App() {
       if (disposed) return;
       const { bootLegacyApp, teardownLegacyApp } = legacyModule;
       cleanup = await bootLegacyApp();
+      if (disposed) {
+        cleanup?.();
+        return;
+      }
       document.getElementById('shell')?.classList.remove('legacy-shell-booting');
       const topActions = document.querySelector('.top-actions');
       const topActionsHome = topActions?.parentElement ?? null;
@@ -400,9 +426,10 @@ function App() {
           const file = avatarInput.files?.[0];
           if (!file) return;
           avatarButton.disabled = true;
-          const ok = await authClient.uploadAvatar(file);
-          avatarButton.disabled = false;
-          avatarInput.value = '';
+          let ok = false;
+          try { ok = await authClient.uploadAvatar(file); }
+          catch { window.alert('头像上传失败，请检查网络和图片大小（最大 2MB）。'); }
+          finally { avatarButton.disabled = false; avatarInput.value = ''; }
           if (!ok || disposed) return;
           const previewUrl = URL.createObjectURL(file);
           renderAccountAvatar(previewUrl);
@@ -414,8 +441,10 @@ function App() {
         resetAvatarButton.textContent = '恢复默认头像';
         resetAvatarButton.addEventListener('click', async () => {
           resetAvatarButton.disabled = true;
-          const ok = await authClient.clearAvatar();
-          resetAvatarButton.disabled = false;
+          let ok = false;
+          try { ok = await authClient.clearAvatar(); }
+          catch { window.alert('恢复头像失败，请稍后重试。'); }
+          finally { resetAvatarButton.disabled = false; }
           if (!ok || disposed) return;
           renderAccountAvatar(null);
           setManagedAvatarUrl(null);
@@ -427,9 +456,16 @@ function App() {
         logoutButton.textContent = '退出登录';
         logoutButton.addEventListener('click', async () => {
           logoutButton.disabled = true;
-          await authClient.logout();
-          setUser(null);
-          setManagedAvatarUrl(null);
+          try {
+            if (!await authClient.logout()) throw new Error('logout_failed');
+            setUser(null);
+            setManagedAvatarUrl(null);
+            // Reload to discard account-specific legacy module state and event closures.
+            window.location.reload();
+          } catch {
+            window.alert('退出失败，服务器尚未确认会话失效，请重试。');
+            logoutButton.disabled = false;
+          }
         });
         menu.append(avatarButton, resetAvatarButton, logoutButton, avatarInput);
         accountButton.addEventListener('click', () => {
@@ -442,24 +478,43 @@ function App() {
             menu.hidden = true;
             accountButton.setAttribute('aria-expanded', 'false');
           }
-        });
+        }, { signal: events.signal });
+        accountWrap.addEventListener('keydown', (event) => {
+          if (event.key !== 'Escape') return;
+          menu.hidden = true;
+          accountButton.setAttribute('aria-expanded', 'false');
+          accountButton.focus();
+        }, { signal: events.signal });
         accountWrap.append(accountButton, menu);
       }
       if (disposed) {
         cleanup?.();
         teardownLegacyApp();
       }
-    })();
+    })().catch(() => {
+      if (!disposed) setStartupError('页面初始化失败，请重新加载。');
+    });
     return () => {
       disposed = true;
+      events.abort();
+      if (window.GJHApp) delete window.GJHApp.currentUser;
       accountAvatarRendererRef.current = null;
       cleanupTopActionsPlacement?.();
       cleanupIcons();
       cleanup?.();
       void import('./legacy/bootstrap').then(({ teardownLegacyApp }) => teardownLegacyApp());
     };
-  }, [user, setManagedAvatarUrl]);
+  }, [user, setManagedAvatarUrl, startupError]);
 
+  if (startupError) return (
+    <main className="auth-shell">
+      <section className="auth-card app-error-card" role="alert">
+        <h2>暂时无法进入系统</h2>
+        <p>{startupError}</p>
+        <button className="ui-button ui-button--primary" onClick={() => window.location.reload()}>重新加载</button>
+      </section>
+    </main>
+  );
   if (user === undefined && hasSessionOnLoad) return <LegacyShell booting />;
   if (user === undefined) return (
     <main className="auth-shell">

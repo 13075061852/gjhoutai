@@ -42,6 +42,13 @@ for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'
   }
 }
 
+// Keep tarball URLs aligned with .npmrc; npm 12 blocks other remote sources by default.
+for (const [path, entry] of Object.entries(packageLock.packages ?? {})) {
+  if (entry.resolved && !entry.resolved.startsWith('https://registry.npmjs.org/')) {
+    errors.push(`${path} resolves to "${entry.resolved}". Use the official npm registry.`);
+  }
+}
+
 if (errors.length > 0) {
   console.error(errors.join('\n'));
   process.exit(1);

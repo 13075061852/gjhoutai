@@ -44,7 +44,7 @@ export function removeCloudBackedLocalStorageItem(key: string): void {
   }
 }
 
-export async function hydrateCloudBackedLocalStorage(): Promise<CloudHydrationResult> {
+export async function hydrateCloudBackedLocalStorage(signal?: AbortSignal): Promise<CloudHydrationResult> {
   const changedKeys = new Set<string>();
   let nextKeyIndex = 0;
   const hydrateKey = async (key: string): Promise<void> => {
@@ -53,7 +53,10 @@ export async function hydrateCloudBackedLocalStorage(): Promise<CloudHydrationRe
       remoteValue = await cloudStorage.getJson<string>(key);
     } catch (error) {
       console.error(`Failed to hydrate cloud-backed localStorage key "${key}".`, error);
+      // A failed read is not an empty remote record: never clear or seed on network errors.
+      return;
     }
+    if (signal?.aborted) return;
     if (remoteValue != null) {
       const nextValue = typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue);
       if (localStorage.getItem(key) !== nextValue) changedKeys.add(key);
@@ -75,7 +78,7 @@ export async function hydrateCloudBackedLocalStorage(): Promise<CloudHydrationRe
     }
   };
   const hydrateNextKeys = async (): Promise<void> => {
-    while (nextKeyIndex < CLOUD_LOCAL_STORAGE_KEYS.length) {
+    while (!signal?.aborted && nextKeyIndex < CLOUD_LOCAL_STORAGE_KEYS.length) {
       const key = CLOUD_LOCAL_STORAGE_KEYS[nextKeyIndex];
       nextKeyIndex += 1;
       await hydrateKey(key);

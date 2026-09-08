@@ -13,7 +13,9 @@
     "deploy:db": "wrangler d1 migrations apply gjhoutai --remote",
     "preview": "vite preview",
     "check:lockfile": "node scripts/check-package-lock.mjs",
-    "typecheck": "npm run check:legacy-types && tsc -b --noEmit",
+    "typecheck": "npm run check:legacy-types && tsc -b --noEmit && npm run typecheck:worker",
+    "typecheck:worker": "tsc -p tsconfig.worker.json",
+    "check": "npm run check:lockfile && npm run check:ui && npm run typecheck:worker && npm test && npm run build",
     "test": "vitest run",
     "check-icons": "node scripts/check-icon-mappings.mjs",
     "check:ui": "node scripts/check-ui-consistency.mjs",
@@ -27,23 +29,25 @@
     "motion": "12.38.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "undici": "8.5.0",
+    "undici": "8.10.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
+    "@cloudflare/workers-types": "5.20260907.1",
     "@types/markdown-it": "14.1.2",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
+    "happy-dom": "20.14.0",
     "lightningcss": "1.32.0",
     "sharp": "0.35.2",
     "typescript": "5.9.3",
-    "vite": "7.3.3",
+    "vite": "7.3.6",
     "vitest": "4.1.5",
-    "wrangler": "4.92.0"
+    "wrangler": "4.129.0"
   },
   "overrides": {
-    "ws": "8.20.1"
+    "ws": "8.21.3"
   }
 }

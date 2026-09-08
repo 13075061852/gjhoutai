@@ -1,0 +1,106 @@
+/* Shared visual contract for React and legacy pages. Keep business layouts in page CSS.
+   Compact table/icon controls retain their own dimensions; do not globally resize buttons. */
+button, input, select, textarea {
+  font-family: var(--app-font-family);
+}
+
+body :is(.page-section, .dialog-card, .auth-card) :is(input, select, textarea) {
+  font-family: var(--app-font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+body :is(.page-section, .dialog-card) :is(h1, h2, h3, h4) {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+}
+
+body :is(.page-section, .dialog-card) :is(label, .custom-select, .custom-select-option) {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Explicit aliases avoid breaking tabs, canvas controls and icon-only buttons. */
+body :is(.ui-button, .analysis-toolbar-btn, .analysis-toolbar-btn-primary,
+  .biz-inventory-primary-btn, .biz-inventory-ghost-btn, .biz-inventory-danger-btn,
+  .confirm-dialog-btn, .cutout-reset-btn) {
+  min-height: var(--control-height-md);
+  padding-inline: var(--space-3);
+  gap: var(--space-2);
+  border-radius: var(--ui-radius-sm);
+  font-family: var(--app-font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
+}
+
+body .ui-button--sm { min-height: var(--control-height-sm); padding-inline: var(--space-2); }
+body .ui-button--lg { min-height: var(--control-height-lg); padding-inline: var(--space-4); }
+
+body :is(.ui-field, .custom-select-trigger) {
+  min-height: var(--control-height-md);
+  border-radius: var(--ui-radius-sm);
+  padding-inline: var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+body .custom-select-menu {
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1);
+  gap: var(--space-1);
+  border-radius: var(--ui-radius-md);
+  overscroll-behavior: contain;
+}
+body .custom-select-option {
+  min-height: var(--control-height-sm);
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  line-height: var(--line-height-body);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+body .custom-select-option span { min-width: 0; }
+body .custom-select-option.is-active::after { flex-shrink: 0; }
+body .custom-select-option:disabled { opacity: .5; cursor: not-allowed; }
+body .custom-select-trigger:disabled { opacity: .56; cursor: not-allowed; box-shadow: none; }
+
+body :is(.ui-search-box-input, .confirm-dialog-message, .system-notify-message) {
+  font-weight: var(--font-weight-regular);
+}
+body :is(.confirm-dialog-title, .system-notify-title) { font-weight: var(--font-weight-semibold); }
+body .confirm-dialog-title { font-size: var(--font-size-lg); }
+body .confirm-dialog-actions { gap: var(--space-2); }
+body .ui-search-box { height: var(--control-height-md); min-height: var(--control-height-md); gap: var(--space-2); }
+
+/* A visible keyboard outline is independent of hover/background colour overrides. */
+body :is(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+}
+body :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+body :is(button, input, select, textarea):disabled { cursor: not-allowed; }
+body :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--accent); }
+body .ui-field[aria-invalid="true"] { border-color: var(--danger); }
+.ui-field-group { display: grid; gap: var(--space-2); min-width: 0; }
+.ui-field-label { color: var(--text-2); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
+.ui-field-error { margin: 0; color: var(--danger); font-size: var(--font-size-xs); }
+
+.app-error-card { margin: auto; width: min(440px, calc(100vw - 32px)); padding: var(--space-6); }
+.app-error-card h2 { margin: 0 0 var(--space-3); font-size: var(--font-size-title); }
+.app-error-card p { margin: 0 0 var(--space-4); color: var(--text-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Text fields stay at 16px on phones to avoid browser focus zoom. */
+  body :is(.page-section, .dialog-card, .auth-card) :is(input, select, textarea) { font-size: var(--font-size-lg); }
+  .ui-toolbar__actions { gap: var(--space-2); }
+}

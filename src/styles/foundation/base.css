@@ -42,7 +42,7 @@
       --space-6:24px;
       --space-8:32px;
       --control-height-sm:32px;
-      --control-height-md:36px;
+      --control-height-md:40px;
       --control-height-lg:44px;
       --ui-radius-xs:6px;
       --ui-radius-sm:8px;
@@ -61,6 +61,17 @@
       --scrollbar-thumb-active:var(--accent);
       --scrollbar-track:transparent;
       --app-font-family:"Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-size-xs:12px;
+      --font-size-sm:13px;
+      --font-size-md:14px;
+      --font-size-lg:16px;
+      --font-size-title:20px;
+      --font-weight-regular:400;
+      --font-weight-medium:500;
+      --font-weight-semibold:600;
+      --line-height-body:1.5;
+      --line-height-heading:1.35;
+      --focus-outline:2px solid var(--accent);
     }
     body[data-theme="dark"]{
       --bg:#0f172a;
@@ -104,6 +115,9 @@
       background:var(--bg);
       color:var(--text);
       font-family:var(--app-font-family);
+      font-size:var(--font-size-md);
+      font-weight:var(--font-weight-regular);
+      line-height:var(--line-height-body);
       -webkit-font-smoothing:antialiased;
       overflow:hidden;
     }

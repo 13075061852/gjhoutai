@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import globalStyles from './styles.css?raw';
+// @ts-expect-error This test runs in Node; the browser app intentionally omits @types/node.
+import { readFileSync } from 'node:fs';
+const globalStyles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
 import chatSource from '../legacy/features/chat.ts?raw';
 import imageCutoutSource from '../legacy/features/image-cutout.ts?raw';
 import businessPagesSource from '../legacy/features/business-pages/index.ts?raw';

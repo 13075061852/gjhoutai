@@ -56,6 +56,10 @@ class FakeD1Database {
     return new FakeStatement(this, sql);
   }
 
+  batch(statements: FakeStatement[]) {
+    return Promise.all(statements.map((statement) => statement.run()));
+  }
+
   addUser(user: any) {
     this.users.set(user.id, user);
     this.usersByUsername.set(user.username, user);
@@ -69,6 +73,9 @@ class FakeD1Database {
   }
 
   first<T>(sql: string, values: unknown[]): T | null {
+    if (sql.includes('SELECT password_hash, password_salt FROM users')) {
+      return (this.users.get(String(values[0])) || null) as T | null;
+    }
     if (sql.includes('SELECT * FROM users WHERE username')) {
       return (this.usersByUsername.get(String(values[0])) || null) as T | null;
     }
@@ -123,6 +130,17 @@ class FakeD1Database {
 
   run(sql: string, values: unknown[]) {
     if (sql.includes('UPDATE sessions SET last_seen_at')) return;
+    if (sql.includes('DELETE FROM sessions WHERE user_id')) {
+      for (const [hash, session] of this.sessions) {
+        if (session.user_id === values[0] && (!sql.includes('token_hash !=') || hash !== values[1])) this.sessions.delete(hash);
+      }
+      return;
+    }
+    if (sql.includes('SET password_hash = ?1')) {
+      const user = this.users.get(String(values[2]));
+      if (user) Object.assign(user, { password_hash: values[0], password_salt: values[1], must_change_password: 0 });
+      return;
+    }
     if (sql.includes('INSERT INTO audit_logs')) return;
     if (sql.includes('INSERT INTO login_attempts')) {
       this.loginAttempts.set(String(values[0]), {
@@ -287,7 +305,7 @@ describe('worker security controls', () => {
     });
     await env.DB.addSession('lab-1', 'lab-token');
 
-    const response = await worker.fetch(authedRequest('/api/blob/reports/payload.html', 'lab-token', {
+    const response = await worker.fetch(authedRequest('/api/blob/spectrum/payload.html', 'lab-token', {
       method: 'PUT',
       headers: { 'content-type': 'text/html' },
       body: '<script>fetch("/api/config")</script>',
@@ -311,15 +329,15 @@ describe('worker security controls', () => {
       is_active: 1,
     });
     await env.DB.addSession('lab-1', 'lab-token');
-    await env.FILES.put('reports/payload.html', '<script>alert(1)</script>', {
+    await env.FILES.put('spectrum/payload.html', '<script>alert(1)</script>', {
       httpMetadata: { contentType: 'text/html' },
     });
 
-    const response = await worker.fetch(authedRequest('/api/blob/reports/payload.html', 'lab-token'), env as any);
+    const response = await worker.fetch(authedRequest('/api/blob/spectrum/payload.html', 'lab-token'), env as any);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/octet-stream');
-    expect(response.headers.get('content-disposition')).toBe('attachment; filename="payload.html"');
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="payload.html"; filename*=UTF-8\'\'payload.html');
   });
 
   it('keeps production and formula state shared across users', async () => {
@@ -602,6 +620,119 @@ describe('worker security controls', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'invalid_liblib_path' });
     expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  async function authenticatedEnv(mustChangePassword = 0) {
+    const env = createEnv();
+    env.DB.addUser({ id: 'admin-1', username: 'admin', display_name: 'Admin', department: '系统管理员',
+      password_hash: await hashPassword('old-password', 'salt'), password_salt: 'salt', must_change_password: mustChangePassword, is_active: 1 });
+    await env.DB.addSession('admin-1', 'token');
+    return env;
+  }
+
+  it('rejects cross-site writes before any database or object changes', async () => {
+    const env = await authenticatedEnv();
+    const response = await worker.fetch(authedRequest('/api/state/key', 'token', {
+      method: 'PUT', headers: { origin: 'https://evil.example', 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'attacker' }),
+    }), env as any);
+    expect(response.status).toBe(403);
+    expect(env.DB.appState.size).toBe(0);
+  });
+
+  it.each(['GET', 'PUT', 'DELETE'])('blocks internal user state keys via %s', async (method) => {
+    const env = await authenticatedEnv();
+    env.DB.appState.set('users/victim/openrouter-ai-chat-v1', '"private"');
+    const response = await worker.fetch(authedRequest('/api/state/users%2Fvictim%2Fopenrouter-ai-chat-v1', 'token', {
+      method, ...(method === 'PUT' ? { headers: { 'content-type': 'application/json' }, body: '{"value":"changed"}' } : {}),
+    }), env as any);
+    expect(response.status).toBe(400);
+    expect(env.DB.appState.get('users/victim/openrouter-ai-chat-v1')).toBe('"private"');
+  });
+
+  it.each(['avatars/victim', 'data-recognition/victim%2Fimage.png', 'spectrum%2F..%2Favatars/victim'])('blocks reserved blob namespace %s', async (path) => {
+    const env = await authenticatedEnv();
+    const response = await worker.fetch(authedRequest(`/api/blob/${path}`, 'token'), env as any);
+    expect(response.status).toBe(400);
+  });
+
+  it.each(['/api/users', '/api/profile/avatar'])('requires initial password change for %s', async (path) => {
+    const env = await authenticatedEnv(1);
+    const response = await worker.fetch(authedRequest(path, 'token'), env as any);
+    expect(response.status).toBe(403);
+  });
+
+  it.each(['null', '[]', '{'])('returns a controlled client error for invalid JSON: %s', async (body) => {
+    const response = await worker.fetch(new Request('https://api.example/api/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    }), createEnv() as any);
+    expect(response.status).toBe(400);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('rejects non-string login credentials instead of throwing', async () => {
+    const response = await worker.fetch(new Request('https://api.example/api/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"username":{},"password":[]}',
+    }), createEnv() as any);
+    expect(response.status).toBe(400);
+  });
+
+  it('treats malformed cookie encoding as unauthenticated', async () => {
+    const response = await worker.fetch(new Request('https://api.example/api/auth/me', {
+      headers: { cookie: 'gjh_session=%ZZ' },
+    }), createEnv() as any);
+    expect(response.status).toBe(401);
+  });
+
+  it('only lets administrators modify shared permission settings', async () => {
+    const env = await authenticatedEnv();
+    env.DB.users.get('admin-1').department = '生产部';
+    const response = await worker.fetch(authedRequest('/api/state/gjh-role-page-permissions-v1', 'token', {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{"value":{}}',
+    }), env as any);
+    expect(response.status).toBe(403);
+    expect(env.DB.appState.size).toBe(0);
+  });
+
+  it('derives new log identities from the session and preserves other users logs', async () => {
+    const env = await authenticatedEnv();
+    const key = 'openrouter-ai-call-log-v1';
+    env.DB.appState.set(key, JSON.stringify([{ id: 'existing', actorUserId: 'victim', summary: 'original' }]));
+    const response = await worker.fetch(authedRequest(`/api/state/${key}`, 'token', {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: [
+        { id: 'existing', actorUserId: 'victim', summary: 'forged' },
+        { id: 'new', actorUserId: 'victim' },
+      ] }),
+    }), env as any);
+    expect(response.status).toBe(200);
+    const logs = JSON.parse(env.DB.appState.get(key)!);
+    expect(logs.find((item: any) => item.id === 'existing').summary).toBe('original');
+    expect(logs.find((item: any) => item.id === 'new').actorUserId).toBe('admin-1');
+  });
+
+  it('revokes sessions when an administrator resets a password', async () => {
+    const env = await authenticatedEnv();
+    env.DB.addUser({ id: 'target', username: 'target', department: '生产部', is_active: 1 });
+    await env.DB.addSession('target', 'target-token');
+    const response = await worker.fetch(authedRequest('/api/users/target', 'token', {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ department: '生产部', displayName: 'Target', password: 'new-password' }),
+    }), env as any);
+    expect(response.status).toBe(200);
+    expect(env.DB.sessions.has(await sha256('target-token'))).toBe(false);
+    expect(env.DB.sessions.has(await sha256('token'))).toBe(true);
+  });
+
+  it('revokes other sessions after password changes', async () => {
+    const env = await authenticatedEnv();
+    await env.DB.addSession('admin-1', 'other-token');
+    const response = await worker.fetch(authedRequest('/api/auth/change-password', 'token', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ currentPassword: 'old-password', nextPassword: 'new-password' }),
+    }), env as any);
+    expect(response.status).toBe(200);
+    expect(env.DB.sessions.has(await sha256('token'))).toBe(true);
+    expect(env.DB.sessions.has(await sha256('other-token'))).toBe(false);
   });
 
 });

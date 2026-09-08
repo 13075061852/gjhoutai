@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import businessSource from '../legacy/features/business-pages/index.ts?raw';
-import globalResponsiveStyles from './layout/responsive.css?raw';
+// @ts-expect-error This test runs in Node; the browser app intentionally omits @types/node.
+import { readFileSync } from 'node:fs';
+const globalResponsiveStyles = readFileSync(new URL('./layout/responsive.css', import.meta.url), 'utf8');
 
 describe('order management layout contract', () => {
   it('uses shared toolbar, field, button, pagination and dialog primitives', () => {

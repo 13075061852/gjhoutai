@@ -245,7 +245,7 @@
 .apimart-field select:focus,
 .apimart-field input:focus{
   border-color:var(--accent);
-  box-shadow:0 0 0 3px var(--accent-soft);
+  box-shadow:none;
 }
 
 .apimart-link-btn{
@@ -276,7 +276,7 @@
 
 .apimart-prompt-box:focus-within{
   border-color:var(--accent);
-  box-shadow:0 0 0 3px var(--accent-soft);
+  box-shadow:none;
 }
 
 .apimart-prompt-box textarea{
@@ -528,7 +528,7 @@
 .apimart-reference-url-editor textarea:focus{
   outline:none;
   border-color:var(--accent);
-  box-shadow:0 0 0 3px rgba(0,87,255,.08);
+  box-shadow:none;
 }
 
 .apimart-reference-url-editor .apimart-reference-file-names{
@@ -737,7 +737,7 @@
 }
 
 .apimart-submit-btn:hover:not(:disabled){
-  transform:translateY(-1px);
+  transform:none;
   box-shadow:0 6px 20px rgba(0,87,255,.28);
 }
 
@@ -946,13 +946,13 @@
 .apimart-add-reference-btn:hover{
   background:rgba(15,23,42,.8);
   border-color:rgba(255,255,255,.4);
-  transform:translateY(-1px);
+  transform:none;
 }
 
 .apimart-add-reference-btn:hover{
   border-color:rgba(255,255,255,.54);
   background:rgba(37,99,235,.82);
-  transform:translateY(-1px);
+  transform:none;
 }
 
 .apimart-result-preview-btn img,
@@ -1077,7 +1077,7 @@ video.apimart-result-media{
 }
 
 .apimart-history-item:hover{
-  transform:translateY(-2px);
+  transform:none;
   box-shadow:0 8px 24px rgba(0,0,0,.2);
 }
 

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
     "dev:worker": "wrangler dev",
     "build": "npm run check:legacy-types && tsc -b && vite build",
     "deploy:web": "npm run build && wrangler pages deploy dist --project-name gjhoutai-web",

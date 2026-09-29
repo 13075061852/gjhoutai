@@ -274,7 +274,7 @@
     }
     .biz-inventory-table-actions select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-inventory-category-editor,
     .biz-inventory-material-editor{
@@ -484,7 +484,7 @@
     .biz-inventory-material-editor select:focus,
     .biz-inventory-material-editor textarea:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-inventory-primary-btn,
     .biz-inventory-ghost-btn,
@@ -517,7 +517,7 @@
     .biz-inventory-primary-btn:hover,
     .biz-inventory-ghost-btn:hover,
     .biz-inventory-danger-btn:hover{
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-inventory-ghost-btn:hover{
       border-color:var(--accent);
@@ -1112,7 +1112,7 @@
     }
     .biz-order-table-actions input[type="date"]:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-order-table-wrap{
       flex:1 1 auto;
@@ -1279,7 +1279,7 @@
     .biz-order-editor select:focus,
     .biz-order-editor textarea:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-order-editor .custom-select{
       width:100%;
@@ -1647,7 +1647,7 @@
     .biz-invoice-toolbar input:focus,
     .biz-invoice-toolbar select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-invoice-toolbar-controls .custom-select{
       width:100%;
@@ -3317,7 +3317,7 @@
     }
     .biz-formula-table-actions select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-formula-new-btn{
       min-height:36px;
@@ -3338,7 +3338,7 @@
     }
     .biz-formula-new-btn:hover{
       filter:brightness(1.04);
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-formula-table-wrap{
       flex:1 1 auto;
@@ -3417,7 +3417,7 @@
     }
     .biz-formula-page-size select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-formula-page-buttons{
       display:inline-flex;
@@ -3660,7 +3660,7 @@
     .biz-formula-row-actions button:hover{
       border-color:var(--accent);
       color:var(--accent);
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-formula-row-actions button.is-danger{
       color:var(--danger);
@@ -3839,7 +3839,7 @@
     .biz-line-table input:focus{
       border-color:var(--accent);
       background:var(--surface-2);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-issue-meta-grid input[readonly]{
       color:var(--text-2);
@@ -4171,7 +4171,7 @@
     }
     .biz-formula-remove-btn:hover,
     .biz-formula-step.is-editable > button:not(:disabled):hover{
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-formula-edit-grid{
       display:grid;
@@ -4233,7 +4233,7 @@
     .biz-recipe-controls select:focus,
     .biz-formula-step input:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-formula-edit-grid .is-wide{
       grid-column:1 / -1;
@@ -4411,7 +4411,7 @@
     }
     .biz-formula-library-filter select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-formula-material-list{
       min-height:0;
@@ -5258,7 +5258,7 @@
     .biz-supplier-row-actions button:hover{
       border-color:var(--accent);
       color:var(--accent);
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-supplier-row-actions button.is-danger{
       color:var(--danger);
@@ -5337,7 +5337,7 @@
     .biz-supplier-editor select:focus,
     .biz-supplier-editor textarea:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .biz-archive-layout{
       display:grid;
@@ -5467,7 +5467,7 @@
     }
     .biz-permission-summary article:hover{
       border-color:var(--border-2);
-      transform:translateY(-1px);
+      transform:none;
     }
     .biz-permission-summary strong{
       color:var(--accent);
@@ -6295,16 +6295,23 @@
     .biz-office-table-actions{
       width:100%;
       display:grid;
-      grid-template-columns:max-content minmax(220px, 340px) max-content;
+      grid-template-columns:max-content minmax(180px, 1fr) max-content;
       align-items:center;
       justify-content:start;
       gap:10px;
       flex:initial;
     }
+    .biz-office-table-actions > .biz-office-tabs,
+    .biz-office-table-actions > .biz-office-search,
+    .biz-office-table-actions > .biz-formula-new-btn{
+      box-sizing:border-box;
+      height:var(--control-height-md, 40px);
+      min-height:var(--control-height-md, 40px);
+    }
     .biz-office-tabs{
       position:relative;
       isolation:isolate;
-      width:330px;
+      width:300px;
       max-width:100%;
       display:grid;
       grid-template-columns:repeat(3,minmax(0,1fr));
@@ -6339,6 +6346,7 @@
       z-index:1;
       min-width:0;
       min-height:28px;
+      height:100%;
       padding:0 10px;
       border:none;
       border-radius:6px;
@@ -6346,7 +6354,7 @@
       color:var(--text-2);
       font:inherit;
       font-size:13px;
-      font-weight:900;
+      font-weight:600;
       cursor:pointer;
     }
     .biz-office-tabs button.is-active{
@@ -6369,12 +6377,14 @@
       min-height:34px;
       padding:0 11px;
       font-size:13px;
-      font-weight:850;
+      font-weight:500;
     }
     .biz-office-table-actions .biz-formula-new-btn{
       min-width:116px;
       padding:0 12px;
       white-space:nowrap;
+      transform:none;
+      transition:filter .18s ease;
     }
     .biz-office-table-wrap{
       flex:1 1 auto;
@@ -6420,8 +6430,9 @@
       min-height:0;
       display:grid;
       align-content:start;
-      gap:0;
-      padding:0;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+      gap:12px;
+      padding:14px;
       overflow-y:auto;
       overflow-x:hidden;
       background:var(--surface);
@@ -6429,11 +6440,11 @@
     .biz-office-record-card{
       min-width:0;
       display:grid;
+      align-content:start;
       gap:12px;
-      padding:14px 16px 16px;
-      border:0;
-      border-bottom:1px solid var(--border);
-      border-radius:0;
+      padding:14px;
+      border:1px solid var(--border);
+      border-radius:10px;
       background:var(--surface);
       box-shadow:none;
     }
@@ -6447,8 +6458,9 @@
     .biz-office-record-title{
       min-width:0;
       display:flex;
-      align-items:center;
-      gap:10px;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:5px;
     }
     .biz-office-record-title strong{
       min-width:0;
@@ -6456,9 +6468,9 @@
       text-overflow:ellipsis;
       white-space:nowrap;
       color:var(--text);
-      font-size:16px;
+      font-size:14px;
       line-height:20px;
-      font-weight:950;
+      font-weight:650;
     }
     .biz-office-record-meta{
       display:flex;
@@ -6474,7 +6486,7 @@
       color:var(--text-3);
       font-size:12px;
       line-height:20px;
-      font-weight:850;
+      font-weight:500;
     }
     .biz-office-record-meta .biz-office-approval-badge{
       padding:0 7px;
@@ -6483,7 +6495,7 @@
       background:var(--surface-2);
       color:var(--text-3);
       font-size:11px;
-      font-weight:900;
+      font-weight:600;
     }
     .biz-office-record-meta .biz-office-approval-badge.is-approved{
       border-color:#86efac;
@@ -6541,11 +6553,11 @@
     .biz-office-empty-list strong{
       color:var(--text);
       font-size:15px;
-      font-weight:950;
+      font-weight:650;
     }
     .biz-office-empty-list span{
       font-size:13px;
-      font-weight:800;
+      font-weight:500;
     }
     .biz-office-table-summary{
       width:100%;
@@ -6558,7 +6570,7 @@
       -webkit-overflow-scrolling:touch;
     }
     .biz-office-table-summary table{
-      width:max-content;
+      width:100%;
       max-width:none;
       border:1px solid var(--border);
       border-collapse:separate;
@@ -6571,12 +6583,12 @@
     .biz-office-table-summary td{
       min-width:48px;
       height:32px;
-      padding:7px 8px;
+      padding:6px 8px;
       border-right:1px solid var(--border);
       border-bottom:1px solid var(--border);
       white-space:nowrap;
       font-size:12px;
-      font-weight:800;
+      font-weight:500;
       color:var(--text-2);
       text-align:center;
     }
@@ -6590,7 +6602,7 @@
     .biz-office-table-summary th{
       background:var(--surface-2);
       color:var(--text);
-      font-weight:950;
+      font-weight:650;
     }
     .biz-office-row-approval{
       min-width:68px;
@@ -6602,7 +6614,7 @@
       color:var(--text-3);
       font:inherit;
       font-size:11px;
-      font-weight:900;
+      font-weight:600;
       cursor:pointer;
     }
     .biz-office-row-approval.is-approved{
@@ -6612,18 +6624,18 @@
     }
     .biz-office-table-summary em{
       display:block;
-      padding:7px 8px;
+      padding:6px 8px;
       border-top:1px solid var(--border);
       color:var(--text-3);
       font-size:12px;
       font-style:normal;
-      font-weight:800;
+      font-weight:500;
       text-align:center;
     }
     .biz-office-muted{
       color:var(--text-3);
       font-size:12px;
-      font-weight:800;
+      font-weight:500;
     }
     .biz-office-dialog{
       width:min(var(--biz-office-dialog-content-width, 560px), calc(100vw - 32px));
@@ -6641,12 +6653,12 @@
       flex:1 1 auto;
       min-height:0;
       display:grid;
-      grid-template-columns:repeat(2, minmax(0, 1fr));
+      grid-template-columns:minmax(0, 1fr) 220px;
       grid-template-rows:auto auto minmax(140px, 1fr) auto;
       align-content:start;
       gap:12px;
       padding:20px;
-      overflow:hidden;
+      overflow:auto;
       overscroll-behavior:contain;
     }
     .biz-office-editor label{
@@ -6655,7 +6667,7 @@
       gap:5px;
       color:var(--text-dim);
       font-size:12px;
-      font-weight:800;
+      font-weight:500;
     }
     .biz-office-editor label.is-wide{
       grid-column:1 / -1;
@@ -6700,12 +6712,12 @@
     .biz-office-detail-head strong{
       color:var(--text);
       font-size:13px;
-      font-weight:950;
+      font-weight:650;
     }
     .biz-office-detail-head span{
       color:var(--text-3);
       font-size:12px;
-      font-weight:800;
+      font-weight:500;
     }
     .biz-office-detail-actions{
       display:flex;
@@ -6726,7 +6738,7 @@
       color:var(--text-2);
       font:inherit;
       font-size:12px;
-      font-weight:900;
+      font-weight:600;
       cursor:pointer;
     }
     .biz-office-detail-actions button{
@@ -6809,16 +6821,17 @@
       color:var(--text-3);
       text-align:center;
       font-size:13px;
-      font-weight:850;
+      font-weight:500;
     }
     .biz-office-empty-table i{
       color:var(--accent);
       font-size:24px;
     }
     .biz-office-detail-scroll table{
-      width:max-content;
+      width:100%;
       min-width:0;
-      border-collapse:collapse;
+      border-collapse:separate;
+      border-spacing:0;
     }
     .biz-office-detail-scroll th,
     .biz-office-detail-scroll td{
@@ -6870,7 +6883,7 @@
       padding:0 8px;
       color:var(--text);
       font-size:13px;
-      font-weight:950;
+      font-weight:650;
       white-space:nowrap;
     }
     .biz-office-column-field input,
@@ -6883,15 +6896,18 @@
       border-radius:6px;
       background:transparent;
       font-size:13px;
-      font-weight:850;
+      font-weight:500;
       text-align:center;
     }
     .biz-office-column-field button{
-      position:absolute;
-      right:2px;
-      top:50%;
-      transform:translateY(-50%);
-      z-index:1;
+      position:static;
+      flex:0 0 24px;
+      width:24px;
+      min-height:24px;
+      margin-left:4px;
+      border-color:transparent;
+      background:transparent;
+      color:var(--text-3);
     }
     .biz-office-detail-scroll td input{
       font-weight:700;
@@ -6899,7 +6915,7 @@
     .biz-office-detail-scroll td input.biz-office-fixed-cell{
       color:var(--text);
       background:transparent;
-      font-weight:950;
+      font-weight:650;
       cursor:default;
     }
     .biz-office-detail-scroll td:first-child,
@@ -6915,8 +6931,8 @@
     .biz-office-editor input:focus,
     .biz-office-editor select:focus,
     .biz-office-editor textarea:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      border-color:var(--text-3);
+      box-shadow:none;
     }
     .biz-office-modal-actions{
       grid-column:1 / -1;
@@ -6943,6 +6959,21 @@
     body[data-theme="dark"] .biz-office-row-action-cell button{
       background:var(--surface-2);
     }
+
+    .biz-office-result-count{color:var(--text-3);font-size:12px;margin-right:auto;white-space:nowrap}
+    .biz-office-required{color:var(--danger);font-style:normal}
+    .biz-office-empty-list{grid-column:1 / -1}
+    .biz-office-dialog .biz-inventory-dialog-head{padding:16px 20px}
+    .biz-office-dialog .biz-inventory-dialog-head h2{font-size:16px;font-weight:650}
+    body .biz-office-dialog input:not([type="checkbox"]):focus-visible{outline:none}
+    .biz-office-column-field input{background:var(--surface);border-color:var(--border);text-align:left}
+    .biz-office-column-field input::placeholder{color:var(--text-3);font-weight:400}
+    .biz-office-detail-scroll td input:not([readonly]):hover{border-color:var(--border)}
+    .biz-office-detail-scroll th:last-child,.biz-office-detail-scroll td:last-child{border-right:0}
+    .biz-office-table-summary tbody tr:hover td{background:var(--surface-2)}
+    .biz-office-record-actions button:focus-visible,
+    .biz-office-detail-actions button:focus-visible,
+    .biz-office-row-approval:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
     @media(max-width:900px){
       .biz-office-table-head{
@@ -6978,10 +7009,7 @@
         max-width:none;
         flex:initial;
       }
-      .biz-office-editor{
-        grid-template-columns:1fr;
-        grid-template-rows:auto auto auto minmax(120px, 1fr) auto;
-      }
+
       .biz-office-dialog{
         width:min(var(--biz-office-dialog-content-width, 560px), calc(100vw - 16px));
         min-width:min(560px, calc(100vw - 16px));
@@ -7000,7 +7028,7 @@
         gap:8px;
       }
       .biz-office-record-title strong{
-        font-size:15px;
+        font-size:14px;
       }
       .biz-office-record-actions{
         justify-content:flex-end;
@@ -7015,7 +7043,7 @@
       .biz-office-dialog .biz-inventory-dialog-head{padding:12px 14px}
       .biz-office-dialog .biz-inventory-dialog-head h2{font-size:16px}
       .biz-office-dialog .biz-inventory-dialog-head span{font-size:11px}
-      .biz-office-editor{gap:8px;padding:12px 14px}
+      .biz-office-editor{grid-template-columns:1fr;grid-template-rows:auto auto auto minmax(120px, 1fr) auto;gap:10px;padding:12px 14px}
       .biz-office-editor label{gap:3px;font-size:11px}
       .biz-office-editor input,
       .biz-office-editor select,
@@ -7038,3 +7066,10 @@
       .biz-office-row-approval-field{font-size:10px !important}
       .biz-office-modal-actions{gap:8px;margin:4px -14px -12px;padding:10px 14px}
     }
+
+
+/* Office records keep dates in their editable detail columns. */
+[data-office-modal] .biz-office-editor{
+  grid-template-columns:minmax(0, 1fr);
+  grid-template-rows:auto auto minmax(120px, 1fr) auto;
+}

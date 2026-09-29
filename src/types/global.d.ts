@@ -84,6 +84,10 @@ declare global {
     searchDepth: LegacySearchDepth;
     searchMaxResults: number;
     searchTopic: LegacySearchTopic;
+    apimartApiKey: string;
+    apimartBaseUrl: string;
+    apimartImageModel: string;
+    apimartVideoModel: string;
     liblibAccessKey: string;
     liblibSecretKey: string;
     liblibBaseUrl: string;
@@ -114,6 +118,7 @@ declare global {
     AI_CALL_LOG_KEY: string;
     DEFAULT_BASE_URL: string;
     DEFAULT_LM_STUDIO_BASE_URL: string;
+    DEFAULT_APIMART_BASE_URL: string;
     DEFAULT_LIBLIB_BASE_URL: string;
     DEFAULT_CONFIG: LegacyConfig;
     PAGE_DEFS: Record<LegacyPageId, LegacyPageDefinition>;

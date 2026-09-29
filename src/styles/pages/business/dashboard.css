@@ -1,7 +1,7 @@
 .business-page-shell{height:100%;min-height:0;display:flex;flex-direction:column;gap:var(--ui-page-gap);padding:0;overflow:auto}
 .biz-dashboard-kpi-row{display:grid;grid-template-columns:repeat(6,minmax(140px,1fr));gap:10px}
 .biz-dashboard-kpi{min-height:80px;display:flex;align-items:center;gap:12px;padding:14px;transition:border-color var(--ui-transition-fast),transform var(--ui-transition-fast)}
-.biz-dashboard-kpi:hover{border-color:var(--border-2);transform:translateY(-1px)}
+.biz-dashboard-kpi:hover{border-color:var(--border-2);transform:none}
 .kpi-icon-wrap{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border-radius:var(--ui-radius-md);background:var(--surface-2);color:var(--accent);font-size:18px}
 .kpi-orders .kpi-icon-wrap{background:#e0f2fe;color:#0e7490}.kpi-revenue .kpi-icon-wrap{background:#dcfce7;color:#16a34a}.kpi-production .kpi-icon-wrap{background:#fef3c7;color:#d97706}.kpi-inventory .kpi-icon-wrap{background:#ede9fe;color:#7c3aed}.kpi-quality .kpi-icon-wrap{background:#cffafe;color:#0891b2}.kpi-customer .kpi-icon-wrap{background:#fce7f3;color:#db2777}
 .kpi-body{min-width:0;flex:1}.kpi-label{margin-bottom:4px;color:var(--muted);font-size:12px;font-weight:700}.kpi-value{color:var(--text);font-size:22px;line-height:1.1;font-weight:900}.kpi-unit{color:var(--muted);font-size:13px;font-weight:600}.kpi-trend{margin-top:4px;display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:11px;font-weight:700}.kpi-trend.up{color:var(--success)}.kpi-trend.warn,.kpi-trend.down{color:var(--warn)}

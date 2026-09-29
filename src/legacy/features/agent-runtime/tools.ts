@@ -375,7 +375,7 @@ const buildRuntimeSkillDefinitions = (App: any) => [
     module: '媒体生成',
     icon: 'ti-photo-spark',
     level: '执行型',
-    summary: '调用 LiblibAI 图片生成任务，返回 generateUuid 并在 AI 绘图页面历史中继续轮询。',
+    summary: '调用 APIMart 图片生成任务，返回 task_id 并在 AI 绘图页面历史中继续轮询。',
     inputSpec: '{ "prompt": "图片提示词", "size": "16:9", "resolution": "2k", "count": 1, "referenceUrls": [] }',
     outputSpec: '{ "ok": true, "taskId": "...", "params": {} }',
     paramDocs: [
@@ -385,7 +385,7 @@ const buildRuntimeSkillDefinitions = (App: any) => [
       ['count', '生成数量 1-4', '可选'],
     ],
     resultDocs: [
-      ['taskId', 'LiblibAI 生成任务 ID'],
+      ['taskId', 'APIMart 生成任务 ID'],
       ['params', '提交给图片生成接口的参数'],
     ],
     examples: ['生成一张产品海报', '画一张工厂质检封面图'],

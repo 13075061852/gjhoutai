@@ -212,9 +212,11 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
   const setMobileSidebarOpen = (open) => {
     if (!refs.shell) return;
+    if (window.innerWidth > 720) open = false;
     refs.shell.classList.toggle('sidebar-open', Boolean(open));
     removeCollapsedNavFlyout();
     updateMobileMenuToggle();
+    if (window.innerWidth <= 720) updateSidebarToggle(!open);
   };
 
   const runSidebarTransition = (direction = '') => {
@@ -294,6 +296,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
       updateAssistantToggle();
       updateAssistantFullscreenToggle();
       (PublicApp?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
+        if (!refs.shell?.classList.contains('assistant-fullscreen') || assistantFullscreenExitTimer) return;
         void refs.shell?.offsetWidth;
         refs.shell?.classList.add('assistant-fullscreen-open');
         App?.chat?.renderChat?.();
@@ -303,7 +306,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
     refs.shell.classList.remove('assistant-fullscreen-open');
     syncAssistantFullscreenAttr(false);
-    assistantFullscreenExitTimer = PublicApp?.animations?.schedule?.(560, () => {
+    assistantFullscreenExitTimer = PublicApp?.animations?.schedule?.(380, () => {
       refs.shell?.classList.remove('assistant-fullscreen');
       refs.shell?.classList.remove('assistant-fullscreen-open');
       updateAssistantFullscreenToggle();
@@ -315,7 +318,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
       updateAssistantFullscreenToggle();
       App?.chat?.renderChat?.();
       assistantFullscreenExitTimer = null;
-    }, 560);
+    }, 380);
   };
 
   const toggleAssistantFullscreen = () => {
@@ -784,7 +787,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
   };
 
   const restoreLayoutState = () => {
-    const sidebarCollapsed = localStorage.getItem(constants.SIDEBAR_STATE_KEY) === '1';
+    const sidebarCollapsed = window.innerWidth <= 980 || localStorage.getItem(constants.SIDEBAR_STATE_KEY) === '1';
     const assistantCollapsed = localStorage.getItem(constants.ASSISTANT_STATE_KEY) === '1';
 
     refs.shell?.classList.toggle('sidebar-collapsed', sidebarCollapsed);
@@ -865,10 +868,29 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     removeCollapsedNavFlyout();
   };
 
+  let sidebarAutoCollapsed = window.innerWidth <= 980;
+  let phoneSidebar = window.innerWidth <= 720;
+  const handleNavigationResize = () => {
+    removeCollapsedNavFlyout();
+    const narrow = window.innerWidth <= 980;
+    const phone = window.innerWidth <= 720;
+    if (phone !== phoneSidebar) {
+      phoneSidebar = phone;
+      setMobileSidebarOpen(false);
+    }
+    if (narrow === sidebarAutoCollapsed) return;
+    sidebarAutoCollapsed = narrow;
+    const collapsed = narrow || localStorage.getItem(constants.SIDEBAR_STATE_KEY) === '1';
+    refs.shell?.classList.toggle('sidebar-collapsed', collapsed);
+    syncSidebarCollapsedAttr(collapsed);
+    setMobileSidebarOpen(false);
+    updateSidebarToggle(collapsed);
+  };
+
   const cleanupNavigationGlobals = () => {
     if (!navigationGlobalListenersBound) return;
     window.removeEventListener('storage', handleNavigationStorage);
-    window.removeEventListener('resize', removeCollapsedNavFlyout);
+    window.removeEventListener('resize', handleNavigationResize);
     window.removeEventListener('scroll', removeCollapsedNavFlyout, true);
     document.removeEventListener('keydown', handleNavigationKeydown);
     document.removeEventListener('click', handleNavigationDocumentClick);
@@ -878,7 +900,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
   const bindNavigationGlobals = () => {
     cleanupNavigationGlobals();
     window.addEventListener('storage', handleNavigationStorage);
-    window.addEventListener('resize', removeCollapsedNavFlyout);
+    window.addEventListener('resize', handleNavigationResize);
     window.addEventListener('scroll', removeCollapsedNavFlyout, true);
     document.addEventListener('keydown', handleNavigationKeydown);
     document.addEventListener('click', handleNavigationDocumentClick);
@@ -902,6 +924,8 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
     if (refs.sidebarToggle) {
       refs.sidebarToggle.addEventListener('click', () => {
+        if (window.innerWidth <= 720) { setMobileSidebarOpen(false); return; }
+        if (window.innerWidth <= 980) return;
         const willCollapse = !refs.shell?.classList.contains('sidebar-collapsed');
         runSidebarTransition(willCollapse ? 'collapse' : 'expand');
         const collapsed = refs.shell?.classList.toggle('sidebar-collapsed');
@@ -916,6 +940,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
     if (refs.sidebarSearch) {
       refs.sidebarSearch.addEventListener('click', (event) => {
+        if (window.innerWidth <= 980) return;
         if (!refs.shell?.classList.contains('sidebar-collapsed')) return;
         event.preventDefault();
         event.stopPropagation();
@@ -936,9 +961,12 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
     refs.groupToggles.forEach((groupToggle) => {
       groupToggle.addEventListener('click', () => {
-        if (isSidebarCollapsed()) return;
         const group = groupToggle.closest('.nav-group');
         if (!group) return;
+        if (isSidebarCollapsed()) {
+          createCollapsedNavFlyout(groupToggle, group);
+          return;
+        }
         const expanded = group.classList.toggle('expanded');
         groupToggle.setAttribute('aria-expanded', String(expanded));
         saveExpandedGroups();
@@ -971,6 +999,11 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     if (refs.askAiToggle) {
       updateAssistantToggle();
       refs.askAiToggle.addEventListener('click', () => {
+        if (window.innerWidth <= 720 && isMobileSidebarOpen()) {
+          setAssistantCollapsed(false);
+          setMobileSidebarOpen(false);
+          return;
+        }
         const collapsed = !refs.shell?.classList.contains('assistant-collapsed');
         setAssistantCollapsed(Boolean(collapsed));
       });

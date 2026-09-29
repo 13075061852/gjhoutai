@@ -6,13 +6,12 @@ import { cloneJsonValue, parseJsonMaybe } from '../../utils/json';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import {
-  LIBLIB_DEFAULT_BASE_URL,
-  LIBLIB_IMAGE_MODELS,
-  LIBLIB_STATUS_PATH,
-  LIBLIB_VIDEO_MODELS,
-  unwrapLiblibPayload,
-} from '../../services/liblibai';
-import { requestLiblibAi } from '../../services/liblibai-proxy';
+  APIMART_DEFAULT_BASE_URL,
+  APIMART_IMAGE_MODELS,
+  APIMART_VIDEO_MODELS,
+  unwrapApimartPayload,
+} from '../../services/apimart';
+import { requestApimart } from '../../services/apimart-proxy';
 
 (function () {
   'use strict';
@@ -185,23 +184,18 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   };
 
   const getApimartRefs = () => ({
-    accessKey: document.getElementById('liblibAccessKey'),
-    accessKeyToggle: document.getElementById('liblibAccessKeyToggle'),
-    accessKeyIcon: document.querySelector('#liblibAccessKeyToggle .liblib-access-key-toggle-icon'),
-    secretKey: document.getElementById('liblibSecretKey'),
-    secretKeyToggle: document.getElementById('liblibSecretKeyToggle'),
-    secretKeyIcon: document.querySelector('#liblibSecretKeyToggle .liblib-secret-key-toggle-icon'),
-    baseUrl: document.getElementById('liblibBaseUrl'),
-    imageModel: document.getElementById('liblibImageModel'),
-    imageModelCustom: document.getElementById('liblibImageModelCustom'),
-    videoModel: document.getElementById('liblibVideoModel'),
-    videoModelCustom: document.getElementById('liblibVideoModelCustom'),
-    balanceButton: document.getElementById('liblibBalanceBtn'),
-    balanceText: document.getElementById('liblibBalanceText'),
+    accessKey: document.getElementById('apimartApiKey'),
+    accessKeyToggle: document.getElementById('apimartApiKeyToggle'),
+    accessKeyIcon: document.querySelector('#apimartApiKeyToggle .apimart-api-key-toggle-icon'),
+    baseUrl: document.getElementById('apimartBaseUrl'),
+    imageModel: document.getElementById('apimartImageModel'),
+    imageModelCustom: document.getElementById('apimartImageModelCustom'),
+    videoModel: document.getElementById('apimartVideoModel'),
+    videoModelCustom: document.getElementById('apimartVideoModelCustom'),
+    balanceButton: document.getElementById('apimartBalanceBtn'),
+    balanceText: document.getElementById('apimartBalanceText'),
   });
 
-  const APIMART_IMAGE_MODELS = LIBLIB_IMAGE_MODELS;
-  const APIMART_VIDEO_MODELS = LIBLIB_VIDEO_MODELS;
 
   const getAgentModelRefs = () => ({
     data: document.getElementById('agentDataModelSelect'),
@@ -228,8 +222,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     const options = models.map(([value, label]) => `
       <option value="${utils.escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${utils.escapeHtml(label)} (${utils.escapeHtml(value)})</option>
     `).join('');
-    const customSelected = selected && !models.some(([value]) => value === selected);
-    return `${options}<option value="custom" ${customSelected ? 'selected' : ''}>自定义模型 ID...</option>`;
+    return options;
   };
 
   const getApimartModelValue = (kind) => {
@@ -249,9 +242,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (models.some(([model]) => model === normalized)) {
       select.value = normalized;
       if (custom) custom.value = '';
-    } else if (normalized) {
-      select.value = 'custom';
-      if (custom) custom.value = normalized;
     } else {
       select.value = models[0]?.[0] || '';
       if (custom) custom.value = '';
@@ -629,81 +619,66 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
         <div class="config-module-title">
           <span class="config-module-icon"><i class="ti ti-photo-spark" aria-hidden="true"></i></span>
           <div>
-            <div class="config-module-kicker">LiblibAI</div>
-            <h2>星流图片与可灵视频</h2>
+            <div class="config-module-kicker">APIMart</div>
+            <h2>图片与视频生成</h2>
           </div>
         </div>
         <div class="apimart-module-actions">
-          <button class="apimart-balance-btn" id="liblibBalanceBtn" type="button">
+          <button class="apimart-balance-btn" id="apimartBalanceBtn" type="button">
             <i class="ti ti-coins" aria-hidden="true"></i>
-            <span id="liblibBalanceText">查询积分</span>
+            <span id="apimartBalanceText">查询额度</span>
           </button>
-          <a class="panel-help" href="https://resonate.feishu.cn/wiki/UAMVw67NcifQHukf8fpccgS5n6d" target="_blank" rel="noreferrer">LiblibAI 文档</a>
+          <a class="panel-help" href="https://docs.apib.ai/cn" target="_blank" rel="noreferrer">APIMart 文档</a>
         </div>
       </div>
       <div class="form-grid apimart-config-grid">
         <div class="field apimart-key-field">
-          <label class="field-label-row" for="liblibAccessKey">
+          <label class="field-label-row" for="apimartApiKey">
             <span class="field-label-main">
               <i class="field-label-icon ti ti-key" aria-hidden="true"></i>
-              <span>AccessKey</span>
+              <span>API Key</span>
             </span>
-            <span class="field-label-note">仅保存在本机浏览器</span>
+            <span class="field-label-note">保存后同步至配置中心</span>
           </label>
           <div class="password-row">
-            <input id="liblibAccessKey" name="liblibAccessKey" type="password" placeholder="填写 LiblibAI AccessKey" autocomplete="off" />
-            <button class="password-toggle" id="liblibAccessKeyToggle" type="button" aria-label="显示或隐藏 LiblibAI AccessKey">
-              <i class="liblib-access-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
-            </button>
-          </div>
-        </div>
-        <div class="field apimart-key-field">
-          <label class="field-label-row" for="liblibSecretKey">
-            <span class="field-label-main">
-              <i class="field-label-icon ti ti-lock" aria-hidden="true"></i>
-              <span>SecretKey</span>
-            </span>
-            <span class="field-label-note">用于请求签名</span>
-          </label>
-          <div class="password-row">
-            <input id="liblibSecretKey" name="liblibSecretKey" type="password" placeholder="填写 LiblibAI SecretKey" autocomplete="off" />
-            <button class="password-toggle" id="liblibSecretKeyToggle" type="button" aria-label="显示或隐藏 LiblibAI SecretKey">
-              <i class="liblib-secret-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
+            <input id="apimartApiKey" name="apimartApiKey" type="password" placeholder="填写 APIMart API Key" autocomplete="off" />
+            <button class="password-toggle" id="apimartApiKeyToggle" type="button" aria-label="显示或隐藏 APIMart API Key">
+              <i class="apimart-api-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
             </button>
           </div>
         </div>
         <div class="field">
-          <label for="liblibBaseUrl">
+          <label for="apimartBaseUrl">
             <span class="field-label-main">
               <i class="field-label-icon ti ti-world" aria-hidden="true"></i>
               <span>API 基地址</span>
             </span>
           </label>
-          <input id="liblibBaseUrl" name="liblibBaseUrl" type="url" value="${LIBLIB_DEFAULT_BASE_URL}" />
+          <input id="apimartBaseUrl" name="apimartBaseUrl" type="url" value="${APIMART_DEFAULT_BASE_URL}" readonly />
         </div>
         <div class="field">
-          <label for="liblibImageModel">
+          <label for="apimartImageModel">
             <span class="field-label-main">
               <i class="field-label-icon ti ti-photo" aria-hidden="true"></i>
               <span>默认图片模型</span>
             </span>
           </label>
-          <select id="liblibImageModel" name="liblibImageModel">
-            ${renderModelOptions(APIMART_IMAGE_MODELS, constants.DEFAULT_CONFIG.liblibImageModel)}
+          <select id="apimartImageModel" name="apimartImageModel">
+            ${renderModelOptions(APIMART_IMAGE_MODELS, constants.DEFAULT_CONFIG.apimartImageModel)}
           </select>
-          <input id="liblibImageModelCustom" name="liblibImageModelCustom" type="text" placeholder="输入自定义图片模型 ID" autocomplete="off" hidden />
+          <input id="apimartImageModelCustom" name="apimartImageModelCustom" type="text" placeholder="输入自定义图片模型 ID" autocomplete="off" hidden />
         </div>
         <div class="field">
-          <label for="liblibVideoModel">
+          <label for="apimartVideoModel">
             <span class="field-label-main">
               <i class="field-label-icon ti ti-video" aria-hidden="true"></i>
               <span>默认视频模型</span>
             </span>
           </label>
-          <select id="liblibVideoModel" name="liblibVideoModel">
-            ${renderModelOptions(APIMART_VIDEO_MODELS, constants.DEFAULT_CONFIG.liblibVideoModel)}
+          <select id="apimartVideoModel" name="apimartVideoModel">
+            ${renderModelOptions(APIMART_VIDEO_MODELS, constants.DEFAULT_CONFIG.apimartVideoModel)}
           </select>
-          <input id="liblibVideoModelCustom" name="liblibVideoModelCustom" type="text" placeholder="输入自定义视频模型 ID" autocomplete="off" hidden />
+          <input id="apimartVideoModelCustom" name="apimartVideoModelCustom" type="text" placeholder="输入自定义视频模型 ID" autocomplete="off" hidden />
         </div>
       </div>
     `;
@@ -1216,11 +1191,10 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       searchDepth: getSearchRefs().depth?.value || constants.DEFAULT_CONFIG.searchDepth,
       searchMaxResults: Math.max(1, Math.min(10, Number(getSearchRefs().maxResults?.value || constants.DEFAULT_CONFIG.searchMaxResults))),
       searchTopic: getSearchRefs().topic?.value || constants.DEFAULT_CONFIG.searchTopic,
-      liblibAccessKey: (getApimartRefs().accessKey?.value || '').trim(),
-      liblibSecretKey: (getApimartRefs().secretKey?.value || '').trim(),
-      liblibBaseUrl: utils.normalizeBaseUrl(getApimartRefs().baseUrl?.value || constants.DEFAULT_LIBLIB_BASE_URL),
-      liblibImageModel: getApimartModelValue('image') || constants.DEFAULT_CONFIG.liblibImageModel,
-      liblibVideoModel: getApimartModelValue('video') || constants.DEFAULT_CONFIG.liblibVideoModel,
+      apimartApiKey: (getApimartRefs().accessKey?.value || '').trim(),
+      apimartBaseUrl: APIMART_DEFAULT_BASE_URL,
+      apimartImageModel: getApimartModelValue('image') || constants.DEFAULT_CONFIG.apimartImageModel,
+      apimartVideoModel: getApimartModelValue('video') || constants.DEFAULT_CONFIG.apimartVideoModel,
       ossBucket: (refs.ossBucket?.value || '').trim(),
       ossEndpoint: (refs.ossEndpoint?.value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
       ossObjectKey: (refs.ossObjectKey?.value || '').trim().replace(/^\/+/, ''),
@@ -1238,7 +1212,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
     if (isRedactedValue(next.ossAccessKeySecret)) next.ossAccessKeySecret = '';
     if (isRedactedValue(next.searchApiKey)) next.searchApiKey = '';
-    if (isRedactedValue(next.liblibAccessKey)) next.liblibAccessKey = '';
+    if (isRedactedValue(next.apimartApiKey)) next.apimartApiKey = '';
     if (isRedactedValue(next.liblibSecretKey)) next.liblibSecretKey = '';
     if (next.openrouterConfig && typeof next.openrouterConfig === 'object') {
       next.openrouterConfig = { ...next.openrouterConfig };
@@ -1268,6 +1242,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     redact(next, 'ossAccessKeyId');
     redact(next, 'ossAccessKeySecret');
     redact(next, 'searchApiKey');
+    redact(next, 'apimartApiKey');
     redact(next, 'liblibAccessKey');
     redact(next, 'liblibSecretKey');
     redact(next.openrouterConfig, 'apiKey');
@@ -1336,11 +1311,10 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
     setSelectValue(searchRefs.topic, next.searchTopic, constants.DEFAULT_CONFIG.searchTopic);
     const apimartRefs = getApimartRefs();
-    if (apimartRefs.accessKey) apimartRefs.accessKey.value = next.liblibAccessKey || '';
-    if (apimartRefs.secretKey) apimartRefs.secretKey.value = next.liblibSecretKey || '';
-    if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = next.liblibBaseUrl || constants.DEFAULT_LIBLIB_BASE_URL;
-    setApimartModelValue('image', next.liblibImageModel || constants.DEFAULT_CONFIG.liblibImageModel);
-    setApimartModelValue('video', next.liblibVideoModel || constants.DEFAULT_CONFIG.liblibVideoModel);
+    if (apimartRefs.accessKey) apimartRefs.accessKey.value = next.apimartApiKey || '';
+    if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = APIMART_DEFAULT_BASE_URL;
+    setApimartModelValue('image', next.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel);
+    setApimartModelValue('video', next.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel);
     syncAgentModelSelects({ preserveCurrent: false, nextValues: activeDraft.agentModels });
     if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
     if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
@@ -1579,7 +1553,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
         config.jsonMode ? 'json' : 'text',
         config.logEnabled ? 'log' : 'no-log',
         config.searchApiKey ? 'web-search' : 'no-search',
-        config.liblibAccessKey && config.liblibSecretKey ? 'liblib-media' : 'no-liblib',
+        config.apimartApiKey ? 'apimart-media' : 'no-apimart',
       ].join(' / ');
     }
     const isLocal = isLmStudioProvider(config.aiProvider);
@@ -1627,7 +1601,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       icon.classList.toggle('ti-eye-off', isVisible);
     };
     syncIcon(apimartRefs.accessKey, apimartRefs.accessKeyIcon);
-    syncIcon(apimartRefs.secretKey, apimartRefs.secretKeyIcon);
   };
 
   const updateSavedState = (saved) => {
@@ -2368,48 +2341,30 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (!Number.isFinite(amount)) throw new Error('未返回有效积分');
     return new Intl.NumberFormat('zh-CN', {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 4,
     }).format(amount);
   };
 
   const readApimartBalance = async () => {
     const config = getFormConfig();
     const { balanceButton } = getApimartRefs();
-    if (!config.liblibAccessKey || !config.liblibSecretKey) {
-      setApimartBalanceStatus('请先填写密钥', 'warn');
+    if (!config.apimartApiKey) {
+      setApimartBalanceStatus('请先填写 API Key', 'warn');
       return;
     }
-
-    const storedTasks = utils.readJson(LOCAL_STORAGE_KEYS.apimartMediaTasks, []);
-    const latestTask = Array.isArray(storedTasks)
-      ? storedTasks.find((task) => task?.provider === 'liblibai' && task?.id)
-      : null;
-    if (!latestTask) {
-      setApimartBalanceStatus('生成后可查', 'warn', 'LiblibAI 在任务状态结果中返回账户剩余积分');
-      return;
-    }
-
     if (balanceButton) balanceButton.disabled = true;
     setApimartBalanceStatus('查询中...', 'loading');
-
     try {
-      const response = await requestLiblibAi({
-        baseUrl: config.liblibBaseUrl || constants.DEFAULT_LIBLIB_BASE_URL,
-        path: LIBLIB_STATUS_PATH,
-        accessKey: config.liblibAccessKey,
-        secretKey: config.liblibSecretKey,
-        payload: { generateUuid: latestTask.id },
+      const response = await requestApimart({
+        baseUrl: APIMART_DEFAULT_BASE_URL, path: '/balance', method: 'GET', apiKey: config.apimartApiKey,
       }, 12000);
       if (!response.ok) throw new Error(await readApiErrorMessage(response));
-      const data = unwrapLiblibPayload(await response.json());
-      const remaining = formatApimartBalance(data?.accountBalance);
-      const used = Number.isFinite(Number(data?.pointsCost))
-        ? formatApimartBalance(data.pointsCost)
-        : '';
-      setApimartBalanceStatus(`积分：${remaining}`, 'success', used ? `最近任务消耗：${used} 积分` : '');
+      const data = unwrapApimartPayload(await response.json());
+      const remaining = data.unlimited_quota ? '不限额' : formatApimartBalance(data.remain_credits);
+      setApimartBalanceStatus(`额度：${remaining}${data.unlimited_quota ? '' : ' 积分'}`, 'success', '当前 API Key 的可用额度');
     } catch (error) {
       setApimartBalanceStatus('查询失败', 'warn', error?.message || '未知错误');
-      App.notify?.warn?.(`LiblibAI 积分查询失败：${error?.message || '未知错误'}`, { key: 'liblib-balance-error' });
+      App.notify?.warn?.(`APIMart 额度查询失败：${error?.message || '未知错误'}`, { key: 'apimart-balance-error' });
     } finally {
       if (balanceButton) balanceButton.disabled = false;
     }
@@ -2660,7 +2615,6 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       getSearchRefs().maxResults,
       getSearchRefs().topic,
       getApimartRefs().accessKey,
-      getApimartRefs().secretKey,
       getApimartRefs().baseUrl,
       getApimartRefs().imageModel,
       getApimartRefs().imageModelCustom,
@@ -2790,11 +2744,11 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       event.preventDefault();
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
-      const hasApimartConfig = Boolean(config.liblibAccessKey || config.liblibSecretKey);
+      const hasApimartConfig = Boolean(config.apimartApiKey);
       const hasSearchConfig = Boolean(config.searchApiKey || config.searchDepth !== constants.DEFAULT_CONFIG.searchDepth || config.searchTopic !== constants.DEFAULT_CONFIG.searchTopic || Number(config.searchMaxResults) !== Number(constants.DEFAULT_CONFIG.searchMaxResults));
       if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig && !hasSearchConfig) {
-        setStatus('请先填写模型 API 密钥、Tavily API Key、LiblibAI 密钥或 OSS 配置', 'warn');
-        App.notify?.warn?.('请先填写模型 API 密钥、Tavily API Key、LiblibAI 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
+        setStatus('请先填写模型 API 密钥、Tavily API Key、APIMart 密钥或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写模型 API 密钥、Tavily API Key、APIMart 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       try {
@@ -2853,21 +2807,9 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       apimartRefs.accessKey.type = apimartRefs.accessKey.type === 'password' ? 'text' : 'password';
       apimartRefs.accessKeyToggle.setAttribute(
         'aria-label',
-        apimartRefs.accessKey.type === 'password' ? '显示 LiblibAI AccessKey' : '隐藏 LiblibAI AccessKey',
+        apimartRefs.accessKey.type === 'password' ? '显示 APIMart API Key' : '隐藏 APIMart API Key',
       );
       apimartRefs.accessKeyToggle.classList.toggle('is-visible', apimartRefs.accessKey.type === 'text');
-      syncApimartKeyToggleIcon();
-    });
-
-    getApimartRefs().secretKeyToggle?.addEventListener('click', () => {
-      const apimartRefs = getApimartRefs();
-      if (!apimartRefs.secretKey) return;
-      apimartRefs.secretKey.type = apimartRefs.secretKey.type === 'password' ? 'text' : 'password';
-      apimartRefs.secretKeyToggle.setAttribute(
-        'aria-label',
-        apimartRefs.secretKey.type === 'password' ? '显示 LiblibAI SecretKey' : '隐藏 LiblibAI SecretKey',
-      );
-      apimartRefs.secretKeyToggle.classList.toggle('is-visible', apimartRefs.secretKey.type === 'text');
       syncApimartKeyToggleIcon();
     });
 

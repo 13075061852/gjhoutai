@@ -1,0 +1,40 @@
+/* Sorting handles only activate dragging; editable cells retain normal selection. */
+.biz-office-detail-scroll .biz-office-sort-handle{
+  display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 18px;width:18px;min-width:18px;height:28px;min-height:28px;
+  padding:0;margin:0 3px 0 0;border:0;border-radius:4px;
+  background:transparent;color:var(--muted);font-size:19px;
+  cursor:grab;touch-action:none;user-select:none;
+}
+.biz-office-detail-scroll .biz-office-sort-handle:hover{color:var(--accent);background:var(--accent-soft)}
+.biz-office-detail-scroll .biz-office-sort-handle:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+.biz-office-sort-index{position:relative}
+.biz-office-sort-index > .biz-office-sort-handle{position:absolute;left:5px;top:50%;translate:0 -50%}
+.biz-office-detail-scroll .biz-office-sort-index > input{padding-left:22px}
+.biz-office-detail-scroll .is-office-sorting{user-select:none;cursor:grabbing}
+.biz-office-detail-scroll .is-office-sorting .biz-office-sort-handle{cursor:grabbing}
+
+.biz-office-detail-scroll .is-office-sort-moving{
+  transition:transform 240ms cubic-bezier(.22,1,.36,1);will-change:transform;
+}
+.biz-office-detail-scroll .is-office-sort-source{opacity:0;pointer-events:none}
+.biz-office-sort-preview{
+  position:fixed;z-index:10020;display:flex;pointer-events:none;overflow:hidden;
+  border-radius:7px;background:var(--panel, #fff);
+  box-shadow:0 8px 24px rgb(20 25 45 / 16%),0 0 0 1px rgb(20 25 45 / 8%);
+  font-size:12px;color:var(--text, #172033);will-change:transform;
+}
+.biz-office-sort-preview.is-column{flex-direction:column}
+.biz-office-sort-preview.is-settling{
+  transition:transform 200ms cubic-bezier(.22,1,.36,1),box-shadow 200ms ease;
+  box-shadow:0 0 0 1px var(--border, #e2e5ed);
+}
+.biz-office-sort-preview > div{
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;box-sizing:border-box;
+  padding:6px 10px;border-right:1px solid var(--border, #e2e5ed);
+  border-bottom:1px solid var(--border, #e2e5ed);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+@media(prefers-reduced-motion:reduce){
+  .biz-office-detail-scroll .is-office-sort-moving,
+  .biz-office-sort-preview.is-settling{transition:none}
+}

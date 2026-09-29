@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react';
+import { observeContentLayout } from '../utils/contentLayout';
 import { legacyMarkup } from '../legacy/legacyMarkup';
 import { LOCAL_STORAGE_KEYS } from '../services/local-storage-keys';
 
@@ -38,6 +40,7 @@ function getInitialPageId() {
 }
 
 function getInitialSidebarCollapsed() {
+  if (typeof window !== 'undefined' && window.innerWidth <= 980) return true;
   try {
     return localStorage.getItem(LOCAL_STORAGE_KEYS.sidebarCollapsed) === '1';
   } catch {
@@ -69,5 +72,10 @@ export function getInitialLegacyMarkup(booting = true) {
 }
 
 export function LegacyShell({ booting = true }: { booting?: boolean }) {
-  return <div dangerouslySetInnerHTML={{ __html: getInitialLegacyMarkup(booting) }} />;
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const main = root.current?.querySelector<HTMLElement>('.main');
+    if (main) return observeContentLayout(main);
+  }, [booting]);
+  return <div ref={root} dangerouslySetInnerHTML={{ __html: getInitialLegacyMarkup(booting) }} />;
 }

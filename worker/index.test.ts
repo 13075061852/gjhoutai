@@ -630,6 +630,49 @@ describe('worker security controls', () => {
     return env;
   }
 
+  it.each([
+    ['/images/generations', 'POST'], ['/videos/generations', 'POST'], ['/tasks/task_123', 'GET'], ['/balance', 'GET'],
+  ])('proxies APIMart %s with Bearer auth and correct method', async (path, method) => {
+    const env = await authenticatedEnv();
+    const upstream = vi.fn(async () => jsonResponse({ code: 200, data: [{ task_id: 'task_123' }] }));
+    vi.stubGlobal('fetch', upstream);
+    const response = await worker.fetch(authedRequest('/api/apimart/request', 'token', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUrl: 'https://api.apimart.ai/v1', path, method, apiKey: 'test-key', payload: { prompt: 'test' } }),
+    }), env as any);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(upstream).toHaveBeenCalledWith(`https://api.apimart.ai/v1${path}`, expect.objectContaining({
+      method, headers: expect.objectContaining({ authorization: 'Bearer test-key' }), redirect: 'error',
+    }));
+    const init = (upstream.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.body).toBe(method === 'GET' ? undefined : JSON.stringify({ prompt: 'test' }));
+  });
+
+  it.each([
+    { baseUrl: 'https://evil.example/v1' }, { path: '/tasks/../balance' },
+    { path: '/tasks/task_1?redirect=evil' }, { path: '/balance', method: 'POST' },
+    { apiKey: '' }, { apiKey: 'key\r\nInjected: value' }, { payload: [] },
+  ])('rejects invalid APIMart proxy input %j before upstream fetch', async (override) => {
+    const env = await authenticatedEnv();
+    const upstream = vi.fn(); vi.stubGlobal('fetch', upstream);
+    const response = await worker.fetch(authedRequest('/api/apimart/request', 'token', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseUrl: 'https://api.apimart.ai/v1', path: '/images/generations', method: 'POST', apiKey: 'test-key', payload: {}, ...override }),
+    }), env as any);
+    expect(response.status).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('requires an authenticated APIMart session', async () => {
+    const upstream = vi.fn(); vi.stubGlobal('fetch', upstream);
+    const response = await worker.fetch(authedRequest('/api/apimart/request', 'unknown', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    }), createEnv() as any);
+    expect(response.status).toBe(401);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it('rejects cross-site writes before any database or object changes', async () => {
     const env = await authenticatedEnv();
     const response = await worker.fetch(authedRequest('/api/state/key', 'token', {

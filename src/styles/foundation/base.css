@@ -18,7 +18,8 @@
       --radius-sm:12px;
       --radius-xs:10px;
       --sidebar:228px;
-      --assistant:366px;
+      --assistant-panel-width:min(366px, 100vw);
+      --assistant:var(--assistant-panel-width);
       --topbar:56px;
       --shadow:none;
       --ease:cubic-bezier(.4,0,.2,1);

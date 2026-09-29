@@ -146,7 +146,7 @@
       transform:translateX(18px);
     }
     .cutout-toggle-field input:focus-visible + em{
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .cutout-crop-grid{
       display:grid;
@@ -176,7 +176,7 @@
     }
     .cutout-crop-grid input:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .cutout-crop-actions{
       display:grid;

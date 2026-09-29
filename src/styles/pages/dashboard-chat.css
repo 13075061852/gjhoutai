@@ -352,7 +352,7 @@
     .ai-skill-action:hover:not(:disabled){
       border-color:var(--border-2);
       background:var(--surface-3);
-      transform:translateY(-1px);
+      transform:none;
     }
     .ai-skill-action:focus-visible{
       outline:3px solid var(--accent-soft);
@@ -536,7 +536,7 @@
       color:#fff;
     }
     .ai-upload-auth-btn:hover:not(:disabled){
-      transform:translateY(-1px);
+      transform:none;
       border-color:var(--border-2);
       background:var(--surface-3);
     }

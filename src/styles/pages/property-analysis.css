@@ -50,7 +50,7 @@
     }
     .analysis-search:focus-within{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .analysis-search-lg{
       flex:1 1 360px;
@@ -548,7 +548,7 @@
     }
     .analysis-select-field select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 2px var(--accent-soft);
+      box-shadow:none;
     }
     #analysisSortSelect{
       width:78px;
@@ -573,7 +573,7 @@
     }
     .analysis-select-field select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 2px var(--accent-soft);
+      box-shadow:none;
     }
     #analysisSortSelect{
       width:78px;
@@ -1486,7 +1486,7 @@
     .analysis-range-form input:focus,
     .analysis-range-form select:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 2px var(--accent-soft);
+      box-shadow:none;
     }
     .analysis-report-metric-editor{
       display:flex;
@@ -1576,7 +1576,7 @@
       outline:none;
       border-color:var(--accent);
       background:var(--accent-soft);
-      box-shadow:0 0 0 3px var(--accent-soft);
+      box-shadow:none;
     }
     .analysis-range-word-dropzone.is-importing{
       cursor:wait;
@@ -1691,7 +1691,7 @@
     }
     .analysis-range-search:focus-within{
       border-color:var(--accent);
-      box-shadow:0 0 0 2px var(--accent-soft);
+      box-shadow:none;
     }
     .analysis-range-search i{
       font-size:16px;

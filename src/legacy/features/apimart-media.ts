@@ -4,16 +4,16 @@ import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { getLegacyApp } from '../core/app-context';
 import {
-  buildLiblibImageRequest,
-  buildLiblibVideoRequest,
-  LIBLIB_IMAGE_MODELS,
-  LIBLIB_SEEDREAM_45_MODEL,
-  LIBLIB_STATUS_PATH,
-  LIBLIB_VIDEO_MODELS,
-  normalizeLiblibTaskStatus,
-  unwrapLiblibPayload,
-} from '../../services/liblibai';
-import { requestLiblibAi } from '../../services/liblibai-proxy';
+  buildApimartImageRequest,
+  buildApimartVideoRequest,
+  APIMART_IMAGE_MODELS,
+  APIMART_SEEDREAM_45_MODEL,
+  apimartTaskIds,
+  APIMART_VIDEO_MODELS,
+  normalizeApimartTaskStatus,
+  unwrapApimartPayload,
+} from '../../services/apimart';
+import { requestApimart } from '../../services/apimart-proxy';
 
 (function () {
   'use strict';
@@ -25,14 +25,15 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   const PAGE_ID = 'apimart-media';
   const STORAGE_KEY = LOCAL_STORAGE_KEYS.apimartMediaTasks;
   const MAX_TASKS = 30;
-  const IMAGE_MODELS = LIBLIB_IMAGE_MODELS;
-  const VIDEO_MODELS = LIBLIB_VIDEO_MODELS;
+  const IMAGE_MODELS = APIMART_IMAGE_MODELS;
+  const VIDEO_MODELS = APIMART_VIDEO_MODELS;
   const IMAGE_RESOLUTIONS = [
     ['2k', '2K'],
     ['4k', '4K'],
   ];
   const VIDEO_RESOLUTIONS = [
-    ['pro', '高品质'],
+    ['std', '标准 · 720P'],
+    ['pro', '专业 · 1080P'],
   ];
   const ASPECT_RATIOS = [
     ['16:9', '16:9'],
@@ -199,11 +200,10 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   const getConfig = () => {
     const saved = App.config?.getFormConfig?.() || App.config?.loadSavedConfig?.() || constants.DEFAULT_CONFIG;
     return {
-      accessKey: String(saved.liblibAccessKey || '').trim(),
-      secretKey: String(saved.liblibSecretKey || '').trim(),
-      baseUrl: utils.normalizeBaseUrl(saved.liblibBaseUrl || constants.DEFAULT_LIBLIB_BASE_URL),
-      imageModel: String(saved.liblibImageModel || constants.DEFAULT_CONFIG.liblibImageModel || LIBLIB_SEEDREAM_45_MODEL).trim(),
-      videoModel: String(saved.liblibVideoModel || constants.DEFAULT_CONFIG.liblibVideoModel || 'kling-v2-6').trim(),
+      apiKey: String(saved.apimartApiKey || '').trim(),
+      baseUrl: utils.normalizeBaseUrl(saved.apimartBaseUrl || constants.DEFAULT_APIMART_BASE_URL),
+      imageModel: String(saved.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel || APIMART_SEEDREAM_45_MODEL).trim(),
+      videoModel: String(saved.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel || 'kling-v2-6').trim(),
     };
   };
 
@@ -229,28 +229,22 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     }
   };
 
-  const requestJson = async (path, payload = {} as any) => {
+  const requestJson = async (path, payload = {} as any, method: 'GET' | 'POST' = 'POST') => {
     const config = getConfig();
-    if (!config.accessKey || !config.secretKey) throw new Error('请先在配置中心填写 LiblibAI AccessKey 和 SecretKey');
-    const response = await requestLiblibAi({
+    if (!config.apiKey) throw new Error('请先在配置中心填写 APIMart API Key');
+    const response = await requestApimart({
       baseUrl: config.baseUrl,
       path,
-      accessKey: config.accessKey,
-      secretKey: config.secretKey,
+      method,
+      apiKey: config.apiKey,
       payload,
     }, AI_FETCH_TIMEOUT_MS);
     if (!response.ok) throw new Error(await readApiError(response));
-    return unwrapLiblibPayload(await response.json());
+    return unwrapApimartPayload(await response.json());
   };
 
-  const normalizeTaskId = (payload) => {
-    return payload?.generateUuid || payload?.task_id || payload?.id || '';
-  };
-
-  const normalizeAllTaskIds = (payload) => {
-    const single = normalizeTaskId(payload);
-    return single ? [single] : [];
-  };
+  const normalizeAllTaskIds = apimartTaskIds;
+  const normalizeTaskId = (payload) => apimartTaskIds(payload)[0] || '';
 
   const extractResultUrls = (task) => {
     const result = task?.result || task || {};
@@ -279,14 +273,15 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     const config = getConfig();
     const model = params.model || (type === 'video' ? config.videoModel : config.imageModel);
     const request = type === 'video'
-      ? buildLiblibVideoRequest({
+      ? buildApimartVideoRequest({
         prompt: params.prompt,
         model,
         duration: params.duration,
+        resolution: params.mode || params.resolution,
         aspectRatio: params.aspect_ratio,
         referenceImages: params.image_urls,
       })
-      : buildLiblibImageRequest({
+      : buildApimartImageRequest({
         prompt: params.prompt,
         model,
         aspectRatio: params.size,
@@ -296,7 +291,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       });
     const response = await requestJson(request.path, request.body);
     const taskId = normalizeTaskId(response);
-    if (!taskId) throw new Error('LiblibAI 未返回 generateUuid');
+    if (!taskId) throw new Error('APIMart 未返回任务 ID');
     return { taskId, response };
   };
 
@@ -307,7 +302,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       if (tasks.some((t) => t.id === id)) continue;
       const task = {
         id,
-        provider: 'liblibai',
+        provider: 'apimart',
         type,
         model: payload.model,
         prompt: payload.prompt,
@@ -342,7 +337,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
   };
 
   const getTaskStatus = async (taskId) => {
-    return requestJson(LIBLIB_STATUS_PATH, { generateUuid: taskId });
+    return requestJson(`/tasks/${encodeURIComponent(taskId)}`, {}, 'GET');
   };
 
   const updateTask = (id, patch = {} as any) => {
@@ -371,7 +366,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
 
   const pollTask = async (id, immediate = false) => {
     const task = tasks.find((item) => item.id === id);
-    if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
+    if (!task || task.provider !== 'apimart' || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
     if (!immediate) {
       const existing = pollTimers.get(id);
       if (existing) window.clearTimeout(existing);
@@ -380,17 +375,17 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     try {
       const data = await getTaskStatus(id);
       const urls = extractResultUrls(data);
-      const status = normalizeLiblibTaskStatus(data.generateStatus);
+      const status = normalizeApimartTaskStatus(data.status);
       updateTask(id, {
         status,
-        progress: Number(data.percentCompleted ?? task.progress ?? 0),
-        cost: Number(data.pointsCost ?? task.cost ?? 0),
+        progress: Number(data.progress ?? task.progress ?? 0),
+        cost: Number(data.cost ?? task.cost ?? 0),
         accountBalance: Number(data.accountBalance ?? task.accountBalance ?? 0),
         result: data,
         images: urls.images,
         videos: urls.videos,
         thumbnail: urls.thumbnail,
-        error: status === 'failed' ? (data.generateMsg || '生成失败') : '',
+        error: status === 'failed' ? (data.error?.message || data.error || data.message || '生成失败') : '',
         raw: data,
       });
       if (!['completed', 'failed', 'cancelled'].includes(status)) {
@@ -1074,7 +1069,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       ? `
         <div class="apimart-result-media">
           <button class="apimart-result-preview-btn" type="button" data-apimart-preview-task="${esc(task.id)}" data-apimart-preview-url="${esc(item.url)}" aria-label="放大查看生成图片">
-            <img src="${esc(item.url)}" alt="LiblibAI 生成图片" loading="lazy" data-apimart-size-image data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}" />
+            <img src="${esc(item.url)}" alt="APIMart 生成图片" loading="lazy" data-apimart-size-image data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}" />
             <span class="apimart-image-size-badge" data-apimart-size-label data-apimart-size-task="${esc(task.id)}" data-apimart-size-url="${esc(item.url)}">${esc(getImageSizeLabel(task, item.url))}</span>
           </button>
           <button class="apimart-add-reference-btn" type="button" data-apimart-add-reference="${esc(item.url)}">
@@ -1213,7 +1208,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     if (!prompt) throw new Error('请先输入生成提示词');
     if (!model) throw new Error('请先选择生成模型');
     if (referenceUrls.some((url) => !/^https?:\/\//i.test(url))) {
-      throw new Error('LiblibAI 参考图必须使用可公开访问的 HTTP(S) 地址');
+      throw new Error('APIMart 参考图必须使用可公开访问的 HTTP(S) 地址');
     }
 
     if (type === 'video') {
@@ -1249,13 +1244,13 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     const status = refs.apimartMediaPanel?.querySelector('#apimartSubmitStatus');
     try {
       if (submitBtn) submitBtn.disabled = true;
-      if (status) status.textContent = '正在提交到 LiblibAI...';
+      if (status) status.textContent = '正在提交到 APIMart...';
       const { type, payload } = collectFormPayload();
       const { taskId, createdIds } = await submitAndTrackGeneration(type, payload);
       App.notify?.success?.(`已提交 ${createdIds.length} 个任务`, { key: `apimart-submit-${taskId}` });
     } catch (error) {
       if (status) status.textContent = error?.message || '提交失败';
-      App.notify?.warn?.(error?.message || 'LiblibAI 提交失败', { key: 'apimart-submit-failed' });
+      App.notify?.warn?.(error?.message || 'APIMart 提交失败', { key: 'apimart-submit-failed' });
     } finally {
       if (submitBtn) submitBtn.disabled = false;
     }
@@ -1293,7 +1288,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
 
           <div class="apimart-scroll-area">
             <section class="apimart-panel-block">
-              <div class="apimart-field-label">LiblibAI 模型</div>
+              <div class="apimart-field-label">APIMart 模型</div>
               <div id="apimartReactBitsModel"></div>
             </section>
 
@@ -1361,7 +1356,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
                 <i class="ti ti-chevron-down" aria-hidden="true"></i>
               </button>
               <div class="apimart-advanced-body" ${uiState.advancedOpen ? '' : 'hidden'}>
-                <div id="apimartSubmitStatus" class="apimart-submit-status">${config.accessKey && config.secretKey ? 'LiblibAI 配置已读取' : '请先在配置中心填写 LiblibAI AccessKey 和 SecretKey'}</div>
+                <div id="apimartSubmitStatus" class="apimart-submit-status">${config.apiKey ? 'APIMart 配置已读取' : '请先在配置中心填写 APIMart API Key'}</div>
                 <button class="apimart-link-btn" type="button" data-apimart-config>配置密钥与模型默认值</button>
               </div>
             </section>
@@ -1395,7 +1390,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
       modelHint: type === 'video' ? '高质量视频生成模型' : '高质量图像生成模型',
       mode: type,
       taskCount: tasks.length,
-      hasApiKey: Boolean(config.accessKey && config.secretKey),
+      hasApiKey: Boolean(config.apiKey),
       latestStatus: tasks[0] ? getTaskStatusLabel(tasks[0].status) : '',
       onPromptSelect: applyPrompt,
     } as any);
@@ -1636,7 +1631,7 @@ import { requestLiblibAi } from '../../services/liblibai-proxy';
     tasks = readTasks();
     render();
     bind();
-    tasks.filter((task) => task.provider === 'liblibai' && !['completed', 'failed', 'cancelled'].includes(task.status)).forEach((task) => {
+    tasks.filter((task) => task.provider === 'apimart' && !['completed', 'failed', 'cancelled'].includes(task.status)).forEach((task) => {
       pollTask(task.id);
     });
   };

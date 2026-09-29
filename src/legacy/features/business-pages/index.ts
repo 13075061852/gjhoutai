@@ -1,3 +1,5 @@
+import { captureOfficeListScroll } from './office-list-scroll';
+import { addOfficeSortHandles, bindOfficeTableSort } from './office-table-sort';
 ﻿import { renderDashboard } from './dashboard';
 import '../../../styles/pages/business-pages.css';
 import { getLegacyApp, getPublicApp } from '../../core/app-context';
@@ -3134,7 +3136,7 @@ import { createArchiveRenderer } from './archive-page';
       id: editingRecord.id || `OR-${getTodayCode().replace(/-/g, '')}-${String(officeRecords.length + 1).padStart(2, '0')}`,
       type: officeRecordActiveType,
       project: read('project'),
-      date: read('date') || getTodayCode(),
+      date: editingRecord.date || getTodayCode(),
       customerApprovedRows,
       target: read('target'),
       tableColumns,
@@ -3219,17 +3221,11 @@ import { createArchiveRenderer } from './archive-page';
     `;
   };
   const renderOfficeRecordCard = (record) => {
-    const approvedCount = record.customerApprovedRows?.length || 0;
-    const detailCount = getOfficeTableFilledRows(record).length;
     return `
       <article class="biz-office-record-card">
         <div class="biz-office-record-top">
           <div class="biz-office-record-title">
             <strong>${esc(record.project || '未填写客户/项目')}</strong>
-            <div class="biz-office-record-meta">
-              <span>${esc(record.date || '--')}</span>
-              ${record.type === 'sampling' ? `<span class="biz-office-approval-badge ${approvedCount ? 'is-approved' : 'is-pending'}">已认可 ${approvedCount}/${detailCount}</span>` : ''}
-            </div>
           </div>
           <div class="biz-office-record-actions">
             <button type="button" data-office-edit="${esc(record.id)}" aria-label="编辑${esc(record.id)}">
@@ -3268,7 +3264,7 @@ import { createArchiveRenderer } from './archive-page';
                       ${index === 0 ? `
                         <span class="biz-office-fixed-column" data-office-table-column="${index}" data-office-table-fixed="true">${esc(officeFixedIndexColumn)}</span>
                       ` : `
-                        <input type="text" value="${esc(column)}" data-office-table-column="${index}" aria-label="第${index + 1}列列名">
+                        <input type="text" value="${esc(column)}" placeholder="填写列名" data-office-table-column="${index}" aria-label="第${index + 1}列列名">
                         <button type="button" data-office-remove-column="${index}" aria-label="删除第${index + 1}列">
                           <i class="ti ti-x" aria-hidden="true"></i>
                         </button>
@@ -3307,6 +3303,10 @@ import { createArchiveRenderer } from './archive-page';
       </section>
     `;
   };
+  const getOfficeDialogContentWidth = (columnCount: number, hasRowApproval: boolean) => (
+    // Editor padding (40px), dialog borders (2px), and table viewport borders (2px).
+    Math.max(760, 44 + 78 + Math.max(0, columnCount - 1) * 150 + (hasRowApproval ? 78 : 0) + 54)
+  );
   const renderOfficeRecords = () => {
     if (officeRecordActiveType === 'ash') return renderAshRecords();
     const typeRows = officeRecords.filter((record) => record.type === officeRecordActiveType);
@@ -3333,9 +3333,7 @@ import { createArchiveRenderer } from './archive-page';
       tableColumns: [...officeDefaultTableColumns],
       tableRows: createOfficeDefaultTableRows(),
     });
-    const modalDataColumnCount = Math.max(0, modalRecord.tableColumns.length - 1);
-    const modalAuxiliaryColumnWidth = modalRecord.type === 'sampling' ? 78 + 54 : 54;
-    const modalDialogContentWidth = Math.max(560, 40 + 78 + (modalDataColumnCount * 150) + modalAuxiliaryColumnWidth);
+    const modalDialogContentWidth = getOfficeDialogContentWidth(modalRecord.tableColumns.length, modalRecord.type === 'sampling');
     return `
       <section class="biz-office-page">
         <section class="business-panel biz-office-table-panel">
@@ -3358,7 +3356,7 @@ import { createArchiveRenderer } from './archive-page';
               </button>
             </div>
           </div>
-          <div class="biz-office-record-list">
+          <div class="biz-office-record-list" data-office-list-key="${esc(JSON.stringify([officeRecordActiveType, officeRecordSearchQuery, officeRecordListPage, officeRecordPageSize]))}">
             ${pagedRows.length ? pagedRows.map(renderOfficeRecordCard).join('') : `
               <div class="biz-office-empty-list">
                 <i class="ti ti-clipboard-list" aria-hidden="true"></i>
@@ -3368,6 +3366,7 @@ import { createArchiveRenderer } from './archive-page';
             `}
           </div>
           <div class="biz-formula-pagination biz-office-pagination">
+            <span class="biz-office-result-count">共 ${visibleRows.length} 条记录</span>
             <div class="biz-formula-pagination-actions">
               <label class="biz-formula-page-size">
                 <span>每页</span>
@@ -3394,20 +3393,15 @@ import { createArchiveRenderer } from './archive-page';
               <div class="biz-inventory-dialog-head">
                 <div>
                   <h2 id="officeRecordModalTitle">${officeRecordEditingId ? `编辑${esc(getOfficeRecordLabel(modalRecord.type))}` : `新建${esc(getOfficeRecordLabel())}`}</h2>
-                  <span>${esc(officeRecordDraftNote)}</span>
                 </div>
                 <button class="biz-inventory-icon-btn dialog-close" type="button" aria-label="关闭办事记录弹窗" data-office-close>
                   <i class="ti ti-x" aria-hidden="true"></i>
                 </button>
               </div>
               <div class="biz-office-editor">
-                <label>
-                  <span>客户/项目 *</span>
-                  <input type="text" value="${esc(modalRecord.project)}" placeholder="客户名称或内部项目" data-office-field="project">
-                </label>
-                <label>
-                  <span>日期</span>
-                  <input type="date" value="${esc(modalRecord.date)}" data-office-field="date">
+                <label class="is-wide">
+                  <span>客户/项目 <em class="biz-office-required">*</em></span>
+                  <input type="text" value="${esc(modalRecord.project)}" placeholder="客户名称或内部项目" data-office-field="project" aria-required="true">
                 </label>
                 <label class="is-wide">
                   <span>目标/用途</span>
@@ -3599,7 +3593,7 @@ import { createArchiveRenderer } from './archive-page';
               </button>
             </div>
           </div>
-          <div class="biz-office-record-list">
+          <div class="biz-office-record-list" data-office-list-key="${esc(JSON.stringify(['ash', ashRecordSearchQuery, ashRecordListPage, ashRecordPageSize]))}">
             ${pagedRows.length ? pagedRows.map(renderAshRecordCard).join('') : `
               <div class="biz-office-empty-list">
                 <i class="ti ti-clipboard-list" aria-hidden="true"></i>
@@ -3686,6 +3680,12 @@ import { createArchiveRenderer } from './archive-page';
     const columnFields = [...table.querySelectorAll('[data-office-table-column]')];
     const rows = [...table.querySelectorAll('[data-office-table-row]')];
     const columnCount = columnFields.length;
+    const dialog = table.closest('.biz-office-dialog');
+    dialog?.style.setProperty(
+      '--biz-office-dialog-content-width',
+      `${getOfficeDialogContentWidth(columnCount, Boolean(table.querySelector('.biz-office-row-approval-head')))}px`,
+    );
+    addOfficeSortHandles(table);
     columnFields.forEach((field, index) => {
       field.setAttribute('data-office-table-column', String(index));
       if (index === 0) {
@@ -5569,8 +5569,11 @@ import { createArchiveRenderer } from './archive-page';
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-inventory-active', usesFullHeightTable);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-invoice-active', usesInvoiceWorkbench);
     refs.businessPageContent.closest('.business-page')?.classList.toggle('biz-permission-active', usesPermissionWorkbench);
+    const restoreOfficeScroll = captureOfficeListScroll(refs.businessPageContent);
     refs.businessPageContent.innerHTML = decorateBusinessUiMarkup(renderBody(pageId));
+    refs.businessPageContent.querySelectorAll('.biz-office-detail-scroll table:has([data-office-table-column])').forEach(syncOfficeDetailTableControls);
     App.customSelects?.enhanceAll?.(refs.businessPageContent);
+    restoreOfficeScroll();
   }
 
   const replaceArrayRows = (target, next) => {
@@ -6176,7 +6179,7 @@ import { createArchiveRenderer } from './archive-page';
         const headerCell = document.createElement('th');
         const field = document.createElement('div');
         field.className = 'biz-office-column-field';
-        field.appendChild(createOfficeTableInput('', { 'data-office-table-column': columnCount, placeholder: '列名' }));
+        field.appendChild(createOfficeTableInput('', { 'data-office-table-column': columnCount, placeholder: '填写列名' }));
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
         removeButton.setAttribute('data-office-remove-column', String(columnCount));
@@ -6266,7 +6269,7 @@ import { createArchiveRenderer } from './archive-page';
       officeRecordDraftNote = `正在新建${getOfficeRecordLabel()}`;
       officeRecordModalOpen = true;
       render('office-records');
-      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus();
+      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus({ preventScroll: true });
       return;
     }
 
@@ -6278,7 +6281,7 @@ import { createArchiveRenderer } from './archive-page';
       officeRecordDraftNote = `正在编辑${getOfficeRecordLabel(record?.type)} ${officeRecordEditingId}`;
       officeRecordModalOpen = true;
       render('office-records');
-      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus();
+      refs.businessPageContent?.querySelector('[data-office-field="project"]')?.focus({ preventScroll: true });
       return;
     }
 
@@ -7293,6 +7296,7 @@ import { createArchiveRenderer } from './archive-page';
     formulaAddCard.click();
   };
 
+  let officeSortCleanup: (() => void) | undefined;
   let businessEventsTarget: HTMLElement | null = null;
   let businessInitialized = false;
   const bindBusinessEvents = () => {
@@ -7300,6 +7304,8 @@ import { createArchiveRenderer } from './archive-page';
     if (!target || target === businessEventsTarget) return;
     businessEventsTarget?.removeEventListener('click', handleBusinessClick);
     businessEventsTarget?.removeEventListener('keydown', handleBusinessKeydown);
+    officeSortCleanup?.();
+    officeSortCleanup = bindOfficeTableSort(target, syncOfficeDetailTableControls);
     target.addEventListener('click', handleBusinessClick);
     target.addEventListener('keydown', handleBusinessKeydown);
     businessEventsTarget = target;
@@ -7349,6 +7355,8 @@ import { createArchiveRenderer } from './archive-page';
     render,
     refreshFromLocalStorage,
     cleanup: () => {
+      officeSortCleanup?.();
+      officeSortCleanup = undefined;
       businessInitialized = false;
       businessEventsTarget?.removeEventListener('click', handleBusinessClick);
       businessEventsTarget?.removeEventListener('keydown', handleBusinessKeydown);
@@ -7379,5 +7387,3 @@ import { createArchiveRenderer } from './archive-page';
   };
   initializeBusinessPages();
 })();
-
-

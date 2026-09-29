@@ -92,7 +92,7 @@
 
 .data-recognition-history-search:focus {
   border-color: #2f63f4;
-  box-shadow: 0 0 0 2px rgba(47, 99, 244, .12);
+  box-shadow:none;
 }
 
 .data-recognition-workbench {

@@ -165,7 +165,7 @@
 .auth-card input:focus {
   outline: none;
   border-color: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
+  box-shadow:none;
 }
 .auth-card button {
   min-height: 56px;
@@ -181,7 +181,7 @@
   transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
 .auth-card button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform:none;
   box-shadow: 0 22px 34px rgba(37, 99, 235, .28);
 }
 .auth-card button:disabled {

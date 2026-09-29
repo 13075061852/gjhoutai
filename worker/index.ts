@@ -695,6 +695,41 @@ async function handleConfig(request: Request, env: Env, url: URL): Promise<Respo
   return notFound();
 }
 
+async function handleApimartProxy(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname !== '/api/apimart/request') return null;
+  if (request.method !== 'POST') return notFound();
+  const user = await getSessionUser(request, env);
+  if (!user) return unauthorized();
+  if (user.mustChangePassword) return forbidden();
+  // prepareJsonRequest bounds the entire incoming JSON, including inline reference images.
+  const input = await request.json<{ baseUrl?: unknown; path?: unknown; apiKey?: unknown; method?: unknown; payload?: unknown }>();
+  if (!input || typeof input !== 'object') return badRequest('invalid_apimart_payload');
+  if (String(input.baseUrl || '').replace(/\/+$/, '') !== 'https://api.apimart.ai/v1') return badRequest('invalid_apimart_origin');
+  const path = String(input.path || '');
+  const method = String(input.method || 'POST');
+  const allowed = method === 'GET'
+    ? path === '/balance' || /^\/tasks\/[a-zA-Z0-9_-]{1,160}$/.test(path)
+    : method === 'POST' && ['/images/generations', '/videos/generations'].includes(path);
+  if (!allowed) return badRequest('invalid_apimart_path');
+  const apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
+  if (!apiKey || apiKey.length > 512 || /[\s\x00-\x1f\x7f]/.test(apiKey)) return badRequest('invalid_apimart_credentials');
+  if (method === 'POST' && (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload))) return badRequest('invalid_apimart_payload');
+  try {
+    const upstream = await fetch(`https://api.apimart.ai/v1${path}`, {
+      method,
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', accept: 'application/json' },
+      ...(method === 'POST' ? { body: JSON.stringify(input.payload) } : {}),
+      redirect: 'error', signal: AbortSignal.timeout(60_000),
+    });
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: { 'content-type': 'application/json;charset=utf-8', 'cache-control': 'no-store' },
+    });
+  } catch {
+    return json({ error: { message: 'APIMart 连接失败或超时，请稍后查询任务状态' } }, { status: 502 });
+  }
+}
+
 async function handleLiblibAiProxy(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/liblibai/request') return null;
   if (request.method !== 'POST') return notFound();
@@ -1040,6 +1075,8 @@ const application = {
     if (profileResponse) return withCors(request, env, profileResponse);
     const configResponse = await handleConfig(request, env, url);
     if (configResponse) return withCors(request, env, configResponse);
+    const apimartResponse = await handleApimartProxy(request, env, url);
+    if (apimartResponse) return withCors(request, env, apimartResponse);
     const liblibAiResponse = await handleLiblibAiProxy(request, env, url);
     if (liblibAiResponse) return withCors(request, env, liblibAiResponse);
     const dataRecognitionHistoryResponse = await handleDataRecognitionHistory(request, env, url);

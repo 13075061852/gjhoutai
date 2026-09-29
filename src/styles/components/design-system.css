@@ -73,10 +73,23 @@ body .confirm-dialog-title { font-size: var(--font-size-lg); }
 body .confirm-dialog-actions { gap: var(--space-2); }
 body .ui-search-box { height: var(--control-height-md); min-height: var(--control-height-md); gap: var(--space-2); }
 
-/* A visible keyboard outline is independent of hover/background colour overrides. */
-body :is(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+/* Keyboard navigation stays visible on actions; text fields use their own border. */
+body :is(button, a[href], [tabindex]):not(input):not(select):not(textarea):not([contenteditable="true"]):focus-visible {
   outline: var(--focus-outline);
   outline-offset: 2px;
+}
+/* Shared input focus contract, including fields in lazily loaded pages. */
+body :is(input, select, textarea, [contenteditable="true"]):focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+body :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]):not([aria-invalid="true"]):focus {
+  border-color: var(--text-3, #64748b) !important;
+}
+/* The search container provides the focus border; avoid a second inner ring. */
+body .ui-search-box .ui-search-box-input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 body :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
 body :is(button, input, select, textarea):disabled { cursor: not-allowed; }

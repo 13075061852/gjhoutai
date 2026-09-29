@@ -35,6 +35,8 @@ npm install
 npm run dev
 ```
 
+也可使用等效命令 `npm run dev:web`。
+
 默认访问地址：
 
 ```text
@@ -165,3 +167,11 @@ npm audit           # 已知依赖漏洞检查
 - 迁移兼容层仍在 `src/legacy/`，后续可逐步替换为 React state 和组件。
 - 样式继续沿用当前类名体系，统一从 `src/styles/styles.css` 进入。
 - 涉及密钥、Cloudflare 存储、模型调用、文件导入和导出时，需要特别检查鉴权、上传大小限制和跨域配置。
+
+### APIMart 图片与视频生成
+
+配置中心的媒体生成已切换至 [APIMart 文档](https://docs.apib.ai/cn) 对应的服务，使用独立的 API Key，固定接口基地址为 `https://api.apimart.ai/v1`。当前适配 Seedream 4.5（2K/4K）与可灵 2.6（标准/专业模式，5/10 秒），支持参考图、异步任务进度和结果查询。
+
+前端通过已登录的 Worker 路由 `/api/apimart/request` 请求平台。上线需同步更新前端与 Worker；本地开发需同时运行 `npm run dev:web` 和 `npm run dev:worker`。在配置中心填入新的 APIMart API Key 后保存，可先点击“查询额度”验证接入，无需提交生成任务。配置随现有配置中心机制保存到云端，导出时密钥脱敏。
+
+旧 LiblibAI 密钥不会用于新平台，历史生成记录保留；旧平台未完成任务不再自动轮询。生成结果链接有有效期，请及时下载保存。

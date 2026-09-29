@@ -1485,7 +1485,7 @@
         gap:10px;
         padding:10px;
         overflow:hidden;
-        transform:translate(-50%, -50%) rotate(90deg);
+        transform:none;
         transform-origin:center;
       }
       .spectrum-preview-back{
@@ -1961,3 +1961,78 @@
       flex-wrap:wrap;
     }
   
+
+/* Sidebars change the workspace width without changing the browser viewport. */
+.main[data-content-layout] .biz-formula-table-title{flex-shrink:0}
+.main[data-content-layout] .biz-formula-table-title h2{white-space:nowrap}
+.main[data-content-layout] .business-page-shell{min-width:0}
+.main[data-content-layout] .biz-dashboard-kpi-row{grid-template-columns:repeat(6,minmax(0,1fr))}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-dashboard-kpi-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-formula-table-head{
+  display:flex;flex-direction:column;align-items:stretch;gap:12px;
+}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-formula-table-actions{
+  display:flex;flex-wrap:wrap;justify-content:flex-start;width:100%;min-width:0;gap:8px;
+}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-formula-table-actions :is(.biz-formula-table-search,.ui-search-box){
+  flex:1 1 240px;width:auto;min-width:0;max-width:100%;
+}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-formula-table-actions > :is(.custom-select,select){
+  flex:0 1 140px;width:140px;min-width:0;max-width:100%;
+}
+.main[data-content-layout]:not([data-content-layout="wide"]) .biz-formula-table-actions .biz-formula-new-btn{
+  flex:0 0 auto;width:auto;white-space:nowrap;margin-left:auto;
+}
+.main[data-content-layout]:not([data-content-layout="wide"]) :is(.biz-stock-layout,.biz-production-layout,.biz-permission-layout,.biz-archive-layout){grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-workbench{grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-aside{position:static}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-office-table-actions .biz-office-tabs{width:100%;flex:0 0 100%}
+.main[data-content-layout][data-content-layout="small"] .biz-dashboard-kpi-row{grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout="small"] :is(.biz-dashboard-bottom-grid,.biz-production-status-grid){grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout="small"] .biz-panel-head{flex-wrap:wrap}
+
+/* Tablets keep the compact rail; phones use the navigation drawer above. */
+@media (min-width:721px) and (max-width:980px){
+  html .shell,html .shell.sidebar-collapsed,html[data-sidebar-collapsed="1"] .shell{--sidebar:72px;--assistant-panel-width:calc(100vw - 72px)}
+  html .shell .sidebar{position:relative;inset:auto;z-index:50;width:72px;min-width:72px;max-width:72px;flex:0 0 72px;transform:none;box-shadow:none;transition:none}
+  html .shell::after{display:none}
+  html .shell .mobile-menu-btn,html .shell .sidebar-toggle,html .shell .sidebar-search{display:none}
+  html .shell .sidebar-top{padding:8px 14px;justify-content:center}
+  html .shell .brand{grid-template-columns:44px 0;column-gap:0}
+  html .shell :is(.brand-title,.section-label,.sidebar-account,.nav-text,.nav-arrow,.nav-children){display:none}
+  html .shell .sidebar-section{padding:8px 0;margin:0}
+  html .shell .nav-item{width:44px;min-width:44px;height:44px;padding:0;margin:2px auto;font-size:0;justify-content:center}
+  html .shell .nav-main{justify-content:center;gap:0}
+  html .shell .nav-icon{flex:0 0 auto}
+  html .shell:not(.assistant-collapsed) .assistant{display:flex;position:absolute;inset:0 0 0 72px;width:calc(100% - 72px);min-width:0;max-width:none;z-index:40;border-left:1px solid var(--border);transform:none}
+  html .shell .assistant-frame,html .shell.assistant-fullscreen .assistant-frame{width:100%;min-width:0}
+  html .shell.assistant-fullscreen .assistant-rail{display:none}
+  html .shell.assistant-collapsed .assistant{display:none}
+  .sidebar-flyout{max-width:calc(100vw - 88px)}
+}
+
+
+/* Configuration modules are loaded lazily: keep narrow rules more specific. */
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .config-lower-grid{grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .ai-config :is(.form-grid,.form-grid-3,.oss-config-grid,.apimart-config-grid,.agent-routing-section){grid-template-columns:minmax(0,1fr)}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .config-lower-grid > .config-module{height:auto}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .config-module{padding:14px}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .config-module-head{flex-wrap:wrap}
+@media(max-width:980px){
+  .ai-config .config-lower-grid{grid-template-columns:minmax(0,1fr)}
+  .ai-config :is(.form-grid,.form-grid-3,.oss-config-grid,.apimart-config-grid,.agent-routing-section){grid-template-columns:minmax(0,1fr)}
+  .ai-config .config-lower-grid > .config-module{height:auto}
+}
+
+@media(max-width:720px){
+  #assistantExpandBtn{display:none}
+  .shell:not(.sidebar-open) .sidebar{visibility:hidden}
+  .shell.sidebar-open .sidebar{visibility:visible}
+  html .shell{--assistant-panel-width:100%}
+  html .shell:not(.assistant-collapsed) .assistant{
+    display:flex;position:absolute;inset:var(--topbar) 0 0;width:100%;min-width:0;max-width:none;z-index:40;
+  }
+  html .shell .assistant-frame{width:100%;min-width:0}
+  html .shell.assistant-collapsed .assistant{display:none}
+}

@@ -65,7 +65,7 @@
     }
     .project-skill-search:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+      box-shadow:none;
     }
     .project-skill-history-head h2{
       margin:8px 0;

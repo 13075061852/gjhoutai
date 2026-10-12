@@ -34,8 +34,9 @@ const formatWan = (value) => (Number(value || 0) / 10000).toLocaleString('zh-CN'
 const formatNumber = (value) => Number(value || 0).toLocaleString('zh-CN');
 const formatPercent = (part, total) => (total ? Math.round((part / total) * 1000) / 10 : 0);
 const getBarHeightPercent = (value, chartMax) => {
-  const percent = (Number(value) / Math.max(1, Number(chartMax) || 0)) * 100;
-  return Number.isFinite(percent) ? Math.max(4, percent) : 4;
+  const ratio = Number(value) / Math.max(1, Number(chartMax) || 0);
+  const percent = Number.isFinite(ratio) ? Math.max(0, ratio) * 80 : 0;
+  return Math.max(6, percent);
 };
 const getOrderDateCode = (order) => String(order?.id || '').match(/\d{8}/)?.[0] || '';
 const toDateCode = (dateText) => String(dateText || '').replace(/-/g, '');
@@ -84,6 +85,7 @@ const buildDashboardData = (state = {} as any) => {
     color: barColors[index],
   }));
   const chartMax = Math.max(1, ...chartRows.map((item) => item.value));
+  const chartPeak = chartRows.reduce((max, item) => Math.max(max, item.value), 0);
   const productionStatus = [
     { key: 'running', label: '生产中', count: productionOrders.filter((order) => order.status === '生产中').length, icon: 'ti-player-play-filled', className: 'running' },
     { key: 'queued', label: '待排产', count: pendingOrders.length, icon: 'ti-clock-filled', className: 'queued' },
@@ -190,6 +192,7 @@ const buildDashboardData = (state = {} as any) => {
     },
     chartRows,
     chartMax,
+    chartPeak,
     productionStatus,
     productionTotal,
     todos,
@@ -270,15 +273,30 @@ export const renderDashboard = (state = {} as any) => {
             </div>
           </div>
           <div class="biz-chart-body">
-            <div class="biz-chart-bars">
-              ${data.chartRows.map(({ label, value, color }) => `
-                <div class="biz-bar-col">
-                  <div class="biz-bar-fill" style="height:${getBarHeightPercent(value, data.chartMax)}%;background:${color}"></div>
-                  <span class="biz-bar-value">${escapeHtml(value)}</span>
-                  <span class="biz-bar-label">${escapeHtml(label)}</span>
-                </div>
-              `).join('')}
+            <div class="biz-chart-plot">
+              <div class="biz-chart-grid" aria-hidden="true">
+                <span class="biz-chart-line"></span>
+                <span class="biz-chart-line"></span>
+                <span class="biz-chart-line"></span>
+                <span class="biz-chart-line"></span>
+                <span class="biz-chart-line"></span>
+              </div>
+              <div class="biz-chart-bars">
+                ${data.chartRows.map(({ value, color }) => `
+                  <div class="biz-bar-col">
+                    <span class="biz-bar-value">${escapeHtml(value)}</span>
+                    <div class="biz-bar-fill" style="height:${getBarHeightPercent(value, data.chartMax)}%;background:${color}"></div>
+                  </div>
+                `).join('')}
+              </div>
             </div>
+            <div class="biz-chart-labels">
+              ${data.chartRows.map(({ label }) => `<span>${escapeHtml(label)}</span>`).join('')}
+            </div>
+          </div>
+          <div class="biz-chart-foot">
+            <span class="biz-chart-legend"><i class="ti ti-chart-line" aria-hidden="true"></i>每日订单量（单）</span>
+            <span>峰值 ${escapeHtml(data.chartPeak)}</span>
           </div>
         </article>
 
@@ -317,7 +335,7 @@ export const renderDashboard = (state = {} as any) => {
                   </div>
                   <span class="biz-todo-tag ${todo.urgent ? '' : 'normal'}">${escapeHtml(todo.tag)}</span>
                 </div>
-              `).join('') || '<div class="biz-formula-empty">暂无待办</div>'}
+              `).join('') || '<div class="biz-dash-empty"><i class="ti ti-circle-check" aria-hidden="true"></i><span>暂无待办</span></div>'}
             </div>
           </article>
 
@@ -336,7 +354,7 @@ export const renderDashboard = (state = {} as any) => {
                     <span>${escapeHtml(item.detail)}</span>
                   </div>
                 </div>
-              `).join('') || '<div class="biz-formula-empty">暂无动态</div>'}
+              `).join('') || '<div class="biz-dash-empty"><i class="ti ti-clock-history" aria-hidden="true"></i><span>暂无动态</span></div>'}
             </div>
           </article>
         </section>
@@ -358,19 +376,32 @@ export const renderDashboard = (state = {} as any) => {
                 </div>
                 <span class="biz-risk-count">${escapeHtml(risk.count)}</span>
               </div>
-            `).join('') || '<div class="biz-formula-empty">暂无风险</div>'}
+            `).join('') || '<div class="biz-dash-empty"><i class="ti ti-circle-check" aria-hidden="true"></i><span>暂无风险</span></div>'}
           </div>
         </article>
 
         <article class="ui-panel biz-dashboard-panel biz-quick-actions-panel">
           <div class="biz-panel-head">
             <h2><i class="ti ti-bolt" aria-hidden="true"></i>快捷操作</h2>
+            <span class="biz-panel-meta">常用入口</span>
           </div>
           <div class="biz-quick-actions-grid">
-            <button class="ui-button biz-qk-btn" type="button" data-quick="order"><i class="ti ti-file-plus" aria-hidden="true"></i>新建订单</button>
-            <button class="ui-button biz-qk-btn" type="button" data-quick="produce"><i class="ti ti-assembly" aria-hidden="true"></i>排产</button>
-            <button class="ui-button biz-qk-btn" type="button" data-quick="quality"><i class="ti ti-checklist" aria-hidden="true"></i>质检录入</button>
-            <button class="ui-button biz-qk-btn" type="button" data-quick="report"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i>导出报表</button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="order">
+              <span class="biz-qk-icon" aria-hidden="true"><i class="ti ti-file-plus"></i></span>
+              <span class="biz-qk-text"><strong>新建订单</strong><span>销售下单</span></span>
+            </button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="produce">
+              <span class="biz-qk-icon" aria-hidden="true"><i class="ti ti-assembly"></i></span>
+              <span class="biz-qk-text"><strong>排产</strong><span>生产计划</span></span>
+            </button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="quality">
+              <span class="biz-qk-icon" aria-hidden="true"><i class="ti ti-checklist"></i></span>
+              <span class="biz-qk-text"><strong>质检录入</strong><span>物性数据</span></span>
+            </button>
+            <button class="ui-button biz-qk-btn" type="button" data-quick="report">
+              <span class="biz-qk-icon" aria-hidden="true"><i class="ti ti-file-spreadsheet"></i></span>
+              <span class="biz-qk-text"><strong>导出报表</strong><span>分析结果</span></span>
+            </button>
           </div>
         </article>
       </aside>

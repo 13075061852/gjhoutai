@@ -1985,8 +1985,7 @@
 }
 .main[data-content-layout]:not([data-content-layout="wide"]) :is(.biz-stock-layout,.biz-production-layout,.biz-permission-layout,.biz-archive-layout){grid-template-columns:minmax(0,1fr)}
 .main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
-.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-workbench{grid-template-columns:minmax(0,1fr)}
-.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-aside{position:static}
+.main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-dashboard-workbench{grid-template-columns:minmax(0,1fr);grid-template-areas:"chart" "risk" "production" "quick" "bottom"}
 .main[data-content-layout]:is([data-content-layout="narrow"],[data-content-layout="small"]) .biz-office-table-actions .biz-office-tabs{width:100%;flex:0 0 100%}
 .main[data-content-layout][data-content-layout="small"] .biz-dashboard-kpi-row{grid-template-columns:minmax(0,1fr)}
 .main[data-content-layout="small"] :is(.biz-dashboard-bottom-grid,.biz-production-status-grid){grid-template-columns:minmax(0,1fr)}

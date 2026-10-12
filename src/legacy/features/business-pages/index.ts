@@ -477,6 +477,7 @@ import { createArchiveRenderer } from './archive-page';
               <i class="ti ti-package" aria-hidden="true"></i>
               <div>
                 <h2>订单管理</h2>
+                <span>共 ${orderRows.length} 单 · 当前筛选 ${filteredCount} 单</span>
               </div>
             </div>
             <div class="ui-toolbar__actions biz-formula-table-actions biz-order-table-actions">
@@ -527,7 +528,13 @@ import { createArchiveRenderer } from './archive-page';
                       </div>
                     </td>
                   </tr>
-                `).join('') || '<tr class="biz-order-empty-row"><td class="biz-order-empty-cell" colspan="9"><div class="biz-formula-empty">暂无匹配订单</div></td></tr>'}
+                `).join('') || `<tr class="biz-order-empty-row"><td class="biz-order-empty-cell" colspan="9">
+                  <div class="biz-order-empty">
+                    <span class="biz-order-empty-icon" aria-hidden="true"><i class="ti ti-package"></i></span>
+                    <strong>暂无匹配订单</strong>
+                    <span>调整筛选条件，或点击「新建订单」创建首单</span>
+                  </div>
+                </td></tr>`}
               </tbody>
             </table>
           </div>

@@ -12,8 +12,6 @@ export interface AppUser {
 
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 const buildUrl = (path: string) => `${API_BASE}${path}`;
-const currentDepartment = () => (typeof window === 'undefined' ? '' : String(window.GJHApp?.currentUser?.department || ''));
-const canManageUsers = () => currentDepartment() === '系统管理员';
 const SESSION_MARKER_COOKIE = 'gjh_session_present';
 const SESSION_MARKER_STORAGE_KEY = 'gjh-auth-session-present';
 const AUTH_ME_CACHE_TTL_MS = 30_000;
@@ -53,7 +51,6 @@ const cacheAuthMe = (user: AppUser | null) => {
 async function requestAuthMe(): Promise<AppUser | null> {
   const response = await fetchWithTimeout(buildUrl('/api/auth/me'), {
     credentials: 'include',
-    headers: { 'content-type': 'application/json' },
   });
   if (response.status === 401 || response.status === 403) return null;
   if (!response.ok) throw new Error(`auth_me_failed_${response.status}`);
@@ -125,7 +122,8 @@ export const authClient = {
   async getAvatarUrl(): Promise<string | null> {
     const response = await fetchWithTimeout(buildUrl('/api/profile/avatar'), {
       credentials: 'include',
-      cache: 'no-store',
+      cache: 'no-cache',
+      headers: { Accept: 'image/webp' },
     });
     if (response.status === 204 || !response.ok) return null;
     const blob = await response.blob();
@@ -144,29 +142,6 @@ export const authClient = {
     const response = await fetchWithTimeout(buildUrl('/api/profile/avatar'), {
       method: 'DELETE',
       credentials: 'include',
-    });
-    return response.ok;
-  },
-  async createUser(input: { username: string; displayName: string; department: AppDepartment; password: string }): Promise<boolean> {
-    const response = await fetchWithTimeout(buildUrl('/api/users'), {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    return response.ok;
-  },
-  async listUsers(): Promise<Array<{ id: string; username: string; display_name: string; department: AppDepartment }>> {
-    if (!canManageUsers()) return [];
-    const payload = await request<{ users: Array<{ id: string; username: string; display_name: string; department: AppDepartment }> }>('/api/users');
-    return payload?.users ?? [];
-  },
-  async updateUser(id: string, input: { username?: string; displayName: string; department: AppDepartment; password?: string }): Promise<boolean> {
-    const response = await fetchWithTimeout(buildUrl(`/api/users/${encodeURIComponent(id)}`), {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
     });
     return response.ok;
   },

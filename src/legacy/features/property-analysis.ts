@@ -1,6 +1,8 @@
-﻿import { getLegacyApp } from '../core/app-context';
+import { getLegacyApp } from '../core/app-context';
 import '../../styles/pages/property-analysis.css';
+import '../../styles/pages/property-mobile.css';
 import { cloudStorage } from '../../services/cloud-storage';
+import { getCompactPagination } from '../../utils/compactPagination';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import {
@@ -26,7 +28,7 @@ import {
   const REPORT_COMPANY_ADDRESS = '浙江省慈溪市横河万洋众创城 28 栋 1-3';
   const REPORT_COMPANY_TEL = '0574-63072712';
   const REPORT_COMPANY_FAX = '0574-63805667';
-  const REPORT_SEAL_SRC = '/inspection-seal.webp';
+  const REPORT_SEAL_SRC = `${String(import.meta.env.BASE_URL || '/')}inspection-seal.webp`;
   const REPORT_SEAL_POSITION_STORAGE_KEY = LOCAL_STORAGE_KEYS.propertyReportSealPosition;
   const REPORT_SEAL_DEFAULT = { x: 428, y: 760, size: 150, rotation: 0 };
   let reportSealImagePromise = null;
@@ -115,8 +117,6 @@ import {
   };
   const MELT_INDEX_METRIC_KEY = '熔指';
   const MELT_INDEX_TEMPERATURES = ['250℃', '260℃', '275℃'];
-  const AGENT_CONTEXT_ROW_LIMIT = 12;
-  const AGENT_CONTEXT_SIMILAR_LIMIT = 8;
   const AGENT_STOP_TERMS = new Set([
     '帮我',
     '请',
@@ -165,7 +165,7 @@ import {
     footerTotal: document.getElementById('analysisFooterTotal'),
     selectionMeta: document.getElementById('analysisSelectionMeta'),
     statusRow: document.getElementById('analysisSelectionMeta')?.closest('.analysis-status-row'),
-    sortSelect: document.getElementById('analysisSortSelect'),
+    sortToggle: document.getElementById('analysisSortToggle'),
   };
 
   const state: any = {
@@ -271,7 +271,7 @@ import {
       button.type = 'button';
       button.setAttribute('aria-expanded', 'false');
       button.setAttribute('aria-controls', 'analysisMobileActionMenu');
-      button.innerHTML = '<i class="ti ti-adjustments-horizontal" aria-hidden="true"></i><span>操作</span><i class="ti ti-chevron-down" aria-hidden="true"></i>';
+      button.innerHTML = '<i class="ti ti-adjustments-horizontal" aria-hidden="true"></i><span>操作</span>';
       mobileActionHost.appendChild(button);
       refs.mobileActionToggle = button;
     } else if (refs.mobileActionToggle.parentElement !== mobileActionHost) {
@@ -848,8 +848,6 @@ import {
   const stripDocxXmlToText = (xml = '') => decodeXmlText(String(xml).replace(/<[^>]+>/g, ''));
 
   const extractDocxText = (xml = '') => normalizeDocxText(stripDocxXmlToText(xml));
-
-  const extractDocxTextRuns = (xml = '') => [extractDocxText(xml)];
 
   const extractDocxCellText = (cellXml = '') => extractDocxText(cellXml);
 
@@ -2020,16 +2018,6 @@ import {
   `;
   };
 
-  const fillRangeForm = (range = {} as any) => {
-    const dialog = document.querySelector('.analysis-range-dialog');
-    const form = dialog?.querySelector('[data-range-form]');
-    if (!form) return;
-    const draft = createRangeDraft(range);
-    form.querySelector('[data-range-field="model"]').value = draft.model;
-    const list = form.querySelector('[data-range-metric-list]');
-    if (list) list.innerHTML = buildRangeRowsHtml(draft.model);
-  };
-
   const readRangeForm = () => {
     const dialog = document.querySelector('.analysis-range-dialog');
     const form = dialog?.querySelector('[data-range-form]');
@@ -2058,13 +2046,6 @@ import {
   function handleRangeManagerKeydown(event) {
     if (event.key === 'Escape') closeRangeManagerDialog();
   }
-
-  const rerenderRangeManagerDialog = (missingItems = []) => {
-    const dialog = document.querySelector('.analysis-range-dialog');
-    if (!dialog) return;
-    dialog.outerHTML = buildRangeManagerHtml(missingItems);
-    bindRangeManagerEvents(missingItems);
-  };
 
   const refreshRangeManagerData = async (missingItems = []) => {
     const currentModel = state.rangeManagerSelectedModel;
@@ -2431,11 +2412,6 @@ import {
     return rows.every((row) => state.selectedKeys.has(row.__rowKey));
   };
 
-  const getSelectedRowsForActiveSheet = () => {
-    const sheetName = getActiveSheet(state.data);
-    return getRowsForSheet(sheetName).filter((row) => state.selectedKeys.has(row.__rowKey));
-  };
-
   const getSelectedRowsForAllSheets = () => {
     if (!state.data) return [];
     return getSheetNames(state.data).flatMap((sheetName) => (
@@ -2480,74 +2456,6 @@ import {
     }
 
     if (refs.importStatus) refs.importStatus.textContent = state.uploadStatusText;
-  };
-
-  const escapeCsvCell = (value) => {
-    const text = String(value ?? '')
-      .replace(/\r?\n/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-
-  const formatRowsCsvForAi = (rows, columns, options = {} as any) => {
-    const visibleColumns = (columns || []).filter((column) => column !== '__rowKey');
-    const includeIndex = options.includeIndex !== false;
-    const tableRows = options.limit == null ? rows : rows.slice(0, options.limit);
-    if (!tableRows.length || !visibleColumns.length) return '';
-
-    const headers = [
-      ...(includeIndex ? ['序号'] : []),
-      ...visibleColumns.map(formatHeader),
-    ];
-    const lines = [headers.map(escapeCsvCell).join(',')];
-
-    tableRows.forEach((row, index) => {
-      const values = visibleColumns.map((column) => {
-        const value = Array.isArray(row[column]) ? row[column].join(' / ') : valueToText(row[column]);
-        return escapeCsvCell(value || '-');
-      });
-      lines.push([
-        ...(includeIndex ? [String(index + 1)] : []),
-        ...values,
-      ].join(','));
-    });
-
-    return lines.join('\n');
-  };
-
-  const formatSelectedRowsTableForAi = (sheetName, rows, columns) => {
-    const csv = formatRowsCsvForAi(rows, columns);
-    return [
-      'source=property-analysis',
-      `sheet_name=${sheetName || ''}`,
-      `selected_count=${rows.length}`,
-      'format=csv',
-      csv,
-    ].filter(Boolean).join('\n');
-  };
-
-  const summarizeMetric = (rows, key) => {
-    const values = rows
-      .map((row) => getMetricValue(row, key))
-      .filter((value) => value != null);
-
-    if (!values.length) return '';
-
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-    return `${formatHeader(key)}：均值 ${avg.toFixed(2).replace(/\.?0+$/, '')}，范围 ${min} - ${max}`;
-  };
-
-  const summarizeRowsForAi = (rows, columns, limit = 12) => {
-    return rows.slice(0, limit).map((row, index) => {
-      const cells = columns
-        .filter((column) => column !== '__rowKey')
-        .map((column) => `${formatHeader(column)}=${valueToText(row[column]) || '-'}`)
-        .join('；');
-      return `${index + 1}. ${cells}`;
-    });
   };
 
   const getCompareColumns = (rows) => {
@@ -2982,10 +2890,10 @@ import {
                 <i class="ti ti-clipboard-copy" aria-hidden="true"></i>
                 <span>复制图片</span>
               </button>
-              <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭对比弹窗" data-analysis-compare-close>
-                <i class="ti ti-x" aria-hidden="true"></i>
-              </button>
             </div>
+            <button class="analysis-compare-close dialog-close" type="button" aria-label="关闭对比弹窗" data-analysis-compare-close>
+              <i class="ti ti-x" aria-hidden="true"></i>
+            </button>
           </div>
           <div class="analysis-compare-body">
             <section class="analysis-compare-section">
@@ -3119,611 +3027,10 @@ import {
     dialog?.querySelector('[data-analysis-compare-close]')?.focus({ preventScroll: true });
   };
 
-  const escapeMarkdownTableCell = (value) => String(value ?? '')
-    .replace(/\|/g, '\\|')
-    .replace(/\r?\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const formatRowsMarkdownTableForAi = (rows, columns, limit = null) => {
-    const visibleColumns = (columns || []).filter((column) => column !== '__rowKey');
-    const tableRows = limit == null ? rows : rows.slice(0, limit);
-    if (!tableRows.length || !visibleColumns.length) return '';
-
-    const headers = ['序号', ...visibleColumns.map(formatHeader)];
-    const lines = [
-      `| ${headers.map(escapeMarkdownTableCell).join(' |')} |`,
-      `| ${headers.map(() => '---').join(' |')} |`,
-    ];
-
-    tableRows.forEach((row, index) => {
-      const values = visibleColumns.map((column) => {
-        const value = Array.isArray(row[column]) ? row[column].join(' / ') : valueToText(row[column]);
-        return escapeMarkdownTableCell(value || '-');
-      });
-      lines.push(`| ${[index + 1, ...values].join(' |')} |`);
-    });
-
-    return lines.join('\n');
-  };
-
-  const getAgentDetailColumns = (columns = []) => {
-    const visibleColumns = columns.filter((column) => column !== '__rowKey');
-    const available = new Set(visibleColumns);
-    const prioritized = COLUMN_PRIORITY.filter((column) => available.has(column));
-    const remaining = visibleColumns.filter((column) => !prioritized.includes(column));
-    return [...prioritized, ...remaining];
-  };
-
-  const getAiContext = () => {
-    if (!state.data) return '';
-
-    const sheetName = getActiveSheet(state.data);
-    const { filteredRows, columns } = getVisibleRows();
-    const selectedRows = getSelectedRowsForAllSheets();
-    const targetColumns = selectedRows.length ? getColumns(selectedRows) : columns;
-    const targetRows = selectedRows;
-    const metrics = [
-      '熔指',
-      '拉伸强度[Mpa]',
-      '断裂伸长率[%]',
-      '弯曲强度[Mpa]',
-      '弯曲模量[Mpa]',
-      IMPACT_STRENGTH_METRIC_KEY,
-      '灰份',
-    ].map((key) => summarizeMetric(targetRows, key)).filter(Boolean);
-
-    const lines = [
-      '【当前物性分析上下文】',
-      `工作表：${sheetName || '未选择'}`,
-      `查询词：${state.query.trim() || '无'}`,
-      `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}`,
-      `排序：${state.sort}`,
-      `数据范围：共 ${filteredRows.length} 条筛选结果，当前工作表已选 ${selectedRows.length} 条；当前上下文只使用已选数据 ${targetRows.length} 条。`,
-    ];
-
-    if (!selectedRows.length) {
-      lines.push('当前物性分析页面没有选中行。请先在表格中点击选择需要分析的数据行，再发送问题。');
-      return lines.join('\n');
-    }
-
-    if (metrics.length) {
-      lines.push('关键指标摘要：', ...metrics.map((item) => `- ${item}`));
-    }
-
-    const rowLines = summarizeRowsForAi(targetRows, targetColumns, 12);
-    if (rowLines.length) {
-      lines.push('代表性数据：', ...rowLines);
-      if (targetRows.length > rowLines.length) lines.push(`还有 ${targetRows.length - rowLines.length} 条未展开。`);
-    }
-
-    return lines.join('\n');
-  };
-
-  const extractQuestionTerms = (question) => {
-    const text = String(question || '');
-    const terms = text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || [];
-    return [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 2))];
-  };
-
-  const rowMatchesTerms = (row, terms) => {
-    if (!terms.length) return false;
-    const values = Object.values(row)
-      .flatMap((value) => Array.isArray(value) ? value : [value])
-      .map((value) => String(value ?? '').trim().toLowerCase())
-      .filter(Boolean);
-
-    return terms.some((term) => {
-      const normalizedTerm = term.toLowerCase();
-      return values.some((value) => value.includes(normalizedTerm) || normalizedTerm.includes(value));
-    });
-  };
-
-  const formatRowsForAi = (rows, columns, limit = 30) => {
-    return rows.slice(0, limit).map((row, index) => {
-      const cells = columns
-        .map((column) => `${formatHeader(column)}=${valueToText(row[column]) || '-'}`)
-        .join('；');
-      return `${index + 1}. ${cells}`;
-    });
-  };
-
-  const formatSheetTableForAi = (sheetName, rows, columns) => [
-    `### 工作表：${sheetName}（共 ${rows.length} 行）`,
-    '```csv',
-    formatRowsCsvForAi(rows, columns),
-    '```',
-  ].join('\n');
-
-  const getFullAiContext = (question = '') => {
-    if (!state.data) return '';
-
-    const sheetNames = getSheetNames(state.data);
-    const questionTerms = extractQuestionTerms(question);
-    const matchedRows = [];
-    const fullTableSections = sheetNames.map((sheetName) => {
-      const rows = getRowsForSheet(sheetName);
-      const columns = getColumns(rows);
-      rows.forEach((row) => {
-        if (!rowMatchesTerms(row, questionTerms)) return;
-        matchedRows.push({ sheetName, row, columns });
-      });
-
-      return formatSheetTableForAi(sheetName, rows, columns);
-    });
-
-    const matchedLines = matchedRows.length
-      ? matchedRows.slice(0, 50).map((item, index) => {
-          const cells = item.columns
-            .map((column) => `${formatHeader(column)}=${valueToText(item.row[column]) || '-'}`)
-            .join('；');
-          return `${index + 1}. 工作表=${item.sheetName}；${cells}`;
-        })
-      : [];
-
-    const activeSheet = getActiveSheet(state.data);
-    const activeRows = activeSheet ? getRowsForSheet(activeSheet) : [];
-    const activeColumns = getColumns(activeRows);
-
-    return [
-      '【已后台接入：物性分析完整表格数据】',
-      '以下数据来自物性分析页面加载的整张表，包含全部工作表/分类和全部行。请优先基于这些数据回答用户问题，不要要求用户重新粘贴表格。',
-      '重要规则：如果用户问题里出现型号或批次，必须先在下方表格字段中匹配。没有完全匹配时，要明确说明“未找到完全匹配”，再列出相近匹配；不要按外部常识解释为服务器、网络设备或其他无关产品。',
-      `当前页面状态：工作表=${getSheetLabel(getActiveSheet(state.data)) || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
-      questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
-      matchedLines.length ? `问题相关匹配行（优先参考）：\n${matchedLines.join('\n')}` : '问题相关匹配行：未匹配到完全或相近行，请基于完整表格继续查找并说明。',
-      activeRows.length ? `当前工作表前 ${Math.min(30, activeRows.length)} 行预览：\n${formatRowsForAi(activeRows, activeColumns, 30).join('\n')}` : '',
-      '完整表格数据：',
-      fullTableSections.join('\n\n'),
-    ].filter(Boolean).join('\n');
-  };
-
-  const getSelectedAiContext = (question = '') => {
-    if (!state.data) return '';
-
-    const sheetName = getActiveSheet(state.data);
-    const selectedRows = getSelectedRowsForAllSheets();
-    const { filteredRows, columns } = getVisibleRows();
-    const selectedColumns = selectedRows.length ? getColumns(selectedRows) : columns;
-
-    if (!selectedRows.length) {
-      return [
-        '【已请求接入：物性分析已选数据】',
-        `当前工作表：${sheetName || '未选择'}`,
-        `当前筛选结果：${filteredRows.length} 条`,
-        '当前没有选中任何物性数据行。请提示用户先在物性分析表格中点击选择需要上传给 AI 的数据。',
-      ].join('\n');
-    }
-
-    const questionTerms = extractQuestionTerms(question);
-    const matchedRows = selectedRows
-      .filter((row) => rowMatchesTerms(row, questionTerms))
-      .slice(0, 30);
-
-    return [
-      '【已后台接入：物性分析已选数据】',
-      '以下数据来自物性分析页面当前选中的表格行，只包含用户选中的数据。请优先基于这些已选数据回答，不要要求用户重新粘贴表格。',
-      '重要规则：如果用户问题里出现型号或批次，必须先在下方已选数据字段中匹配。没有完全匹配时，要明确说明“未找到完全匹配”，再列出已选数据中的相近匹配；不要按外部常识解释为服务器、网络设备或其他无关产品。',
-      `当前页面状态：工作表=${sheetName || '未选择'}；查询词=${state.query.trim() || '无'}；搜索方式=${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；排序=${state.sort}。`,
-      `已选数据行数：${selectedRows.length}`,
-      questionTerms.length ? `用户问题提取关键词：${questionTerms.join('、')}` : '用户问题未提取到明显型号/批次关键词。',
-      matchedRows.length ? `已选数据中的问题相关匹配行：\n${summarizeRowsForAi(matchedRows, selectedColumns, 30).join('\n')}` : '已选数据中的问题相关匹配行：未匹配到完全或相近行，请基于全部已选数据继续查找并说明。',
-      '已选数据（CSV）：',
-      formatSelectedRowsTableForAi(sheetName, selectedRows, selectedColumns),
-    ].filter(Boolean).join('\n');
-  };
-
-  const getAiDataFile = (question = '') => {
-    if (!getSelectedRowsForAllSheets().length) return null;
-    const content = getSelectedAiContext(question);
-    if (!content) return null;
-
-    return {
-      filename: `property-analysis-selected-data-${new Date().toISOString().slice(0, 10)}.txt`,
-      mimeType: 'text/plain',
-      content,
-    };
-  };
-
-  const normalizeAgentText = (value) => String(value ?? '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const normalizeAgentTerm = (term) => normalizeAgentText(term)
-    .replace(/^(帮我|请|麻烦|分析一下|查一下|看一下|查询一下|分析|查询|查看|看)\s*/, '')
-    .replace(/^的+/, '')
-    .replace(/(一下|看看|数据|情况|结果)$/g, '')
-    .trim();
-
-  const extractAgentTerms = (question = '') => {
-    const text = String(question || '');
-    const terms = [
-      ...(text.match(/[A-Za-z0-9][A-Za-z0-9._/-]{1,}/g) || []),
-      ...(text.match(/[\u4e00-\u9fa5]{2,}/g) || []),
-    ];
-    return [...new Set(terms
-      .map(normalizeAgentTerm)
-      .filter((term) => term.length >= 2 && !AGENT_STOP_TERMS.has(term)))];
-  };
-
-  const getIdentifierTerms = (terms) => terms.filter((term) => /[a-z0-9]/i.test(term) && term.length >= 3);
-
-  const rowMatchesIdentifierTerm = (row, term) => {
-    const normalizedTerm = normalizeAgentText(term);
-    if (!normalizedTerm) return false;
-    return SEARCH_KEYS.some((key) => flattenSearchTexts(row?.[key]).some((value) => value === normalizedTerm));
-  };
-
-  const extractAgentRowLimit = (question = '') => {
-    const text = String(question || '');
-    if (/(?:全部|所有|完整|全量|不要省略|不要截断)/.test(text)) return null;
-    const match = text.match(/(?:前|只要|仅|取|显示|列出|上传|给我)?\s*(\d{1,3})\s*(?:条|行|个|批次|记录|数据)/);
-    if (!match) return null;
-    const count = Number.parseInt(match[1], 10);
-    if (!Number.isFinite(count) || count <= 0) return null;
-    return Math.min(count, 500);
-  };
-
-  const extractAgentRowWindow = (question = '') => {
-    const text = String(question || '');
-    const limit = extractAgentRowLimit(text);
-    if (limit == null) return { limit: null, mode: 'all' };
-
-    const wantsTail = /(?:最近|最新|近期|近|靠后|后面|末尾|最后|后)\s*的?\s*\d{0,3}\s*(?:条|行|个|批次|记录|数据)?/.test(text)
-      || /\d{1,3}\s*(?:条|行|个|批次|记录|数据)?\s*(?:最近|最新|靠后|后面|末尾|最后)/.test(text);
-    const wantsHead = /(?:最早|早期|靠前|前面|之前|以前|老批次|旧批次)\s*的?\s*\d{0,3}\s*(?:条|行|个|批次|记录|数据)?/.test(text)
-      || /前\s*\d{1,3}\s*(?:条|行|个|批次|记录|数据)/.test(text);
-
-    return {
-      limit,
-      mode: wantsTail ? 'tail' : wantsHead ? 'head' : 'head',
-    };
-  };
-
-  const sliceAgentRowsByWindow = (rows, rowWindow) => {
-    const sourceRows = Array.isArray(rows) ? rows : [];
-    const limit = rowWindow?.limit;
-    if (limit == null || sourceRows.length <= limit) return sourceRows;
-    return rowWindow.mode === 'tail' ? sourceRows.slice(-limit) : sourceRows.slice(0, limit);
-  };
-
-  const getAgentRowWindowDescription = (rowWindow) => {
-    if (!rowWindow?.limit) return '上传策略：默认上传全部符合条件的数据；仅在用户指定数量时限制行数。';
-    if (rowWindow.mode === 'tail') {
-      return `用户指定上传数量：${rowWindow.limit} 行；批次顺序按表格从旧到新理解，已取靠后的最近 ${rowWindow.limit} 行，并保持从旧到新的顺序展示。`;
-    }
-    return `用户指定上传数量：${rowWindow.limit} 行；批次顺序按表格从旧到新理解，已取靠前的较早 ${rowWindow.limit} 行。`;
-  };
-
-  const getRowSearchText = (row) => normalizeAgentText(Object.entries(row || {})
-    .filter(([key]) => key !== '__rowKey')
-    .map(([key, value]) => `${formatHeader(key)} ${Array.isArray(value) ? value.join(' ') : valueToText(value)}`)
-    .join(' '));
-
-  const scoreAgentRow = (row, terms) => {
-    if (!terms.length) return 0;
-    const rowText = getRowSearchText(row);
-    return terms.reduce((score, term) => {
-      const normalizedTerm = normalizeAgentText(term);
-      if (!normalizedTerm) return score;
-      if (rowText.includes(normalizedTerm)) return score + 3;
-      if (normalizedTerm.length >= 4 && rowText.includes(normalizedTerm.slice(0, Math.max(3, Math.floor(normalizedTerm.length * 0.7))))) return score + 1;
-      return score;
-    }, 0);
-  };
-
-  const getMetricSummaryForAgent = (rows) => [
-    '熔指',
-    '拉伸强度[Mpa]',
-    '断裂伸长率[%]',
-    '弯曲强度[Mpa]',
-    '弯曲模量[Mpa]',
-    IMPACT_STRENGTH_METRIC_KEY,
-    '灰份',
-  ].map((key) => summarizeMetric(rows, key)).filter(Boolean);
-
-  const PROPERTY_AGENT_CAPABILITIES = [
-    '读取全部物性分类/工作表及各分类记录数，并按分类名称直接查询材料',
-    '精确查询型号、批次以及跨工作表的相近型号',
-    '统计熔指、拉伸强度、断裂伸长率、弯曲强度、弯曲模量、冲击强度、灰份等指标的均值和范围',
-    '对比多个型号或批次的重复测试值、均值、差异、波动和极值',
-    '读取测试温度、灼热丝、CTI、阻燃厚度 T1/T2 等扩展字段',
-    '按照已配置的型号检测范围判断检验通过、异常、未设置范围或检验值无效',
-    '按当前筛选结果、当前已选行、全表或用户指定行数组织分析数据',
-    '为 JSON 导出、横纵向对比和检验报告提供分析结论',
-  ];
-
-  const inferPropertyAgentOperation = (question = '', requestedOperation = '') => {
-    if (requestedOperation) return requestedOperation;
-    const text = String(question || '');
-    if (/(?:分类情况|有哪些分类|哪些分类|有什么分类|分类有哪些|工作表|页签)/.test(text)) return 'categories';
-    if (/(?:合格|不合格|达标|超标|异常|检测范围|检验范围|规格范围|上下限|判定)/.test(text)) return 'validate';
-    if (/(?:对比|比较|差异|哪个更|哪.*高|哪.*低|批次间|型号间)/.test(text)) return 'compare';
-    if (/(?:统计|汇总|均值|平均|范围|最大|最小|极值|波动|稳定|趋势|离散)/.test(text)) return 'summarize';
-    return 'search';
-  };
-
-  const getRangeValidationSummaryForAgent = (rows) => {
-    const summary = { pass: 0, fail: 0, missing: 0, details: [] as string[] };
-    rows.forEach((row) => {
-      const model = getRowModel(row) || '未知型号';
-      const batch = getRowBatch(row) || '未知批次';
-      const draft = createReportDraft(row);
-      draft.metrics.forEach((metric) => {
-        const validation = getReportMetricValidation(metric);
-        summary[validation.status] += 1;
-        if (validation.status !== 'pass') {
-          summary.details.push(`${model}/${batch}：${metric.item}=${metric.value || '-'}，范围=${metric.range || '未设置'}，${validation.text}`);
-        }
-      });
-    });
-    return summary;
-  };
-
-  const wantsFullCurrentPropertyTable = (question = '') => {
-    const text = String(question || '');
-    const asksCurrentTable = /(?:当前|现在|本页|筛选|表格|物性表|物性数据)/.test(text);
-    const asksFullRange = /(?:全部|所有|完整|全量|一共|总共|有哪些|哪些|列举|汇总|统计|清单)/.test(text);
-    const asksModels = /(?:型号|牌号|材料)/.test(text);
-    const specifiesSmallLimit = /\d{1,3}\s*(?:条|行|个|款|型号|记录|数据)/.test(text)
-      && !/(?:全部|所有|完整|全量)/.test(text);
-    return !specifiesSmallLimit && asksCurrentTable && (asksFullRange || asksModels);
-  };
-
-  const getUniqueColumnValues = (rows, keys = []) => {
-    const seen = new Set();
-    const values = [];
-    rows.forEach((row) => {
-      keys.forEach((key) => {
-        const raw = row?.[key];
-        const items = Array.isArray(raw) ? raw : [raw];
-        items.forEach((item) => {
-          const value = valueToText(item).trim();
-          if (!value || seen.has(value)) return;
-          seen.add(value);
-          values.push(value);
-        });
-      });
-    });
-    return values;
-  };
-
-  const getAgentContext = (question = '', options = {} as any) => {
-    if (!state.data) {
-      return {
-        title: '物性分析',
-        reason: '物性分析数据尚未加载完成',
-        content: '【物性分析】数据尚未加载完成，暂时无法检索物性表格。',
-        score: 0,
-      };
-    }
-
-    const activeSheet = getActiveSheet(state.data);
-    const sheetNames = getSheetNames(state.data);
-    const normalizedQuestion = normalizeAgentText(question);
-    const matchedSheetNames = sheetNames.filter((sheetName) => {
-      const normalizedSheetName = normalizeAgentText(sheetName);
-      return normalizedSheetName && normalizedQuestion.includes(normalizedSheetName);
-    });
-    const categoryCatalog = sheetNames.map((sheetName) => ({
-      name: sheetName,
-      rowCount: getRowsForSheet(sheetName).length,
-    }));
-    const visible = getVisibleRows();
-    const selectedRows = getSelectedRowsForAllSheets();
-    const terms = extractAgentTerms(question);
-    const identifierTerms = getIdentifierTerms(terms);
-    const exactOnly = Boolean(options.exactOnly);
-    const rowWindow = extractAgentRowWindow(question);
-    const requestedRowLimit = rowWindow.limit;
-    const selectedOnly = Boolean(options.selectedOnly || options.mode === 'selected' || /(?:当前已选|当前选中|已选中|已选|选中|选择的|选出来的)/.test(String(question || '')));
-    const fullCurrentTable = Boolean(options.fullCurrentTable || wantsFullCurrentPropertyTable(question));
-    const operation = inferPropertyAgentOperation(question, options.operation);
-
-    if (selectedOnly && selectedRows.length) {
-      const selectedColumns = getAgentDetailColumns(getColumns(selectedRows));
-      const selectedRowWindow = rowWindow.limit == null ? { limit: null, mode: 'all' } : rowWindow;
-      const selectedForUpload = sliceAgentRowsByWindow(selectedRows, selectedRowWindow);
-      const metrics = getMetricSummaryForAgent(selectedForUpload);
-      const validationSummary = operation === 'validate' ? getRangeValidationSummaryForAgent(selectedForUpload) : null;
-      const displayTable = formatRowsMarkdownTableForAi(selectedForUpload, selectedColumns, null);
-      const csvTable = formatRowsCsvForAi(selectedForUpload, selectedColumns);
-      const content = [
-        '【物性分析已选数据】',
-        '以下数据来自物性分析页面当前高亮/选中的表格行。用户询问“选中、已选、选择的、这些数据”时，必须优先基于这些行回答，不要要求用户重新提供数据，也不要改用全表检索结果。',
-        `当前工作表：${getSheetLabel(activeSheet) || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
-        terms.length ? `用户问题关键词：${terms.join('、')}` : '',
-        getAgentRowWindowDescription(rowWindow),
-        '【用于分析的已选数据表】',
-        '```csv',
-        csvTable,
-        '```',
-        metrics.length ? '表格之后再输出的分析摘要：' : '',
-        ...metrics.map((item) => `- ${item}`),
-        `本次分析任务：${operation}。`,
-        `Agent 可用物性能力：${PROPERTY_AGENT_CAPABILITIES.join('；')}。`,
-        operation === 'compare' ? '对比要求：逐项比较共同指标，指出均值、范围、差异、波动和缺失字段；不要只复述数据。' : '',
-        validationSummary ? `检测范围判定汇总：通过 ${validationSummary.pass} 项，异常 ${validationSummary.fail} 项，待完善 ${validationSummary.missing} 项。` : '',
-        validationSummary?.details.length ? `异常或待完善明细：\n- ${validationSummary.details.slice(0, 30).join('\n- ')}` : '',
-      ].filter(Boolean).join('\n');
-
-      return {
-        title: '物性分析',
-        reason: `使用当前已选物性数据 ${selectedRows.length} 行`,
-        content,
-        score: options.forceCurrentPage ? 10 : 9,
-        stats: {
-          exactMatches: 0,
-          strongMatches: selectedRows.length,
-          similarMatches: 0,
-          selectedRows: selectedRows.length,
-          filteredRows: visible.filteredRows.length,
-          requestedRowLimit,
-          rowWindowMode: rowWindow.mode,
-          uploadedRows: selectedForUpload.length,
-          selectedOnly: true,
-          operation,
-          validation: validationSummary || undefined,
-          contextChars: content.length,
-        },
-        displayTable: displayTable ? `### 当前已选数据（${selectedForUpload.length} / ${selectedRows.length} 行）\n${displayTable}` : '',
-        fullContext: requestedRowLimit == null,
-      };
-    }
-
-    const exactMatches = [];
-    const categoryMatches = [];
-    const scoredRows = [];
-
-    sheetNames.forEach((sheetName) => {
-      const rows = getRowsForSheet(sheetName);
-      const columns = getColumns(rows);
-      rows.forEach((row) => {
-        if (identifierTerms.some((term) => rowMatchesIdentifierTerm(row, term))) {
-          exactMatches.push({ sheetName, row, columns, score: 100 });
-          return;
-        }
-        if (matchedSheetNames.includes(sheetName)) {
-          categoryMatches.push({ sheetName, row, columns, score: 90 });
-          return;
-        }
-        const score = scoreAgentRow(row, terms);
-        if (score > 0) scoredRows.push({ sheetName, row, columns, score });
-      });
-    });
-
-    scoredRows.sort((a, b) => b.score - a.score);
-    const strongMatches = exactOnly
-      ? exactMatches
-      : exactMatches.length
-        ? exactMatches
-        : categoryMatches.length
-          ? categoryMatches
-          : scoredRows.filter((item) => item.score >= 3);
-    const similarMatches = exactOnly || exactMatches.length || categoryMatches.length
-      ? []
-      : scoredRows.filter((item) => item.score > 0 && item.score < 3);
-    const fallbackRows = selectedRows.length
-      ? selectedRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }))
-      : visible.filteredRows.map((row) => ({ sheetName: activeSheet, row, columns: visible.columns }));
-    const fallbackRowLimit = fullCurrentTable ? requestedRowLimit : (requestedRowLimit ?? AGENT_CONTEXT_ROW_LIMIT);
-    const rowsForSummary = strongMatches.length
-      ? sliceAgentRowsByWindow(strongMatches.map((item) => item.row), rowWindow)
-      : selectedRows.length
-        ? sliceAgentRowsByWindow(selectedRows, rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow)
-        : sliceAgentRowsByWindow(visible.filteredRows, fullCurrentTable ? rowWindow : (rowWindow.limit == null ? { limit: AGENT_CONTEXT_ROW_LIMIT, mode: 'head' } : rowWindow));
-    const metrics = getMetricSummaryForAgent(rowsForSummary);
-    const validationSummary = operation === 'validate' ? getRangeValidationSummaryForAgent(rowsForSummary) : null;
-    const currentModelValues = fullCurrentTable ? getUniqueColumnValues(visible.filteredRows, ['型号']) : [];
-    const sections = [
-      '【物性分析检索结果】',
-      `命中原因：${fullCurrentTable ? '用户要求汇总当前物性表格，使用当前筛选后的全量表格数据' : terms.length ? `根据关键词 ${terms.join('、')} 检索物性数据` : '用户问题未提取到明确型号/批次，使用当前页面数据概览'}`,
-      identifierTerms.length ? `精确型号/批次关键词：${identifierTerms.join('、')}；精确命中 ${exactMatches.length} 行。` : '',
-      getAgentRowWindowDescription(rowWindow),
-      `当前工作表：${getSheetLabel(activeSheet) || '未选择'}；筛选结果：${visible.filteredRows.length} 条；已选行：${selectedRows.length} 条。`,
-      `物性分类目录（${categoryCatalog.length} 个）：${categoryCatalog.map((item) => `${item.name} ${item.rowCount} 条`).join('；') || '无'}。`,
-      matchedSheetNames.length ? `用户指定分类：${matchedSheetNames.join('、')}；已从对应工作表读取 ${categoryMatches.length} 行，不受当前激活工作表影响。` : '',
-      `搜索方式：${state.searchMode === 'exact' ? '精准查询' : '模糊查询'}；查询词：${state.query.trim() || '无'}。`,
-      '展示策略：前端会先展示全部匹配数据表格，AI 只需要继续输出表格后的分析。',
-      `本次分析任务：${operation}。`,
-      `Agent 可用物性能力：${PROPERTY_AGENT_CAPABILITIES.join('；')}。`,
-      operation === 'compare' ? '对比要求：逐项比较共同指标，指出均值、范围、差异、波动和缺失字段；不要只复述数据。' : '',
-      operation === 'summarize' ? '统计要求：说明样本数量，并按指标给出均值、最小值、最大值和可见波动；禁止把缺失值当作 0。' : '',
-      validationSummary ? `检测范围判定汇总：通过 ${validationSummary.pass} 项，异常 ${validationSummary.fail} 项，待完善 ${validationSummary.missing} 项。` : '',
-      validationSummary?.details.length ? `异常或待完善明细：\n- ${validationSummary.details.slice(0, 30).join('\n- ')}` : '',
-      fullCurrentTable ? `当前筛选表格中的唯一型号（${currentModelValues.length} 个）：${currentModelValues.join('、') || '无'}` : '',
-      operation === 'categories' ? '分类回答要求：直接列出分类名称、各分类记录数和总量；不要声称分类字段缺失，因为分类由工作表/页签表达。' : '',
-    ].filter(Boolean);
-    const displayTableSections = [];
-
-    const appendRows = (title, items, rowLimit = null) => {
-      if (!items.length) return;
-      const grouped = items.reduce((map, item) => {
-        const key = item.sheetName || activeSheet || '未命名工作表';
-        if (!map.has(key)) map.set(key, { columns: item.columns, rows: [] });
-        map.get(key).rows.push(item.row);
-        return map;
-      }, new Map());
-      sections.push(title);
-      grouped.forEach((group, sheetName) => {
-        sections.push(`### ${sheetName}（${group.rows.length} 行）`);
-        const displayColumns = getAgentDetailColumns(group.columns);
-        const limitedRows = sliceAgentRowsByWindow(group.rows, { limit: rowLimit, mode: rowWindow.mode });
-        const limit = limitedRows.length;
-        const displayTable = formatRowsMarkdownTableForAi(limitedRows, displayColumns, null);
-        const csvTable = formatRowsCsvForAi(limitedRows, displayColumns);
-        if (displayTable && csvTable) {
-          const tableTitle = `### ${sheetName}（${limit} / ${group.rows.length} 行）`;
-          displayTableSections.push(tableTitle, displayTable);
-          sections.push(
-            '【用于分析的数据表；已压缩为 CSV 以减少输入体积，前端会展示表格，回答时不要重复整表。】',
-            tableTitle,
-            '```csv',
-            csvTable,
-            '```'
-          );
-        }
-        if (rowLimit != null && group.rows.length > limit) {
-          const hiddenPosition = rowWindow.mode === 'tail' ? '靠前的较早' : '靠后的较新';
-          sections.push(`还有 ${group.rows.length - limit} 行未展开；这是因为用户指定了数量限制，未展开的是${hiddenPosition}数据。`);
-        }
-      });
-    };
-
-    appendRows(`${exactMatches.length ? '精确匹配数据' : '强匹配数据'}（共 ${strongMatches.length} 行）：`, strongMatches, requestedRowLimit);
-    appendRows(`相近匹配数据（共 ${similarMatches.length} 行）：`, similarMatches, requestedRowLimit ?? AGENT_CONTEXT_SIMILAR_LIMIT);
-    if (!exactOnly && !strongMatches.length && !similarMatches.length) {
-      appendRows(
-        selectedRows.length ? '当前已选数据：' : fullCurrentTable ? `当前筛选全量数据（共 ${fallbackRows.length} 行）：` : `当前筛选数据预览（共 ${fallbackRows.length} 行）：`,
-        fallbackRows,
-        fallbackRowLimit
-      );
-    }
-    if (metrics.length) sections.push('表格之后再输出的分析摘要：', ...metrics.map((item) => `- ${item}`));
-    const content = sections.join('\n');
-    const uploadedRows = strongMatches.length
-      ? (requestedRowLimit == null ? strongMatches.length : Math.min(strongMatches.length, requestedRowLimit))
-      : similarMatches.length
-        ? (requestedRowLimit == null ? Math.min(similarMatches.length, AGENT_CONTEXT_SIMILAR_LIMIT) : Math.min(similarMatches.length, requestedRowLimit))
-        : (fallbackRowLimit == null ? fallbackRows.length : Math.min(fallbackRows.length, fallbackRowLimit));
-
-    return {
-      title: '物性分析',
-      reason: strongMatches.length || similarMatches.length
-        ? '匹配到物性型号/批次/指标数据'
-        : selectedRows.length
-          ? '未命中关键词，使用当前已选物性数据'
-          : '未命中关键词，使用当前筛选物性数据预览',
-      content,
-      score: fullCurrentTable ? 12 : options.forceCurrentPage ? 9 : 7,
-      stats: {
-        exactMatches: exactMatches.length,
-        categoryMatches: categoryMatches.length,
-        matchedCategories: matchedSheetNames,
-        categoryCatalog,
-        strongMatches: strongMatches.length,
-        similarMatches: similarMatches.length,
-        selectedRows: selectedRows.length,
-        filteredRows: visible.filteredRows.length,
-        requestedRowLimit,
-        rowWindowMode: rowWindow.mode,
-        uploadedRows,
-        fullCurrentTable,
-        operation,
-        validation: validationSummary || undefined,
-        uniqueModels: currentModelValues.length,
-        fullMatchedRowsUploaded: requestedRowLimit == null && strongMatches.length > 0,
-        contextChars: content.length,
-      },
-      displayTable: displayTableSections.join('\n\n'),
-      fullContext: (requestedRowLimit == null && strongMatches.length > 0) || fullCurrentTable,
-    };
-  };
-
   const buildTable = (rows, columns) => {
     if (!rows.length || !columns.length) {
-      return '<div class="analysis-empty">暂无符合条件的数据，请调整筛选条件后重试。</div>';
+      const filtered = Boolean(state.query.trim() || state.compareOnly);
+      return `<div class="analysis-empty" role="status"><i class="ti ti-${filtered ? 'search' : 'file-spreadsheet'}" aria-hidden="true"></i><strong>${filtered ? '没有找到匹配数据' : '暂无物性数据'}</strong><p>${filtered ? '试试其他关键词，或清除筛选查看全部数据。' : '导入 Excel 文件，即可查看、筛选与对比材料数据。'}</p><button type="button" class="analysis-toolbar-btn analysis-toolbar-btn-primary" data-analysis-empty-action="${filtered ? 'reset' : 'import'}">${filtered ? '清除筛选' : '导入 Excel'}</button>${filtered ? '' : '<small class="analysis-empty-hint">支持 .xlsx / .xls 文件</small>'}</div>`;
     }
 
     return `
@@ -3758,34 +3065,12 @@ import {
     `;
   };
 
-  const getPaginationItems = (currentPage, totalPages): any[] => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, index) => index + 1);
-    }
-
-    const items: any[] = [1];
-
-    if (currentPage > 3) items.push('ellipsis-left');
-
-    const start = Math.max(2, currentPage - 1);
-    const end = Math.min(totalPages - 1, currentPage + 1);
-
-    for (let page = start; page <= end; page += 1) {
-      items.push(page);
-    }
-
-    if (currentPage < totalPages - 2) items.push('ellipsis-right');
-
-    items.push(totalPages);
-    return items;
-  };
-
   const renderPagination = (currentPage, totalPages) => {
     if (refs.prevPageBtn) refs.prevPageBtn.disabled = currentPage <= 1;
     if (refs.nextPageBtn) refs.nextPageBtn.disabled = currentPage >= totalPages;
 
     if (refs.pageNumbers) {
-      refs.pageNumbers.innerHTML = getPaginationItems(currentPage, totalPages).map((item) => {
+      refs.pageNumbers.innerHTML = getCompactPagination(currentPage, totalPages).map((item) => {
         if (typeof item !== 'number') {
           return '<span class="analysis-page-ellipsis">...</span>';
         }
@@ -3794,6 +3079,8 @@ import {
           <button
             class="analysis-page-number${item === currentPage ? ' is-active' : ''}"
             type="button"
+            aria-label="第 ${item} 页"
+            ${item === currentPage ? 'aria-current="page"' : ''}
             data-page-number="${item}">
             ${item}
           </button>
@@ -3828,20 +3115,23 @@ import {
   };
 
   const render = () => {
-    const { rows, allRows, filteredRows, columns, currentPage, totalPages } = getVisibleRows();
-    const hasTableRows = allRows.length > 0;
+    const { rows, filteredRows, columns, currentPage, totalPages } = getVisibleRows();
     const hasFilteredRows = filteredRows.length > 0;
 
     renderTabs();
 
     if (refs.searchMode) {
-      refs.searchMode.querySelectorAll('[data-search-mode]').forEach((button) => {
-        button.classList.toggle('is-active', button.getAttribute('data-search-mode') === state.searchMode);
-      });
+      const button = refs.searchMode.querySelector('[data-search-mode-toggle]');
+      if (button) {
+        const exact = state.searchMode === 'exact';
+        button.textContent = exact ? '精准查询' : '模糊查询';
+        button.setAttribute('aria-pressed', String(exact));
+        button.setAttribute('aria-label', exact ? '当前精准查询，点击切换为模糊查询' : '当前模糊查询，点击切换为精准查询');
+      }
     }
 
     if (refs.panel) {
-      refs.panel.hidden = !hasTableRows;
+      refs.panel.hidden = false;
     }
 
     if (refs.tableWrap) {
@@ -4049,9 +3339,9 @@ import {
       state.sourceFileName = '';
 
       if (refs.sheetTabs) refs.sheetTabs.innerHTML = '';
-      if (refs.panel) refs.panel.hidden = true;
+      if (refs.panel) refs.panel.hidden = false;
       if (refs.tableWrap) {
-        refs.tableWrap.innerHTML = '<div class="analysis-empty">云端物性数据加载失败，请检查登录状态或 Cloudflare D1 配置。</div>';
+        refs.tableWrap.innerHTML = '<div class="analysis-empty" role="alert"><i class="ti ti-cloud-data-connection" aria-hidden="true"></i><strong>暂时无法读取数据</strong><p>请检查网络与登录状态后重试。也可以使用上方「导入数据」添加 Excel 文件。</p><button type="button" class="analysis-toolbar-btn" data-analysis-empty-action="retry"><i class="ti ti-refresh" aria-hidden="true"></i>重新加载</button></div>';
       }
       if (refs.footerTotal) refs.footerTotal.textContent = '共 0 条';
       if (refs.selectionMeta) refs.selectionMeta.textContent = '已选 0 条';
@@ -4147,13 +3437,10 @@ import {
     });
 
     refs.searchMode?.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-search-mode]');
+      const button = event.target.closest('[data-search-mode-toggle]');
       if (!button) return;
 
-      const nextMode = button.getAttribute('data-search-mode');
-      if (!nextMode || nextMode === state.searchMode) return;
-
-      state.searchMode = nextMode;
+      state.searchMode = state.searchMode === 'fuzzy' ? 'exact' : 'fuzzy';
       state.page = 1;
       render();
     });
@@ -4166,8 +3453,13 @@ import {
       applySuggestionValue(nextValue);
     });
 
-    refs.sortSelect?.addEventListener('change', (event) => {
-      state.sort = event.target.value === 'backward' ? 'backward' : 'forward';
+    refs.sortToggle?.addEventListener('click', () => {
+      state.sort = state.sort === 'forward' ? 'backward' : 'forward';
+      const reversed = state.sort === 'backward';
+      refs.sortToggle.textContent = reversed ? '反序' : '正序';
+      refs.sortToggle.setAttribute('aria-pressed', String(reversed));
+      refs.sortToggle.setAttribute('aria-label', `当前${reversed ? '反序' : '正序'}，点击切换为${reversed ? '正序' : '反序'}`);
+      refs.sortToggle.title = `点击切换为${reversed ? '正序' : '反序'}`;
       state.page = 1;
       render();
     });
@@ -4197,6 +3489,22 @@ import {
     refs.tableWrap?.addEventListener('click', (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
+      const emptyAction = target.closest<HTMLButtonElement>('[data-analysis-empty-action]');
+      if (emptyAction) {
+        if (emptyAction.dataset.analysisEmptyAction === 'import') document.getElementById('analysisImportExcelBtn')?.click();
+        else if (emptyAction.dataset.analysisEmptyAction === 'reset') {
+          state.query = '';
+          state.compareOnly = false;
+          state.page = 1;
+          if (refs.searchInput) refs.searchInput.value = '';
+          render();
+        } else {
+          emptyAction.disabled = true;
+          emptyAction.textContent = '正在重新加载…';
+          void loadData({ bustCache: true });
+        }
+        return;
+      }
       if (
         target.closest('button') ||
         target.closest('a') ||
@@ -4298,12 +3606,13 @@ import {
   const init = () => {
     loadReportRanges();
     bind();
-    loadData();
+    const initialLoading = loadData();
     window.setTimeout(() => {
       if (document.querySelector('[data-page-section="property-analysis"]')?.classList.contains('active')) {
         ensureLoaded();
       }
     }, 8500);
+    return initialLoading;
   };
 
   const cleanup = () => {
@@ -4320,12 +3629,6 @@ import {
     ensureLoaded,
     render,
     parseExcelWorkbook,
-    getAiContext,
-    getFullAiContext,
-    getSelectedAiContext,
-    getAiDataFile,
-    getAgentContext,
-    getAgentCapabilities: () => [...PROPERTY_AGENT_CAPABILITIES],
   };
 })();
 

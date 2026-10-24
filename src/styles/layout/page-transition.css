@@ -1,0 +1,36 @@
+/* Resident styles: loading feedback must not wait for the destination's CSS chunk. */
+.app .shell .content { scroll-behavior: auto; }
+.app .shell .content.is-page-loading { position: relative; overflow: hidden; isolation: isolate; }
+.app .shell .content.is-page-loading > .page-section { visibility: hidden; pointer-events: none; }
+.app .shell .page-transition-state {
+  position: absolute; inset: 0; z-index: 31;
+  display: grid; place-content: center; justify-items: center; gap: 12px;
+  padding: 24px; background: var(--bg); color: var(--text); text-align: center;
+  font-family: var(--app-font-family);
+}
+.page-transition-state strong { font-size: 14px; font-weight: 600; line-height: 1.6; }
+.page-transition-state p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.page-transition-spinner {
+  width: 30px; height: 30px; box-sizing: border-box; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: page-transition-spin 750ms linear infinite;
+}
+.page-transition-spinner[hidden], .page-transition-state button[hidden] { display: none; }
+.page-transition-state button {
+  min-height: 44px; padding: 0 18px; margin-top: 4px; border-radius: 6px;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.page-transition-state button:hover { background: var(--accent-soft); border-color: var(--accent); }
+.page-transition-state button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Reveal only once ready; no animation delay or smooth-scroll to hold up navigation. */
+.app .shell .page-section.is-navigation-ready.active { animation: page-transition-enter 120ms ease-out both; }
+.app .shell .page-section.is-navigation-ready.active > :is(.analysis-panel, .spectrum-toolbar, .inspection-report-shell, .config-layout, .theme-settings-shell, .bottom-space) { animation: none; }
+@keyframes page-transition-spin { to { transform: rotate(360deg); } }
+@keyframes page-transition-enter { from { opacity: .65; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .page-transition-spinner { animation: none; }
+  .app .shell .page-section.is-navigation-ready.active { animation: none; }
+}
+html[data-reduced-motion="1"] .page-transition-spinner,
+html[data-reduced-motion="1"] .app .shell .page-section.is-navigation-ready.active { animation: none; }

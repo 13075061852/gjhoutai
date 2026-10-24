@@ -939,15 +939,6 @@
       .analysis-panel-title{
         font-size:16px;
       }
-      .project-skill-workspace,
-      .ai-call-analysis-stats,
-      .ai-call-analysis-overview,
-      .ai-call-analysis-grid{
-        grid-template-columns:1fr;
-      }
-      .ai-call-analysis-actions{
-        justify-content:flex-start;
-      }
       .ai-call-detail-grid{
         grid-template-columns:1fr;
       }
@@ -1012,23 +1003,6 @@
       .analysis-select-field .custom-select,
       .analysis-select-field .custom-select-trigger{
         min-width:86px;
-      }
-      .image-cutout-page{
-        height:auto;
-        min-height:auto;
-        overflow:visible;
-      }
-      .ai-call-analysis-page{
-        height:auto;
-        min-height:auto;
-        max-height:none;
-        overflow:visible;
-      }
-      .project-skill-page{
-        height:auto;
-        min-height:auto;
-        max-height:none;
-        overflow:visible;
       }
       .cutout-toolbar{
         align-items:flex-start;
@@ -2034,4 +2008,152 @@
   }
   html .shell .assistant-frame{width:100%;min-width:0}
   html .shell.assistant-collapsed .assistant{display:none}
+}
+
+/* ==========================================================================
+   Multi-device refinement
+   Desktop > 1200 · Tablet landscape ≤ 1200 · Tablet portrait ≤ 980
+   Phone ≤ 720 · Small phone ≤ 480 · Touch pointer sizing
+   ========================================================================== */
+
+/* ---------- Tablet landscape: tighten rhythm, keep two-column grids ------ */
+@media (max-width: 1200px){
+  :root{
+    --content-pad:12px;
+    --panel-gap:12px;
+  }
+  .topbar{ padding:0 12px; }
+  .page-section.active > * + *{ margin-top:var(--panel-gap); }
+}
+
+/* ---------- Tablet portrait: icon rail with hover labels ----------------- */
+@media (max-width: 980px){
+  :root{
+    --content-pad:10px;
+    --panel-gap:10px;
+  }
+  .content{ padding:var(--content-pad); }
+  .topbar{ gap:8px; padding:0 10px; }
+  /* Dialogs keep their shape but never exceed the viewport. */
+  .dialog-overlay{ padding:14px; }
+  .dialog-card{ max-height:calc(100dvh - 28px); }
+  .system-notify-stack{ right:14px; bottom:14px; }
+}
+
+@media (min-width:721px) and (max-width:980px){
+  html .shell .sidebar-scroll{ padding:8px 0 10px; }
+  html .shell .sidebar-section-flat{ gap:4px; align-items:center; }
+  html .shell .nav-item{
+    width:46px;
+    min-width:46px;
+    height:46px;
+    margin:1px auto;
+    border-radius:var(--shape-md);
+  }
+  html .shell .nav-item::before{ display:none; }
+  html .shell .nav-item.active{
+    background:var(--accent-soft);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  html .shell .nav-item:hover{ background:var(--surface-2); }
+  html .shell .nav-icon{ width:46px; height:46px; }
+  html .shell .sidebar-footer,
+  html .shell .sidebar-mobile-actions{ display:none; }
+  html .shell .nav-item:focus-visible{ outline-offset:1px; }
+}
+
+/* ---------- Phone: drawer navigation, bottom-sheet dialogs --------------- */
+@media (max-width: 720px){
+  :root{
+    --content-pad:8px;
+    --panel-gap:8px;
+    --topbar:52px;
+  }
+  .content{
+    padding:var(--content-pad);
+    padding-bottom:calc(var(--content-pad) + env(safe-area-inset-bottom));
+    overscroll-behavior-y:contain;
+  }
+  .topbar{ padding:0 8px; gap:6px; }
+  .mobile-menu-btn,
+  .topbar .icon-btn{
+    width:36px;
+    height:36px;
+    flex-basis:36px;
+    border-radius:var(--shape-sm);
+  }
+  .page-section.active > * + *{ margin-top:var(--panel-gap); }
+
+  /* Dialogs become bottom sheets so thumb reach and focus stay natural. */
+  .dialog-overlay{
+    align-items:flex-end;
+    padding:0;
+  }
+  .dialog-card,
+  .ui-dialog-card,
+  .confirm-dialog-card{
+    width:100%;
+    max-width:100%;
+    max-height:92dvh;
+    border-radius:var(--shape-lg) var(--shape-lg) 0 0;
+    animation:mo-sheet-up var(--mo-dur-slow) var(--mo-ease-drawer) both;
+  }
+  .ui-dialog-header,
+  .ui-dialog-footer{ padding:var(--space-3) var(--space-4); }
+  .ui-dialog-body{
+    padding:var(--space-4);
+    padding-bottom:calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+  .confirm-dialog-card{ padding:16px; }
+  .confirm-dialog-actions{
+    position:sticky;
+    bottom:0;
+    padding-bottom:calc(4px + env(safe-area-inset-bottom));
+    background:var(--surface);
+  }
+
+  /* Custom selects read as native sheets on small screens. */
+  .custom-select-menu{
+    max-height:56dvh;
+  }
+  .ui-pagination{
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:var(--space-2);
+    padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom));
+  }
+  /* Horizontal scrollers get momentum and edge containment. */
+  :is(.analysis-table-scroll, .biz-formula-table-wrap, .biz-office-table-wrap, .ui-table-wrap,
+      .analysis-sheet-tabs, .spectrum-toolbar-actions, .provider-segment, .top-visited){
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;
+  }
+  /* Notifications avoid the phone notch and stay clear of the thumb zone. */
+  .system-notify-stack{
+    right:10px;
+    left:10px;
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    width:auto;
+  }
+}
+
+/* ---------- Small phone: single column, quieter chrome ------------------- */
+@media (max-width: 480px){
+  :root{ --content-pad:6px; --panel-gap:6px; }
+  .topbar{ padding:0 6px; }
+  .dialog-card,
+  .ui-dialog-card{ max-height:94dvh; border-radius:16px 16px 0 0; }
+  .system-notify-item{ grid-template-columns:30px minmax(0,1fr) 26px; gap:8px; padding:10px; }
+}
+
+/* ---------- Touch pointers: comfortable hit areas ------------------------ */
+@media (pointer: coarse){
+  :is(.icon-btn, .mobile-menu-btn, .dialog-close, .top-visited-remove, .spectrum-icon-btn,
+      .assistant-icon-btn, .analysis-page-btn){
+    min-width:36px;
+    min-height:36px;
+  }
+  .nav-item{ min-height:48px; }
+  .top-visited-entry{ min-height:34px; }
+  .custom-select-option{ min-height:42px; }
 }

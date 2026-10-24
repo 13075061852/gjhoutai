@@ -76,7 +76,7 @@
   white-space: nowrap;
 }
 
-.inspection-report-panel-head span {
+.inspection-report-panel-head > div:not(.inspection-report-actions) > span {
   display: block;
   margin-top: 2px;
   color: #64748b;
@@ -91,6 +91,12 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.inspection-report-actions .analysis-toolbar-btn > span {
+  color: inherit;
+  font: inherit;
+  margin-top: 0;
 }
 
 /* 搜索栏 */
@@ -705,4 +711,169 @@
   .inspection-report-card-label {
     display: none;
   }
+}
+
+/* ==========================================================================
+   UI refresh — token-driven surfaces, motion and device refinements
+   The original rules above use fixed hex colors; this layer re-points the
+   main surfaces at the shared design tokens so every theme works.
+   ========================================================================== */
+.inspection-report-list-view{
+  border-right:var(--hairline);
+  background:var(--surface);
+}
+.inspection-report-preview-view{ background:var(--surface-3); }
+.inspection-report-preview-head{
+  background:var(--surface);
+  border-bottom:var(--hairline);
+}
+.inspection-report-preview-info h3{ color:var(--text); }
+.inspection-report-preview-info span{ color:var(--muted); }
+.inspection-report-preview-body{ background:var(--surface-3); }
+.inspection-report-preview-body iframe{ background:var(--surface); }
+.inspection-report-preview-empty i{
+  background:var(--surface-3);
+  color:var(--muted-2);
+}
+.inspection-report-preview-empty strong{ color:var(--text); }
+.inspection-report-preview-empty span{ color:var(--muted); }
+.inspection-report-card{
+  border-radius:var(--shape-md);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             transform var(--mo-dur-base) var(--mo-ease-out);
+}
+.inspection-report-card:hover{ background:var(--surface-2); }
+.inspection-report-card.is-active{ background:var(--accent-soft); }
+.inspection-report-card.is-active::before{ background:var(--accent); }
+.inspection-report-main p{ color:var(--muted); }
+.inspection-report-card-label{
+  background:var(--surface-3);
+  color:var(--text-2);
+}
+.inspection-report-drop-hint{
+  border:2px dashed var(--accent);
+  border-radius:var(--shape-lg);
+}
+.inspection-report-drop-card i{
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+.inspection-report-drop-card strong{ color:var(--text); }
+.inspection-report-drop-card span{ color:var(--muted); }
+.inspection-report-actions .analysis-toolbar-btn,
+.inspection-report-card-actions .analysis-toolbar-btn{
+  border-color:var(--border);
+  background:var(--surface);
+  color:var(--text-2);
+}
+.inspection-report-actions .analysis-toolbar-btn:hover,
+.inspection-report-card-actions .analysis-toolbar-btn:hover{
+  background:var(--surface-2);
+  border-color:var(--control-border-hover);
+  color:var(--text);
+}
+.inspection-report-preview-actions a{
+  border-color:var(--border);
+  background:var(--surface);
+  color:var(--text-2);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             border-color var(--mo-dur-fast) var(--mo-ease-standard),
+             color var(--mo-dur-fast) var(--mo-ease-standard);
+}
+.inspection-report-preview-actions a:hover{
+  background:var(--surface-2);
+  border-color:var(--control-border-hover);
+  color:var(--text);
+}
+.inspection-report-upload-track{ border-radius:var(--shape-pill); }
+.inspection-report-empty{ animation:mo-fade-in var(--mo-dur-slow) var(--mo-ease-out) both; }
+
+/* ---- Tablet ---- */
+@media (max-width:980px){
+  .inspection-report-list-view{ width:320px; min-width:280px; }
+  .inspection-report-preview-head{ padding:0 14px; }
+}
+/* ---- Phone ---- */
+@media (max-width:720px){
+  .inspection-report-preview-head{
+    height:auto;
+    min-height:56px;
+    padding:8px 12px;
+    gap:8px;
+  }
+  .inspection-report-preview-actions a{ width:38px; height:38px; }
+  .inspection-report-drop-card i{ width:46px; height:46px; }
+}
+
+/* Compact report workspace. Keep names readable, actions explicit and PDF states local. */
+.app .shell .inspection-reports-page { border-radius: 8px; }
+.app .shell .inspection-reports-page .inspection-report-list-view { width: 320px; min-width: 280px; }
+.app .shell .inspection-report-panel-head { height: 56px; padding: 0 12px; border-bottom: 0; }
+.app .shell .inspection-report-search-bar { padding: 0 12px 10px; border-bottom: 0; background: var(--surface); }
+.app .shell .inspection-report-search { height: 36px; border-radius: 6px; border-color: var(--border); background-color: var(--surface-2); color: var(--text); }
+.app .shell .inspection-report-search:focus { border-color: var(--accent); background-color: var(--surface); }
+.app .shell .inspection-report-list-toolbar { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; }
+.app .shell .inspection-report-list-toolbar .inspection-report-search-bar { flex: 1 1 0; min-width: 0; padding: 0; }
+.app .shell .inspection-report-list-toolbar .inspection-report-search { width: 100%; min-width: 0; box-sizing: border-box; }
+.app .shell .inspection-report-list-toolbar .inspection-report-actions { flex: 0 0 auto; }
+.app .shell .inspection-report-list-toolbar .analysis-toolbar-btn { height: 36px; min-height: 36px; padding: 0 10px; white-space: nowrap; }
+.app .shell .inspection-report-list { padding: 0 8px 8px; gap: 4px; overscroll-behavior: contain; }
+.app .shell .inspection-report-card { gap: 10px; padding: 12px 8px; border-radius: 6px; transition: background-color 160ms ease; }
+.app .shell .inspection-report-card.is-active::before { left: 0; height: 20px; width: 2px; }
+.app .shell .inspection-report-icon { width: 32px; height: 38px; border-radius: 6px; font-size: 20px; background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+.app .shell .inspection-report-title-row h3 {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  white-space: normal; overflow-wrap: anywhere; font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--text);
+}
+.app .shell .inspection-report-meta { flex-wrap: nowrap; gap: 6px; margin-top: 5px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.app .shell .inspection-report-meta span { white-space: nowrap; }
+.app .shell .inspection-report-file { font-size: 11px; color: var(--muted); }
+.app .shell .inspection-report-main p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.app .shell .inspection-report-card-actions { width: 28px; min-height: 28px; flex: 0 0 28px; }
+.app .shell .inspection-report-card-actions .analysis-toolbar-btn {
+  width: 28px; height: 32px; padding: 0; border-color: transparent; border-radius: 6px;
+  background: transparent; color: var(--muted); opacity: 1; pointer-events: auto; transform: none;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.app .shell .inspection-report-card-actions .inspection-report-delete:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+.app .shell .inspection-report-preview-head { height: 56px; min-height: 56px; padding: 0 16px; gap: 12px; }
+.app .shell .inspection-report-preview-info h3 { font-size: 14px; font-weight: 500; }
+.app .shell .inspection-report-preview-info span { font-size: 11px; color: var(--muted); }
+.app .shell .inspection-report-preview-actions a { width: auto; min-height: 34px; height: auto; padding: 0 10px; gap: 6px; border-radius: 6px; font-size: 12px; }
+.app .shell .inspection-report-actions .analysis-toolbar-btn { border-radius: 6px; height: 34px; }
+.app .shell .inspection-report-preview-body { background: var(--surface-2); }
+.app .shell .inspection-report-preview-body iframe[hidden] { display: none; }
+.app .shell .inspection-report-preview-status {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 24px; text-align: center; color: var(--muted); overflow: auto;
+}
+.app .shell .inspection-report-preview-status[hidden] { display: none; }
+.app .shell .inspection-report-preview-status > i { display: grid; place-items: center; width: 48px; height: 56px; border-radius: 8px; color: var(--accent); background: var(--surface); font-size: 28px; }
+.app .shell .inspection-report-preview-status strong { font-size: 14px; font-weight: 500; color: var(--text); }
+.app .shell .inspection-report-preview-status p { max-width: 340px; margin: 0; font-size: 12px; line-height: 1.8; }
+.app .shell .inspection-report-preview-status button { min-height: 36px; border: 1px solid var(--border); border-radius: 6px; padding: 0 14px; background: var(--surface); color: var(--accent); cursor: pointer; }
+.app .shell .inspection-report-preview-status button[hidden] { display: none; }
+.app .shell .inspection-reports-page :is(button, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 768px) {
+  .app .shell .inspection-reports-page .inspection-report-list-view { width: 100%; min-width: 0; border-right: 0; }
+  .app .shell .inspection-report-preview-head { height: auto; padding: 8px 12px; gap: 8px; }
+  .app .shell .inspection-report-preview-info h3 { font-size: 13px; }
+  .app .shell .inspection-report-preview-actions a { padding: 0 8px; min-height: 36px; }
+  .app .shell .inspection-report-card-actions .analysis-toolbar-btn { width: 32px; min-height: 40px; }
+  .app .shell .inspection-report-card-actions { width: 32px; flex-basis: 32px; }
+}
+@media (max-width: 380px) {
+  .app .shell .inspection-report-preview-actions a { width: 34px; padding: 0; }
+  .app .shell .inspection-report-preview-actions a span { display: none; }
+}
+/* Per-file download lives beside delete; the PDF has no title/action header. */
+.app .shell .inspection-report-card .inspection-report-card-actions { display: flex; flex-direction: row; align-items: center; gap: 4px; width: 60px; flex: 0 0 60px; }
+.app .shell .inspection-report-download:hover { background: var(--accent-soft); color: var(--accent); }
+.app .shell .inspection-report-preview-back { display: none; }
+@media (max-width: 768px) {
+  .app .shell .inspection-report-card .inspection-report-card-actions { width: 68px; flex-basis: 68px; }
+  .app .shell .inspection-report-preview-back { display: inline-flex; position: absolute; top: 8px; left: 8px; z-index: 3; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 2px 6px #0001; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .shell .inspection-report-card { transition: none; }
 }

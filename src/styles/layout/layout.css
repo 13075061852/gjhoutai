@@ -287,12 +287,58 @@
     .page-section.active{display:block}
     .page-section.active.analysis-page{display:flex}
     .page-section.active.spectrum-page{display:flex}
-    .page-section.active.image-cutout-page{display:flex}
-    .page-section.active.project-skill-page{display:flex}
-    .page-section.active.ai-call-analysis-page{display:flex}
     .dashboard{
       width:100%;
       min-width:0;
       max-width:none;
       margin:0;
     }
+
+    /* ======================================================================
+       Shell refresh — topbar, content rhythm and page scroll behaviour
+       ====================================================================== */
+    .topbar{
+      gap:10px;
+      padding:0 16px;
+      background:var(--surface);
+    }
+    .top-visited{
+      gap:8px;
+      scroll-behavior:smooth;
+    }
+    .top-visited-entry{ border-radius:var(--shape-sm); }
+    .top-visited-item{
+      font-weight:var(--font-weight-semibold);
+      transition:color var(--mo-dur-fast) var(--mo-ease-standard);
+    }
+    .pill-btn,
+    .icon-btn,
+    .time-chip{
+      border-radius:var(--shape-sm);
+      transition:border-color var(--mo-dur-fast) var(--mo-ease-standard),
+                 background-color var(--mo-dur-fast) var(--mo-ease-standard),
+                 color var(--mo-dur-fast) var(--mo-ease-standard),
+                 box-shadow var(--mo-dur-fast) var(--mo-ease-standard);
+    }
+    .icon-btn:hover:not(.is-active),
+    .pill-btn:hover:not(.primary){
+      border-color:var(--control-border-hover);
+      background:var(--surface-2);
+      color:var(--text);
+    }
+    .pill-btn.primary{
+      box-shadow:0 1px 2px color-mix(in srgb, var(--accent) 34%, transparent);
+    }
+    .pill-btn.primary:hover{
+      box-shadow:0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+    }
+    .mobile-menu-btn{ border-radius:var(--shape-sm); }
+    .content{
+      padding:var(--content-pad);
+      scroll-behavior:smooth;
+    }
+    /* Sections keep a consistent vertical rhythm inside the scroll area. */
+    .page-section.active > * + *{
+      margin-top:var(--panel-gap);
+    }
+    .bottom-space{ flex:0 0 auto; }

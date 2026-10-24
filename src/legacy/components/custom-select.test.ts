@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 beforeAll(async () => { await import('./custom-select'); });
 afterEach(() => { document.body.innerHTML = ''; });
@@ -53,6 +53,25 @@ describe('shared custom select', () => {
     menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(menu.hidden).toBe(true);
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('anchors the top-layer menu to viewport coordinates without default popover offsets', () => {
+    const { trigger, menu } = setup();
+    const showPopover = vi.fn();
+    const hidePopover = vi.fn();
+    Object.assign(menu, { showPopover, hidePopover });
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      left: 105, right: 205, top: 12, bottom: 44, width: 100, height: 32,
+      x: 105, y: 12, toJSON: () => ({}),
+    });
+    trigger.click();
+    expect(menu.getAttribute('popover')).toBe('manual');
+    expect(showPopover).toHaveBeenCalledOnce();
+    expect(menu.style.left).toBe('105px');
+    expect(menu.style.top).toBe('50px');
+    expect(menu.style.margin).toBe('0px');
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(hidePopover).toHaveBeenCalledOnce();
   });
 
   it('keeps multi-select native and makes enhancement idempotent', () => {

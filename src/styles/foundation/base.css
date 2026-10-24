@@ -1,26 +1,39 @@
     :root{
-      --bg:#f3f4f6;
+      --bg:#f2f4f5;
       --surface:#ffffff;
-      --surface-2:#f9fafb;
+      --surface-2:#f7f9fa;
       --surface-3:#eef2f7;
       --border:#e5e7eb;
       --border-2:#cbd5e1;
-      --text:#111827;
+      --text:#1b2b35;
       --text-2:#374151;
       --muted:#6b7280;
       --muted-2:#9ca3af;
-      --accent:#2563eb;
-      --accent-soft:rgba(37,99,235,.12);
+      --accent:#137d82;
+      --accent-soft:#ebf3f3;
+      --on-accent:#ffffff;
+      --accent-hover:#145f62;
+      --sidebar-bg:#e5eeec;
+      --sidebar-text:#244441;
+      --sidebar-title:#244441;
+      --sidebar-muted:#526e69;
+      --sidebar-border:#cad6d3;
+      --sidebar-hover:#d7e2df;
+      --sidebar-hover-text:#244441;
+      --sidebar-active:#176d70;
+      --sidebar-active-text:#ffffff;
+      --sidebar-active-icon:#ffffff;
+      --sidebar-marker:#bee0df;
+      --sidebar-focus:#176d70;
       --success:#65a30d;
       --warn:#f59e0b;
       --danger:#ef4444;
       --radius:16px;
       --radius-sm:12px;
       --radius-xs:10px;
-      --sidebar:228px;
-      --assistant-panel-width:min(366px, 100vw);
-      --assistant:var(--assistant-panel-width);
-      --topbar:56px;
+      --sidebar:240px;
+      --assistant:0px;
+      --topbar:64px;
       --shadow:none;
       --ease:cubic-bezier(.4,0,.2,1);
       --sidebar-ease:cubic-bezier(.22,.9,.24,1);
@@ -29,8 +42,8 @@
       --control-bg-hover:var(--surface-2);
       --control-border:var(--border);
       --control-border-hover:var(--border-2);
-      --control-border-focus:rgba(37,99,235,.58);
-      --control-ring:rgba(37,99,235,.14);
+      --control-border-focus:rgba(19,125,130,.58);
+      --control-ring:rgba(19,125,130,.14);
       --control-text:var(--text);
       --control-muted:var(--muted-2);
       --control-shadow:none;
@@ -49,8 +62,8 @@
       --ui-radius-sm:8px;
       --ui-radius-md:10px;
       --ui-radius-lg:12px;
-      --ui-page-gap:12px;
-      --ui-panel-padding:16px;
+      --ui-page-gap:20px;
+      --ui-panel-padding:20px;
       --ui-dialog-width-sm:420px;
       --ui-dialog-width-md:640px;
       --ui-dialog-width-lg:920px;
@@ -73,30 +86,33 @@
       --line-height-body:1.5;
       --line-height-heading:1.35;
       --focus-outline:2px solid var(--accent);
+      /* ---- Elevation scale (solid shadows only, no gradients) ---- */
+      --elev-1:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.05);
+      --elev-2:0 2px 4px rgba(15,23,42,.04),0 6px 16px rgba(15,23,42,.06);
+      --elev-3:0 10px 28px rgba(15,23,42,.09),0 2px 6px rgba(15,23,42,.05);
+      --elev-4:0 20px 52px rgba(15,23,42,.16),0 6px 16px rgba(15,23,42,.07);
+      --elev-inset:inset 0 1px 2px rgba(15,23,42,.05);
+      /* ---- Shape scale ---- */
+      --shape-sm:10px;
+      --shape-md:14px;
+      --shape-lg:18px;
+      --shape-xl:24px;
+      --shape-pill:999px;
+      /* ---- Layout rhythm ---- */
+      --content-pad:24px;
+      --panel-gap:16px;
+      --touch-target:44px;
+      --hairline:1px solid var(--border);
+      --surface-blur:12px;
+      --surface-raised:var(--surface);
     }
     body[data-theme="dark"]{
-      --bg:#0f172a;
-      --surface:#111827;
-      --surface-2:#182235;
-      --surface-3:#202c42;
-      --border:#2b3a52;
-      --border-2:#3b4c66;
-      --text:#e5edf7;
-      --text-2:#cbd5e1;
-      --muted:#94a3b8;
-      --muted-2:#7f8fa6;
-      --accent:#22d3ee;
-      --accent-soft:rgba(34,211,238,.14);
-      --control-bg:#0f172a;
-      --control-bg-hover:#111c31;
-      --control-border:#24324a;
-      --control-border-hover:#32435f;
-      --control-border-focus:rgba(34,211,238,.62);
-      --control-ring:rgba(34,211,238,.16);
-      --control-text:#e5edf7;
-      --control-muted:#8b9bb2;
-      --control-shadow:none;
-      --control-shadow-hover:none;
+      /* Palette colours live on :root; body must not shadow the selected dark preset. */
+      --elev-1:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.35);
+      --elev-2:0 2px 6px rgba(0,0,0,.45),0 8px 20px rgba(0,0,0,.4);
+      --elev-3:0 12px 30px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.4);
+      --elev-4:0 22px 56px rgba(0,0,0,.6),0 6px 18px rgba(0,0,0,.45);
+      --elev-inset:inset 0 1px 0 rgba(255,255,255,.04);
     }
     *{box-sizing:border-box}
     [hidden]{display:none!important}
@@ -165,7 +181,6 @@
     }
     html[data-sidebar-collapsed="1"] .shell,
     .shell.sidebar-collapsed{--sidebar:72px}
-    html[data-assistant-collapsed="1"] .shell{--assistant:0px}
     .sidebar{
       width:var(--sidebar);
       min-width:var(--sidebar);

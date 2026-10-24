@@ -897,3 +897,161 @@ html[data-reduced-motion="1"] .system-notify-item.is-leaving{
     width:calc(100vw - 24px);
   }
 }
+
+/* ==========================================================================
+   Surface and control refresh
+   Shared shape/elevation layer applied on top of the primitives above.
+   Kept additive so page-specific rules and the UI-consistency contracts stay
+   untouched.
+   ========================================================================== */
+
+/* ---- Surfaces ---- */
+.ui-panel,
+.ui-stat-card{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-1);
+}
+.ui-stat-card{
+  padding:var(--space-4) var(--space-4) var(--space-5);
+}
+.ui-panel{
+  background:var(--surface);
+}
+
+/* ---- Toolbar ---- */
+.ui-toolbar{
+  gap:var(--space-3);
+  padding:var(--space-3) var(--space-4);
+  background:var(--surface);
+}
+.ui-toolbar__title{
+  font-weight:var(--font-weight-semibold);
+  letter-spacing:.01em;
+}
+
+/* ---- Buttons ---- */
+.ui-button{
+  border-radius:var(--ui-radius-md);
+  box-shadow:none;
+}
+.ui-button--primary{
+  box-shadow:0 1px 2px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.ui-button--primary:not(:disabled):hover{
+  box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.analysis-toolbar-btn,
+.analysis-toolbar-btn-primary{
+  border-radius:var(--ui-radius-md);
+}
+.analysis-toolbar-btn-primary:not(:disabled):hover{
+  box-shadow:var(--elev-1);
+}
+
+/* ---- Fields and search ---- */
+.ui-field{
+  border-radius:var(--ui-radius-md);
+}
+.ui-field:hover{
+  background:var(--control-bg-hover);
+}
+.ui-search-box{
+  border-radius:var(--ui-radius-md);
+  background:var(--surface-2);
+}
+.ui-search-box:focus-within{
+  border-color:var(--accent);
+  background:var(--surface);
+  box-shadow:0 0 0 3px var(--accent-soft);
+}
+
+/* ---- Custom select ---- */
+.custom-select-trigger{
+  border-radius:var(--ui-radius-md);
+}
+.custom-select.is-open .custom-select-trigger{
+  box-shadow:0 0 0 3px var(--accent-soft);
+}
+.custom-select-menu{
+  padding:var(--space-1);
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-3);
+}
+.custom-select-option{
+  border-radius:var(--ui-radius-sm);
+}
+.custom-select-option.is-active{
+  font-weight:var(--font-weight-semibold);
+}
+
+/* ---- Tables ---- */
+.ui-table th{
+  background:var(--surface-2);
+  color:var(--text-2);
+  font-weight:var(--font-weight-semibold);
+  letter-spacing:.01em;
+}
+@media (hover: hover) {
+  .ui-table tbody tr:hover td{
+    background:var(--surface-2);
+  }
+}
+.ui-table td{
+  transition:background-color var(--mo-dur-fast, .16s) var(--mo-ease-standard, ease);
+}
+
+/* ---- Dialogs, toasts and overlays ---- */
+.dialog-card{
+  border-radius:var(--shape-lg);
+  box-shadow:var(--elev-4);
+}
+.dialog-close{
+  border-radius:var(--ui-radius-md);
+}
+.confirm-dialog-card{
+  border-radius:var(--shape-lg);
+  box-shadow:var(--elev-4);
+}
+.confirm-dialog-icon{
+  border-radius:var(--ui-radius-md);
+}
+.confirm-dialog-btn{
+  border-radius:var(--ui-radius-md);
+}
+.system-notify-item{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-3);
+}
+.system-notify-icon{
+  border-radius:var(--ui-radius-md);
+}
+
+/* ---- Pagination ---- */
+.ui-pagination{
+  gap:var(--space-1);
+  padding:var(--space-2) var(--space-4);
+  background:var(--surface);
+}
+
+/* ---- Empty states ---- */
+.ui-empty{
+  display:grid;
+  justify-items:center;
+  align-content:center;
+  gap:var(--space-2);
+  padding:var(--space-8) var(--space-4);
+  color:var(--muted);
+  text-align:center;
+}
+.ui-empty strong{
+  color:var(--text-2);
+  font-size:var(--font-size-md);
+  font-weight:var(--font-weight-semibold);
+}
+
+/* ---- Compact tablet fallbacks for shared primitives ---- */
+@media (min-width:721px) and (max-width:1200px){
+  .ui-toolbar{
+    flex-wrap:wrap;
+  }
+}

@@ -1,36 +1,23 @@
 import { LOCAL_STORAGE_KEYS } from '../services/local-storage-keys';
+import { applyThemePreset, getThemePreset } from './themePresets';
 
-const THEME_KEYS = {
-  sidebar: LOCAL_STORAGE_KEYS.sidebarCollapsed,
-  assistant: LOCAL_STORAGE_KEYS.assistantCollapsed,
-  mode: 'gjh-theme-mode-v1',
-  vars: 'gjh-theme-vars-v1',
-  font: 'gjh-font-vars-v1',
-  themeId: 'gjh-theme-id-v1',
-} as const;
-
+/** Apply canonical palette tokens before React mounts, including the sidebar. */
 export function applyInitialThemeState(): void {
+  const root = document.documentElement;
+  let themeId: string | null = null;
+  let font: { family?: string; id?: string } | null = null;
   try {
-    const root = document.documentElement;
-    root.dataset.sidebarCollapsed = localStorage.getItem(THEME_KEYS.sidebar) === '1' ? '1' : '0';
-    root.dataset.assistantCollapsed = localStorage.getItem(THEME_KEYS.assistant) === '1' ? '1' : '0';
-    root.dataset.colorMode = localStorage.getItem(THEME_KEYS.mode) || 'light';
-
-    const savedThemeVars = JSON.parse(localStorage.getItem(THEME_KEYS.vars) || 'null') as Record<string, string> | null;
-    if (savedThemeVars && typeof savedThemeVars === 'object') {
-      Object.entries(savedThemeVars).forEach(([key, value]) => {
-        root.style.setProperty(key, value);
-      });
-    }
-
-    const savedFontVars = JSON.parse(localStorage.getItem(THEME_KEYS.font) || 'null') as { family?: string; id?: string } | null;
-    if (savedFontVars?.family) {
-      root.style.setProperty('--app-font-family', savedFontVars.family);
-      root.dataset.fontPreset = savedFontVars.id || 'system';
-    }
-
-    root.dataset.colorTheme = localStorage.getItem(THEME_KEYS.themeId) || 'white';
-  } catch {
-    // Ignore storage access failures and keep default state.
+    root.dataset.sidebarCollapsed = localStorage.getItem(LOCAL_STORAGE_KEYS.sidebarCollapsed) === '1' ? '1' : '0';
+    themeId = localStorage.getItem('gjh-theme-id-v1');
+  } catch { root.dataset.sidebarCollapsed = '0'; }
+  delete root.dataset.assistantCollapsed;
+  delete root.dataset.assistantFullscreen;
+  // Legacy stored CSS variables are intentionally not replayed: a saved ID adopts the
+  // current coordinated palette instead of reviving stale sidebar/control colours.
+  applyThemePreset(getThemePreset(themeId));
+  try { font = JSON.parse(localStorage.getItem('gjh-font-vars-v1') || 'null'); } catch { /* Keep system font. */ }
+  if (font?.family && typeof font.family === 'string') {
+    root.style.setProperty('--app-font-family', font.family);
+    root.dataset.fontPreset = font.id || 'system';
   }
 }

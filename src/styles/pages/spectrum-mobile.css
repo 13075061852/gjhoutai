@@ -1,0 +1,165 @@
+/* Available toolbar width, rather than viewport width, decides when actions collapse. */
+.app .shell .spectrum-toolbar-menu-toggle { display: none; }
+@media (min-width: 721px) {
+  .app .shell .spectrum-page .spectrum-toolbar { container: spectrum-toolbar / inline-size; }
+  .app .shell .spectrum-page .spectrum-toolbar-row { flex-wrap: nowrap; }
+  .app .shell .spectrum-page .spectrum-toolbar-main { flex: 1 1 0; min-width: 0; }
+  .app .shell .spectrum-page .spectrum-search { min-width: 0; max-width: none; }
+  .app .shell .spectrum-page .spectrum-toolbar-actions { flex: 0 0 auto; padding-bottom: 0; }
+  @container spectrum-toolbar (max-width: 900px) {
+    .app .shell .spectrum-page .spectrum-toolbar-row { flex-wrap: wrap; }
+    .app .shell .spectrum-page .spectrum-toolbar-menu-toggle {
+      display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+      height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--surface); color: var(--text-2); font-size: 12px; font-weight: 500;
+      white-space: nowrap; cursor: pointer;
+    }
+    .app .shell .spectrum-page .spectrum-toolbar-menu-toggle:hover,
+    .app .shell .spectrum-page .spectrum-toolbar-menu-toggle[aria-expanded="true"] {
+      background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+    }
+    .app .shell .spectrum-page .spectrum-toolbar-menu-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .app .shell .spectrum-page .spectrum-toolbar-actions { display: none; }
+    .app .shell .spectrum-page .is-actions-expanded > .spectrum-toolbar-actions {
+      display: flex; flex: 1 0 100%; width: 100%; max-width: 100%; box-sizing: border-box;
+      padding: 6px; border-radius: 6px; background: var(--surface-2); gap: 8px;
+    }
+    .app .shell .spectrum-page .is-actions-expanded > .spectrum-toolbar-actions .analysis-toolbar-btn {
+      padding: 0 10px; border-color: transparent; background: transparent;
+    }
+    .app .shell .spectrum-page .is-actions-expanded > .spectrum-toolbar-actions .analysis-toolbar-btn:hover { background: var(--accent-soft); }
+  }
+}
+/* Phone and tablet share filter rows; compact toolbar sizing remains phone-only. */
+@media (max-width: 720px) {
+  .app .shell .spectrum-page.spectrum-mobile-layout { height: 100%; min-height: 0; gap: 12px; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar { padding: 12px; gap: 12px; flex: 0 0 auto; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-row { display: flex; flex: 0 0 auto; flex-direction: column; align-items: stretch; justify-content: flex-start; flex-wrap: nowrap; height: auto; min-height: 0; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-main { display: flex; flex: 0 0 auto; width: 100%; height: auto; min-height: 0; align-items: center; gap: 8px; min-width: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-search { flex: 1 1 0; min-width: 0; height: 40px; padding-left: 10px; }
+  .app .shell .spectrum-mobile-layout .spectrum-search input { min-width: 32px; font-size: 12px; padding: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-mode-switch { flex: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-mode-btn { width: 34px; padding: 0; font-size: 10px; }
+  .app .shell .spectrum-mobile-layout .spectrum-mode-switch { --spectrum-mode-item: 34px; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-menu-toggle,
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-actions { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-actions > * { min-width: 0; width: 100%; margin: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-actions .analysis-toolbar-btn { width: 100%; min-width: 0; height: 36px; min-height: 36px; padding: 0 3px; gap: 4px; justify-content: center; font-size: 10px; white-space: nowrap; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-actions .analysis-toolbar-btn .ti { font-size: 14px; }
+  .app .shell .spectrum-mobile-layout .spectrum-export-menu { right: 0; left: auto; width: min(300px, calc(100vw - 48px)); }
+}
+@media (max-width: 1200px) {
+  .app .shell .spectrum-mobile-layout :is(.spectrum-mobile-categories, .spectrum-toolbar-tags) { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 0; border: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-mobile-categories { border-top: 0; padding-top: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-label { flex: 0 0 24px; width: 24px; margin: 0; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .app .shell .spectrum-mobile-layout :is(.spectrum-filter-list, .spectrum-tag-cloud) { display: flex; flex-direction: row; align-items: center; flex: 1 1 0; gap: 8px; min-width: 0; padding: 2px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .app .shell .spectrum-mobile-layout :is(.spectrum-filter-list, .spectrum-tag-cloud)::-webkit-scrollbar { display: none; }
+  .app .shell .spectrum-mobile-layout :is(.spectrum-filter-btn, .spectrum-tag-filter) { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: auto; max-width: none; min-height: 32px; height: 32px; padding: 0 10px; gap: 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-2); font-size: 11px; font-weight: 600; box-shadow: none; cursor: pointer; transform: none; }
+  .app .shell .spectrum-mobile-layout :is(.spectrum-filter-btn, .spectrum-tag-filter).is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .app .shell .spectrum-mobile-layout .spectrum-filter-counts { gap: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-filter-counts em { font-style: normal; color: var(--muted-2); font-size: 10px; font-weight: 600; }
+  .app .shell .spectrum-mobile-layout .spectrum-filter-counts strong { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-tag-filter span { margin: 0; font-size: 10px; }
+  .app .shell .spectrum-mobile-layout .spectrum-filter-btn.is-active .spectrum-filter-counts em { color: #ffffffc7; }
+  .app .shell .spectrum-mobile-layout .spectrum-filter-panel { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-workbench,
+  .app .shell .spectrum-mobile-layout .spectrum-workbench.is-detail-collapsed { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-panel { grid-row: 1; grid-column: 1; padding: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar { row-gap: 12px; }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar > .spectrum-gallery-controls {
+    display: flex; flex: 0 0 auto; width: 100%; min-width: 0; margin: 0;
+    justify-content: flex-end; flex-wrap: wrap; gap: 8px;
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar > .spectrum-gallery-controls > .spectrum-sort-field { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-block {
+    display: grid; grid-template-rows: 0fr; gap: 0; min-height: 0; width: 100%;
+    grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: stretch;
+    margin-top: -12px; padding: 0; border-top: 0 solid var(--border);
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: grid-template-rows 240ms ease, padding-top 240ms ease, margin-top 240ms ease, border-top-width 240ms ease, opacity 180ms ease, visibility 0s 240ms;
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-block.has-selection {
+    grid-template-rows: 1fr; margin-top: 0; padding-top: 10px; border-top-width: 1px;
+    opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s;
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-block,
+  .app .shell .spectrum-mobile-layout .spectrum-selected-block.has-selection { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; min-height: 0; overflow: hidden; align-items: center; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-list { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-actions { justify-self: end; justify-content: flex-end; margin-left: auto; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-selected-actions button { min-height: 32px; padding: 0 10px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-selected-actions { justify-self: auto; margin-left: 0; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-gallery-zoom-btn,
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-detail-toggle,
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-action-btn {
+    box-sizing: border-box; min-width: 0; height: 34px; min-height: 34px; margin: 0; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text-2);
+    font: inherit; font-size: 12px; font-weight: 700; line-height: 1; gap: 6px;
+    box-shadow: none;
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-detail-toggle.is-collapsed {
+    border-color: var(--border); background: var(--surface-2); color: var(--accent);
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-gallery-zoom-btn:hover:not(:disabled),
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-detail-toggle:hover,
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-action-btn:hover:not(:disabled) {
+    border-color: var(--border-2); background: var(--surface-2); color: var(--accent);
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-action-danger {
+    border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border));
+    background: var(--surface); color: var(--danger);
+  }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-action-danger:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+    color: var(--danger);
+  }
+}
+@media (max-width: 720px) {
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-head { display: none; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-title-row { flex: 1 1 0; min-width: 0; gap: 0; flex-wrap: nowrap; }
+  .app .shell .spectrum-mobile-layout .spectrum-panel-title { font-size: 12px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls { flex: 0 0 auto; width: auto; margin-left: auto; justify-content: flex-end; flex-wrap: nowrap; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-sort-field .custom-select-trigger,
+  .app .shell .spectrum-mobile-layout .spectrum-sort-field select,
+  .app .shell .spectrum-mobile-layout .spectrum-detail-toggle { min-width: 0; height: 32px; padding: 0 8px; font-size: 11px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-gallery-zoom-btn,
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls > .spectrum-detail-toggle,
+  .app .shell .spectrum-mobile-layout .spectrum-gallery-controls .spectrum-action-btn { height: 32px; min-height: 32px; margin: 0; padding: 0 10px; font-size: 11px; }
+  .app .shell .spectrum-mobile-layout .spectrum-sort-field .custom-select { min-width: 0; width: auto; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery { padding: 12px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid:not(.is-empty) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 184px; gap: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card { height: 184px; min-width: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card-image { flex: 0 0 100px; height: 100px; min-height: 100px; padding: 6px; aspect-ratio: auto; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card-image img { width: 100%; height: 100%; object-fit: contain; }
+  .app .shell .spectrum-mobile-layout .spectrum-card-body { padding: 8px; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card-body { flex: 1 1 0; min-height: 0; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; overflow: hidden; font-size: 11px; line-height: 1.35; }
+  .app .shell .spectrum-mobile-layout .spectrum-gallery.is-grid .spectrum-card-meta { gap: 4px; font-size: 9px; flex-wrap: wrap; }
+  .app .shell .spectrum-mobile-layout .spectrum-card-tags { gap: 4px; }
+  .app .shell .spectrum-mobile-layout .spectrum-detail-panel { grid-column: auto; grid-row: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .shell .spectrum-mobile-layout .spectrum-selected-block { transition: none; }
+}
+html[data-reduced-motion="1"] .app .shell .spectrum-mobile-layout .spectrum-selected-block { transition: none; }
+/* The detail editor is a body portal, not a child of the mobile workbench. */
+@media (max-width: 720px) {
+  body .spectrum-compact-detail-dialog.dialog-overlay {
+    position: fixed; inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none;
+    display: flex; align-items: flex-end; justify-content: center;
+    margin: 0; padding: 0; border: 0; border-radius: 0; box-sizing: border-box;
+    overflow: hidden; transform: none;
+  }
+  body .spectrum-compact-detail-dialog .spectrum-compact-detail-card {
+    flex: 0 1 auto; width: 100%; min-width: 0; max-width: 100%; max-height: 94dvh;
+    margin: 0; padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+    border: 0; border-radius: 12px 12px 0 0; box-sizing: border-box;
+    overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  }
+}
+@media (max-width: 340px) {
+  .app .shell .spectrum-mobile-layout .spectrum-toolbar-main { flex-wrap: wrap; }
+  .app .shell .spectrum-mobile-layout .spectrum-search { flex-basis: 100%; }
+}

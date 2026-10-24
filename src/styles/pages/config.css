@@ -321,9 +321,6 @@
     .config-module-ai:has(#aiProviderLmStudio:checked) #apiKeyField{
       display:none !important;
     }
-    .config-module-search .search-key-field{
-      grid-column:1 / -1;
-    }
     .config-module-apimart .apimart-key-field{
       grid-column:1 / -1;
     }
@@ -332,12 +329,6 @@
     }
     .apimart-config-grid > .field:has(#apimartBaseUrl){
       grid-column:1 / -1;
-    }
-    .config-module-search > .form-grid{
-      grid-template-columns:repeat(2,minmax(0,1fr));
-    }
-    .config-module-search > .form-grid > .form-grid-3{
-      display:contents;
     }
     .agent-routing-section{
       grid-column:1 / -1;
@@ -2567,3 +2558,74 @@
     }
 
     .shell.sidebar-collapsed .sidebar{overflow-x:hidden}
+
+/* ==========================================================================
+   UI refresh — module surfaces, motion and device refinements
+   ========================================================================== */
+.config-module{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-1);
+  transition:box-shadow var(--mo-dur-base) var(--mo-ease-out);
+}
+.config-module-icon{
+  border-radius:var(--shape-sm);
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+.config-module-kicker{ letter-spacing:.06em; text-transform:uppercase; }
+.config-module-head h2{ letter-spacing:-.01em; }
+.field input,
+.field select,
+.field textarea,
+.password-row input{
+  border-radius:var(--ui-radius-md);
+}
+.field{ position:relative; }
+.field:focus-within > label .field-label-main{ color:var(--accent); }
+.field-label-icon{ transition:color var(--mo-dur-fast) var(--mo-ease-standard); }
+.field:focus-within .field-label-icon{ color:var(--accent); }
+.password-toggle,
+.password-toggle-icon{ transition:color var(--mo-dur-fast) var(--mo-ease-standard), background-color var(--mo-dur-fast) var(--mo-ease-standard); }
+.provider-option{
+  border-radius:var(--shape-sm);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             color var(--mo-dur-fast) var(--mo-ease-standard),
+             border-color var(--mo-dur-fast) var(--mo-ease-standard);
+}
+.model-dropdown-trigger{ border-radius:var(--ui-radius-md); }
+.model-dropdown-panel{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-3);
+}
+.model-dropdown-option{ border-radius:var(--ui-radius-sm); }
+.config-actions-panel .save-btn,
+.config-actions-panel .outline-btn{ border-radius:var(--ui-radius-md); }
+.summary-card{ border-radius:var(--shape-md); }
+.slider-row input[type="range"]{ accent-color:var(--accent); }
+.config-loading-shell{ animation:mo-fade-in var(--mo-dur-base) var(--mo-ease-out) both; }
+.config-loading-spinner{ animation:mo-spin 1s linear infinite; }
+
+/* ---- Tablet ---- */
+@media (max-width:980px){
+  .config-module{ box-shadow:none; }
+  .config-layout{ gap:var(--panel-gap); }
+}
+/* ---- Phone: sticky save bar keeps the primary action reachable ---- */
+@media (max-width:720px){
+  .config-module{ padding:14px; }
+  .config-actions-panel,
+  .action-bar.config-actions-panel{
+    position:sticky;
+    bottom:0;
+    z-index:12;
+    margin:0 -2px;
+    padding:10px;
+    border:var(--hairline);
+    border-radius:var(--shape-md);
+    background:var(--surface);
+    box-shadow:var(--elev-3);
+    backdrop-filter:blur(var(--surface-blur));
+  }
+  .config-actions-panel .action-buttons{ width:100%; }
+  .config-actions-panel .save-btn{ flex:1 1 auto; justify-content:center; }
+}

@@ -1,0 +1,57 @@
+/* Canonical palette bindings. Specificity keeps deferred legacy CSS from
+   reintroducing a fixed blue/teal palette after a page is opened. */
+html[data-color-theme] .app .shell .sidebar :is(.section-label, .nav-arrow, .sidebar-search .ti) { color: var(--sidebar-muted); }
+html[data-color-theme] .app .shell .sidebar :is(.sidebar-search, .sidebar-account) { background: var(--sidebar-hover); border-color: var(--sidebar-border); color: var(--sidebar-text); }
+html[data-color-theme] .app .shell .sidebar input { color: var(--sidebar-text); }
+html[data-color-theme] .app .shell .sidebar input::placeholder { color: var(--sidebar-muted); }
+html[data-color-theme] .app .shell .sidebar .nav-subitem { color: var(--sidebar-text); }
+html[data-color-theme] .app .shell .sidebar .nav-subitem.active { background: var(--sidebar-active); color: var(--sidebar-active-text); }
+html[data-color-theme] .app .shell .sidebar .nav-item:hover .nav-icon { color: var(--sidebar-hover-text); }
+html[data-color-theme] .app .shell .sidebar .nav-item.active:hover .nav-icon { color: var(--sidebar-active-icon); }
+html[data-color-theme] .sidebar-flyout .sidebar-flyout-card { background: var(--sidebar-bg); border-color: var(--sidebar-border); }
+html[data-color-theme] .sidebar-flyout :is(.sidebar-flyout-item, .sidebar-flyout-label) { color: var(--sidebar-text); }
+html[data-color-theme] .sidebar-flyout :is(button, a):focus-visible { outline: 2px solid var(--sidebar-focus); outline-offset: 2px; }
+html[data-color-theme] .sidebar-flyout .sidebar-flyout-item:hover { background: var(--sidebar-hover); }
+html[data-color-theme] .sidebar-flyout .sidebar-flyout-item.is-active { background: var(--sidebar-active); color: var(--sidebar-active-text); }
+html[data-color-theme] .app .shell #mobileMenuBtn { background: var(--surface); border-color: var(--border); color: var(--text); }
+html[data-color-theme] .app .shell .top-visited-entry.is-active { background: var(--accent-soft); color: var(--accent); }
+html[data-color-theme] .app .shell .top-visited-entry.is-active .top-visited-item { color: inherit; }
+
+html[data-color-theme] body .app .shell :is(
+  .analysis-toolbar-btn-primary, .analysis-toolbar-btn.is-active,
+  .analysis-sheet-tab.is-active, .analysis-search-mode-btn,
+  .analysis-page-btn.is-active, .spectrum-mode-btn.is-active,
+  .spectrum-icon-btn.is-active, .spectrum-filter-btn.is-active,
+  .biz-formula-page-btn.is-active, .save-btn, .send-btn
+):not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+html[data-color-theme] body .app .shell :is(
+  .analysis-toolbar-btn-primary, .analysis-toolbar-btn.is-active,
+  .analysis-sheet-tab.is-active, .analysis-search-mode-btn,
+  .analysis-page-btn.is-active, .spectrum-mode-btn.is-active,
+  .spectrum-icon-btn.is-active, .spectrum-filter-btn.is-active,
+  .biz-formula-page-btn.is-active, .save-btn, .send-btn
+):not(:disabled) :is(i, svg, span) { color: inherit; }
+/* Count badges have their own background; don't inherit the button's light text. */
+html[data-color-theme] body .app .shell .analysis-sheet-tab.is-active:not(:disabled) .analysis-sheet-tab-count {
+  background: var(--on-accent);
+  color: var(--accent);
+}
+html[data-color-theme] body .ui-button--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+html[data-color-theme] body .ui-button--primary:hover:not(:disabled) { background: var(--accent-hover); }
+html[data-color-theme] body .app .shell .analysis-toolbar-btn:disabled { background: var(--surface-2); border-color: var(--border); color: var(--muted); }
+html[data-color-theme] body .app .shell .analysis-toolbar-btn:disabled i { color: inherit; }
+html[data-color-theme] body .app .shell .model-dropdown-option.is-active { background: var(--accent-soft); }
+html[data-color-theme] body .app .shell .model-dropdown-option.is-active .model-dropdown-option-meta { background: var(--accent); color: var(--on-accent); }
+html[data-color-theme] body .app .shell :is(.spectrum-view-switch, .spectrum-mode-switch)::before { background: var(--accent); }
+html[data-color-theme] body .app .shell :is(.spectrum-card-image, .spectrum-detail-image) { background: var(--surface-2); border-color: var(--border); }
+html[data-color-theme] body .app .shell .spectrum-card-body { background: var(--surface); border-color: var(--border); }
+html[data-color-theme] body .app .shell :is(.spectrum-card, .spectrum-filter-btn, .spectrum-selected-item) { border-color: var(--border); }
+html[data-color-theme] body .app .shell :is(.spectrum-card.is-selected, .spectrum-filter-btn.is-active) { border-color: var(--accent); }
+html[data-color-theme] body .app .shell .spectrum-card.is-selected .spectrum-card-body { background: var(--accent-soft); }
+html[data-color-theme] body .app .shell #inspectionReportUploadBtn { background: var(--surface); color: var(--accent); }
+html[data-color-theme] body .app .shell #inspectionReportUploadBtn:hover:not(:disabled) { background: var(--accent-soft); }
+
+/* Semantic success/warning/error colours remain semantic, not decorative theme accents. */
+html[data-color-theme] .auth-brand { background: var(--sidebar-bg); color: var(--sidebar-text); }
+html[data-color-theme] .auth-brand::after { background: var(--sidebar-marker); }
+html[data-color-theme] .auth-brand :is(.auth-brand__names em, .auth-brand__kicker, .auth-brand__copy p, .auth-brand__features .auth-icon, .auth-brand__features div span, .auth-brand__foot) { color: var(--sidebar-muted); }

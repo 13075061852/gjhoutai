@@ -1,0 +1,1223 @@
+/* Office records and ash measurements; obsolete ERP page styles removed. */
+.business-page{
+      width:100%;
+      max-width:none;
+      margin:0;
+    }
+    .business-page-shell{
+      width:100%;
+      max-width:none;
+      margin:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .business-panel{
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
+    .business-panel{
+      min-width:0;
+      padding:14px;
+    }
+    .business-panel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .business-panel-head h2{
+      margin:0;
+      color:var(--text);
+      font-size:15px;
+      line-height:1.3;
+      font-weight:900;
+    }
+    .business-panel-head span{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .business-table-wrap{
+      background:var(--surface);
+    }
+    .business-table{
+      min-width:680px;
+      font-size:13px;
+    }
+    .business-table th,
+    .business-table td{
+      padding:13px 14px;
+      text-align:left;
+      color:var(--text-2);
+      white-space:nowrap;
+    }
+    .business-table th{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:900;
+    }
+    .page-section.active.business-page.biz-inventory-active{
+      height:100%;
+      min-height:0;
+    }
+    .business-page-shell.biz-inventory-shell{
+      height:100%;
+      min-height:0;
+    }
+    .biz-inventory-material-dialog{
+      width:min(686px, calc(100vw - 28px));
+      max-height:min(88vh, 760px);
+      display:flex;
+      flex-direction:column;
+      gap:0;
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-inventory-dialog-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    .biz-inventory-material-dialog .biz-inventory-dialog-head{
+      align-items:center;
+      min-height:74px;
+      padding:18px 22px;
+    }
+    .biz-inventory-dialog-head h2{
+      margin:0;
+      color:var(--text);
+      font-size:16px;
+      line-height:1.3;
+      font-weight:900;
+    }
+    .biz-inventory-dialog-head span{
+      display:block;
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+      font-weight:800;
+    }
+    .biz-inventory-icon-btn{
+      flex:0 0 auto;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+    }
+    .biz-inventory-icon-btn:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-inventory-material-dialog .biz-inventory-icon-btn{
+      border:0;
+      background:transparent;
+    }
+    .biz-inventory-material-dialog .biz-inventory-icon-btn:hover{
+      background:var(--accent-soft);
+    }
+    .biz-inventory-primary-btn,
+    .biz-inventory-ghost-btn{
+      min-height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+      cursor:pointer;
+      transition:border-color .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+    }
+    .biz-inventory-primary-btn{
+      border-color:var(--accent);
+      background:var(--accent);
+      color:#fff;
+    }
+    .biz-inventory-primary-btn:hover,
+    .biz-inventory-ghost-btn:hover{
+      transform:none;
+    }
+    .biz-inventory-ghost-btn:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .biz-inventory-modal-actions{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      grid-column:1 / -1;
+      margin:10px -22px 0;
+      padding:14px 12px 14px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-formula-table-head{
+      flex:0 0 auto;
+      min-height:64px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 18px;
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-formula-table-actions{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .biz-formula-table-search{
+      width:190px;
+      min-height:36px;
+    }
+    .biz-formula-table-actions select{
+      width:auto;
+      min-width:96px;
+      min-height:36px;
+      padding:0 34px 0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+      outline:none;
+      cursor:pointer;
+    }
+    .biz-formula-table-actions select:focus{
+      border-color:var(--accent);
+      box-shadow:none;
+    }
+    .biz-formula-new-btn{
+      min-height:36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:0 14px;
+      border:1px solid var(--accent);
+      border-radius:7px;
+      background:var(--accent);
+      color:#fff;
+      font:inherit;
+      font-size:13px;
+      font-weight:900;
+      cursor:pointer;
+      transition:filter .18s ease, transform .18s ease;
+    }
+    .biz-formula-new-btn:hover{
+      filter:brightness(1.04);
+      transform:none;
+    }
+    .biz-formula-pagination{
+      flex:0 0 auto;
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:flex-end;
+      gap:12px 16px;
+      padding:12px 18px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+      overflow:visible;
+    }
+    .biz-formula-pagination-actions{
+      display:flex;
+      flex-wrap:nowrap;
+      align-items:center;
+      justify-content:flex-end;
+      gap:18px;
+    }
+    .biz-formula-page-size{
+      position:relative;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      margin:0;
+      color:var(--text-2);
+      font-size:13px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    .biz-formula-page-size .custom-select{
+      width:72px;
+      font-size:13px;
+      font-weight:600;
+    }
+    .biz-formula-page-size .custom-select-trigger{
+      height:36px;
+      padding:0 12px;
+    }
+    .biz-formula-page-size .custom-select-menu{
+      top:auto;
+      bottom:calc(100% + 8px);
+      z-index:80;
+    }
+    .biz-formula-page-size select{
+      min-width:52px;
+      min-height:36px;
+      padding:0 10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      font-weight:850;
+      cursor:pointer;
+      outline:none;
+    }
+    .biz-formula-page-size select:focus{
+      border-color:var(--accent);
+      box-shadow:none;
+    }
+    .biz-formula-page-buttons{
+      display:inline-flex;
+      align-items:center;
+      gap:2px;
+      min-height:32px;
+    }
+    .biz-formula-page-indicator{
+      min-width:44px;
+      padding:0 10px;
+      text-align:center;
+      font-size:13px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .biz-formula-page-btn{
+      width:30px;
+      min-width:30px;
+      height:30px;
+      display:grid;
+      place-items:center;
+      padding:0;
+      border:1px solid transparent;
+      border-radius:8px;
+      background:transparent;
+      color:var(--text-2);
+      font:inherit;
+      font-size:13px;
+      font-weight:900;
+      cursor:pointer;
+      transition:border-color .18s ease, background .18s ease, color .18s ease;
+    }
+    .biz-formula-page-btn i{
+      font-size:13px;
+    }
+    .biz-formula-page-btn:hover:not(:disabled){
+      border-color:var(--border);
+      background:var(--surface-2);
+      color:var(--accent);
+    }
+    .biz-formula-page-btn:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
+    @media(max-width:820px){
+      .biz-formula-pagination{
+        justify-content:flex-start;
+      }
+      .biz-formula-pagination-actions{
+        width:100%;
+        justify-content:space-between;
+        gap:10px;
+      }
+    }
+    @keyframes formulaMaterialSelectIn{
+      from{
+        background:var(--surface);
+        box-shadow:inset 0 0 0 1px transparent;
+      }
+      to{
+        background:color-mix(in srgb, var(--success) 7%, var(--surface));
+        box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--success) 10%, transparent);
+      }
+    }
+    @keyframes formulaMaterialBadgeIn{
+      from{
+        opacity:0;
+        transform:scale(.88);
+      }
+      to{
+        opacity:1;
+        transform:scale(1);
+      }
+    }
+    @keyframes biz-production-spin{
+      to{transform:rotate(360deg)}
+    }
+    @keyframes biz-production-action-pulse{
+      0%{opacity:.72;transform:scale(.82)}
+      100%{opacity:0;transform:scale(1.28)}
+    }
+    @keyframes biz-pipeline-pulse-anim{
+      0%, 100%{box-shadow:0 0 0 0 var(--accent-soft)}
+      50%{box-shadow:0 0 0 8px transparent}
+    }
+
+    .biz-office-page{
+      height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      overflow:hidden;
+    }
+    .biz-office-table-panel{
+      flex:1 1 auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      padding:0;
+      overflow:hidden;
+    }
+    .biz-office-table-head{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr);
+      align-items:center;
+      gap:14px;
+      padding:12px 16px;
+    }
+    .biz-office-table-actions{
+      width:100%;
+      display:grid;
+      grid-template-columns:max-content minmax(180px, 1fr) max-content;
+      align-items:center;
+      justify-content:start;
+      gap:10px;
+      flex:initial;
+    }
+    .biz-office-table-actions > .biz-office-tabs,
+    .biz-office-table-actions > .biz-office-search,
+    .biz-office-table-actions > .biz-formula-new-btn{
+      box-sizing:border-box;
+      height:var(--control-height-md, 40px);
+      min-height:var(--control-height-md, 40px);
+    }
+    .biz-office-tabs{
+      position:relative;
+      isolation:isolate;
+      width:300px;
+      max-width:100%;
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      align-items:center;
+      gap:4px;
+      padding:3px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface-2);
+    }
+    .biz-office-tabs::before{
+      content:'';
+      position:absolute;
+      inset:3px auto 3px 3px;
+      z-index:0;
+      width:calc((100% - 14px) / 3);
+      border-radius:6px;
+      background:var(--surface);
+      box-shadow:0 1px 4px rgba(15,23,42,.08);
+      transform:translateX(0);
+      transition:transform .22s cubic-bezier(.22,.8,.3,1);
+      pointer-events:none;
+    }
+    .biz-office-tabs[data-office-active-type="coloring"]::before{
+      transform:translateX(calc(100% + 4px));
+    }
+    .biz-office-tabs[data-office-active-type="ash"]::before{
+      transform:translateX(calc(200% + 8px));
+    }
+    .biz-office-tabs button{
+      position:relative;
+      z-index:1;
+      min-width:0;
+      min-height:28px;
+      height:100%;
+      padding:0 10px;
+      border:none;
+      border-radius:6px;
+      background:transparent;
+      color:var(--text-2);
+      font:inherit;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .biz-office-tabs button.is-active{
+      background:transparent;
+      color:var(--accent);
+      box-shadow:none;
+    }
+    .biz-office-search{
+      width:100%;
+      min-height:34px;
+    }
+    .biz-office-table-actions > select,
+    .biz-office-table-actions > .custom-select{
+      width:136px;
+      min-width:136px;
+      max-width:136px;
+      flex:0 0 136px;
+    }
+    .biz-office-table-actions .custom-select-trigger{
+      min-height:34px;
+      padding:0 11px;
+      font-size:13px;
+      font-weight:500;
+    }
+    .biz-office-table-actions .biz-formula-new-btn{
+      min-width:116px;
+      padding:0 12px;
+      white-space:nowrap;
+      transform:none;
+      transition:filter .18s ease;
+    }
+    .biz-office-table-wrap{
+      flex:1 1 auto;
+      min-height:0;
+      overflow:auto;
+    }
+    .biz-office-pagination{
+      padding:6px 14px;
+    }
+    .biz-office-pagination .biz-formula-pagination-actions{
+      gap:12px;
+    }
+    .biz-office-pagination .biz-formula-page-size{
+      gap:6px;
+    }
+    .biz-office-pagination .biz-formula-page-size .custom-select{
+      width:58px;
+    }
+    .biz-office-pagination .biz-formula-page-size .custom-select-trigger{
+      min-height:26px;
+      height:26px;
+      padding:0 8px;
+      border-radius:7px;
+      font-size:12px;
+    }
+    .biz-office-pagination .biz-formula-page-size select{
+      min-height:26px;
+      padding:0 8px;
+      border-radius:7px;
+      font-size:12px;
+    }
+    .biz-office-pagination .biz-formula-page-buttons{
+      min-height:26px;
+    }
+    .biz-office-pagination .biz-formula-page-btn{
+      width:26px;
+      min-width:26px;
+      height:26px;
+      border-radius:7px;
+    }
+    .biz-office-record-list{
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      align-content:start;
+      grid-template-columns:repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+      gap:12px;
+      padding:14px;
+      overflow-y:auto;
+      overflow-x:hidden;
+      background:var(--surface);
+    }
+    .biz-office-record-card{
+      min-width:0;
+      display:grid;
+      align-content:start;
+      gap:12px;
+      padding:14px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface);
+      box-shadow:none;
+    }
+    .biz-office-record-top{
+      min-width:0;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .biz-office-record-title{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:5px;
+    }
+    .biz-office-record-title strong{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:var(--text);
+      font-size:14px;
+      line-height:20px;
+      font-weight:650;
+    }
+    .biz-office-record-meta{
+      display:flex;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+    .biz-office-record-meta span{
+      min-height:20px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--text-3);
+      font-size:12px;
+      line-height:20px;
+      font-weight:500;
+    }
+    .biz-office-record-meta .biz-office-approval-badge{
+      padding:0 7px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      background:var(--surface-2);
+      color:var(--text-3);
+      font-size:11px;
+      font-weight:600;
+    }
+    .biz-office-record-meta .biz-office-approval-badge.is-approved{
+      border-color:#86efac;
+      background:#f0fdf4;
+      color:#15803d;
+    }
+    .biz-office-record-actions{
+      flex:0 0 auto;
+      display:flex;
+      align-items:center;
+      gap:6px;
+    }
+    .biz-office-record-actions button{
+      flex:0 0 30px;
+      width:30px;
+      min-width:30px;
+      height:30px;
+      min-height:30px;
+      display:grid;
+      place-items:center;
+      padding:0;
+      box-sizing:border-box;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text-2);
+      cursor:pointer;
+    }
+    .biz-office-record-actions button:hover{
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--accent-soft);
+    }
+    .biz-office-record-actions button.is-danger:hover{
+      border-color:var(--danger);
+      color:var(--danger);
+      background:#fef2f2;
+    }
+    .biz-office-empty-list{
+      min-height:240px;
+      display:grid;
+      place-items:center;
+      align-content:center;
+      gap:8px;
+      border:1px dashed var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text-3);
+      text-align:center;
+    }
+    .biz-office-empty-list i{
+      color:var(--accent);
+      font-size:28px;
+    }
+    .biz-office-empty-list strong{
+      color:var(--text);
+      font-size:15px;
+      font-weight:650;
+    }
+    .biz-office-empty-list span{
+      font-size:13px;
+      font-weight:500;
+    }
+    .biz-office-table-summary{
+      width:100%;
+      max-width:100%;
+      min-width:0;
+      overflow-x:auto;
+      overflow-y:hidden;
+      overscroll-behavior-inline:contain;
+      touch-action:pan-x pan-y;
+      -webkit-overflow-scrolling:touch;
+    }
+    .biz-office-table-summary table{
+      width:100%;
+      max-width:none;
+      border:1px solid var(--border);
+      border-collapse:separate;
+      border-spacing:0;
+      border-radius:8px;
+      table-layout:auto;
+      background:var(--surface);
+    }
+    .biz-office-table-summary th,
+    .biz-office-table-summary td{
+      min-width:48px;
+      height:32px;
+      padding:6px 8px;
+      border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:500;
+      color:var(--text-2);
+      text-align:center;
+    }
+    .biz-office-table-summary th:last-child,
+    .biz-office-table-summary td:last-child{
+      border-right:none;
+    }
+    .biz-office-table-summary tbody tr:last-child td{
+      border-bottom:none;
+    }
+    .biz-office-table-summary th{
+      background:var(--surface-2);
+      color:var(--text);
+      font-weight:650;
+    }
+    .biz-office-row-approval{
+      min-width:68px;
+      min-height:24px;
+      padding:0 8px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      background:var(--surface-2);
+      color:var(--text-3);
+      font:inherit;
+      font-size:11px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .biz-office-row-approval.is-approved{
+      border-color:#86efac;
+      background:#f0fdf4;
+      color:#15803d;
+    }
+    .biz-office-table-summary em{
+      display:block;
+      padding:6px 8px;
+      border-top:1px solid var(--border);
+      color:var(--text-3);
+      font-size:12px;
+      font-style:normal;
+      font-weight:500;
+      text-align:center;
+    }
+    .biz-office-muted{
+      color:var(--text-3);
+      font-size:12px;
+      font-weight:500;
+    }
+    .biz-office-dialog{
+      width:min(var(--biz-office-dialog-content-width, 560px), calc(100vw - 32px));
+      min-width:min(560px, calc(100vw - 32px));
+      max-width:calc(100vw - 32px);
+      max-height:calc(100vh - 28px);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .biz-office-dialog .biz-inventory-dialog-head{
+      flex:0 0 auto;
+    }
+    .biz-office-editor{
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) 220px;
+      grid-template-rows:auto auto minmax(140px, 1fr) auto;
+      align-content:start;
+      gap:12px;
+      padding:20px;
+      overflow:auto;
+      overscroll-behavior:contain;
+    }
+    .biz-office-editor label{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      color:var(--text-dim);
+      font-size:12px;
+      font-weight:500;
+    }
+    .biz-office-editor label.is-wide{
+      grid-column:1 / -1;
+    }
+    .biz-office-editor input,
+    .biz-office-editor select,
+    .biz-office-editor textarea{
+      width:100%;
+      padding:9px 12px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface);
+      color:var(--text);
+      font:inherit;
+      font-size:13px;
+      outline:none;
+    }
+    .biz-office-editor textarea{
+      min-height:78px;
+      resize:vertical;
+      line-height:1.5;
+    }
+    .biz-office-detail-table{
+      grid-column:1 / -1;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-width:0;
+      min-height:0;
+      overflow:hidden;
+    }
+    .biz-office-detail-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .biz-office-detail-head > div:first-child{
+      display:grid;
+      gap:2px;
+    }
+    .biz-office-detail-head strong{
+      color:var(--text);
+      font-size:13px;
+      font-weight:650;
+    }
+    .biz-office-detail-head span{
+      color:var(--text-3);
+      font-size:12px;
+      font-weight:500;
+    }
+    .biz-office-detail-actions{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .biz-office-detail-actions button,
+    .biz-office-column-field button,
+    .biz-office-row-action-cell button{
+      min-height:30px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:5px;
+      border:1px solid var(--border);
+      border-radius:7px;
+      background:var(--surface-2);
+      color:var(--text-2);
+      font:inherit;
+      font-size:12px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .biz-office-detail-actions button{
+      padding:0 10px;
+    }
+    .biz-office-column-field button,
+    .biz-office-row-action-cell button{
+      width:30px;
+      padding:0;
+    }
+    .biz-office-row-action-cell{
+      white-space:nowrap;
+    }
+    .biz-office-row-approval-field{
+      display:inline-flex !important;
+      flex-direction:row !important;
+      align-items:center;
+      gap:4px !important;
+      margin:0;
+      color:var(--text-2) !important;
+      font-size:11px !important;
+      font-weight:900 !important;
+      cursor:pointer;
+    }
+    .biz-office-row-approval-field input{
+      width:15px !important;
+      height:15px !important;
+      min-width:15px;
+      padding:0 !important;
+      accent-color:var(--accent);
+      cursor:pointer;
+    }
+    .biz-office-detail-actions button:hover,
+    .biz-office-column-field button:hover:not(:disabled),
+    .biz-office-row-action-cell button:hover:not(:disabled){
+      border-color:var(--accent);
+      color:var(--accent);
+      background:var(--accent-soft);
+    }
+    .biz-office-column-field button:disabled,
+    .biz-office-row-action-cell button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
+    .biz-office-detail-scroll{
+      flex:1 1 auto;
+      width:100%;
+      max-width:100%;
+      min-height:0;
+      max-height:none;
+      overflow:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:thin;
+      scrollbar-color:color-mix(in srgb, var(--text-3) 42%, transparent) transparent;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+    }
+    .biz-office-detail-scroll::-webkit-scrollbar{
+      width:6px;
+      height:6px;
+    }
+    .biz-office-detail-scroll::-webkit-scrollbar-track{
+      background:transparent;
+    }
+    .biz-office-detail-scroll::-webkit-scrollbar-thumb{
+      border-radius:999px;
+      background:color-mix(in srgb, var(--text-3) 42%, transparent);
+    }
+    .biz-office-detail-scroll::-webkit-scrollbar-corner{
+      background:transparent;
+    }
+    .biz-office-empty-table{
+      min-height:120px;
+      display:grid;
+      place-items:center;
+      gap:8px;
+      padding:24px;
+      color:var(--text-3);
+      text-align:center;
+      font-size:13px;
+      font-weight:500;
+    }
+    .biz-office-empty-table i{
+      color:var(--accent);
+      font-size:24px;
+    }
+    .biz-office-detail-scroll table{
+      width:100%;
+      min-width:0;
+      border-collapse:separate;
+      border-spacing:0;
+    }
+    .biz-office-detail-scroll th,
+    .biz-office-detail-scroll td{
+      width:150px;
+      min-width:150px;
+      padding:6px;
+      border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);
+      background:var(--surface);
+    }
+    .biz-office-detail-scroll th{
+      position:sticky;
+      top:0;
+      z-index:3;
+      background:var(--surface-2);
+      box-shadow:0 1px 0 var(--border);
+    }
+    .biz-office-detail-scroll tr:last-child td{
+      border-bottom:none;
+    }
+    .biz-office-row-action-head,
+    .biz-office-row-action-cell{
+      width:54px;
+      min-width:54px !important;
+      max-width:54px;
+      text-align:center;
+    }
+    .biz-office-row-approval-head,
+    .biz-office-row-approval-cell{
+      width:78px;
+      min-width:78px !important;
+      max-width:78px;
+      white-space:nowrap;
+      text-align:center;
+    }
+    .biz-office-column-field{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+    }
+    .biz-office-fixed-column{
+      min-height:32px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+      padding:0 8px;
+      color:var(--text);
+      font-size:13px;
+      font-weight:650;
+      white-space:nowrap;
+    }
+    .biz-office-column-field input,
+    .biz-office-detail-scroll td input{
+      width:100%;
+      min-width:0;
+      height:32px;
+      padding:0 8px;
+      border:1px solid transparent;
+      border-radius:6px;
+      background:transparent;
+      font-size:13px;
+      font-weight:500;
+      text-align:center;
+    }
+    .biz-office-column-field button{
+      position:static;
+      flex:0 0 24px;
+      width:24px;
+      min-height:24px;
+      margin-left:4px;
+      border-color:transparent;
+      background:transparent;
+      color:var(--text-3);
+    }
+    .biz-office-detail-scroll td input{
+      font-weight:700;
+    }
+    .biz-office-detail-scroll td input.biz-office-fixed-cell{
+      color:var(--text);
+      background:transparent;
+      font-weight:650;
+      cursor:default;
+    }
+    .biz-office-detail-scroll td:first-child,
+    .biz-office-detail-scroll th:first-child{
+      min-width:78px;
+      width:78px;
+      max-width:78px;
+    }
+    .biz-office-column-field input:focus,
+    .biz-office-detail-scroll td input:focus{
+      background:var(--surface);
+    }
+    .biz-office-editor input:focus,
+    .biz-office-editor select:focus,
+    .biz-office-editor textarea:focus{
+      border-color:var(--text-3);
+      box-shadow:none;
+    }
+    .biz-office-modal-actions{
+      grid-column:1 / -1;
+      position:static;
+      z-index:2;
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin:4px -20px -20px;
+      padding:12px 20px 16px;
+      border-top:1px solid var(--border);
+      background:var(--surface);
+    }
+    body[data-theme="dark"] .biz-office-tabs,
+    body[data-theme="dark"] .biz-office-editor input,
+    body[data-theme="dark"] .biz-office-editor select,
+    body[data-theme="dark"] .biz-office-editor textarea,
+    body[data-theme="dark"] .biz-office-record-list,
+    body[data-theme="dark"] .biz-office-record-actions button,
+    body[data-theme="dark"] .biz-office-detail-scroll,
+    body[data-theme="dark"] .biz-office-detail-scroll th,
+    body[data-theme="dark"] .biz-office-detail-actions button,
+    body[data-theme="dark"] .biz-office-column-field button,
+    body[data-theme="dark"] .biz-office-row-action-cell button{
+      background:var(--surface-2);
+    }
+
+    .biz-office-result-count{color:var(--text-3);font-size:12px;margin-right:auto;white-space:nowrap}
+    .biz-office-required{color:var(--danger);font-style:normal}
+    .biz-office-empty-list{grid-column:1 / -1}
+    .biz-office-dialog .biz-inventory-dialog-head{padding:16px 20px}
+    .biz-office-dialog .biz-inventory-dialog-head h2{font-size:16px;font-weight:650}
+    body .biz-office-dialog input:not([type="checkbox"]):focus-visible{outline:none}
+    .biz-office-column-field input{background:var(--surface);border-color:var(--border);text-align:left}
+    .biz-office-column-field input::placeholder{color:var(--text-3);font-weight:400}
+    .biz-office-detail-scroll td input:not([readonly]):hover{border-color:var(--border)}
+    .biz-office-detail-scroll th:last-child,.biz-office-detail-scroll td:last-child{border-right:0}
+    .biz-office-table-summary tbody tr:hover td{background:var(--surface-2)}
+    .biz-office-record-actions button:focus-visible,
+    .biz-office-detail-actions button:focus-visible,
+    .biz-office-row-approval:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+    @media(max-width:900px){
+      .biz-office-table-head{
+        grid-template-columns:1fr;
+        padding:10px 14px;
+      }
+      .biz-office-table-actions{
+        grid-template-columns:minmax(0, 1fr) max-content;
+        justify-content:flex-start;
+        gap:8px;
+      }
+      .biz-office-tabs{
+        width:100%;
+        grid-column:1 / -1;
+      }
+      .biz-office-tabs{
+        justify-content:stretch;
+      }
+      .biz-office-tabs button{
+        flex:1 1 0;
+      }
+      .biz-office-search{
+        width:100%;
+      }
+      .biz-office-table-actions .biz-formula-new-btn{
+        width:auto;
+        min-width:118px;
+      }
+      .biz-office-table-actions > select,
+      .biz-office-table-actions > .custom-select{
+        width:100%;
+        min-width:0;
+        max-width:none;
+        flex:initial;
+      }
+
+      .biz-office-dialog{
+        width:min(var(--biz-office-dialog-content-width, 560px), calc(100vw - 16px));
+        min-width:min(560px, calc(100vw - 16px));
+        max-height:calc(100vh - 16px);
+      }
+      .biz-office-record-card{
+        grid-template-columns:1fr;
+        gap:10px;
+        padding:14px;
+      }
+      .biz-office-record-top{
+        gap:8px;
+      }
+      .biz-office-record-title{
+        flex:1 1 auto;
+        gap:8px;
+      }
+      .biz-office-record-title strong{
+        font-size:14px;
+      }
+      .biz-office-record-actions{
+        justify-content:flex-end;
+      }
+      .biz-office-table-summary{
+        width:100%;
+        max-width:100%;
+        overflow-x:auto;
+      }
+    }
+    @media(max-width:640px){
+      .biz-office-dialog .biz-inventory-dialog-head{padding:12px 14px}
+      .biz-office-dialog .biz-inventory-dialog-head h2{font-size:16px}
+      .biz-office-dialog .biz-inventory-dialog-head span{font-size:11px}
+      .biz-office-editor{grid-template-columns:1fr;grid-template-rows:auto auto auto minmax(120px, 1fr) auto;gap:10px;padding:12px 14px}
+      .biz-office-editor label{gap:3px;font-size:11px}
+      .biz-office-editor input,
+      .biz-office-editor select,
+      .biz-office-editor textarea{padding:7px 9px;font-size:12px}
+      .biz-office-detail-table{gap:6px}
+      .biz-office-detail-head strong{font-size:12px}
+      .biz-office-detail-actions{gap:6px}
+      .biz-office-detail-actions button{min-height:28px;padding:0 8px;font-size:11px}
+      .biz-office-detail-scroll th,
+      .biz-office-detail-scroll td{width:108px;min-width:108px;padding:4px}
+      .biz-office-detail-scroll th{font-size:11px;line-height:1.2;font-weight:900}
+      .biz-office-detail-scroll td:first-child,
+      .biz-office-detail-scroll th:first-child{width:54px;min-width:54px;max-width:54px}
+      .biz-office-column-field input,
+      .biz-office-detail-scroll td input{height:28px;padding:0 5px;font-size:11px}
+      .biz-office-row-approval-head,
+      .biz-office-row-approval-cell{width:68px;min-width:68px !important;max-width:68px;font-size:11px}
+      .biz-office-row-action-head,
+      .biz-office-row-action-cell{width:44px;min-width:44px !important;max-width:44px;font-size:11px}
+      .biz-office-row-approval-field{font-size:10px !important}
+      .biz-office-modal-actions{gap:8px;margin:4px -14px -12px;padding:10px 14px}
+    }
+[data-office-modal] .biz-office-editor{
+  grid-template-columns:minmax(0, 1fr);
+  grid-template-rows:auto auto minmax(120px, 1fr) auto;
+}
+.biz-office-page{ gap:var(--panel-gap); }
+.biz-office-table-panel{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-1);
+}
+.biz-office-table-head{ border-bottom:var(--hairline); }
+.biz-office-tabs{
+  border-radius:var(--shape-sm);
+  background:var(--surface-2);
+}
+.biz-office-tabs > *{
+  border-radius:var(--shape-sm);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             color var(--mo-dur-fast) var(--mo-ease-standard),
+             box-shadow var(--mo-dur-fast) var(--mo-ease-standard);
+}
+.biz-office-tabs > .is-active{
+  box-shadow:0 1px 3px rgba(15,23,42,.08);
+}
+.biz-office-record-list{ scroll-behavior:smooth; }
+.biz-office-record-card{
+  border-radius:var(--shape-md);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             border-color var(--mo-dur-fast) var(--mo-ease-standard),
+             transform var(--mo-dur-base) var(--mo-ease-out);
+}
+.biz-office-empty-list,
+.biz-office-empty-table{
+  animation:mo-fade-in var(--mo-dur-slow) var(--mo-ease-out) both;
+}
+.biz-office-pagination{
+  border-radius:0 0 var(--shape-md) var(--shape-md);
+}
+.biz-office-dialog,
+.biz-office-modal{ border-radius:var(--shape-lg); }
+.biz-office-detail-head{ border-bottom:var(--hairline); }
+@media (max-width:980px){
+  .biz-office-table-panel{ box-shadow:none; }
+}
+@media (max-width:720px){
+  .biz-office-table-actions{ gap:8px; }
+  .biz-office-pagination{
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .biz-office-record-card{ padding:12px; }
+}

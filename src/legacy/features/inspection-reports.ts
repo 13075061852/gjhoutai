@@ -1,6 +1,7 @@
 ﻿import { getLegacyApp } from '../core/app-context';
 import '../../styles/pages/inspection-reports.css';
 import { cloudStorage } from '../../services/cloud-storage';
+import { mountInspectionReportPreview } from '../../utils/inspectionReportPreview';
 
 (function () {
   'use strict';
@@ -22,6 +23,7 @@ import { cloudStorage } from '../../services/cloud-storage';
   const refs: any = {};
   let eventController: AbortController | null = null;
   let initialized = false;
+  let previewController: ReturnType<typeof mountInspectionReportPreview> | null = null;
 
   const getFreshRefs = () => {
     refs.page = document.querySelector(`[data-page-section="${PAGE_ID}"]`);
@@ -38,10 +40,7 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.previewView = document.querySelector('.inspection-report-preview-view');
     refs.backBtn = document.getElementById('inspectionReportBackBtn');
     refs.previewFrame = document.getElementById('inspectionReportPreviewFrame');
-    refs.previewTitle = document.getElementById('inspectionReportPreviewTitle');
-    refs.previewMeta = document.getElementById('inspectionReportPreviewMeta');
-    refs.previewOpen = document.getElementById('inspectionReportPreviewOpen');
-    refs.previewDownload = document.getElementById('inspectionReportPreviewDownload');
+    refs.previewStatus = document.getElementById('inspectionReportPreviewStatus');
   };
 
   const installPageDefinition = () => {
@@ -55,31 +54,23 @@ import { cloudStorage } from '../../services/cloud-storage';
   const installMarkup = () => {
     if (document.querySelector(`[data-page-section="${PAGE_ID}"]`)) return;
 
-    const dataRecognitionSection = document.querySelector('[data-page-section="data-recognition"]');
-    const imageCutoutSection = document.querySelector('[data-page-section="image-cutout"]');
     const section = document.createElement('section');
     section.className = 'dashboard inspection-reports-page page-section';
     section.dataset.pageSection = PAGE_ID;
     section.innerHTML = `
       <div class="inspection-report-shell">
         <div class="inspection-report-list-view">
-          <div class="inspection-report-panel-head">
-            <div>
-              <h2>检测报告</h2>
+          <div class="inspection-report-panel-head inspection-report-list-toolbar">
+            <div class="inspection-report-search-bar">
+              <input class="inspection-report-search" id="inspectionReportSearchInput" type="search" placeholder="搜索报告名称、文件名..." aria-label="搜索检测报告" />
             </div>
             <div class="inspection-report-actions">
-              <button class="analysis-toolbar-btn" id="inspectionReportRefreshBtn" type="button" title="刷新列表">
-                <i class="ti ti-refresh" aria-hidden="true"></i>
-              </button>
               <button class="analysis-toolbar-btn analysis-toolbar-btn-primary" id="inspectionReportUploadBtn" type="button">
                 <i class="ti ti-upload" aria-hidden="true"></i>
                 <span>上传</span>
               </button>
               <input id="inspectionReportInput" type="file" accept="application/pdf,.pdf" multiple hidden />
             </div>
-          </div>
-          <div class="inspection-report-search-bar">
-            <input class="inspection-report-search" id="inspectionReportSearchInput" type="search" placeholder="搜索报告名称、文件名..." aria-label="搜索检测报告" />
           </div>
           <div class="inspection-report-list" id="inspectionReportList">
             <div class="inspection-report-empty">
@@ -109,32 +100,24 @@ import { cloudStorage } from '../../services/cloud-storage';
         </div>
 
         <div class="inspection-report-preview-view">
-          <div class="inspection-report-preview-head">
-            <button class="inspection-report-back-btn" id="inspectionReportBackBtn" type="button">
+          <div class="inspection-report-preview-body">
+            <button class="inspection-report-back-btn inspection-report-preview-back" id="inspectionReportBackBtn" type="button" aria-label="返回报告列表">
               <i class="ti ti-arrow-left" aria-hidden="true"></i>
               <span>返回</span>
             </button>
-            <div class="inspection-report-preview-info">
-              <h3 id="inspectionReportPreviewTitle">文档预览</h3>
-              <span id="inspectionReportPreviewMeta">-</span>
-            </div>
-            <div class="inspection-report-preview-actions">
-              <a class="analysis-toolbar-btn" id="inspectionReportPreviewOpen" href="#" target="_blank" rel="noopener" title="在新窗口打开" aria-disabled="true">
-                <i class="ti ti-external-link" aria-hidden="true"></i>
-              </a>
-              <a class="analysis-toolbar-btn" id="inspectionReportPreviewDownload" href="#" download title="下载 PDF" aria-disabled="true">
-                <i class="ti ti-download" aria-hidden="true"></i>
-              </a>
-            </div>
-          </div>
-          <div class="inspection-report-preview-body">
             <iframe id="inspectionReportPreviewFrame" title="检测报告预览" hidden></iframe>
+            <div class="inspection-report-preview-status" id="inspectionReportPreviewStatus" role="status" aria-live="polite">
+              <i class="ti ti-file-type-pdf" aria-hidden="true"></i>
+              <strong>选择一份检测报告</strong>
+              <p>从列表选择报告，即可在此查看内容</p>
+              <button class="analysis-toolbar-btn" type="button" data-report-preview-retry hidden>重新加载</button>
+            </div>
           </div>
         </div>
       </div>
       <div class="bottom-space"></div>
     `;
-    (dataRecognitionSection || imageCutoutSection || document.querySelector('[data-page-section="placeholder"]'))?.insertAdjacentElement('afterend', section);
+    document.querySelector('[data-page-section="placeholder"]')?.insertAdjacentElement('afterend', section);
 
     App.refs.navPageButtons = document.querySelectorAll('[data-page]');
     App.refs.inspectionReportsPageSection = section;
@@ -188,20 +171,6 @@ import { cloudStorage } from '../../services/cloud-storage';
     ].some((value) => String(value || '').toLowerCase().includes(keyword)));
   };
 
-  const setPreviewLinkState = (element, url, fileName) => {
-    if (!element) return;
-    if (!url) {
-      element.setAttribute('href', '#');
-      element.setAttribute('aria-disabled', 'true');
-      element.setAttribute('tabindex', '-1');
-      return;
-    }
-    element.setAttribute('href', url);
-    element.removeAttribute('aria-disabled');
-    element.removeAttribute('tabindex');
-    if (fileName && element === refs.previewDownload) element.setAttribute('download', fileName);
-  };
-
   const downloadBlob = (blob, fileName) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -224,24 +193,15 @@ import { cloudStorage } from '../../services/cloud-storage';
     downloadBlob(blob, getReportFileName(item));
   };
 
-  const getPdfPreviewUrl = (url) => url ? `${url}#zoom=85` : '';
-
   const renderPreview = () => {
     const item = getActiveReport();
 
-    if (!item) return;
-
-    const url = cloudStorage.getInspectionReportFileUrl(item.id || '');
-    const previewUrl = getPdfPreviewUrl(url);
-    const title = getReportTitle(item);
-    if (refs.previewTitle) refs.previewTitle.textContent = title;
-    if (refs.previewMeta) refs.previewMeta.textContent = `${formatFileSize(item.file_size)} · ${formatDate(item.created_at)}`;
-    if (refs.previewFrame) {
-      refs.previewFrame.hidden = false;
-      if (refs.previewFrame.getAttribute('src') !== previewUrl) refs.previewFrame.setAttribute('src', previewUrl);
+    if (!item) {
+      previewController?.clear();
+      return;
     }
-    setPreviewLinkState(refs.previewOpen, url, getReportFileName(item));
-    setPreviewLinkState(refs.previewDownload, url, getReportFileName(item));
+
+    void previewController?.select(item.id);
   };
 
   const isSmallScreen = () => window.innerWidth <= 768;
@@ -273,6 +233,7 @@ import { cloudStorage } from '../../services/cloud-storage';
       return;
     }
     if (!items.length) {
+      if (!state.reports.length) renderPreview();
       refs.list.innerHTML = `
         <div class="inspection-report-empty">
           <div class="inspection-report-empty-icon">
@@ -290,11 +251,10 @@ import { cloudStorage } from '../../services/cloud-storage';
       const fileName = utils.escapeHtml(getReportFileName(item));
       const fileNameHtml = shouldShowReportFileName(item) ? `<div class="inspection-report-file">${fileName}</div>` : '';
       const notes = String(item.notes || '').trim();
-      const fileUrl = utils.escapeHtml(cloudStorage.getInspectionReportFileUrl(item.id || ''));
       return `
         <article class="inspection-report-card ${item.id === state.activeReportId ? 'is-active' : ''}" data-report-id="${id}">
           <div class="inspection-report-icon"><i class="ti ti-file-type-pdf" aria-hidden="true"></i></div>
-          <button class="inspection-report-main" type="button" data-report-preview="${id}">
+          <button class="inspection-report-main" type="button" data-report-preview="${id}" title="${title}" aria-pressed="${item.id === state.activeReportId}">
             <div class="inspection-report-title-row">
               <h3>${title}</h3>
             </div>
@@ -302,18 +262,14 @@ import { cloudStorage } from '../../services/cloud-storage';
             ${notes ? `<p>${utils.escapeHtml(notes)}</p>` : ''}
             <div class="inspection-report-meta">
               <span>${utils.escapeHtml(formatFileSize(item.file_size))}</span>
-              <span>${utils.escapeHtml(formatDate(item.created_at))}</span>
+              <span title="${utils.escapeHtml(formatDate(item.created_at))}">${utils.escapeHtml(formatDate(item.created_at).split(' ')[0])}</span>
             </div>
           </button>
           <div class="inspection-report-card-actions">
-            <span class="inspection-report-card-label">检测报告</span>
-            <a class="analysis-toolbar-btn" href="${fileUrl}" target="_blank" rel="noopener" title="在新窗口中打开">
-              <i class="ti ti-external-link" aria-hidden="true"></i>
-            </a>
-            <button class="analysis-toolbar-btn" type="button" data-report-download="${id}" title="下载文件">
+            <button class="analysis-toolbar-btn inspection-report-download" type="button" data-report-download="${id}" title="下载报告" aria-label="下载报告：${title}">
               <i class="ti ti-download" aria-hidden="true"></i>
             </button>
-            <button class="analysis-toolbar-btn inspection-report-delete" type="button" data-report-delete="${id}" title="删除报告">
+            <button class="analysis-toolbar-btn inspection-report-delete" type="button" data-report-delete="${id}" title="删除报告" aria-label="删除报告：${title}">
               <i class="ti ti-trash" aria-hidden="true"></i>
             </button>
           </div>
@@ -481,14 +437,9 @@ import { cloudStorage } from '../../services/cloud-storage';
     refs.uploadBtn?.addEventListener('click', () => refs.input?.click(), options);
     refs.refreshBtn?.addEventListener('click', refreshReports, options);
     refs.backBtn?.addEventListener('click', showList, options);
-    refs.previewOpen?.addEventListener('click', (event) => {
-      if (!getActiveReport()) event.preventDefault();
-    }, options);
-    refs.previewDownload?.addEventListener('click', (event) => {
-      event.preventDefault();
+    refs.previewStatus?.querySelector('[data-report-preview-retry]')?.addEventListener('click', () => {
       const item = getActiveReport();
-      if (!item?.id) return;
-      downloadReportFile(item.id);
+      if (item?.id) void previewController?.select(item.id, true);
     }, options);
     refs.searchInput?.addEventListener('input', () => {
       state.search = refs.searchInput.value || '';
@@ -540,19 +491,21 @@ import { cloudStorage } from '../../services/cloud-storage';
     eventController?.abort();
     eventController = null;
     initialized = false;
+    previewController?.dispose();
+    previewController = null;
     refs.listView?.classList.remove('is-drag-over', 'is-uploading');
   };
 
   const init = () => {
     getFreshRefs();
     if (!refs.page) return;
-    if (initialized) {
-      refreshReports();
-      return;
-    }
+    if (initialized) return refreshReports();
     initialized = true;
+    if (refs.previewFrame && refs.previewStatus) {
+      previewController = mountInspectionReportPreview(refs.previewFrame, refs.previewStatus, (id, signal) => cloudStorage.getInspectionReportFileBlob(id, signal));
+    }
     bindEvents();
-    refreshReports();
+    return refreshReports();
   };
 
   installPageDefinition();

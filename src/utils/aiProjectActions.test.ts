@@ -1,0 +1,5 @@
+import { it, expect } from 'vitest';
+import { parseAiProjectAction, renderAiProjectActions } from './aiProjectActions';
+const action={id:'12345678-1234-1234-1234-123456789abc',threadId:'t1',project:'guangjun',operation:'stop',status:'pending',expiresAt:new Date(Date.now()+300000).toISOString()};
+it('allows only the two authorized projects and validates streamed/persisted cards',()=>{expect(parseAiProjectAction(action)?.name).toBe('广俊官网及管理后台');for(const change of [{project:'gjhoutai'},{project:'node-admin'},{operation:'restart'},{id:'<script>'},{threadId:'../t'},{expiresAt:'bad'}])expect(parseAiProjectAction({...action,...change})).toBeNull();});
+it('uses trusted labels and disables streaming confirmation without faking a result',()=>{const a=parseAiProjectAction({...action,name:'<script>',path:'https://evil'})!;const html=renderAiProjectActions([a],true);expect(html).toContain('确认关闭');expect(html).toContain('disabled');expect(html).toContain('待确认，尚未执行');expect(html).not.toContain('<script>');expect(html).not.toContain('https://evil');expect(renderAiProjectActions([{...a,status:'unknown'}],false)).not.toContain('data-project-action="confirm"');});

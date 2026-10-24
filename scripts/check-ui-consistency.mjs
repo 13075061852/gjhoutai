@@ -34,22 +34,15 @@ for (const match of responsiveSource.matchAll(/@media\s*\(max-width:\s*(\d+)px\)
 }
 
 const layoutSource = await readFile(path.join(srcRoot, 'styles', 'layout', 'layout.css'), 'utf8');
-const bootingAssistantRule = layoutSource.match(/\.legacy-shell-booting \.assistant\s*\{[^}]*\}/)?.[0] || '';
-if (!/display:\s*none/.test(bootingAssistantRule)) {
-  failures.push('src/styles/layout/layout.css: resident assistant must leave layout until legacy styles finish booting');
-}
 const bootingPageRule = layoutSource.match(/\.legacy-shell-booting \.page-section\s*\{[^}]*\}/)?.[0] || '';
 if (!/visibility:\s*hidden/.test(bootingPageRule) || !/pointer-events:\s*none/.test(bootingPageRule)) {
   failures.push('src/styles/layout/layout.css: deferred page sections must not flash above the boot loading state');
 }
 
-const businessStylesPath = path.join(srcRoot, 'styles', 'pages', 'business-pages.css');
+const businessStylesPath = path.join(srcRoot, 'styles', 'pages', 'office-records-base.css');
 const businessStylesSource = await readFile(businessStylesPath, 'utf8');
-if (businessStylesSource.includes('NEW DASHBOARD')) {
-  failures.push('src/styles/pages/business-pages.css: contains dashboard styles that belong in business/dashboard.css');
-}
-if (/\.biz-dashboard(?:-|\b)/.test(businessStylesSource)) {
-  failures.push('src/styles/pages/business-pages.css: contains duplicated dashboard selectors');
+if (/\.biz-(dashboard|order-table|production-table|supplier-table|personnel-archive)(?:-|\b)/.test(businessStylesSource)) {
+  failures.push('office-records-base.css: contains retired ERP page styles');
 }
 
 const sharedComponentsSource = await readFile(path.join(srcRoot, 'styles', 'components', 'components.css'), 'utf8');
@@ -123,8 +116,9 @@ if (!/\.spectrum-page \.spectrum-view-switch\s*\{[^}]*height:\s*40px[^}]*padding
 }
 
 const sizeLimits = new Map([
-  ['src/legacy/features/business-pages/index.ts', 365 * 1024],
-  ['src/styles/pages/business-pages.css', 190 * 1024],
+  ['src/legacy/features/office-records/index.ts', 90 * 1024],
+  ['src/styles/pages/office-records-base.css', 45 * 1024],
+  ['src/styles/pages/office-records.css', 30 * 1024],
 ]);
 for (const [relativePath, limit] of sizeLimits) {
   const fileStat = await stat(path.join(root, relativePath));

@@ -1,68 +1,34 @@
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error This test runs in Node; the browser app intentionally omits @types/node.
+// @ts-expect-error Tests run in Node, not the browser.
 import { readFileSync } from 'node:fs';
-const globalStyles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
-import chatSource from '../legacy/features/chat.ts?raw';
-import imageCutoutSource from '../legacy/features/image-cutout.ts?raw';
-import businessPagesSource from '../legacy/features/business-pages/index.ts?raw';
-import propertyAnalysisSource from '../legacy/features/property-analysis.ts?raw';
-import spectrumAnalysisSource from '../legacy/features/spectrum-analysis.ts?raw';
-import dataRecognitionSource from '../legacy/features/data-recognition.ts?raw';
-import inspectionReportsSource from '../legacy/features/inspection-reports.ts?raw';
-import themeSettingsSource from '../legacy/features/theme-settings.ts?raw';
-import projectSkillsSource from '../legacy/features/project-skills.ts?raw';
-import apimartMediaSource from '../legacy/features/apimart-media.ts?raw';
-import aiCallAnalysisSource from '../legacy/features/ai-call-analysis.ts?raw';
-import legacyBootstrapSource from '../legacy/bootstrap.ts?raw';
-import dashboardPageSource from '../legacy/features/business-pages/dashboard-page.ts?raw';
-import mainSource from '../main.tsx?raw';
-
-describe('page style loading', () => {
-  it('keeps only application-shell styles in the global entry', () => {
-    const deferredStyles = [
-      'dashboard-chat.css',
-      'image-cutout.css',
-      'business-pages.css',
-      'property-analysis.css',
-      'spectrum-analysis.css',
-      'data-recognition.css',
-      'inspection-reports.css',
-      'config.css',
-      'theme-settings.css',
-      'project-skills.css',
-      'apimart-media.css',
-      'ai-call-analysis.css',
-      'theme-overrides.css',
-    ];
-    deferredStyles.forEach((stylesheet) => expect(globalStyles).not.toContain(stylesheet));
+import office from '../legacy/features/office-records/index.ts?raw';
+import property from '../legacy/features/property-analysis.ts?raw';
+import spectrum from '../legacy/features/spectrum-analysis.ts?raw';
+import inspection from '../legacy/features/inspection-reports.ts?raw';
+import ai from '../legacy/features/ai-analysis.ts?raw';
+import theme from '../legacy/features/theme-settings.ts?raw';
+import bootstrap from '../legacy/bootstrap.ts?raw';
+import loader from '../legacy/bootstrap/feature-loader.ts?raw';
+import main from '../main.tsx?raw';
+const styles=readFileSync(new URL('./styles.css',import.meta.url),'utf8');
+describe('current page style loading',()=>{
+  it('loads only current feature styles on demand',()=>{
+    for(const [source,file] of [[office,'office-records-base.css'],[property,'property-analysis.css'],[spectrum,'spectrum-analysis.css'],[inspection,'inspection-reports.css'],[ai,'ai-analysis.css'],[theme,'theme-settings.css']]){
+      expect(source).toContain(file);expect(styles).not.toContain(file);
+    }
+    expect(styles).toContain('config.css');
+    expect(styles).toContain('office-records.css');
   });
-
-  it('loads each deferred stylesheet from its feature module', () => {
-    const mappings: Array<[string, string]> = [
-      [chatSource, 'dashboard-chat.css'],
-      [imageCutoutSource, 'image-cutout.css'],
-      [businessPagesSource, 'business-pages.css'],
-      [propertyAnalysisSource, 'property-analysis.css'],
-      [spectrumAnalysisSource, 'spectrum-analysis.css'],
-      [dataRecognitionSource, 'data-recognition.css'],
-      [inspectionReportsSource, 'inspection-reports.css'],
-      [themeSettingsSource, 'theme-settings.css'],
-      [projectSkillsSource, 'project-skills.css'],
-      [apimartMediaSource, 'apimart-media.css'],
-      [aiCallAnalysisSource, 'ai-call-analysis.css'],
-      [dashboardPageSource, 'dashboard.css'],
-    ];
-    mappings.forEach(([source, stylesheet]) => expect(source).toContain(stylesheet));
+  it('removes retired runtime/style imports rather than merely hiding their entries',()=>{
+    for(const name of ['business-pages','data-recognition','image-cutout','project-skills','apimart-media','ai-call-analysis','agent-runtime','dashboard-page']){
+      expect(loader).not.toContain(name);expect(bootstrap).not.toContain(`features/${name}`);
+    }
+    expect(bootstrap).not.toContain('App?.chat');
+    expect(bootstrap).not.toContain("ensureLegacyPageFeature('ai-config')");
   });
-
-  it('loads responsive shell styles synchronously and defers theme overrides', () => {
-    expect(mainSource).toContain("import './styles/layout/responsive.css'");
-    expect(legacyBootstrapSource).toContain('theme-overrides.css');
-    expect(legacyBootstrapSource).not.toContain('responsive.css');
+  it('keeps responsive styles synchronous and theme overrides lazy',()=>{
+    expect(main).toContain("import './styles/layout/responsive.css'");
+    expect(bootstrap).toContain('theme-overrides.css');
+    expect(bootstrap).toContain('installCurrentPagePermissions();');
   });
-
-  it('loads the resident assistant layout before deferred chat initialization', () => {
-    expect(legacyBootstrapSource).toContain('config.css');
-  });
-
 });

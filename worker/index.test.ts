@@ -113,6 +113,10 @@ class FakeD1Database {
   }
 
   all<T>(sql: string, values: unknown[]): T[] {
+    if (sql.includes('SELECT key, value FROM app_state WHERE key IN')) {
+      return values.filter((key) => this.appState.has(String(key)))
+        .map((key) => ({ key: String(key), value: this.appState.get(String(key)) })) as T[];
+    }
     if (sql.includes('FROM login_attempts')) {
       const now = String(values[values.length - 1]);
       return values.slice(0, -1)
@@ -239,6 +243,71 @@ afterEach(() => {
 });
 
 describe('worker security controls', () => {
+  it('retires unused project routes and never forwards generation requests', async () => {
+    const env = await authenticatedEnv();
+    const upstream = vi.fn(); vi.stubGlobal('fetch', upstream);
+    for (const path of ['/api/users', '/api/data-recognition/history', '/api/liblibai/request', '/api/business-actions/prepare']) {
+      const response = await worker.fetch(authedRequest(path, 'token', { method:'POST',headers:{'content-type':'application/json'},body:'{}' }),env as any);
+      expect(response.status).toBe(404);
+    }
+    for (const [path,method] of [['/images/generations','POST'],['/videos/generations','POST'],['/tasks/task','GET']]) {
+      const response = await worker.fetch(authedRequest('/api/apimart/request','token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({baseUrl:'https://api.apimart.ai/v1',apiKey:'key',path,method})}),env as any);
+      expect(response.status).toBe(400);
+    }
+    expect(upstream).not.toHaveBeenCalled();expect(env.FILES.objects.size).toBe(0);
+  });
+  it('rejects retired ERP and permission keys for every method, including administrators', async () => {
+    const env = await authenticatedEnv();
+    for (const key of ['gjh-orders-v1','gjh-formula-recipes-v1','gjh-personnel-v1','gjh-role-page-permissions-v1','unknown']) for (const method of ['GET','PUT','DELETE']) {
+      const response = await worker.fetch(authedRequest('/api/state/'+key,'token',{method,...(method==='PUT'?{headers:{'content-type':'application/json'},body:'{"value":"blocked"}'}:{})}),env as any);
+      expect(response.status).toBe(400);
+    }
+    expect(env.DB.appState.size).toBe(0);
+  });
+  it.each(['销售部','生产部','研发部'])('enforces business write restrictions on the server for %s',async department=>{
+    const env=createEnv();env.DB.addUser({id:'restricted',username:'r',department,role:department==='研发部'?'system_admin':'sales_manager',must_change_password:0,is_active:1});await env.DB.addSession('restricted','restricted-token');
+    for (const path of ['/api/state/gjh-office-records-v1','/api/state/gjh-ash-records-v1','/api/property-data','/api/blob/spectrum/upload-test']) {
+      const response=await worker.fetch(authedRequest(path,'restricted-token',{method:'PUT',headers:{'content-type':path.includes('/blob/')?'image/png':'application/json'},body:'{"value":[],"data":{}}'}),env as any);
+      expect(response.status).toBe(403);
+    }
+    expect(env.DB.appState.size).toBe(0);expect(env.FILES.objects.size).toBe(0);
+  });
+  it('keeps current office/ash data shared for lab edits, and user preferences isolated',async()=>{
+    const env=await authenticatedEnv();
+    const key='gjh-office-records-v1';
+    const put=await worker.fetch(authedRequest('/api/state/'+key,'token',{method:'PUT',headers:{'content-type':'application/json'},body:'{"value":"office"}'}),env as any);expect(put.status).toBe(200);
+    expect((await worker.fetch(authedRequest('/api/state/'+key,'token'),env as any)).status).toBe(200);
+    const deleted=await worker.fetch(authedRequest('/api/state/'+key,'token',{method:'DELETE'}),env as any);expect(deleted.status).toBe(200);expect(env.DB.appState.has(key)).toBe(false);
+    const pref='openrouter-ai-call-log-v1';
+    await worker.fetch(authedRequest('/api/state/'+pref,'token',{method:'PUT',headers:{'content-type':'application/json'},body:'{"value":"private"}'}),env as any);
+    expect(env.DB.appState.has('users/admin-1/'+pref)).toBe(true);expect(env.DB.appState.has(pref)).toBe(false);
+  });
+  it('batches state reads with authentication, per-user keys and missing-key nulls', async () => {
+    const env = createEnv();
+    const path = '/api/state?key=sidebar-active-page&key=gjh-office-records-v1&key=gjh-ash-records-v1';
+    expect((await worker.fetch(new Request(`https://api.example${path}`), env as any)).status).toBe(401);
+    env.DB.addUser({ id: 'batch-user', username: 'batch', display_name: 'Batch', role: 'lab_engineer', department: '测试部', must_change_password: 0, is_active: 1 });
+    await env.DB.addSession('batch-user', 'batch-token');
+    env.DB.appState.set('users/batch-user/sidebar-active-page', JSON.stringify('property-analysis'));
+    env.DB.appState.set('users/other-user/sidebar-active-page', JSON.stringify('private-other-user'));
+    env.DB.appState.set('gjh-office-records-v1', JSON.stringify('office-data'));
+    const response = await worker.fetch(authedRequest(path, 'batch-token'), env as any);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ values: { 'sidebar-active-page': 'property-analysis', 'gjh-office-records-v1': 'office-data', 'gjh-ash-records-v1': null } });
+    for (const query of ['', '?key=../private', '?' + new URLSearchParams(Array.from({ length: 33 }, (_, i) => ['key', `key-${i}`])).toString()]) {
+      expect((await worker.fetch(authedRequest(`/api/state${query}`, 'batch-token'), env as any)).status).toBe(400);
+    }
+  });
+  it('requires config-read permission for the official pricing endpoint', async () => {
+    const env = createEnv();
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    expect((await worker.fetch(new Request('https://api.example/api/model-pricing?provider=deepseek'), env as any)).status).toBe(401);
+    env.DB.addUser({ id: 'pricing-sales', username: 'sales', display_name: 'Sales', role: 'sales_manager', department: '销售部', password_hash: 'unused', password_salt: 'unused', must_change_password: 0, is_active: 1 });
+    await env.DB.addSession('pricing-sales', 'pricing-token');
+    expect((await worker.fetch(authedRequest('/api/model-pricing?provider=deepseek', 'pricing-token'), env as any)).status).toBe(403);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('forbids non-admin users from reading or changing shared config', async () => {
     const env = createEnv();
     env.DB.addUser({
@@ -340,79 +409,6 @@ describe('worker security controls', () => {
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="payload.html"; filename*=UTF-8\'\'payload.html');
   });
 
-  it('keeps production and formula state shared across users', async () => {
-    const env = createEnv();
-    env.DB.addUser({
-      id: 'prod-1',
-      username: 'prod',
-      display_name: 'Production',
-      role: 'warehouse_manager',
-      department: '生产部',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    env.DB.addUser({
-      id: 'admin-1',
-      username: 'admin',
-      display_name: 'Admin',
-      role: 'system_admin',
-      department: '系统管理员',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    await env.DB.addSession('prod-1', 'prod-token');
-    await env.DB.addSession('admin-1', 'admin-token');
-
-    const writeResponse = await worker.fetch(authedRequest('/api/state/gjh-formula-recipes-v1', 'prod-token', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ value: JSON.stringify([{ id: 'FM-REAL', name: '真实配方' }]) }),
-    }), env as any);
-    expect(writeResponse.status).toBe(200);
-
-    const readResponse = await worker.fetch(authedRequest('/api/state/gjh-formula-recipes-v1', 'admin-token'), env as any);
-    expect(readResponse.status).toBe(200);
-    await expect(readResponse.json()).resolves.toEqual({
-      value: JSON.stringify([{ id: 'FM-REAL', name: '真实配方' }]),
-    });
-    expect([...env.DB.appState.keys()]).toEqual(['gjh-formula-recipes-v1']);
-  });
-
-  it('deletes app state through DELETE instead of storing null', async () => {
-    const env = createEnv();
-    env.DB.addUser({
-      id: 'prod-1',
-      username: 'prod',
-      display_name: 'Production',
-      role: 'warehouse_manager',
-      department: '生产部',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    await env.DB.addSession('prod-1', 'prod-token');
-
-    const key = 'gjh-formula-recipes-v1';
-    const writeResponse = await worker.fetch(authedRequest(`/api/state/${key}`, 'prod-token', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ value: JSON.stringify([{ id: 'FM-DELETE', name: '待删除配方' }]) }),
-    }), env as any);
-    expect(writeResponse.status).toBe(200);
-    expect(env.DB.appState.has(key)).toBe(true);
-
-    const deleteResponse = await worker.fetch(authedRequest(`/api/state/${key}`, 'prod-token', {
-      method: 'DELETE',
-    }), env as any);
-    expect(deleteResponse.status).toBe(200);
-    expect(env.DB.appState.has(key)).toBe(false);
-  });
-
   it('locks login attempts after repeated failures', async () => {
     const env = createEnv();
     const salt = 'test-salt';
@@ -446,182 +442,6 @@ describe('worker security controls', () => {
     expect(lockedResponse.status).toBe(429);
   });
 
-  it('stores data recognition history in D1 and the image in R2', async () => {
-    const env = createEnv();
-    env.DB.addUser({
-      id: 'lab-1',
-      username: 'lab',
-      display_name: 'Lab',
-      role: 'lab_engineer',
-      department: '测试部',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    await env.DB.addSession('lab-1', 'lab-token');
-
-    const createResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        fileName: 'sample.png',
-        imageDataUrl: 'data:image/png;base64,aGVsbG8=',
-        model: 'vision-model',
-        rowCount: 1,
-        modelCode: '320G6',
-        batchCode: 'B605204',
-        result: { fields: ['型号', '批次'], rows: [{ 型号: '320G6', 批次: 'B605204' }] },
-        rawText: '[{"型号":"320G6","批次":"B605204"}]',
-      }),
-    }), env as any);
-
-    expect(createResponse.status).toBe(201);
-    const created = await createResponse.json() as { id: string };
-    expect(env.DB.dataRecognitionRecords.size).toBe(1);
-    expect(env.FILES.objects.size).toBe(1);
-
-    const listResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token'), env as any);
-    expect(listResponse.status).toBe(200);
-    await expect(listResponse.json()).resolves.toMatchObject({
-      items: [{
-        file_name: 'sample.png',
-        model_code: '320G6 / B605204',
-        batch_code: '',
-        row_count: 1,
-      }],
-    });
-
-    const detailResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}`, 'lab-token'), env as any);
-    expect(detailResponse.status).toBe(200);
-    await expect(detailResponse.json()).resolves.toMatchObject({
-      item: {
-        id: created.id,
-        file_name: 'sample.png',
-        model: 'vision-model',
-        model_code: '320G6',
-        batch_code: '',
-        row_count: 1,
-        result: { fields: ['型号', '批次'], rows: [{ 型号: '320G6', 批次: 'B605204' }] },
-      },
-    });
-
-    const updateResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}`, 'lab-token', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        rowCount: 2,
-        result: {
-          fields: ['型号', '批次'],
-          rows: [
-            { 型号: '320G6', 批次: 'B605204' },
-            { 型号: '330G6', 批次: 'A605213' },
-          ],
-        },
-        rawText: 'updated',
-      }),
-    }), env as any);
-    expect(updateResponse.status).toBe(200);
-
-    const updatedListResponse = await worker.fetch(authedRequest('/api/data-recognition/history', 'lab-token'), env as any);
-    expect(updatedListResponse.status).toBe(200);
-    await expect(updatedListResponse.json()).resolves.toMatchObject({
-      items: [{
-        model_code: '320G6 / B605204、330G6 / A605213',
-        batch_code: '',
-        row_count: 2,
-      }],
-    });
-
-    const imageResponse = await worker.fetch(authedRequest(`/api/data-recognition/history/${created.id}/image`, 'lab-token'), env as any);
-    expect(imageResponse.status).toBe(200);
-    expect(imageResponse.headers.get('content-type')).toBe('image/png');
-  });
-
-  it('proxies signed LiblibAI requests through the authenticated worker route', async () => {
-    const env = createEnv();
-    env.DB.addUser({
-      id: 'lab-1',
-      username: 'lab',
-      display_name: 'Lab',
-      role: 'lab_engineer',
-      department: '测试部',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    await env.DB.addSession('lab-1', 'lab-token');
-    const upstreamFetch = vi.fn(async () => jsonResponse({
-      code: 0,
-      data: { generateUuid: 'task-1' },
-    }));
-    vi.stubGlobal('fetch', upstreamFetch);
-
-    const response = await worker.fetch(authedRequest('/api/liblibai/request', 'lab-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://openapi.liblibai.cloud',
-        path: '/api/generate/seedreamV4',
-        accessKey: 'test-access',
-        secretKey: 'test-secret',
-        payload: { templateUuid: 'template-1' },
-      }),
-    }), env as any);
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      code: 0,
-      data: { generateUuid: 'task-1' },
-    });
-    expect(upstreamFetch).toHaveBeenCalledOnce();
-    const [target, init] = upstreamFetch.mock.calls[0] as unknown as [string, RequestInit];
-    const targetUrl = new URL(target);
-    expect(targetUrl.origin).toBe('https://openapi.liblibai.cloud');
-    expect(targetUrl.pathname).toBe('/api/generate/seedreamV4');
-    expect(targetUrl.searchParams.get('AccessKey')).toBe('test-access');
-    expect(targetUrl.searchParams.get('Signature')).toBeTruthy();
-    expect(init).toMatchObject({
-      method: 'POST',
-      body: JSON.stringify({ templateUuid: 'template-1' }),
-    });
-  });
-
-  it('rejects LiblibAI proxy paths outside the explicit allowlist', async () => {
-    const env = createEnv();
-    env.DB.addUser({
-      id: 'lab-1',
-      username: 'lab',
-      display_name: 'Lab',
-      role: 'lab_engineer',
-      department: '测试部',
-      password_hash: 'unused',
-      password_salt: 'unused',
-      must_change_password: 0,
-      is_active: 1,
-    });
-    await env.DB.addSession('lab-1', 'lab-token');
-    const upstreamFetch = vi.fn();
-    vi.stubGlobal('fetch', upstreamFetch);
-
-    const response = await worker.fetch(authedRequest('/api/liblibai/request', 'lab-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://openapi.liblibai.cloud',
-        path: '/api/admin/secrets',
-        accessKey: 'test-access',
-        secretKey: 'test-secret',
-        payload: {},
-      }),
-    }), env as any);
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: 'invalid_liblib_path' });
-    expect(upstreamFetch).not.toHaveBeenCalled();
-  });
-
   async function authenticatedEnv(mustChangePassword = 0) {
     const env = createEnv();
     env.DB.addUser({ id: 'admin-1', username: 'admin', display_name: 'Admin', department: '系统管理员',
@@ -631,7 +451,7 @@ describe('worker security controls', () => {
   }
 
   it.each([
-    ['/images/generations', 'POST'], ['/videos/generations', 'POST'], ['/tasks/task_123', 'GET'], ['/balance', 'GET'],
+    ['/balance', 'GET'],
   ])('proxies APIMart %s with Bearer auth and correct method', async (path, method) => {
     const env = await authenticatedEnv();
     const upstream = vi.fn(async () => jsonResponse({ code: 200, data: [{ task_id: 'task_123' }] }));
@@ -725,45 +545,6 @@ describe('worker security controls', () => {
       headers: { cookie: 'gjh_session=%ZZ' },
     }), createEnv() as any);
     expect(response.status).toBe(401);
-  });
-
-  it('only lets administrators modify shared permission settings', async () => {
-    const env = await authenticatedEnv();
-    env.DB.users.get('admin-1').department = '生产部';
-    const response = await worker.fetch(authedRequest('/api/state/gjh-role-page-permissions-v1', 'token', {
-      method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{"value":{}}',
-    }), env as any);
-    expect(response.status).toBe(403);
-    expect(env.DB.appState.size).toBe(0);
-  });
-
-  it('derives new log identities from the session and preserves other users logs', async () => {
-    const env = await authenticatedEnv();
-    const key = 'openrouter-ai-call-log-v1';
-    env.DB.appState.set(key, JSON.stringify([{ id: 'existing', actorUserId: 'victim', summary: 'original' }]));
-    const response = await worker.fetch(authedRequest(`/api/state/${key}`, 'token', {
-      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: [
-        { id: 'existing', actorUserId: 'victim', summary: 'forged' },
-        { id: 'new', actorUserId: 'victim' },
-      ] }),
-    }), env as any);
-    expect(response.status).toBe(200);
-    const logs = JSON.parse(env.DB.appState.get(key)!);
-    expect(logs.find((item: any) => item.id === 'existing').summary).toBe('original');
-    expect(logs.find((item: any) => item.id === 'new').actorUserId).toBe('admin-1');
-  });
-
-  it('revokes sessions when an administrator resets a password', async () => {
-    const env = await authenticatedEnv();
-    env.DB.addUser({ id: 'target', username: 'target', department: '生产部', is_active: 1 });
-    await env.DB.addSession('target', 'target-token');
-    const response = await worker.fetch(authedRequest('/api/users/target', 'token', {
-      method: 'PUT', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ department: '生产部', displayName: 'Target', password: 'new-password' }),
-    }), env as any);
-    expect(response.status).toBe(200);
-    expect(env.DB.sessions.has(await sha256('target-token'))).toBe(false);
-    expect(env.DB.sessions.has(await sha256('token'))).toBe(true);
   });
 
   it('revokes other sessions after password changes', async () => {

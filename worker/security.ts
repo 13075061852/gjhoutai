@@ -57,9 +57,7 @@ export async function prepareJsonRequest(request: Request): Promise<Request> {
   if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
     throw new RequestError(415, 'json_content_type_required');
   }
-  const limit = path.startsWith('/api/auth/') || path.startsWith('/api/users')
-    ? 16 * 1024
-    : path.startsWith('/api/data-recognition/') ? 12 * 1024 * 1024 : 2 * 1024 * 1024;
+  const limit = path.startsWith('/api/auth/') ? 16 * 1024 : 2 * 1024 * 1024;
   const bytes = await readLimitedBody(request, limit);
   let value: unknown;
   try {

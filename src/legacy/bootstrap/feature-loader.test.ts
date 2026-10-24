@@ -1,26 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { getLegacyPageFeature } from './feature-loader';
-
-describe('getLegacyPageFeature', () => {
-  it('maps dedicated pages to their lazy feature modules', () => {
-    expect(getLegacyPageFeature('property-analysis')).toBe('propertyAnalysis');
-    expect(getLegacyPageFeature('spectrum-analysis')).toBe('spectrumAnalysis');
-    expect(getLegacyPageFeature('data-recognition')).toBe('dataRecognition');
-    expect(getLegacyPageFeature('inspection-reports')).toBe('inspectionReports');
-    expect(getLegacyPageFeature('image-cutout')).toBe('imageCutout');
-    expect(getLegacyPageFeature('ai-config')).toBe('config');
-    expect(getLegacyPageFeature('theme-settings')).toBe('themeSettings');
-    expect(getLegacyPageFeature('project-skills')).toBe('projectSkills');
-    expect(getLegacyPageFeature('apimart-media')).toBe('apimartMedia');
-    expect(getLegacyPageFeature('ai-call-analysis')).toBe('aiCallAnalysis');
+import { getLegacyPageFeature, ensureLegacyPageFeature, isLegacyPageFeatureReady } from './feature-loader';
+describe('seven-page lazy feature boundary', () => {
+  it('maps only the seven current pages', () => {
+    expect(['property-analysis','spectrum-analysis','inspection-reports','ai-analysis','office-records','ai-config','theme-settings'].map(getLegacyPageFeature)).toEqual(['propertyAnalysis','spectrumAnalysis','inspectionReports','aiAnalysis','officeRecords','config','themeSettings']);
   });
-
-  it('keeps the default dashboard separate from the full business module', () => {
-    expect(getLegacyPageFeature('dashboard')).toBe('dashboard');
-  });
-
-  it('routes detailed business pages through the shared business module', () => {
-    expect(getLegacyPageFeature('order-management')).toBe('businessPages');
-    expect(getLegacyPageFeature('inventory-management')).toBe('businessPages');
+  it('never routes retired pages into a generic ERP runtime', async () => {
+    for (const page of ['dashboard','inventory-management','order-management','permission-management','personnel-archive','data-recognition','project-skills','apimart-media','image-cutout','ai-call-analysis','unknown']) {
+      expect(getLegacyPageFeature(page)).toBeNull();
+      expect(isLegacyPageFeatureReady(page)).toBe(false);
+      await expect(ensureLegacyPageFeature(page)).rejects.toThrow('页面不在当前项目范围内');
+    }
   });
 });

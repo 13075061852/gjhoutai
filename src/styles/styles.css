@@ -4,4 +4,14 @@
 @import url("./layout/sidebar.css");
 @import url("./layout/layout.css");
 @import url("./pages/auth.css");
+/* Resident assistant markup is present on first render: its styles must not be deferred. */
+@import url("./pages/config.css");
 @import url("./components/design-system.css");
+@import url("./foundation/motion.css");
+@import url("./layout/workspace.css");
+@import url("./layout/page-transition.css");
+@import url("./pages/office-records.css");
+@import url("./pages/spectrum-preview.css");
+@import url("./pages/config-workspace.css");
+@import url("./pages/workspace-refinements.css");
+@import url("./foundation/theme-colors.css");

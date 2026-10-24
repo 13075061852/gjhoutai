@@ -25,6 +25,7 @@
     if (!instance) return;
     PublicApp?.animations?.removeClass?.(instance.root, 'is-open') ?? instance.root.classList.remove('is-open');
     instance.trigger.setAttribute('aria-expanded', 'false');
+    instance.menu.hidePopover?.();
     instance.menu.hidden = true;
     if (openInstance === instance) openInstance = null;
   };
@@ -36,11 +37,16 @@
     const menuHeight = Math.min(240, instance.menu.scrollHeight || 240);
     const opensUp = spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow;
 
+    // The top layer avoids transformed/animated panels becoming the fixed
+    // positioning container. Coordinates below are relative to the viewport.
     instance.menu.style.position = 'fixed';
+    instance.menu.style.margin = '0';
+    instance.menu.style.inset = 'auto';
     instance.menu.style.minWidth = `${Math.min(rect.width, window.innerWidth - 16)}px`;
     instance.menu.style.maxHeight = `${Math.max(0, Math.min(240, opensUp ? spaceAbove : spaceBelow))}px`;
     instance.menu.style.visibility = 'hidden';
     instance.menu.hidden = false;
+    instance.menu.showPopover?.();
 
     const menuWidth = instance.menu.offsetWidth;
     const spaceRight = window.innerWidth - rect.left;
@@ -140,7 +146,7 @@
         <span class="custom-select-value"></span>
         <span class="custom-select-caret" aria-hidden="true"></span>
       </button>
-      <div class="custom-select-menu" id="${menuId}" role="listbox" aria-label="${escapeHtml(label)}" hidden></div>
+      <div class="custom-select-menu" id="${menuId}" role="listbox" aria-label="${escapeHtml(label)}" popover="manual" hidden></div>
     `;
 
     select.classList.add('is-custom-select-native');

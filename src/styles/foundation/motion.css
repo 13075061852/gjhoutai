@@ -1,0 +1,272 @@
+/* ==========================================================================
+   Motion system — shared entrance, feedback and transition primitives.
+   Rules: transform/opacity only (GPU friendly), no color/stroke animations that
+   trigger layout, and every animation is disabled by the reduced-motion gates.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Tokens
+   -------------------------------------------------------------------------- */
+:root {
+  --mo-dur-instant: 90ms;
+  --mo-dur-fast: 160ms;
+  --mo-dur-base: 240ms;
+  --mo-dur-slow: 340ms;
+  --mo-dur-slower: 460ms;
+  --mo-ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --mo-ease-out: cubic-bezier(.16, 1, .3, 1);
+  --mo-ease-in: cubic-bezier(.4, 0, 1, 1);
+  --mo-ease-spring: cubic-bezier(.34, 1.42, .64, 1);
+  --mo-ease-drawer: cubic-bezier(.22, .9, .24, 1);
+  --mo-rise: 10px;
+  --mo-rise-sm: 6px;
+  --mo-stagger: 26ms;
+}
+
+/* --------------------------------------------------------------------------
+   2. Keyframes
+   -------------------------------------------------------------------------- */
+@keyframes mo-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mo-fade-up {
+  from { opacity: 0; transform: translate3d(0, var(--mo-rise), 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mo-fade-down {
+  from { opacity: 0; transform: translate3d(0, calc(var(--mo-rise) * -1), 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mo-slide-in-end {
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mo-slide-in-start {
+  from { opacity: 0; transform: translate3d(-24px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mo-scale-in {
+  from { opacity: 0; transform: scale(.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mo-pop-in {
+  0% { opacity: 0; transform: scale(.9); }
+  62% { opacity: 1; transform: scale(1.012); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mo-sheet-up {
+  from { opacity: 0; transform: translate3d(0, 100%, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes mo-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+
+@keyframes mo-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes mo-ring {
+  0% { opacity: .55; transform: scale(.7); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+@keyframes mo-sweep-x {
+  from { transform: translate3d(-110%, 0, 0); }
+  to { transform: translate3d(110%, 0, 0); }
+}
+
+@keyframes mo-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes mo-nudge {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  35% { transform: translate3d(0, -2px, 0); }
+  70% { transform: translate3d(0, 1px, 0); }
+}
+
+/* --------------------------------------------------------------------------
+   3. Utility classes
+   -------------------------------------------------------------------------- */
+.ui-anim-fade { animation: mo-fade-in var(--mo-dur-base) var(--mo-ease-out) both; }
+.ui-anim-rise { animation: mo-fade-up var(--mo-dur-slow) var(--mo-ease-out) both; }
+.ui-anim-scale { animation: mo-pop-in var(--mo-dur-slow) var(--mo-ease-out) both; }
+.ui-anim-delay-1 { animation-delay: calc(var(--mo-stagger) * 1); }
+.ui-anim-delay-2 { animation-delay: calc(var(--mo-stagger) * 2); }
+.ui-anim-delay-3 { animation-delay: calc(var(--mo-stagger) * 3); }
+
+/* Stagger container: direct children rise in sequence (capped so long lists
+   stay snappy) and re-run whenever the container contents are re-rendered. */
+.ui-stagger > * {
+  animation: mo-fade-up var(--mo-dur-slow) var(--mo-ease-out) both;
+}
+.ui-stagger > *:nth-child(1) { animation-delay: calc(var(--mo-stagger) * 0); }
+.ui-stagger > *:nth-child(2) { animation-delay: calc(var(--mo-stagger) * 1); }
+.ui-stagger > *:nth-child(3) { animation-delay: calc(var(--mo-stagger) * 2); }
+.ui-stagger > *:nth-child(4) { animation-delay: calc(var(--mo-stagger) * 3); }
+.ui-stagger > *:nth-child(5) { animation-delay: calc(var(--mo-stagger) * 4); }
+.ui-stagger > *:nth-child(6) { animation-delay: calc(var(--mo-stagger) * 5); }
+.ui-stagger > *:nth-child(7) { animation-delay: calc(var(--mo-stagger) * 6); }
+.ui-stagger > *:nth-child(8) { animation-delay: calc(var(--mo-stagger) * 7); }
+.ui-stagger > *:nth-child(9) { animation-delay: calc(var(--mo-stagger) * 8); }
+.ui-stagger > *:nth-child(10) { animation-delay: calc(var(--mo-stagger) * 9); }
+.ui-stagger > *:nth-child(n+11) { animation-delay: calc(var(--mo-stagger) * 10); }
+
+/* Skeleton placeholder that breathes instead of shimmering with a gradient. */
+.ui-skeleton {
+  position: relative;
+  border-radius: var(--ui-radius-sm);
+  background: var(--surface-3);
+  color: transparent !important;
+  animation: mo-pulse-soft 1.35s var(--mo-ease-standard) infinite;
+}
+.ui-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--surface-2);
+  opacity: .85;
+  animation: mo-sweep-x 1.5s var(--mo-ease-in) infinite;
+}
+
+/* Indeterminate progress accent used by upload bars and boot spinners. */
+.ui-progress-indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  opacity: .5;
+  animation: mo-sweep-x 1.2s var(--mo-ease-in) infinite;
+}
+
+/* --------------------------------------------------------------------------
+   4. Page transitions
+   -------------------------------------------------------------------------- */
+.page-section.active {
+  animation: mo-fade-up var(--mo-dur-base) var(--mo-ease-out) both;
+}
+/* Keep the boot state from animating twice: the shell mounts before features. */
+.legacy-shell-booting .page-section {
+  animation: none;
+}
+
+.analysis-page.active > .analysis-panel,
+.spectrum-page.active > .spectrum-toolbar,
+.inspection-reports-page.active > .inspection-report-shell,
+.ai-config.active > .config-layout,
+.theme-settings-page.active > .theme-settings-shell,
+.biz-office-page.active > .biz-formula-table-panel {
+  animation: mo-fade-up var(--mo-dur-slow) var(--mo-ease-out) both;
+}
+
+/* Re-trigger the entrance whenever a lazily mounted page is swapped in. */
+.page-section.active > .bottom-space {
+  animation: mo-fade-in var(--mo-dur-base) var(--mo-ease-out) both;
+}
+
+/* --------------------------------------------------------------------------
+   5. Interaction feedback
+   -------------------------------------------------------------------------- */
+@media (hover: hover) {
+  :is(.ui-button, .analysis-toolbar-btn, .analysis-toolbar-btn-primary, .confirm-dialog-btn,
+      .biz-inventory-primary-btn, .biz-inventory-ghost-btn, .spectrum-action-btn, .dialog-close,
+      .pill-btn, .icon-btn, .mobile-menu-btn, .spectrum-icon-btn, .assistant-icon-btn) {
+    transition:
+      transform var(--mo-dur-fast) var(--mo-ease-out),
+      border-color var(--mo-dur-fast) var(--mo-ease-standard),
+      background-color var(--mo-dur-fast) var(--mo-ease-standard),
+      color var(--mo-dur-fast) var(--mo-ease-standard),
+      box-shadow var(--mo-dur-fast) var(--mo-ease-standard);
+  }
+  :is(.ui-panel, .ui-stat-card, .analysis-panel, .spectrum-filter-panel, .spectrum-gallery-panel,
+      .theme-card, .font-card, .config-module, .system-notify-item):hover {
+    border-color: var(--control-border-hover);
+  }
+}
+
+:is(.ui-button, .analysis-toolbar-btn, .analysis-toolbar-btn-primary, .confirm-dialog-btn,
+    .biz-inventory-primary-btn, .biz-inventory-ghost-btn, .spectrum-action-btn,
+    .pill-btn, .icon-btn, .mobile-menu-btn, .spectrum-icon-btn):not(:disabled):active {
+  transform: translate3d(0, 0, 0) scale(.975);
+  transition-duration: var(--mo-dur-instant);
+}
+
+/* Table rows and list cards respond without shifting the layout. */
+@media (hover: hover) {
+  .ui-table tbody tr,
+  .analysis-table tbody tr,
+  .biz-formula-table tbody tr,
+  .biz-office-record-card,
+  .inspection-report-card,
+  .spectrum-card,
+  .theme-card,
+  .font-card {
+    transition: background-color var(--mo-dur-fast) var(--mo-ease-standard),
+                border-color var(--mo-dur-fast) var(--mo-ease-standard),
+                box-shadow var(--mo-dur-fast) var(--mo-ease-standard),
+                transform var(--mo-dur-fast) var(--mo-ease-out);
+  }
+}
+
+/* Tab / segmented control indicator easing. */
+:is(.analysis-sheet-tab, .biz-office-tabs > *, .spectrum-filter-btn, .provider-option,
+    .spectrum-view-switch::before, .analysis-search-mode::before, .spectrum-mode-switch::before) {
+  transition-timing-function: var(--mo-ease-out);
+}
+
+/* Custom select menus pop instead of snapping. */
+.custom-select-menu {
+  transition: opacity var(--mo-dur-fast) var(--mo-ease-standard),
+              transform var(--mo-dur-base) var(--mo-ease-out);
+}
+
+/* Progress bars animate their width smoothly. */
+:is(.spectrum-import-progress-bar, .analysis-range-word-progress, .inspection-report-upload-track > span,
+    .analysis-report-progress > span) {
+  transition: width var(--mo-dur-slow) var(--mo-ease-out);
+}
+
+/* --------------------------------------------------------------------------
+   6. Reduced motion gates
+   -------------------------------------------------------------------------- */
+html[data-reduced-motion="1"] .ui-stagger > *,
+html[data-reduced-motion="1"] .page-section.active,
+html[data-reduced-motion="1"] .ui-skeleton,
+html[data-reduced-motion="1"] .ui-skeleton::after,
+html[data-reduced-motion="1"] .ui-progress-indeterminate::after,
+html[data-reduced-motion="1"] .ui-anim-fade,
+html[data-reduced-motion="1"] .ui-anim-rise,
+html[data-reduced-motion="1"] .ui-anim-scale {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-stagger > *,
+  .page-section.active,
+  .ui-skeleton,
+  .ui-skeleton::after,
+  .ui-progress-indeterminate::after,
+  .ui-anim-fade,
+  .ui-anim-rise,
+  .ui-anim-scale {
+    animation: none !important;
+  }
+  :is(.ui-button, .analysis-toolbar-btn, .analysis-toolbar-btn-primary):hover,
+  :is(.ui-button, .analysis-toolbar-btn, .analysis-toolbar-btn-primary):active {
+    transform: none !important;
+  }
+}

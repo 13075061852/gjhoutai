@@ -1,0 +1,47 @@
+.ai-business-change { margin-block: 16px; border: 1px solid var(--border-2); border-radius: 10px; padding: 16px; background: var(--surface); min-width: 0; }
+.ai-business-change-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.ai-business-change-head strong { font-size: 13px; font-weight: 600; color: var(--text); }
+.ai-business-change-head > span { font-size: 12px; line-height: 1.6; color: var(--muted); }
+.ai-business-change details { margin-top: 12px; min-width: 0; }
+.ai-business-change summary { min-height: 36px; padding-block: 8px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.ai-business-preview { min-width: 0; padding-top: 4px; }
+.ai-business-record { min-width: 0; }
+.ai-business-record + .ai-business-record { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.ai-business-record h5 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.6; }
+.ai-business-table-scroll { max-width: 100%; min-width: 0; overflow-x: auto; margin-top: 8px; border: 1px solid var(--border-2); border-radius: 6px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.ai-business-table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ai-business-table { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--text); font-size: 12px; line-height: 1.7; font-variant-numeric: tabular-nums; }
+.ai-business-table caption { padding: 7px 10px; border-bottom: 1px solid var(--border-2); background: var(--surface-2); color: var(--text-2); text-align: left; font-size: 12px; font-weight: 500; }
+.ai-business-table :is(th, td) { min-width: 72px; padding: 9px 10px; border: 0; border-bottom: 1px solid var(--border-2); border-right: 1px solid var(--border-2); text-align: center; vertical-align: middle; overflow-wrap: anywhere; white-space: pre-line; }
+.ai-business-table th { font-weight: 500; color: var(--text-2); }
+.ai-business-table thead th { background: var(--surface-2); white-space: nowrap; }
+.ai-business-table tr > :last-child { border-right: 0; }
+.ai-business-table tbody tr:last-child > :is(th, td) { border-bottom: 0; }
+.ai-business-table.is-fields > tbody > tr > th { width: 100px; min-width: 88px; background: var(--surface-2); }
+.ai-business-table.is-fields > tbody > tr > td { min-width: 112px; }
+.ai-business-table.is-fields > :is(thead, tbody) > tr > th:first-child { position: sticky; left: 0; z-index: 1; }
+.ai-business-table td.is-changed { background: var(--accent-soft, var(--surface-2)); font-weight: 600; }
+.ai-business-table .ai-business-table { font-size: inherit; }
+.ai-business-nested { display: grid; gap: 10px; }
+.ai-business-subtitle { display: block; margin-bottom: 4px; color: var(--text-2); font-weight: 500; }
+.ai-business-empty { color: var(--muted); }
+.ai-analysis-text .ai-business-table-reference { color: var(--text-2); font-size: 12px; }
+.ai-business-preview > .ai-business-empty { margin: 8px 0; font-size: 12px; line-height: 1.7; }
+.ai-business-change-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ai-business-change-buttons button { min-height: 44px; padding: 0 16px; border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.ai-business-change-buttons button.is-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ai-business-change-buttons button.is-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.ai-business-change-buttons button:hover:not(:disabled) { filter: brightness(.96); }
+.ai-business-change-buttons button:focus-visible, .ai-business-change summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.ai-business-change-buttons button:disabled { opacity: .5; cursor: not-allowed; }
+.ai-business-change-error { margin: 10px 0 0; color: var(--danger); font-size: 12px; line-height: 1.7; }
+@media (max-width: 720px) {
+  .ai-business-change { padding: 12px; }
+  .ai-business-change summary { min-height: 44px; padding-block: 12px; }
+  .ai-business-table :is(th, td) { padding: 8px; }
+}
+@media (max-width: 480px) {
+  .ai-business-change { padding: 10px; }
+  .ai-business-change-head { gap: 4px 8px; }
+  .ai-business-table :is(th, td) { padding: 7px; }
+}

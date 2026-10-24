@@ -1,0 +1,29 @@
+[Unit]
+Description=Restricted three-project read and start-stop broker
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=gjhoutai
+ExecStart=/usr/bin/python3 -B /usr/local/lib/gjhoutai-projects/project-bridge.py
+RuntimeDirectory=gjhoutai-projects
+RuntimeDirectoryMode=0750
+UMask=0077
+Restart=on-failure
+RestartSec=3
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/gjhoutai-projects
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

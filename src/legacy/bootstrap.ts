@@ -1,11 +1,10 @@
 import './core/app-namespace';
-import '../styles/pages/config.css';
 import '../styles/pages/theme-overrides.css';
 import { getLegacyApp } from './core/app-context';
 import { resetLegacyPageFeatures } from './bootstrap/feature-loader';
 import { refreshLegacyDomRefs } from './core/dom-refs';
+import { installCurrentPagePermissions } from '../services/page-permissions';
 import './core/app-constants';
-import './core/runtime-state';
 import './core/utils';
 import './bootstrap/app-state';
 import './core/animation-manager';
@@ -33,19 +32,6 @@ async function runLegacyInit(name: string, init?: () => void | Promise<void> | u
   }
 }
 
-function startAssistantFeatures(version: number): void {
-  void Promise.all([
-    import('./features/agent-butler'),
-    import('./features/chat'),
-  ]).then(async () => {
-    if (!booted || version !== bootVersion) return;
-    const App = getLegacyApp();
-    await runLegacyInit('chat', () => App?.chat?.init?.());
-  }).catch((error) => {
-    console.warn('[legacy] Failed to load assistant features.', error);
-  });
-}
-
 export async function bootLegacyApp(): Promise<(() => void) | undefined> {
   if (booted) return undefined;
   if (bootPromise) return bootPromise;
@@ -53,13 +39,13 @@ export async function bootLegacyApp(): Promise<(() => void) | undefined> {
 
   bootPromise = (async () => {
     refreshLegacyDomRefs();
+    installCurrentPagePermissions();
     await loadCoreLegacyFeatures();
     booted = true;
 
     const App = getLegacyApp();
     await runLegacyInit('navigation', () => App?.navigation?.init?.());
     if (!booted || version !== bootVersion) return undefined;
-    startAssistantFeatures(version);
     return undefined;
   })();
 
@@ -73,18 +59,13 @@ export function teardownLegacyApp(): void {
   resetLegacyPageFeatures();
   const App = getLegacyApp();
   const modules: Array<LegacyLifecycleModule | LegacyAnimationApi | LegacyMotionEffectsApi | undefined> = [
-    App?.chat,
-    App?.projectSkills,
-    App?.aiCallAnalysis,
-    App?.apimartMedia,
+    App?.aiAnalysis,
     App?.config,
     App?.themeSettings,
-    App?.imageCutout,
     App?.inspectionReports,
-    App?.dataRecognition,
     App?.spectrumAnalysis,
     App?.propertyAnalysis,
-    App?.businessPages,
+    App?.officeRecords,
     App?.navigation,
     App?.dialogConsentAnimation,
     App?.animations,

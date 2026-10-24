@@ -18,36 +18,15 @@ declare global {
   }
 
   type LegacyPageId =
-    | 'dashboard'
-    | 'order-management'
-    | 'order-detail'
-    | 'invoice-print'
-    | 'formula-management'
-    | 'production-plan'
-    | 'inventory-management'
-    | 'supplier-archive'
-    | 'supplier-detail'
-    | 'raw-material-procurement'
-    | 'customer-archive'
-    | 'customer-detail'
-    | 'personnel-archive'
     | 'property-analysis'
     | 'spectrum-analysis'
-    | 'data-recognition'
-    | 'office-records'
     | 'inspection-reports'
-    | 'image-cutout'
-    | 'project-skills'
-    | 'apimart-media'
-    | 'ai-call-analysis'
-    | 'permission-management'
-    | 'theme-settings'
-    | 'ai-config';
+    | 'office-records'
+    | 'ai-config'
+    | 'ai-analysis'
+    | 'theme-settings';
 
   type LegacyAiProvider = 'deepseek' | 'siliconflow' | 'lmstudio';
-  type LegacySearchProvider = 'tavily' | 'serpapi' | 'bing' | 'none';
-  type LegacySearchDepth = 'basic' | 'advanced';
-  type LegacySearchTopic = 'general' | 'news' | 'finance';
   type LegacyMotionType = 'animation' | 'transition';
 
   type LegacyLifecycleModule = Record<string, any> & {
@@ -79,11 +58,6 @@ declare global {
     autoImageUpload: boolean;
     jsonMode: boolean;
     logEnabled: boolean;
-    searchProvider: LegacySearchProvider;
-    searchApiKey: string;
-    searchDepth: LegacySearchDepth;
-    searchMaxResults: number;
-    searchTopic: LegacySearchTopic;
     apimartApiKey: string;
     apimartBaseUrl: string;
     apimartImageModel: string;
@@ -103,18 +77,10 @@ declare global {
 
   type LegacyAppConstants = {
     SIDEBAR_STATE_KEY: string;
-    ASSISTANT_STATE_KEY: string;
     NAV_PAGE_KEY: string;
     NAV_RECENT_PAGES_KEY: string;
     CONFIG_STORAGE_KEY: string;
     CONFIG_LOG_KEY: string;
-    CHAT_STORAGE_KEY: string;
-    CHAT_SESSIONS_KEY: string;
-    CHAT_SESSION_INDEX_KEY: string;
-    CHAT_SESSION_PREFIX: string;
-    CHAT_ACTIVE_SESSION_KEY: string;
-    CHAT_DATA_ATTACHMENT_KEY: string;
-    CHAT_SEARCH_ENABLED_KEY: string;
     AI_CALL_LOG_KEY: string;
     DEFAULT_BASE_URL: string;
     DEFAULT_LM_STUDIO_BASE_URL: string;
@@ -128,15 +94,6 @@ declare global {
     shell: HTMLElement | null;
     navPageButtons: NodeListOf<HTMLElement>;
     groupToggles: NodeListOf<HTMLElement>;
-  };
-
-  type LegacyState = {
-    chatHistory: any[];
-    chatSessions: any[];
-    chatSessionId: string;
-    conversationMenuQuery: string;
-    chatBusy: boolean;
-    dataAttachmentEnabled: boolean;
   };
 
   type LegacyUtils = {
@@ -188,98 +145,6 @@ declare global {
     cleanup: () => void;
   };
 
-  type LegacyAgentRunState =
-    | 'routing'
-    | 'planning'
-    | 'executing'
-    | 'awaiting_confirmation'
-    | 'composing'
-    | 'completed'
-    | 'failed'
-    | 'timed_out'
-    | 'cancelled';
-
-  type LegacyAgentProgressEvent = {
-    runId?: string;
-    at: string;
-    phase: LegacyAgentRunState;
-    label: string;
-    status: 'started' | 'running' | 'completed' | 'failed' | 'waiting_confirmation';
-    toolId?: string;
-    stepId?: string;
-    durationMs?: number;
-  };
-
-  type LegacyAgentRunRecord = {
-    version: 2;
-    id: string;
-    prompt: string;
-    state: LegacyAgentRunState;
-    pendingConfirmation?: {
-      version: 2;
-      id: string;
-      runId: string;
-      stepId: string;
-      toolId: string;
-      riskLevel: 'read' | 'create' | 'update' | 'delete';
-      expiresAt: string;
-    };
-    [key: string]: any;
-  };
-
-  type LegacyAgentRuntimeResult = {
-    run: LegacyAgentRunRecord;
-    state: LegacyAgentRunState;
-    answer: string;
-    images: unknown[];
-    actions: unknown[];
-  };
-
-  type LegacyAgentRuntime = {
-    run: (input: {
-      prompt: string;
-      activePageId: string;
-      projectAccessEnabled: boolean;
-      webSearchEnabled: boolean;
-      sessionId?: string;
-      history?: unknown[];
-      attachments?: {
-        images?: unknown[];
-      };
-      signal?: AbortSignal;
-      onProgress?: (event: LegacyAgentProgressEvent) => void;
-    }) => Promise<LegacyAgentRuntimeResult>;
-    confirm: (input: {
-      runId: string;
-      confirmationId: string;
-      sessionId?: string;
-      history?: unknown[];
-      signal?: AbortSignal;
-      onProgress?: (event: LegacyAgentProgressEvent) => void;
-    }) => Promise<LegacyAgentRuntimeResult>;
-    cancel: (runId: string) => Promise<LegacyAgentRunRecord | null>;
-  };
-
-  type LegacyAgentToolRegistry = {
-    register: (definition: Record<string, unknown>) => void;
-    get: (toolId: string) => Record<string, unknown> | null;
-    list: () => Array<Record<string, unknown>>;
-    getPlannerCatalog: () => Array<Record<string, unknown>>;
-    prepareCall: (
-      toolId: string,
-      input: unknown,
-      context: { runId: string; stepId: string },
-    ) => Record<string, unknown>;
-    validateResult: (toolId: string, result: unknown) => Record<string, unknown>;
-  };
-
-  type LegacyProjectSkillsApi = LegacyLifecycleModule & {
-    getToolRegistry?: () => LegacyAgentToolRegistry;
-    getToolCatalog?: () => Array<Record<string, unknown>>;
-    resumeConfirmedRun?: (...args: any[]) => Promise<unknown>;
-    executeSkill?: (...args: any[]) => Promise<unknown>;
-  };
-
   interface LegacyAppNamespace extends Record<string, any> {
     currentUser?: {
       id: string;
@@ -291,25 +156,17 @@ declare global {
     };
     constants?: LegacyAppConstants;
     refs?: LegacyRefs;
-    state?: LegacyState;
     utils?: LegacyUtils;
-    aiCallAnalysis?: LegacyLifecycleModule;
-    apimartMedia?: LegacyLifecycleModule;
+    aiAnalysis?: LegacyLifecycleModule;
     animations?: LegacyAnimationApi;
-    agentRuntime?: LegacyAgentRuntime;
-    agentToolRegistry?: LegacyAgentToolRegistry;
-    businessPages?: LegacyLifecycleModule;
-    chat?: LegacyLifecycleModule;
+    officeRecords?: LegacyLifecycleModule;
     config?: LegacyLifecycleModule;
-    dataRecognition?: LegacyLifecycleModule;
     dialogConsentAnimation?: LegacyLifecycleModule;
     confirmDialog?: Record<string, any>;
-    imageCutout?: LegacyLifecycleModule;
     inspectionReports?: LegacyLifecycleModule;
     motionEffects?: LegacyMotionEffectsApi;
     navigation?: LegacyLifecycleModule;
     notify?: Record<string, any>;
-    projectSkills?: LegacyProjectSkillsApi;
     propertyAnalysis?: LegacyLifecycleModule;
     spectrumAnalysis?: LegacyLifecycleModule;
     themeSettings?: LegacyLifecycleModule;

@@ -452,6 +452,7 @@
       align-items:center;
       justify-content:flex-end;
       flex:0 0 auto;
+      gap:8px;
     }
     .spectrum-gallery-controls > .spectrum-sort-field{
       margin:0;
@@ -552,6 +553,42 @@
       color:var(--accent);
       border-color:var(--accent);
       background:var(--accent-soft);
+    }
+    .spectrum-gallery-zoom-btn{
+      display:inline-flex;
+      height:34px;
+      min-height:34px;
+      box-sizing:border-box;
+      margin-right:0;
+      padding:0 12px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:var(--surface);
+      color:var(--text-2);
+      align-items:center;
+      gap:6px;
+      font:inherit;
+      font-size:12px;
+      font-weight:700;
+      line-height:1;
+      cursor:pointer;
+      white-space:nowrap;
+      transition:all .18s ease;
+    }
+    .spectrum-gallery-controls > .spectrum-detail-toggle{
+      margin-left:0;
+    }
+    .spectrum-selected-actions #spectrumPreviewSelectedBtn{
+      display:none;
+    }
+    .spectrum-gallery-zoom-btn:hover:not(:disabled){
+      border-color:var(--border-2);
+      background:var(--surface-2);
+      color:var(--accent);
+    }
+    .spectrum-gallery-zoom-btn:disabled{
+      cursor:not-allowed;
+      opacity:.48;
     }
     .spectrum-muted{
       margin-top:0;
@@ -693,17 +730,35 @@
       min-height:0;
       overflow:visible;
     }
+    .spectrum-selected-block:not(.has-selection){
+      display:none;
+    }
     .spectrum-selected-head{
       display:flex;
+      flex-wrap:nowrap;
       align-items:center;
       justify-content:space-between;
-      gap:12px;
+      gap:8px;
+      padding-bottom:8px;
+      border-bottom:1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    }
+    .spectrum-selected-head .spectrum-filter-label{
+      flex:1 1 auto;
+      min-width:0;
+      overflow:hidden;
+      white-space:nowrap;
+      text-overflow:ellipsis;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.02em;
     }
     .spectrum-selected-actions{
       display:flex;
       align-items:center;
-      gap:8px;
+      gap:4px;
       flex:0 0 auto;
+      margin-left:auto;
     }
     .spectrum-action-btn{
       min-width:42px;
@@ -741,6 +796,32 @@
       border-color:var(--danger);
       background:color-mix(in srgb, var(--danger) 8%, var(--surface));
     }
+    .spectrum-selected-actions .spectrum-action-btn{
+      min-width:0;
+      height:24px;
+      padding:0 6px;
+      border-color:transparent;
+      background:transparent;
+      border-radius:6px;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:700;
+    }
+    .spectrum-selected-actions .spectrum-action-btn:hover:not(:disabled){
+      border-color:transparent;
+      background:var(--surface-2);
+      color:var(--accent);
+    }
+    .spectrum-selected-actions .spectrum-action-danger{
+      border-color:transparent;
+      background:transparent;
+      color:var(--danger);
+    }
+    .spectrum-selected-actions .spectrum-action-danger:hover:not(:disabled){
+      border-color:transparent;
+      background:color-mix(in srgb, var(--danger) 10%, var(--surface));
+      color:var(--danger);
+    }
     .spectrum-link-danger{
       color:var(--danger);
     }
@@ -757,6 +838,19 @@
       min-height:0;
       overflow:auto;
       scrollbar-gutter:auto;
+      padding-right:2px;
+      scrollbar-width:thin;
+      scrollbar-color:color-mix(in srgb, var(--border-2, var(--border)) 80%, transparent) transparent;
+    }
+    .spectrum-selected-list::-webkit-scrollbar{
+      width:6px;
+    }
+    .spectrum-selected-list::-webkit-scrollbar-track{
+      background:transparent;
+    }
+    .spectrum-selected-list::-webkit-scrollbar-thumb{
+      border-radius:999px;
+      background:color-mix(in srgb, var(--border-2, var(--border)) 80%, transparent);
     }
     .spectrum-selected-empty{
       min-height:40px;
@@ -1081,7 +1175,11 @@
     .spectrum-preview-image-frame.is-image-pending{
       position:relative;
       overflow:hidden;
-      background:#f3f7fb;
+      background:var(--surface-2);
+    }
+    :is(.spectrum-card-image, .spectrum-detail-image, .spectrum-compact-detail-image,
+        .spectrum-preview-thumb, .spectrum-preview-image-frame) > img{
+      transition:opacity .24s ease-out;
     }
     .spectrum-card-image.is-image-pending > img,
     .spectrum-detail-image.is-image-pending > img,
@@ -1100,8 +1198,7 @@
       inset:8px;
       z-index:1;
       border-radius:6px;
-      background:#eef2f7;
-      animation:spectrum-image-pending 1.35s ease-in-out infinite;
+      background:var(--surface-2);
       pointer-events:none;
     }
     .spectrum-card-image.is-image-pending::after,
@@ -1109,27 +1206,67 @@
     .spectrum-compact-detail-image.is-image-pending::after,
     .spectrum-preview-thumb.is-image-pending::after,
     .spectrum-preview-image-frame.is-image-pending::after{
-      content:"图片加载中";
+      content:"加载中";
       position:absolute;
       left:50%;
-      bottom:14px;
+      top:calc(50% + 30px);
       z-index:2;
       max-width:calc(100% - 24px);
-      color:#64748b;
-      font-size:12px;
-      font-weight:850;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:500;
       line-height:1.2;
       text-align:center;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      transform:translateX(-50%);
+      transform:translate(-50%, -50%);
       pointer-events:none;
     }
-    @keyframes spectrum-image-pending{
-      0%{background-position:-120% 0,14px 16px,14px 34px,14px 52px,0 0}
-      100%{background-position:220% 0,14px 16px,14px 34px,14px 52px,0 0}
+    .spectrum-image-loader{
+      display:none;
+      position:absolute;
+      left:50%;
+      top:calc(50% - 8px);
+      width:min(144px, calc(100% - 28px));
+      height:48px;
+      transform:translate(-50%, -50%);
+      z-index:2;
+      pointer-events:none;
+      color:var(--accent);
     }
+    .is-image-pending > .spectrum-image-loader{ display:block; }
+    .spectrum-image-loader svg{ display:block; width:100%; height:100%; }
+    .spectrum-loader-grid{ stroke:var(--border); stroke-width:.65; opacity:.6; }
+    .spectrum-loader-trace{
+      stroke:currentColor;
+      stroke-width:1.6;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      stroke-dasharray:1;
+      animation:spectrum-loader-draw 2.4s ease-in-out infinite;
+    }
+    @keyframes spectrum-loader-draw{
+      0%{stroke-dashoffset:1;opacity:.35}
+      60%,80%{stroke-dashoffset:0;opacity:.85}
+      100%{stroke-dashoffset:0;opacity:.15}
+    }
+    @media (prefers-reduced-motion:reduce){
+      .spectrum-loader-trace{ animation:none; stroke-dashoffset:0; opacity:.7; }
+    }
+    html[data-reduced-motion="1"] .spectrum-loader-trace{ animation:none; stroke-dashoffset:0; opacity:.7; }
+    @media (prefers-reduced-motion:reduce){
+      :is(.spectrum-card-image, .spectrum-detail-image, .spectrum-compact-detail-image,
+          .spectrum-preview-thumb, .spectrum-preview-image-frame).is-image-pending::before{ animation:none; }
+      :is(.spectrum-card-image, .spectrum-detail-image, .spectrum-compact-detail-image,
+          .spectrum-preview-thumb, .spectrum-preview-image-frame) > img{ transition:none; }
+    }
+    html[data-reduced-motion="1"] :is(.spectrum-card-image, .spectrum-detail-image,
+        .spectrum-compact-detail-image, .spectrum-preview-thumb,
+        .spectrum-preview-image-frame).is-image-pending::before{ animation:none; }
+    html[data-reduced-motion="1"] :is(.spectrum-card-image, .spectrum-detail-image,
+        .spectrum-compact-detail-image, .spectrum-preview-thumb,
+        .spectrum-preview-image-frame) > img{ transition:none; }
     .spectrum-card-image.is-image-missing,
     .spectrum-detail-image.is-image-missing,
     .spectrum-compact-detail-image.is-image-missing,
@@ -2947,4 +3084,59 @@
   .spectrum-preview-dialog .spectrum-preview-image-frame{min-width:0;min-height:0;padding:6px}
   .spectrum-preview-dialog .spectrum-preview-image-frame > img{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain}
   .spectrum-preview-dialog .spectrum-preview-card-foot{padding:6px 10px;flex-wrap:wrap;overflow-wrap:anywhere}
+}
+
+/* ==========================================================================
+   UI refresh — unified surfaces, motion and device refinements
+   ========================================================================== */
+.spectrum-toolbar,
+.spectrum-filter-panel,
+.spectrum-gallery-panel,
+.spectrum-detail-panel{
+  border-radius:var(--shape-md);
+  box-shadow:var(--elev-1);
+}
+.spectrum-card{
+  border-radius:var(--shape-md);
+  transition:transform var(--mo-dur-base) var(--mo-ease-out),
+             box-shadow var(--mo-dur-base) var(--mo-ease-out),
+             border-color var(--mo-dur-base) var(--mo-ease-standard);
+}
+.spectrum-filter-btn{
+  border-radius:var(--shape-sm);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             color var(--mo-dur-fast) var(--mo-ease-standard),
+             border-color var(--mo-dur-fast) var(--mo-ease-standard);
+}
+.spectrum-selected-item{
+  border-radius:var(--shape-sm);
+  transition:background-color var(--mo-dur-fast) var(--mo-ease-standard),
+             transform var(--mo-dur-base) var(--mo-ease-out);
+}
+.spectrum-empty-icon{ animation:mo-pop-in var(--mo-dur-slow) var(--mo-ease-out) both; }
+.spectrum-detail-panel > *{ animation:mo-fade-in var(--mo-dur-slow) var(--mo-ease-out) both; }
+@media (hover:hover){
+  .spectrum-card:hover{
+    box-shadow:var(--elev-2);
+  }
+  .spectrum-filter-btn:hover{ transform:translate3d(2px, 0, 0); }
+}
+html[data-reduced-motion="1"] .spectrum-card:hover,
+html[data-reduced-motion="1"] .spectrum-filter-btn:hover{ transform:none; }
+
+/* ---- Tablet ---- */
+@media (max-width:980px){
+  .spectrum-workbench{ gap:var(--panel-gap); }
+  .spectrum-toolbar,
+  .spectrum-filter-panel,
+  .spectrum-gallery-panel,
+  .spectrum-detail-panel{ box-shadow:none; }
+}
+/* ---- Phone ---- */
+@media (max-width:720px){
+  .spectrum-workbench{ gap:8px; }
+  .spectrum-filter-panel,
+  .spectrum-gallery-panel,
+  .spectrum-detail-panel{ border-radius:var(--shape-md); }
+  .spectrum-icon-btn{ border-radius:var(--ui-radius-md); }
 }

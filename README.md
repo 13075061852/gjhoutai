@@ -6,20 +6,41 @@
 
 这是一个前端后台原型，用于沉淀广俊塑料科技的业务管理、数据分析、AI 助手和配置中心能力。项目运行依赖浏览器本地存储、IndexedDB、Cloudflare D1/R2 和第三方模型接口。
 
-当前页面主要包含：
+当前页面只保留以下模块，左侧导航为扁平的 6 项列表（无分类）：
 
-- 业务导航、仪表盘、库存管理和业务中心页面
-- 配置中心、主题设置、权限管理和审计日志
-- 物性分析、图谱分析、抠图助手
-- 右侧 Gjun AI 聊天、AI 技能面板、AI 调用分析
+- 物性分析
+- 图谱分析
+- 检测报告
+- 办事记录
+- 配置中心
+- 主题设置
+
+右侧保留 Gjun AI 聊天助手；仪表盘、权限管理以及订单、库存、客户、供应商、配方、生产、采购、人员等业务页面均已下线。
 
 ## 技术栈
 
 - React 18
 - TypeScript
-- Vite
+- Vite（构建基路径为 `/gjhoutai/`）
+- Node 20 自托管服务（`server/`，承载原 Cloudflare Worker 的 API 与静态资源）
+- 本地 SQLite（原 D1）+ 本地文件系统对象存储（原 R2）
 - 原有 CSS 样式体系迁移到 `src/styles/`
 - 原有业务逻辑迁移到 `src/legacy/`，由 React 页面壳挂载运行
+
+生产环境部署在 `https://www.kingpolymer.com/gjhoutai/`，迁移说明见
+[香港服务器迁移记录](docs/deployment-hk-server.md)。
+
+## 界面设计系统
+
+全局视觉与动效由共享层统一约束，页面只描述自己的布局：
+
+- `src/styles/foundation/base.css`：颜色、字号、间距、圆角、控件高度、`--elev-*` 层级阴影与暗色主题覆盖。
+- `src/styles/foundation/motion.css`：动效令牌、关键帧与工具类（`.ui-stagger`、`.ui-skeleton`、`.ui-anim-*`），页面切换、对话框、卡片、进度条与交互反馈统一从这里取用。
+- `src/styles/components/`：React 与旧页面共用的按钮、字段、工具栏、分页、对话框、下拉选择等基础控件。
+- `src/styles/layout/`：外壳（侧边栏、顶栏、内容区）与全局断点。全局断点固定为 1200 / 980 / 720 / 480，页面可以在此基础上追加自己的断点。
+- 多端策略：桌面（>1200）完整三栏；平板（721–980）固定 72px 图标导航轨，悬停显示名称气泡；平板与手机（≤980）聊天助手改为整屏覆盖；手机（≤720）侧边栏改为抽屉、对话框改为底部弹出面板、配置文件操作栏吸附底部；手机（≤480）进一步单列化。
+
+约束：样式不得使用渐变函数，动效只使用 `transform` / `opacity`，并同时尊重 `prefers-reduced-motion` 与 `html[data-reduced-motion="1"]`，由 `npm run check:ui` 与 `npm test` 守护。
 
 ## 本地运行
 
@@ -40,7 +61,14 @@ npm run dev
 默认访问地址：
 
 ```text
-http://127.0.0.1:5001
+http://127.0.0.1:5001/gjhoutai/
+```
+
+启动本地 Node API（可选，默认前端连线上服务）：
+
+```bash
+npm run build:server
+npm run start:server
 ```
 
 生产构建：
@@ -66,8 +94,21 @@ npm run preview
 ├─ tsconfig.json
 ├─ tsconfig.app.json
 ├─ tsconfig.node.json
+├─ server/
+│  ├─ index.mjs          # Node HTTP 服务：API 转发 + 静态资源 + SPA 回退
+│  ├─ worker.mjs         # esbuild 打包后的原 Worker 代码
+│  └─ lib/
+│     ├─ d1.mjs          # D1 -> 本地 SQLite 兼容层
+│     ├─ r2.mjs          # R2 -> 本地文件系统兼容层
+│     └─ static.mjs      # 静态资源服务
+├─ deploy/
+│  ├─ gjhoutai.service   # systemd 单元
+│  ├─ nginx-gjhoutai.conf# nginx 反向代理片段
+│  ├─ gjhoutai.env.example
+│  └─ tools/             # D1 导入 / R2 下载等一次性迁移脚本
+├─ worker/               # 原 Cloudflare Worker 源码（仍为唯一 API 实现来源）
 ├─ public/
-│  └─ logo.png
+│  └─ logo.webp
 └─ src/
    ├─ main.tsx
    ├─ App.tsx
@@ -104,14 +145,23 @@ npm run preview
 - `src/legacy/bootstrap.ts`：按依赖顺序加载原功能模块并执行初始化。
 - `src/legacy/core/`：应用命名空间、常量、运行态状态、DOM 引用和通用工具。
 - `src/legacy/components/`：自定义下拉、搜索框、确认弹窗等共享组件。
-- `src/legacy/shell/navigation.ts`：侧边栏、页面切换、最近访问和 AI 面板布局控制。
+- `src/legacy/shell/navigation.ts`：侧边栏、页面切换和最近访问；不再控制旧 AI 浮层。
 - `src/legacy/features/`：物性分析、图谱分析、抠图助手、配置中心、AI 聊天等业务功能。
 - `src/styles/`：全局样式、布局样式、组件样式和页面样式。
 - `public/logo.png`：静态 Logo 资源。
+- `src/services/ai-analysis.ts`：服务端 AI 内核的客户端（发起分析 + 订阅 SSE 事件流）。
+- `server/ai/`：服务端 AI 内核（pi SDK、内置 `pi-web-search@1.7.0`、业务只读工具、SSE 网关），有独立依赖锁文件；唯一的 AI 分析页面走服务端插件，旧助手入口、面板与聊天运行时已删除，已移除 Tavily 及其配置。详见 [docs/ai-pi-kernel.md](docs/ai-pi-kernel.md)。
 
 ## 数据来源
 
-物性分析表从 Cloudflare Worker 读取 D1 中的结构化数据；导入 Excel 时，解析后的数据写入 D1，Excel 原文件备份写入 R2。前端不再保存或使用阿里云 OSS 密钥。
+物性分析表、应用状态、用户与配置等数据保存在自托管服务器的 SQLite 中；导入
+Excel 时，解析后的数据写入 SQLite，Excel 原文件备份写入 `data/objects` 目录
+（原 R2 语义）。前端不再保存或使用阿里云 OSS 密钥。
+
+- 生产接口：`https://www.kingpolymer.com/gjhoutai/api/*`
+- 本地开发接口：由 `.env.development` 的 `VITE_STORAGE_API_BASE` 指定
+- 构建产物基路径：`/gjhoutai/`（见 `vite.config.ts` 的 `base`）
+- 旧的 Cloudflare Worker / D1 / R2 资源保留未删除，可作为回滚备份
 
 配置中心默认 OSS 配置：
 
@@ -119,11 +169,12 @@ npm run preview
 - Endpoint：`oss-cn-shanghai.aliyuncs.com`
 - JSON 路径：`测试数据.json`
 
-本地开发地址为 `http://127.0.0.1:5001`。前端通过 `VITE_STORAGE_API_BASE` 访问 Cloudflare Worker，由 Worker 负责鉴权、D1 和 R2 操作。
+本地开发地址为 `http://127.0.0.1:5001/gjhoutai/`。前端通过 `VITE_STORAGE_API_BASE`
+访问后端 API（生产环境为同源 `/gjhoutai`），由后端负责鉴权、SQLite 和文件对象操作。
 
 ## 外部依赖和网络请求
 
-- 配置中心和 Gjun AI 会根据本地配置请求 DeepSeek、SiliconFlow 或 LM Studio 兼容接口。
+- AI 分析统一请求服务端 pi 网关；配置检测、图谱分析和数据识别等专用功能仍使用各自的模型接口。
 - 物性分析导入 Excel 时会运行时加载 SheetJS CDN。
 - 图谱分析导入/导出压缩包时会运行时加载 JSZip CDN。
 - 汇率估算会请求公开汇率接口。
@@ -137,18 +188,14 @@ npm run preview
 
 清理浏览器站点数据会重置这些本地状态。
 
-## Gjun AI Agent Runtime
+## 唯一的 AI 工作区
 
-聊天请求由版本化 Agent Runtime V2 统一协调：
+侧栏只保留「AI 分析」，已删除旧 Gjun AI 的侧栏/顶部入口、常驻面板、启动逻辑、聊天运行时及专属样式。
+新页面使用服务端 pi 内核，支持业务只读查询、原生联网搜索、流式回答、停止、新建与历史分析。
+模型和搜索密钥由服务端持有；旧助手的浏览器聊天路径不再构建或加载。
 
-- 普通问候直接调用一次聊天模型，不经过项目规划或页面清单读取。
-- 单工具、联网搜索、图片分析和图片生成走注册表中的确定性工具。
-- 多工具任务先规划，再按依赖顺序执行；执行步骤会在同一条助手消息中持续更新，不展示隐藏思维链。
-- 读取类工具可自动执行；创建、删除等写操作会先展示目标、参数、影响和有效期，用户确认后才执行。
-- 用户取消会中止活动请求；超时与取消分开记录。已经启动的外部写入若无法回滚，会标记为结果未知并要求对账。
-- 每次运行以版本化记录保存到本地运行存储，支持确认重放、幂等键和审计结果。
-
-API 凭据仍只从现有本地配置路径读取；模型回答只接收脱敏后的工具证据，不会收到处理器、确认令牌、密钥或原始图片数据。
+历史本地数据未主动清空，但旧的面板开关不会被恢复。共用的项目技能注册表仍供其他模块使用，不再作为第二个聊天助手运行。
+详细接口与当前限制见 [AI pi 内核](docs/ai-pi-kernel.md)。
 
 ## UI 规范与质量检查
 

@@ -1,0 +1,46 @@
+# 当前项目范围与旧模块清理
+
+已于2026-10-23 14:10:43 CST按用户授权同步香港服务器。前端、主服务与AI清理一并生效；数据库、环境、依赖、其他站点与历史备份保留。发布备份`/var/backups/gjhoutai/cleanup-20261023141043/`，前端备份`/var/www/gjhoutai/app/dist.bak-20261023141043`。
+
+## 只保留七个页面
+
+物性分析、图谱分析、检测报告、AI分析、办事记录、配置中心、主题设置。
+
+- 懒加载入口：`src/legacy/bootstrap/feature-loader.ts`。未知/退休页面返回null且拒绝加载，不再回落到通用ERP模块。
+- 办事记录：`src/legacy/features/office-records/`。从原7477行通用ERP模块按TypeScript词法依赖提取送样、配色、灰份、详情和编辑器，移除订单/库存/配方/采购/客户/供应商/人员/权限/仪表盘状态、渲染器、监听器和浏览器Agent接口。模块只在init绑定事件，使用AbortController清理；不再初始化时拉取人员/账号档案。
+- `App.officeRecords`替代`App.businessPages`。权限在应用启动时独立安装，不再依赖先访问旧业务页。
+- 当前办事记录基础样式在`office-records-base.css`，全局精细布局在`office-records.css`；保留部分当前弹窗正在复用的历史CSS类名，不代表仍有库存等业务模块。
+- 保留当前配置页的APIMart目录与余额查询，删除其绘图/视频生成、任务查询逻辑。现有配置字段的安全清洗和存量业务记录格式兼容不等于旧项目入口。
+
+## 已删除的运行逻辑
+
+- `src/legacy/features/business-pages/`与旧包装入口。
+- 浏览器`agent-runtime`、project-skills、data-recognition、image-cutout、apimart-media、ai-call-analysis页面及其独占组件/样式/测试。
+- 服务端旧AI业务写入引擎`server/lib/business-actions.mjs`、`server/ai/write-tools.mjs`与前端写入服务、预览表、去重及刷新适配代码。历史AI变更仅显示已停用提示，不恢复提交能力。主服务不再拦截这些请求，旧路径由当前API返回404。
+- 已退役的识别历史、账号/人员维护、LiblibAI生成代理API及无调用的客户端SDK；当前登录、自助密码、头像与配置保存保留。
+- 物性GET接口中的旧远程导入/GET时写库兼容分支，不再在查询时访问旧项目并自动补库。
+- 旧ERP/旧聊天/权限管理/媒体任务云同步键。现有数据不删除、不迁移；只是当前代码不再同步、暴露或执行旧逻辑。
+- 物性/图谱模块中无调用者的旧Agent上下文、CSV/Markdown打包、模型模糊匹配和图谱批量增删改接口；图谱预览中已无入口的浏览器AI识别/合并、SSE解析、缓存和渲染链路一并移除。当前图谱预览、导入导出、详情编辑保留，服务端`read_spectrum_image`保持不变。
+- 配置页已不存在DOM的子Agent模型选择器、搜索下拉、表单监听和草稿字段；真实主模型配置保留。
+- 旧页面的初始挂载白名单与全局样式选择器；退休/未知页面持久化值在React首次挂载时也回落物性页，避免启动闪到旧占位页。
+- 旧浏览器Agent独占的直接zod依赖。当前仍使用的公共库与安全版本约束不擅自删除。
+
+`npm run check:scope`在完整检查中验证旧模块/导入/后端处理器不复活。数据库迁移历史、现存表、报告、图谱对象、生产备份没有删除。
+
+## 同时收紧的安全边界（本地）
+
+- 仅测试部/系统管理员可修改物性、图谱、检测报告、办事/灰份记录。服务端不再只信任宽泛state:write或前端是否显示按钮；现有业务状态键白名单见`worker/current-scope.ts`。已废弃的权限状态键即使管理员也不可经当前API访问。
+- 显式部门优先于历史role，研发部或未知部门不能因旧role=system_admin变成项目管理员。前端未知部门也不再默认管理员。
+- AI本地历史按真实用户id分开存储；不自动导入归属未知的旧公共历史键。退出清空内存，避免另一账户继承聊天。
+- AI附件中仅允许的栅格图片可inline；HTML/其他附件强制下载，附加sandbox CSP、nosniff和no-store，不把上传HTML当同源页面执行。
+- 图谱、Excel备份采用真实流字节上限，不仅依赖Content-Length。
+
+这些边界已随本次发布生效；隔离fixture覆盖具体拒绝行为，不把代码与HTTP检查称为生产渗透测试。生产Node20及sharp/依赖版本是否需升级属于部署环境工作，本次未改服务器，也未宣称已完成运行环境加固。
+
+## 验证与上线要求
+
+- 完整`npm run check`：前端测试、Worker类型、UI/范围门禁、服务端性能与谱图回归、生产构建。
+- `npm test --prefix server/ai`：真实本地HTTP网关fixture、附件下载策略、管理员部门优先、受控项目启停与谱图等。
+- 办事记录新增DOM回归覆盖送样/灰份切换、编辑器、重新挂载和只读账户；并保留七页导航、历史隔离等测试。预览当时折叠，未将自动化DOM验证称为真实设备视觉验收。
+- 必须重新生成`server/worker.mjs`（`npm run build:server`）；只发布前端不能关闭生产旧接口。
+- 后续明确同步时同时发布主服务index/新worker、安全附件AIservice、管理员判断project-access及最新前端；备份后删除已退休的服务端源文件（business-actions与write-tools），不删除迁移文件/数据库/对象/历史备份。主/AI重启需按各自服务门禁操作，其他站点不动。

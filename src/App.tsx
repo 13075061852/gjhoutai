@@ -1,10 +1,14 @@
-import { type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
+import { type Dispatch, type FormEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
+import { Attention, ArrowRight, Brain, ChartHistogram, Flask, Key, Lock, PreviewClose, PreviewOpen, Shield, User } from '@icon-park/svg';
 import { LegacyShell } from './pages/LegacyShell';
 import { Button } from './components/ui/Button';
 import { authClient, type AppUser } from './services/auth';
 import { hydrateCloudBackedLocalStorage } from './services/cloud-sync';
 import { normalizeSafeAvatarUrl } from './utils/avatarSecurity';
 import { mountIconParkAdapter } from './utils/iconParkAdapter';
+
+const ASSET_BASE_URL = String(import.meta.env.BASE_URL || '/');
+const asset = (name: string): string => `${ASSET_BASE_URL}${name}`;
 
 const DEPARTMENT_LABELS: Record<AppUser['department'], string> = {
   系统管理员: '系统管理员',
@@ -15,131 +19,72 @@ const DEPARTMENT_LABELS: Record<AppUser['department'], string> = {
   生产部主管: '生产部主管',
 };
 
-type AuthParticle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  size: number;
-  life: number;
-  maxLife: number;
-  hue: number;
-};
+type AuthIconRenderer = (props: {
+  size?: string | number;
+  strokeWidth?: number;
+  theme?: 'outline' | 'filled' | 'two-tone' | 'multi-color';
+  fill?: string | string[];
+}) => string;
 
 type AuthUserState = AppUser | null | undefined;
 
-function AuthParticleTrail() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+const AUTH_HIGHLIGHTS: ReadonlyArray<{ icon: AuthIconRenderer; title: string; note: string }> = [
+  { icon: ChartHistogram, title: '物性分析', note: '批次检索、指标对比与报告导出' },
+  { icon: Flask, title: '图谱与报告', note: 'DSC / TGA 图谱管理与检测报告归档' },
+  { icon: Brain, title: 'Gjun AI 助手', note: '数据问答与联网检索，结论可追溯' },
+];
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const shell = canvas?.parentElement;
-    if (!canvas || !shell) return;
+function AuthIcon({ icon, size = 20, strokeWidth = 4, className }: { icon: AuthIconRenderer; size?: number; strokeWidth?: number; className?: string }) {
+  const markup = String(icon({ theme: 'outline', size: String(size), strokeWidth })).replace(/^<\?xml[^>]*\?>/, '');
+  return (
+    <span
+      className={['auth-icon', className].filter(Boolean).join(' ')}
+      aria-hidden="true"
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
+  );
+}
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const finePointer = window.matchMedia('(pointer: fine)');
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    let animationFrame = 0;
-    let particles: AuthParticle[] = [];
-    let width = 0;
-    let height = 0;
-    let lastX = 0;
-    let lastY = 0;
-    let hasLastPoint = false;
-
-    const resize = () => {
-      const rect = shell.getBoundingClientRect();
-      const ratio = window.devicePixelRatio || 1;
-      width = rect.width;
-      height = rect.height;
-      canvas.width = Math.max(1, Math.floor(width * ratio));
-      canvas.height = Math.max(1, Math.floor(height * ratio));
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    };
-
-    const addParticle = (x: number, y: number, intensity = 1) => {
-      particles.push({
-        x,
-        y,
-        vx: (Math.random() - 0.5) * 0.9 * intensity,
-        vy: (Math.random() - 0.5) * 0.9 * intensity - 0.15,
-        size: 1.2 + Math.random() * 2.6,
-        life: 0,
-        maxLife: 28 + Math.random() * 24,
-        hue: 208 + Math.random() * 16,
-      });
-      if (particles.length > 110) particles.shift();
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (reducedMotion.matches || !finePointer.matches) return;
-      const rect = shell.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      if (!hasLastPoint) {
-        lastX = x;
-        lastY = y;
-        hasLastPoint = true;
-      }
-      const distance = Math.hypot(x - lastX, y - lastY);
-      const steps = Math.min(6, Math.max(1, Math.floor(distance / 12)));
-      for (let step = 0; step < steps; step += 1) {
-        const progress = step / steps;
-        addParticle(lastX + (x - lastX) * progress, lastY + (y - lastY) * progress, Math.min(1.8, 0.8 + distance / 80));
-      }
-      lastX = x;
-      lastY = y;
-      if (!animationFrame) animationFrame = window.requestAnimationFrame(render);
-    };
-
-    const handlePointerLeave = () => {
-      hasLastPoint = false;
-    };
-
-    const render = () => {
-      animationFrame = 0;
-      if (reducedMotion.matches || document.hidden) particles = [];
-      context.clearRect(0, 0, width, height);
-      particles = particles.filter((particle) => particle.life < particle.maxLife);
-      for (const particle of particles) {
-        particle.life += 1;
-        particle.x += particle.vx;
-        particle.y += particle.vy;
-        particle.vx *= 0.985;
-        particle.vy *= 0.985;
-        const progress = particle.life / particle.maxLife;
-        const alpha = (1 - progress) * 0.55;
-        context.beginPath();
-        context.fillStyle = `hsla(${particle.hue}, 95%, ${68 + progress * 10}%, ${alpha})`;
-        context.arc(particle.x, particle.y, particle.size * (1 - progress * 0.35), 0, Math.PI * 2);
-        context.fill();
-      }
-      if (particles.length) animationFrame = window.requestAnimationFrame(render);
-    };
-
-    resize();
-    window.addEventListener('resize', resize);
-    shell.addEventListener('pointermove', handlePointerMove);
-    shell.addEventListener('pointerleave', handlePointerLeave);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.removeEventListener('resize', resize);
-      shell.removeEventListener('pointermove', handlePointerMove);
-      shell.removeEventListener('pointerleave', handlePointerLeave);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className="auth-particle-trail" aria-hidden="true" />;
+function AuthBrandPanel({ headline, description }: { headline: ReactNode; description: string }) {
+  return (
+    <section className="auth-brand">
+      <div className="auth-brand__content">
+        <div className="auth-brand__logo">
+          <img src={asset('logo.webp')} alt="广俊塑料科技" />
+          <span className="auth-brand__names">
+            <strong>广俊塑料科技</strong>
+            <em>GJUN POLYMER</em>
+          </span>
+        </div>
+        <div className="auth-brand__copy">
+          <span className="auth-brand__kicker">从材料数据，到可靠决策</span>
+          <h1>{headline}</h1>
+          <p>{description}</p>
+        </div>
+        <ul className="auth-brand__features">
+          {AUTH_HIGHLIGHTS.map((item) => (
+            <li key={item.title}>
+              <AuthIcon icon={item.icon} size={22} />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.note}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="auth-brand__foot">
+          <AuthIcon icon={Shield} size={16} />
+          <span>仅限授权成员访问 · 数据留存于公司服务器</span>
+        </p>
+      </div>
+    </section>
+  );
 }
 
 function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -161,40 +106,84 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
 
   return (
     <main className="auth-shell">
-      <AuthParticleTrail />
-      <section className="auth-brand-panel" aria-hidden="true">
-        <div className="auth-brand-mark">
-          <img src="/logo.webp" alt="" />
-          <span>广俊塑料科技</span>
-        </div>
-        <div className="auth-brand-copy">
-          <h1>后台管理系统</h1>
-          <p>让生产、库存与业务协同更清晰</p>
-        </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
-      </section>
-
-      <section className="auth-panel-wrap">
-        <section className="auth-card">
-          <div className="auth-card-heading">
-            <h2>欢迎回来</h2>
-            <p>仅限已授权成员访问</p>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <label>
-              <span>账号</span>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
-            </label>
-            <label>
-              <span>密码</span>
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" required />
-            </label>
-            {error ? <div className="auth-error" role="alert">{error}</div> : null}
-            <Button type="submit" variant="primary" loading={submitting}>{submitting ? '登录中…' : '登录'}</Button>
+      <AuthBrandPanel
+        headline={<>塑料粒子<br />测试分析平台</>}
+        description="物性分析、图谱管理与 AI 协作，一站式连接材料数据。"
+      />
+      <section className="auth-panel">
+        <div className="auth-card">
+          <header className="auth-card__head">
+            <h2>登录工作台</h2>
+            <p>使用管理员分配的工作账号登录</p>
+          </header>
+          <form
+            className="auth-form"
+            onSubmit={handleSubmit}
+            aria-busy={submitting}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)) event.preventDefault();
+            }}
+          >
+            <div className="auth-field">
+              <label className="auth-field__label" htmlFor="auth-username">账号</label>
+              <span className="auth-field__control">
+                <AuthIcon icon={User} className="auth-field__leading" />
+                <input
+                  id="auth-username"
+                  name="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="请输入账号"
+                  required
+                />
+              </span>
+            </div>
+            <div className="auth-field">
+              <label className="auth-field__label" htmlFor="auth-password">密码</label>
+              <span className="auth-field__control">
+                <AuthIcon icon={Lock} className="auth-field__leading" />
+                <input
+                  id="auth-password"
+                  name="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="请输入密码"
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-field__toggle"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  aria-pressed={showPassword}
+                >
+                  <AuthIcon icon={showPassword ? PreviewClose : PreviewOpen} size={18} />
+                </button>
+              </span>
+            </div>
+            {error ? (
+              <div className="auth-alert" role="alert">
+                <AuthIcon icon={Attention} size={18} />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            <Button type="submit" variant="primary" size="lg" className="auth-submit" loading={submitting}>
+              {submitting ? '登录中…' : (
+                <>
+                  <span>进入工作台</span>
+                  <AuthIcon icon={ArrowRight} size={18} />
+                </>
+              )}
+            </Button>
           </form>
-        </section>
+          <p className="auth-card__note">首次登录需修改初始密码；忘记密码请联系系统管理员。</p>
+        </div>
       </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
 }
@@ -202,6 +191,7 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AppUser) => 
 function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: Dispatch<SetStateAction<AuthUserState>> }) {
   const [currentPassword, setCurrentPassword] = useState('');
   const [nextPassword, setNextPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   async function handleSubmit(event: FormEvent) {
@@ -222,33 +212,80 @@ function PasswordResetScreen({ user, onComplete }: { user: AppUser; onComplete: 
   }
   return (
     <main className="auth-shell">
-      <section className="auth-brand-panel" aria-hidden="true">
-        <div className="auth-brand-mark">
-          <img src="/logo.webp" alt="" />
-          <span>广俊塑料科技</span>
-        </div>
-        <div className="auth-brand-copy">
-          <h1>后台管理系统</h1>
-          <p>先完成一次安全设置，再进入业务工作台</p>
-        </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
-      </section>
-
-      <section className="auth-panel-wrap">
-        <section className="auth-card">
-          <div className="auth-card-heading">
+      <AuthBrandPanel
+        headline={<>先完成一次<br />安全设置</>}
+        description="首次登录需要重新设置密码。设置完成后即可进入物性分析、图谱库与 AI 工作台。"
+      />
+      <section className="auth-panel">
+        <div className="auth-card">
+          <header className="auth-card__head">
+            <span className="auth-card__eyebrow">安全设置</span>
             <h2>请先修改初始密码</h2>
-            <p>首次登录需要完成安全设置</p>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <label><span>当前密码</span><input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" maxLength={128} required /></label>
-            <label><span>新密码</span><input value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} type="password" autoComplete="new-password" minLength={10} maxLength={128} required /></label>
-            {error ? <div className="auth-error" role="alert">{error}</div> : null}
-            <Button type="submit" variant="primary" loading={submitting}>{submitting ? '保存中…' : '保存新密码'}</Button>
+            <p>新密码需为 10–128 位，设置后可用于日常登录</p>
+          </header>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="auth-field">
+              <label className="auth-field__label" htmlFor="auth-current-password">当前密码</label>
+              <span className="auth-field__control">
+                <AuthIcon icon={Lock} className="auth-field__leading" />
+                <input
+                  id="auth-current-password"
+                  name="currentPassword"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="请输入当前密码"
+                  maxLength={128}
+                  required
+                />
+              </span>
+            </div>
+            <div className="auth-field">
+              <label className="auth-field__label" htmlFor="auth-next-password">新密码</label>
+              <span className="auth-field__control">
+                <AuthIcon icon={Key} className="auth-field__leading" />
+                <input
+                  id="auth-next-password"
+                  name="nextPassword"
+                  value={nextPassword}
+                  onChange={(event) => setNextPassword(event.target.value)}
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="至少 10 位"
+                  minLength={10}
+                  maxLength={128}
+                  required
+                />
+                <button
+                  type="button"
+                  className="auth-field__toggle"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  aria-pressed={showPassword}
+                >
+                  <AuthIcon icon={showPassword ? PreviewClose : PreviewOpen} size={18} />
+                </button>
+              </span>
+            </div>
+            {error ? (
+              <div className="auth-alert" role="alert">
+                <AuthIcon icon={Attention} size={18} />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            <Button type="submit" variant="primary" size="lg" className="auth-submit" loading={submitting}>
+              {submitting ? '保存中…' : (
+                <>
+                  <span>保存并进入系统</span>
+                  <AuthIcon icon={ArrowRight} size={18} />
+                </>
+              )}
+            </Button>
           </form>
-        </section>
+          <p className="auth-card__note">请勿使用与其他平台相同的密码。</p>
+        </div>
       </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
 }
@@ -334,7 +371,7 @@ function App() {
     window.GJHApp.currentUser = user;
     void hydrateCloudBackedLocalStorage(events.signal).then((result) => {
       if (disposed || !result.changedKeys.length) return;
-      window.GJHApp?.businessPages?.refreshFromLocalStorage?.(result.changedKeys);
+      window.GJHApp?.officeRecords?.refreshFromLocalStorage?.(result.changedKeys);
     }).catch((error) => {
       console.warn('[startup] Cloud-backed localStorage hydration failed.', error);
     });
@@ -352,7 +389,9 @@ function App() {
       const topActionsHome = topActions?.parentElement ?? null;
       const topActionsNextSibling = topActions?.nextSibling ?? null;
       const sidebarMobileActions = document.querySelector('[data-sidebar-mobile-actions]');
-      const mobileActionsQuery = window.matchMedia('(max-width: 980px)');
+      // Tablet uses the compact rail, whose mobile action area is hidden.
+      // Only move the account actions into the navigation drawer on actual phones.
+      const mobileActionsQuery = window.matchMedia('(max-width: 720px)');
       const placeTopActions = () => {
         if (!topActions || !topActionsHome) return;
         if (mobileActionsQuery.matches && sidebarMobileActions) {
@@ -397,7 +436,10 @@ function App() {
           return avatar;
         };
         const renderAccountAvatar = (url: string | null) => {
-          accountButton.replaceChildren(createAccountAvatar(url));
+          const label = document.createElement('span');
+          label.className = 'top-auth-label';
+          label.textContent = '账户';
+          accountButton.replaceChildren(createAccountAvatar(url), label);
         };
         accountAvatarRendererRef.current = renderAccountAvatar;
         renderAccountAvatar(avatarUrlRef.current);
@@ -507,40 +549,29 @@ function App() {
   }, [user, setManagedAvatarUrl, startupError]);
 
   if (startupError) return (
-    <main className="auth-shell">
+    <main className="auth-shell auth-shell--error">
       <section className="auth-card app-error-card" role="alert">
+        <span className="auth-card__eyebrow">访问受限</span>
         <h2>暂时无法进入系统</h2>
         <p>{startupError}</p>
-        <button className="ui-button ui-button--primary" onClick={() => window.location.reload()}>重新加载</button>
+        <button className="ui-button ui-button--primary auth-submit" onClick={() => window.location.reload()}>重新加载</button>
       </section>
     </main>
   );
   if (user === undefined && hasSessionOnLoad) return <LegacyShell booting />;
   if (user === undefined) return (
     <main className="auth-shell">
-      <section className="auth-brand-panel" aria-hidden="true">
-        <div className="auth-brand-mark">
-          <img src="/logo.webp" alt="" />
-          <span>广俊塑料科技</span>
+      <AuthBrandPanel
+        headline={<>塑料粒子<br />测试分析平台</>}
+        description="正在与服务器确认登录状态。完成后将自动进入业务工作台。"
+      />
+      <section className="auth-panel">
+        <div className="auth-card auth-card--status">
+          <span className="auth-spinner" aria-hidden="true" />
+          <h2>正在验证登录状态</h2>
+          <p>请稍候，不要关闭当前页面</p>
         </div>
-        <div className="auth-brand-copy">
-          <h1>后台管理系统</h1>
-          <p>让生产、库存与业务协同更清晰</p>
-        </div>
-        <img className="auth-brand-image" src="/auth-factory-buildings.webp" alt="" />
       </section>
-      <section className="auth-panel-wrap">
-        <section className="auth-card auth-card-loading">
-          <div className="auth-card-icon" aria-hidden="true">
-            <span className="auth-spinner" />
-          </div>
-          <div className="auth-card-heading">
-            <h2>正在验证登录状态</h2>
-            <p>请稍候</p>
-          </div>
-        </section>
-      </section>
-      <img className="auth-mobile-brand-image" src="/auth-factory-buildings.webp" alt="" aria-hidden="true" />
     </main>
   );
   if (!user) return <LoginScreen onAuthenticated={setUser} />;

@@ -4,7 +4,8 @@ import { legacyMarkup } from '../legacy/legacyMarkup';
 import { LOCAL_STORAGE_KEYS } from '../services/local-storage-keys';
 
 const NAV_PAGE_KEY = 'sidebar-active-page';
-const DEFAULT_PAGE_ID = 'dashboard';
+const DEFAULT_PAGE_ID = 'property-analysis';
+const CURRENT_PAGE_IDS = new Set(['property-analysis', 'spectrum-analysis', 'inspection-reports', 'ai-analysis', 'office-records', 'ai-config', 'theme-settings']);
 const TRUSTED_LEGACY_MARKUP = assertTrustedLegacyMarkup(legacyMarkup);
 const LEGACY_LOADING_MARKUP = `
   <div class="legacy-loading-state" role="status" aria-live="polite" aria-label="正在加载工作台">
@@ -17,11 +18,9 @@ const DIRECT_PAGE_SECTIONS = new Set([
   'ai-config',
   'property-analysis',
   'spectrum-analysis',
-  'data-recognition',
-  'image-cutout',
+  'inspection-reports',
+  'ai-analysis',
   'theme-settings',
-  'project-skills',
-  'ai-call-analysis',
 ]);
 
 export function assertTrustedLegacyMarkup(markup: string) {
@@ -33,7 +32,8 @@ export function assertTrustedLegacyMarkup(markup: string) {
 
 function getInitialPageId() {
   try {
-    return localStorage.getItem(NAV_PAGE_KEY) || DEFAULT_PAGE_ID;
+    const stored = localStorage.getItem(NAV_PAGE_KEY) || '';
+    return CURRENT_PAGE_IDS.has(stored) ? stored : DEFAULT_PAGE_ID;
   } catch {
     return DEFAULT_PAGE_ID;
   }
@@ -56,7 +56,7 @@ export function getInitialLegacyMarkup(booting = true) {
     'shell',
     booting ? 'legacy-shell-booting' : '',
     getInitialSidebarCollapsed() ? 'sidebar-collapsed' : '',
-    pageId !== DEFAULT_PAGE_ID ? 'page-other' : '',
+    pageId !== 'ai-config' ? 'page-other' : '',
   ].filter(Boolean).join(' ');
 
   let markup = TRUSTED_LEGACY_MARKUP

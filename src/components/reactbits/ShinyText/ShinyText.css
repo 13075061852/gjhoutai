@@ -1,9 +1,0 @@
-.shiny-text {
-  color:#b5b5b5;
-  display: inline-block;
-  transition:color .18s ease,opacity .18s ease;
-}
-
-.shiny-text.disabled {
-  opacity:.72;
-}

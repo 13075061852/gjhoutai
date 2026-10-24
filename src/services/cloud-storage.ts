@@ -71,6 +71,20 @@ export const cloudStorage = {
     return payload?.value ?? null;
   },
 
+  async getJsonBatch(keys: readonly string[], signal?: AbortSignal): Promise<Record<string, unknown>> {
+    if (!keys.length) return {};
+    const params = new URLSearchParams();
+    [...new Set(keys)].forEach((key) => params.append('key', key));
+    const response = await fetchWithTimeout(buildUrl(`/api/state?${params}`), { credentials: 'include', signal });
+    // Compatibility with older API deployments only; failed/forbidden reads must never look empty.
+    if (response.status === 404 || response.status === 405) {
+      return Object.fromEntries(await Promise.all(keys.map(async (key) => [key, await cloudStorage.getJson(key)])));
+    }
+    const payload = await parseJson<{ values: Record<string, unknown> }>(response);
+    if (!payload?.values || keys.some((key) => !Object.hasOwn(payload.values, key))) throw new Error('Incomplete state batch');
+    return payload.values;
+  },
+
   async putJson<T>(key: string, value: T extends null ? never : T): Promise<boolean> {
     try {
       const response = await fetchWithTimeout(buildUrl(`/api/state/${encodeURIComponent(key)}`), {
@@ -97,9 +111,12 @@ export const cloudStorage = {
     }
   },
 
-  async getDataUrl(namespace: string, key: string): Promise<string | null> {
+  async getDataUrl(namespace: string, key: string, optimized = false): Promise<string | null> {
     try {
-      const response = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), { credentials: 'include' });
+      const response = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}${optimized ? '' : '?format=original'}`), {
+        credentials: 'include',
+        headers: { Accept: optimized ? 'image/webp' : '*/*' },
+      });
       if (response.status === 204) return null;
       if (!response.ok) return null;
       const blob = await response.blob();
@@ -132,98 +149,6 @@ export const cloudStorage = {
   async deleteBlob(namespace: string, key: string): Promise<boolean> {
     try {
       const response = await fetchWithTimeout(buildUrl(`/api/blob/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`), {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  },
-
-  async listDataRecognitionHistory(limit = 40): Promise<any[] | null> {
-    try {
-      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history?limit=${encodeURIComponent(String(limit))}`), {
-        credentials: 'include',
-      });
-      const payload = await parseJson<{ items: any[] }>(response);
-      return Array.isArray(payload?.items) ? payload.items : null;
-    } catch {
-      return null;
-    }
-  },
-
-  async createDataRecognitionHistory(payload: {
-    fileName: string;
-    imageDataUrl: string;
-    model: string;
-    rowCount: number;
-    modelCode?: string;
-    batchCode?: string;
-    result: unknown;
-    rawText: string;
-  }): Promise<{ id: string } | null> {
-    try {
-      const response = await fetchWithTimeout(buildUrl('/api/data-recognition/history'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return await parseJson<{ id: string }>(response);
-    } catch {
-      return null;
-    }
-  },
-
-  async getDataRecognitionHistory(id: string): Promise<any | null> {
-    try {
-      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
-        credentials: 'include',
-      });
-      const payload = await parseJson<{ item: any }>(response);
-      if (!payload?.item) return null;
-      const imageResponse = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}/image`), {
-        credentials: 'include',
-      });
-      if (imageResponse.ok && imageResponse.status !== 204) {
-        const blob = await imageResponse.blob();
-        payload.item.imageDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.addEventListener('load', () => resolve(typeof reader.result === 'string' ? reader.result : ''));
-          reader.addEventListener('error', () => resolve(''));
-          reader.readAsDataURL(blob);
-        });
-      }
-      return payload.item;
-    } catch {
-      return null;
-    }
-  },
-
-  async updateDataRecognitionHistory(id: string, payload: {
-    rowCount: number;
-    modelCode?: string;
-    batchCode?: string;
-    result: unknown;
-    rawText: string;
-  }): Promise<boolean> {
-    try {
-      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  },
-
-  async deleteDataRecognitionHistory(id: string): Promise<boolean> {
-    try {
-      const response = await fetchWithTimeout(buildUrl(`/api/data-recognition/history/${encodeURIComponent(id)}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -320,9 +245,10 @@ export const cloudStorage = {
     return buildUrl(`/api/inspection-reports/${encodeURIComponent(id)}/file`);
   },
 
-  async getInspectionReportFileBlob(id: string): Promise<Blob | null> {
+  async getInspectionReportFileBlob(id: string, signal?: AbortSignal): Promise<Blob | null> {
     try {
       const response = await fetchWithTimeout(this.getInspectionReportFileUrl(id), {
+        signal,
         credentials: 'include',
       });
       if (!response.ok) return null;

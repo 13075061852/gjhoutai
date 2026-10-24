@@ -25,7 +25,7 @@ describe('initial legacy layout state', () => {
     try {
       const getInitialLegacyMarkup = (LegacyShellModule as any).getInitialLegacyMarkup;
       expect(typeof getInitialLegacyMarkup).toBe('function');
-      expect(getInitialLegacyMarkup(true)).toContain('class="shell legacy-shell-booting sidebar-collapsed"');
+      expect(getInitialLegacyMarkup(true)).toContain('class="shell legacy-shell-booting sidebar-collapsed page-other"');
     } finally {
       Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: originalLocalStorage });
     }

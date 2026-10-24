@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from '../utils/fetch';
+import { withoutRetiredSearchConfig } from '../utils/retiredSearchConfig';
 
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 
@@ -20,7 +21,7 @@ export const cloudConfig = {
     try {
       const response = await fetchWithTimeout(buildUrl('/api/config'), { credentials: 'include' });
       const payload = await parseJson<{ value: T | null }>(response);
-      return payload?.value ?? null;
+      return withoutRetiredSearchConfig(payload?.value ?? null);
     } catch {
       return null;
     }
@@ -32,7 +33,7 @@ export const cloudConfig = {
         method: 'PUT',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({ value: withoutRetiredSearchConfig(value) }),
       });
       return response.ok;
     } catch {

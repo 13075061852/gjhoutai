@@ -1,8 +1,14 @@
-﻿import { getLegacyApp } from '../core/app-context';
-import '../../styles/pages/config.css';
+import { getLegacyApp } from '../core/app-context';
+// Configuration and resident assistant layout styles load from styles.css.
 import { cloudConfig } from '../../services/cloud-config';
+import { withoutRetiredSearchConfig } from '../../utils/retiredSearchConfig';
+import { DEEPSEEK_OFFICIAL_SNAPSHOT, fetchOfficialDeepSeekPricing, findOfficialModelPrice } from '../../services/model-pricing';
+import { mountConfigSections } from '../components/config-sections';
+import { positionConfigDropdown, watchConfigDropdowns } from '../components/config-dropdown-position';
 import { SILICONFLOW_MODEL_CATALOG } from '../data/siliconflow-model-catalog';
 import { cloneJsonValue, parseJsonMaybe } from '../../utils/json';
+import { getModelManufacturerLabel } from '../../utils/modelManufacturer';
+import { getModelOptionPresentation } from '../../utils/modelOptionPresentation';
 import { AI_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../../utils/fetch';
 import { LOCAL_STORAGE_KEYS } from '../../services/local-storage-keys';
 import {
@@ -30,23 +36,19 @@ import { requestApimart } from '../../services/apimart-proxy';
   const DEFAULT_SILICONFLOW_BASE_URL = 'https://api.siliconflow.cn/v1';
   const DEFAULT_SILICONFLOW_MODEL = 'Pro/zai-org/GLM-5.1';
   const DEEPSEEK_CONTEXT_LENGTH = 1000000;
-  const DEEPSEEK_MODEL_PRICING = {
-    'deepseek-v4-flash': { prompt: '0.00000014', completion: '0.00000028' },
-    'deepseek-v4-pro': { prompt: '0.000000435', completion: '0.00000087' },
-    'deepseek-chat': { prompt: '0.00000014', completion: '0.00000028' },
-    'deepseek-reasoner': { prompt: '0.00000014', completion: '0.00000028' },
-  };
   const DEEPSEEK_MODEL_NAMES = {
+    'deepseek-flash': 'DeepSeek V4.1 Flash',
     'deepseek-v4-flash': 'DeepSeek V4 Flash',
     'deepseek-v4-pro': 'DeepSeek V4 Pro',
     'deepseek-chat': 'DeepSeek Chat',
     'deepseek-reasoner': 'DeepSeek Reasoner',
   };
   const DEEPSEEK_MODEL_OPTIONS = [
-    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-v4-flash'] },
-    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-v4-pro'] },
-    { id: 'deepseek-chat', name: 'DeepSeek Chat', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-chat'] },
-    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', context_length: DEEPSEEK_CONTEXT_LENGTH, pricing: DEEPSEEK_MODEL_PRICING['deepseek-reasoner'] },
+    { id: 'deepseek-flash', name: 'DeepSeek V4.1 Flash', context_length: DEEPSEEK_CONTEXT_LENGTH },
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash（官方已转由 V4.1 服务）', context_length: DEEPSEEK_CONTEXT_LENGTH },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', context_length: DEEPSEEK_CONTEXT_LENGTH },
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', context_length: DEEPSEEK_CONTEXT_LENGTH },
+    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', context_length: DEEPSEEK_CONTEXT_LENGTH },
   ];
   const SILICONFLOW_CONTEXT_LENGTH = 131072;
   const SILICONFLOW_MODEL_NAMES = {
@@ -133,30 +135,10 @@ import { requestApimart } from '../../services/apimart-proxy';
   let openRouterModelRefreshTimer = null;
   let lastLoadedOpenRouterApiKey = '';
   let modelSearchQuery = '';
-  const agentModelSearchQuery = { data: '', spectrum: '' };
-
-  const getSearchRefs = () => ({
-    provider: document.getElementById('searchProvider'),
-    apiKey: document.getElementById('searchApiKey'),
-    depth: document.getElementById('searchDepth'),
-    maxResults: document.getElementById('searchMaxResults'),
-    topic: document.getElementById('searchTopic'),
-    apiKeyToggle: document.getElementById('searchApiKeyToggle'),
-    apiKeyIcon: document.querySelector('#searchApiKeyToggle .search-key-toggle-icon'),
-  });
 
   const getAssistantBehaviorRefs = () => ({
     autoImageUpload: document.getElementById('autoImageUpload'),
   });
-
-  const setSelectValue = (select, value, fallback = '') => {
-    if (!select) return;
-    const nextValue = String(value || fallback || '');
-    select.value = Array.from(select.options || []).some((option) => option.value === nextValue)
-      ? nextValue
-      : String(fallback || '');
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  };
 
   const mountAssistantBehaviorControls = () => {
     if (document.getElementById('autoImageUpload')) return;
@@ -196,27 +178,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     balanceText: document.getElementById('apimartBalanceText'),
   });
 
-
-  const getAgentModelRefs = () => ({
-    data: document.getElementById('agentDataModelSelect'),
-    spectrum: document.getElementById('agentSpectrumModelSelect'),
-    dataDropdown: document.getElementById('agentDataModelDropdown'),
-    spectrumDropdown: document.getElementById('agentSpectrumModelDropdown'),
-    dataTrigger: document.getElementById('agentDataModelTrigger'),
-    spectrumTrigger: document.getElementById('agentSpectrumModelTrigger'),
-    dataLabel: document.getElementById('agentDataModelLabel'),
-    spectrumLabel: document.getElementById('agentSpectrumModelLabel'),
-    dataPanel: document.getElementById('agentDataModelPanel'),
-    spectrumPanel: document.getElementById('agentSpectrumModelPanel'),
-    dataCustom: document.getElementById('agentDataModelCustom'),
-    spectrumCustom: document.getElementById('agentSpectrumModelCustom'),
-  });
-
-  const normalizeAgentModels = (agentModels = {} as any) => ({
-    data: String(agentModels.data || '').trim(),
-    spectrum: String(agentModels.spectrum || '').trim(),
-  });
-
   const renderModelOptions = (models, selectedValue = '') => {
     const selected = String(selectedValue || '').trim();
     const options = models.map(([value, label]) => `
@@ -249,364 +210,7 @@ import { requestApimart } from '../../services/apimart-proxy';
     if (custom) custom.hidden = select.value !== 'custom';
   };
 
-  const getAgentModelValue = (role) => {
-    const agentRefs = getAgentModelRefs();
-    const select = agentRefs[role];
-    const custom = agentRefs[`${role}Custom`];
-    return String(select?.value === 'custom' ? custom?.value : select?.value || '').trim();
-  };
-
-  const getAgentModelLabel = (role) => {
-    const value = getAgentModelValue(role);
-    if (!value) return '使用默认主模型';
-    const match = Array.from(refs.modelSelect?.options || []).find((option) => option.value === value);
-    const parts = splitModelLabel(match?.textContent || value);
-    return parts.title || value;
-  };
-
-  const setAgentModelValue = (role, value = '') => {
-    const agentRefs = getAgentModelRefs();
-    const select = agentRefs[role];
-    const custom = agentRefs[`${role}Custom`];
-    if (!select) return;
-    const normalized = String(value || '').trim();
-    if (!normalized) {
-      select.value = '';
-      if (custom) custom.value = '';
-    } else if (!Array.from(select.options).some((option) => option.value === normalized)) {
-      const opt = document.createElement('option');
-      opt.value = normalized;
-      opt.textContent = normalized;
-      select.insertBefore(opt, select.querySelector('[value="custom"]'));
-      select.value = normalized;
-      if (custom) custom.value = '';
-    } else {
-      select.value = normalized;
-      if (custom) custom.value = '';
-    }
-    if (custom) custom.hidden = select.value !== 'custom';
-  };
-
-  const setAgentDropdownOpen = (role, open) => {
-    const agentRefs = getAgentModelRefs();
-    const dropdown = agentRefs[`${role}Dropdown`];
-    const trigger = agentRefs[`${role}Trigger`];
-    if (!dropdown || !trigger) return;
-    dropdown.classList.toggle('is-open', open);
-    trigger.setAttribute('aria-expanded', String(open));
-  };
-
-  const closeAgentDropdown = (role) => {
-    setAgentDropdownOpen(role, false);
-    if (agentModelSearchQuery[role]) {
-      agentModelSearchQuery[role] = '';
-      renderAgentModelDropdown(role);
-    }
-  };
-
-  const renderAgentModelDropdown = (role) => {
-    const agentRefs = getAgentModelRefs();
-    const panel = agentRefs[`${role}Panel`];
-    const label = agentRefs[`${role}Label`];
-    if (!panel || !label) return;
-    const currentValue = getAgentModelValue(role);
-    const selectedValue = agentRefs[role]?.value || '';
-    const isLocal = isLmStudioProvider(getAiProvider());
-    const searchQuery = normalizeModelSearchText(agentModelSearchQuery[role]);
-    label.textContent = getAgentModelLabel(role);
-
-    const defaultActive = !currentValue && selectedValue !== 'custom';
-    const fixedOptions = [
-      {
-        value: '',
-        label: '使用默认主模型',
-        meta: '继承上方',
-        active: defaultActive,
-      },
-      {
-        value: 'custom',
-        label: '自定义模型 ID...',
-        meta: '手动输入',
-        active: selectedValue === 'custom',
-      },
-    ].map((item) => `
-      <button
-        type="button"
-        class="model-dropdown-option${item.active ? ' is-active' : ''}"
-        role="option"
-        aria-selected="${item.active ? 'true' : 'false'}"
-        data-agent-model-role="${role}"
-        data-agent-model-value="${item.value}">
-        <span class="model-dropdown-option-body">
-          <span class="model-dropdown-option-label">${utils.escapeHtml(item.label)}</span>
-        </span>
-        <span class="model-dropdown-option-meta">${utils.escapeHtml(item.meta)}</span>
-      </button>
-    `).join('');
-
-    const grouped = new Map();
-    getModelOptions().forEach((option) => {
-      const parts = splitModelLabel(option.label);
-      const provider = getProviderGroupLabel(option.value);
-      const pricing = parseJsonMaybe(option.pricing);
-      const category = option.category || getModelCategoryLabel(option);
-      const contextLabel = formatContextLength(option.contextLength);
-      const normalized = {
-        ...option,
-        title: parts.title,
-        pricingLabel: getPricingLabel(pricing),
-        category,
-        contextLabel,
-      };
-      if (modelMatchesSearch(normalized, provider, searchQuery)) {
-        const items = grouped.get(provider) || [];
-        items.push(normalized);
-        grouped.set(provider, items);
-      }
-    });
-
-    const groupedHtml = Array.from(grouped.entries()).length
-      ? Array.from(grouped.entries()).map(([provider, items]) => {
-        const rows = items.map((option) => {
-          const isActive = option.value === currentValue && selectedValue !== 'custom';
-          const showSubline = !isLocal && (option.pricingLabel || option.contextLabel);
-          return `
-            <button
-              type="button"
-              class="model-dropdown-option${isActive ? ' is-active' : ''}"
-              role="option"
-              aria-selected="${isActive ? 'true' : 'false'}"
-              data-agent-model-role="${role}"
-              data-agent-model-value="${option.value}">
-              <span class="model-dropdown-option-body">
-                <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
-                ${showSubline ? `<span class="model-dropdown-option-subline">
-                  <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
-                  ${option.contextLabel ? `<span class="model-dropdown-option-context">${utils.escapeHtml(option.contextLabel)}</span>` : ''}
-                </span>` : ''}
-              </span>
-              <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
-            </button>
-          `;
-        }).join('');
-        return `
-          <div class="model-dropdown-group">
-            <div class="model-dropdown-group-title">${utils.escapeHtml(provider)}</div>
-            <div class="model-dropdown-group-body">${rows}</div>
-          </div>
-        `;
-      }).join('')
-      : '<div class="model-dropdown-empty">没有匹配的模型</div>';
-
-    panel.innerHTML = `
-      <label class="model-dropdown-search">
-        <i class="ti ti-search" aria-hidden="true"></i>
-        <input
-          class="model-dropdown-search-input"
-          type="search"
-          placeholder="搜索模型、供应商或分类"
-          aria-label="搜索子 Agent 模型"
-          data-agent-model-search="${role}"
-          value="${utils.escapeHtml(agentModelSearchQuery[role])}">
-      </label>
-      <div class="model-dropdown-results">
-        <div class="model-dropdown-group">
-          <div class="model-dropdown-group-title">Agent 选项</div>
-          <div class="model-dropdown-group-body">${fixedOptions}</div>
-        </div>
-        ${groupedHtml}
-      </div>
-    `;
-  };
-
-  const syncAgentModelSelects = (options = {} as any) => {
-    const agentRefs = getAgentModelRefs();
-    const preserveCurrent = options.preserveCurrent !== false;
-    const current = normalizeAgentModels(options.nextValues || (preserveCurrent
-      ? {
-          data: getAgentModelValue('data'),
-          spectrum: getAgentModelValue('spectrum'),
-        }
-      : {}));
-    const currentSelectValue = {
-      data: agentRefs.data?.value || '',
-      spectrum: agentRefs.spectrum?.value || '',
-    };
-    const sourceOptions = Array.from(refs.modelSelect?.options || [])
-      .filter((option) => option.value)
-      .map((option) => ({
-        value: option.value,
-        label: option.textContent || option.value,
-        category: option.dataset.category || '',
-      }));
-    const sourceValues = new Set(sourceOptions.map((item) => item.value));
-    const resolveCurrentValue = (role) => {
-      const value = current[role];
-      if (!value) return '';
-      if (sourceValues.has(value)) return value;
-      return preserveCurrent && currentSelectValue[role] === 'custom' ? value : '';
-    };
-    const fillSelect = (select) => {
-      if (!select) return;
-      select.innerHTML = '';
-      const defaultOption = document.createElement('option');
-      defaultOption.value = '';
-      defaultOption.textContent = '使用默认主模型';
-      select.appendChild(defaultOption);
-      sourceOptions.forEach((item) => {
-        const option = document.createElement('option');
-        option.value = item.value;
-        option.textContent = item.category ? `${item.label} · ${item.category}` : item.label;
-        select.appendChild(option);
-      });
-      const customOption = document.createElement('option');
-      customOption.value = 'custom';
-      customOption.textContent = '自定义模型 ID...';
-      select.appendChild(customOption);
-    };
-    fillSelect(agentRefs.data);
-    fillSelect(agentRefs.spectrum);
-    setAgentModelValue('data', resolveCurrentValue('data'));
-    setAgentModelValue('spectrum', resolveCurrentValue('spectrum'));
-    renderAgentModelDropdown('data');
-    renderAgentModelDropdown('spectrum');
-  };
-
-  const mountAgentRoutingConfigSection = () => {
-    if (!refs.aiConfigForm || document.getElementById('agentRoutingConfigModule')) return;
-    const aiModuleGrid = refs.aiConfigForm.querySelector('.config-module-ai > .form-grid');
-    if (!aiModuleGrid) return;
-    const section = document.createElement('div');
-    section.className = 'agent-routing-section';
-    section.id = 'agentRoutingConfigModule';
-    section.innerHTML = `
-      <div class="field">
-        <label for="agentDataModelTrigger">
-          <span class="field-label-main">
-            <i class="field-label-icon ti ti-table" aria-hidden="true"></i>
-            <span>数据分析模型</span>
-          </span>
-        </label>
-        <div class="model-dropdown agent-model-dropdown" id="agentDataModelDropdown">
-          <button class="model-dropdown-trigger" id="agentDataModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="agentDataModelPanel">
-            <span class="model-dropdown-value" id="agentDataModelLabel">使用默认主模型</span>
-            <span class="model-dropdown-arrow" aria-hidden="true"></span>
-          </button>
-          <div class="model-dropdown-panel" id="agentDataModelPanel" role="listbox" aria-label="数据分析模型选择列表"></div>
-           <select id="agentDataModelSelect" name="agentDataModelSelect" hidden class="js-no-custom-select"></select>
-        </div>
-        <input id="agentDataModelCustom" name="agentDataModelCustom" type="text" placeholder="输入自定义模型 ID，例如 deepseek/deepseek-chat" autocomplete="off" hidden />
-      </div>
-      <div class="field">
-        <label for="agentSpectrumModelTrigger">
-          <span class="field-label-main">
-            <i class="field-label-icon ti ti-chart-dots-3" aria-hidden="true"></i>
-            <span>图谱分析模型</span>
-          </span>
-        </label>
-        <div class="model-dropdown agent-model-dropdown" id="agentSpectrumModelDropdown">
-          <button class="model-dropdown-trigger" id="agentSpectrumModelTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="agentSpectrumModelPanel">
-            <span class="model-dropdown-value" id="agentSpectrumModelLabel">使用默认主模型</span>
-            <span class="model-dropdown-arrow" aria-hidden="true"></span>
-          </button>
-          <div class="model-dropdown-panel" id="agentSpectrumModelPanel" role="listbox" aria-label="图谱分析模型选择列表"></div>
-          <select id="agentSpectrumModelSelect" name="agentSpectrumModelSelect" hidden class="js-no-custom-select"></select>
-        </div>
-        <input id="agentSpectrumModelCustom" name="agentSpectrumModelCustom" type="text" placeholder="输入自定义模型 ID，例如 qwen/qwen-vl-plus" autocomplete="off" hidden />
-      </div>
-    `;
-    aiModuleGrid.appendChild(section);
-  };
-
-  const mountSearchConfigSection = () => {
-    if (!refs.aiConfigForm || document.getElementById('searchConfigModule')) return;
-    const anchor = refs.aiConfigForm.querySelector('.config-module-assistant');
-    const article = document.createElement('article');
-    article.className = 'panel config-module config-module-search';
-    article.id = 'searchConfigModule';
-    article.innerHTML = `
-      <div class="config-module-head">
-        <div class="config-module-title">
-          <span class="config-module-icon"><i class="ti ti-world-search" aria-hidden="true"></i></span>
-          <div>
-            <div class="config-module-kicker">联网搜索</div>
-            <h2>搜索增强</h2>
-          </div>
-        </div>
-        <a class="panel-help" href="https://docs.tavily.com/documentation/api-reference/endpoint/search" target="_blank" rel="noreferrer">Tavily 文档</a>
-      </div>
-      <div class="form-grid">
-        <div class="form-grid form-grid-3">
-          <div class="field">
-            <label for="searchProvider">
-              <span class="field-label-main">
-                <i class="field-label-icon ti ti-search" aria-hidden="true"></i>
-                <span>搜索引擎</span>
-              </span>
-            </label>
-            <select id="searchProvider" name="searchProvider">
-              <option value="tavily">Tavily Search</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="searchDepth">
-              <span class="field-label-main">
-                <i class="field-label-icon ti ti-adjustments" aria-hidden="true"></i>
-                <span>搜索深度</span>
-              </span>
-            </label>
-            <select id="searchDepth" name="searchDepth">
-              <option value="basic">basic</option>
-              <option value="advanced">advanced</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="searchMaxResults">
-              <span class="field-label-main">
-                <i class="field-label-icon ti ti-list-numbers" aria-hidden="true"></i>
-                <span>结果数量</span>
-              </span>
-            </label>
-            <input id="searchMaxResults" name="searchMaxResults" type="number" min="1" max="10" value="5" />
-          </div>
-        </div>
-        <div class="form-grid form-grid-3">
-          <div class="field">
-            <label for="searchTopic">
-              <span class="field-label-main">
-                <i class="field-label-icon ti ti-category" aria-hidden="true"></i>
-                <span>搜索主题</span>
-              </span>
-            </label>
-            <select id="searchTopic" name="searchTopic">
-              <option value="general">general</option>
-              <option value="news">news</option>
-            </select>
-          </div>
-          <div class="field full search-key-field">
-            <label class="field-label-row" for="searchApiKey">
-              <span class="field-label-main">
-                <i class="field-label-icon ti ti-key" aria-hidden="true"></i>
-                <span>Tavily API Key</span>
-              </span>
-              <span class="field-label-note">仅保存在本机浏览器</span>
-            </label>
-            <div class="password-row">
-              <input id="searchApiKey" name="searchApiKey" type="password" placeholder="tvly-..." autocomplete="off" />
-              <button class="password-toggle" id="searchApiKeyToggle" type="button" aria-label="显示或隐藏 Tavily API 密钥">
-                <i class="search-key-toggle-icon ti ti-eye" aria-hidden="true"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-    if (anchor && anchor.parentElement === refs.aiConfigForm) {
-      refs.aiConfigForm.insertBefore(article, anchor);
-    } else {
-      refs.aiConfigForm.appendChild(article);
-    }
-  };
+  let stopDropdownPositioning: (() => void) | undefined;
 
   const mountApimartConfigSection = () => {
     if (!refs.aiConfigForm || document.getElementById('apimartConfigModule')) return;
@@ -696,26 +300,7 @@ import { requestApimart } from '../../services/apimart-proxy';
 
   const mountConfigContentPanel = () => {
     if (!refs.aiConfigForm || refs.aiConfigForm.querySelector(':scope > .config-content-panel')) return;
-    const actionPanel = refs.aiConfigForm.querySelector(':scope > .config-actions-panel');
-    const contentPanel = document.createElement('div');
-    const lowerPanel = document.createElement('div');
-    contentPanel.className = 'config-content-panel';
-    lowerPanel.className = 'config-lower-grid';
-    const contentNodes = Array.from(refs.aiConfigForm.children).filter((node) => node !== actionPanel);
-    refs.aiConfigForm.insertBefore(contentPanel, actionPanel || null);
-    contentPanel.appendChild(lowerPanel);
-    contentNodes.forEach((node) => {
-      if (node.classList?.contains('config-module-ai')) {
-        contentPanel.insertBefore(node, lowerPanel);
-      } else {
-        lowerPanel.appendChild(node);
-      }
-    });
-    const assistantModule = lowerPanel.querySelector('.config-module-assistant');
-    const ossModule = lowerPanel.querySelector('.oss-config-block');
-    if (assistantModule && ossModule) {
-      lowerPanel.insertBefore(ossModule, assistantModule);
-    }
+    mountConfigSections(refs.aiConfigForm);
   };
 
   const setStatus = (message, tone = 'success') => {
@@ -815,14 +400,16 @@ import { requestApimart } from '../../services/apimart-proxy';
   const normalizeDeepSeekModel = (item = {} as any) => {
     const id = String(item?.id || '').trim();
     if (!id) return item;
+    const baseUrl = refs.openrouterBaseUrl?.value || DEFAULT_DEEPSEEK_BASE_URL;
+    const official = /^https:\/\/api\.deepseek\.com(?:\/v1)?\/?$/i.test(baseUrl)
+      ? findOfficialModelPrice(DEEPSEEK_OFFICIAL_SNAPSHOT, id) : undefined;
     return {
       ...item,
       name: item.name || DEEPSEEK_MODEL_NAMES[id] || id,
       context_length: Number(item.context_length || 0) > 0 ? item.context_length : DEEPSEEK_CONTEXT_LENGTH,
-      pricing: {
-        ...(DEEPSEEK_MODEL_PRICING[id] || {}),
-        ...(item.pricing && typeof item.pricing === 'object' ? item.pricing : {}),
-      },
+      pricing: item.pricing && typeof item.pricing === 'object' && Object.keys(item.pricing).length
+        ? item.pricing : official ? { ...official.pricing, source: DEEPSEEK_OFFICIAL_SNAPSHOT.source,
+          updatedAt: DEEPSEEK_OFFICIAL_SNAPSHOT.fetchedAt, snapshot: true } : { unavailable: true },
     };
   };
 
@@ -1007,13 +594,6 @@ import { requestApimart } from '../../services/apimart-proxy';
 
   const isLocalBaseUrl = (value) => /(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.)/i.test(String(value || ''));
 
-  const normalizeOpenRouterBaseUrl = (value) => {
-    const normalized = utils.normalizeBaseUrl(value || constants.DEFAULT_BASE_URL);
-    if (/api\.deepseek\.com/i.test(normalized)) return constants.DEFAULT_BASE_URL;
-    if (/api\.siliconflow\.cn/i.test(normalized)) return constants.DEFAULT_BASE_URL;
-    return isLocalBaseUrl(normalized) ? constants.DEFAULT_BASE_URL : normalized;
-  };
-
   const normalizeDeepSeekBaseUrl = (value) => {
     const normalized = utils.normalizeBaseUrl(value || DEFAULT_DEEPSEEK_BASE_URL);
     if (/openrouter\.ai/i.test(normalized)) return DEFAULT_DEEPSEEK_BASE_URL;
@@ -1045,7 +625,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       baseUrl: normalizeProviderBaseUrl(normalizedProvider, baseUrl),
       appTitle: String(config.appTitle || defaults.appTitle || '').trim(),
       modelChoice: String(config.modelChoice || config.model || defaults.modelChoice || '').trim(),
-      agentModels: normalizeAgentModels(config.agentModels || {}),
     };
   };
 
@@ -1095,10 +674,6 @@ import { requestApimart } from '../../services/apimart-proxy';
           ? 'SiliconFlow'
         : (refs.appTitle?.value || defaults.appTitle || '').trim(),
       modelChoice: refs.modelSelect?.value || providerDrafts[normalizedProvider]?.modelChoice || defaults.modelChoice,
-      agentModels: normalizeAgentModels({
-        data: getAgentModelValue('data'),
-        spectrum: getAgentModelValue('spectrum'),
-      }),
     };
   };
 
@@ -1155,7 +730,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     }
     syncProviderUi();
     syncModelState();
-    syncAgentModelSelects({ preserveCurrent: false, nextValues: draft.agentModels });
     syncPreview();
   };
 
@@ -1171,7 +745,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       appTitle: activeDraft.appTitle,
       httpReferer: (refs.httpReferer?.value || '').trim(),
       modelChoice: activeDraft.modelChoice,
-      agentModels: normalizeAgentModels(activeDraft.agentModels || {}),
       openrouterConfig: { ...providerDrafts[PROVIDER_OPENROUTER] },
       deepseekConfig: { ...providerDrafts[PROVIDER_DEEPSEEK], appTitle: 'DeepSeek' },
       siliconflowConfig: { ...providerDrafts[PROVIDER_SILICONFLOW], appTitle: 'SiliconFlow' },
@@ -1186,11 +759,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       autoImageUpload: Boolean(getAssistantBehaviorRefs().autoImageUpload?.checked),
       jsonMode: Boolean(refs.jsonMode?.checked),
       logEnabled: Boolean(refs.logEnabled?.checked),
-      searchProvider: getSearchRefs().provider?.value || constants.DEFAULT_CONFIG.searchProvider,
-      searchApiKey: (getSearchRefs().apiKey?.value || '').trim(),
-      searchDepth: getSearchRefs().depth?.value || constants.DEFAULT_CONFIG.searchDepth,
-      searchMaxResults: Math.max(1, Math.min(10, Number(getSearchRefs().maxResults?.value || constants.DEFAULT_CONFIG.searchMaxResults))),
-      searchTopic: getSearchRefs().topic?.value || constants.DEFAULT_CONFIG.searchTopic,
       apimartApiKey: (getApimartRefs().accessKey?.value || '').trim(),
       apimartBaseUrl: APIMART_DEFAULT_BASE_URL,
       apimartImageModel: getApimartModelValue('image') || constants.DEFAULT_CONFIG.apimartImageModel,
@@ -1207,11 +775,10 @@ import { requestApimart } from '../../services/apimart-proxy';
   const isRedactedValue = (value) => String(value || '').trim() === SENSITIVE_CONFIG_PLACEHOLDER;
 
   const dropRedactedSecrets = (config = {} as any) => {
-    const next = { ...config };
+    const next = withoutRetiredSearchConfig({ ...config });
     if (isRedactedValue(next.apiKey)) next.apiKey = '';
     if (isRedactedValue(next.ossAccessKeyId)) next.ossAccessKeyId = '';
     if (isRedactedValue(next.ossAccessKeySecret)) next.ossAccessKeySecret = '';
-    if (isRedactedValue(next.searchApiKey)) next.searchApiKey = '';
     if (isRedactedValue(next.apimartApiKey)) next.apimartApiKey = '';
     if (isRedactedValue(next.liblibSecretKey)) next.liblibSecretKey = '';
     if (next.openrouterConfig && typeof next.openrouterConfig === 'object') {
@@ -1233,7 +800,7 @@ import { requestApimart } from '../../services/apimart-proxy';
   };
 
   const redactSensitiveConfig = (config = {} as any) => {
-    const next = cloneJsonValue(config || {});
+    const next = withoutRetiredSearchConfig(cloneJsonValue(config || {}));
     const redact = (target, key) => {
       if (!target || !String(target[key] || '').trim()) return;
       target[key] = SENSITIVE_CONFIG_PLACEHOLDER;
@@ -1241,7 +808,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     redact(next, 'apiKey');
     redact(next, 'ossAccessKeyId');
     redact(next, 'ossAccessKeySecret');
-    redact(next, 'searchApiKey');
     redact(next, 'apimartApiKey');
     redact(next, 'liblibAccessKey');
     redact(next, 'liblibSecretKey');
@@ -1271,10 +837,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     activeProvider = provider;
     setProviderRadio(activeProvider);
     const activeDraft = providerDrafts[activeProvider];
-    const legacyAgentModels = normalizeAgentModels(next.agentModels || constants.DEFAULT_CONFIG.agentModels || {});
-    if ((legacyAgentModels.data || legacyAgentModels.spectrum) && !activeDraft.agentModels?.data && !activeDraft.agentModels?.spectrum) {
-      activeDraft.agentModels = legacyAgentModels;
-    }
     if (refs.openrouterApiKey) {
       refs.openrouterApiKey.value = isLmStudioProvider(activeProvider)
         ? providerDrafts[PROVIDER_OPENROUTER]?.apiKey || ''
@@ -1304,18 +866,11 @@ import { requestApimart } from '../../services/apimart-proxy';
     }
     if (refs.jsonMode) refs.jsonMode.checked = Boolean(next.jsonMode);
     if (refs.logEnabled) refs.logEnabled.checked = Boolean(next.logEnabled);
-    const searchRefs = getSearchRefs();
-    setSelectValue(searchRefs.provider, next.searchProvider, constants.DEFAULT_CONFIG.searchProvider);
-    if (searchRefs.apiKey) searchRefs.apiKey.value = next.searchApiKey || '';
-    setSelectValue(searchRefs.depth, next.searchDepth, constants.DEFAULT_CONFIG.searchDepth);
-    if (searchRefs.maxResults) searchRefs.maxResults.value = String(next.searchMaxResults || constants.DEFAULT_CONFIG.searchMaxResults);
-    setSelectValue(searchRefs.topic, next.searchTopic, constants.DEFAULT_CONFIG.searchTopic);
     const apimartRefs = getApimartRefs();
     if (apimartRefs.accessKey) apimartRefs.accessKey.value = next.apimartApiKey || '';
     if (apimartRefs.baseUrl) apimartRefs.baseUrl.value = APIMART_DEFAULT_BASE_URL;
     setApimartModelValue('image', next.apimartImageModel || constants.DEFAULT_CONFIG.apimartImageModel);
     setApimartModelValue('video', next.apimartVideoModel || constants.DEFAULT_CONFIG.apimartVideoModel);
-    syncAgentModelSelects({ preserveCurrent: false, nextValues: activeDraft.agentModels });
     if (refs.ossBucket) refs.ossBucket.value = next.ossBucket || '';
     if (refs.ossEndpoint) refs.ossEndpoint.value = next.ossEndpoint || '';
     if (refs.ossObjectKey) refs.ossObjectKey.value = next.ossObjectKey || '';
@@ -1347,7 +902,6 @@ import { requestApimart } from '../../services/apimart-proxy';
   const syncModelState = () => {
     if (!refs.modelSelect) return;
     syncModelDropdown();
-    syncAgentModelSelects();
     syncModelProviderField();
   };
 
@@ -1433,7 +987,7 @@ import { requestApimart } from '../../services/apimart-proxy';
           : 'API 密钥';
     }
     if (refs.apiKeyNoteText) {
-      refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '仅保存在本机浏览器';
+      refs.apiKeyNoteText.textContent = isLocal ? '本地接入可留空' : '保存后云端同步';
     }
     if (refs.openrouterApiKey) {
       refs.openrouterApiKey.placeholder = isLocal ? '可留空' : isDeepSeek || isSiliconFlow ? 'sk-...' : 'sk-or-...';
@@ -1460,11 +1014,7 @@ import { requestApimart } from '../../services/apimart-proxy';
     } else if (refs.appTitle && !refs.appTitle.value.trim()) {
       refs.appTitle.value = defaults.appTitle;
     }
-    if (isLocal) {
-      setBalanceStatus('余额：本地模型无需查询');
-    } else {
-      setBalanceStatus('余额：未查询');
-    }
+    queueBalanceRefresh();
   };
 
   const syncApiKeyToggleIcon = () => {
@@ -1552,8 +1102,8 @@ import { requestApimart } from '../../services/apimart-proxy';
         config.streamEnabled ? 'stream' : 'no-stream',
         config.jsonMode ? 'json' : 'text',
         config.logEnabled ? 'log' : 'no-log',
-        config.searchApiKey ? 'web-search' : 'no-search',
-        config.apimartApiKey ? 'apimart-media' : 'no-apimart',
+        'pi-web-search（服务端）',
+        config.apimartApiKey ? 'APIMart 余额查询已配置' : 'APIMart 未配置',
       ].join(' / ');
     }
     const isLocal = isLmStudioProvider(config.aiProvider);
@@ -1584,14 +1134,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     }
   };
 
-  const syncSearchKeyToggleIcon = () => {
-    const searchRefs = getSearchRefs();
-    if (!searchRefs.apiKeyIcon) return;
-    const isVisible = searchRefs.apiKey?.type === 'text';
-    searchRefs.apiKeyIcon.classList.toggle('ti-eye', !isVisible);
-    searchRefs.apiKeyIcon.classList.toggle('ti-eye-off', isVisible);
-  };
-
   const syncApimartKeyToggleIcon = () => {
     const apimartRefs = getApimartRefs();
     const syncIcon = (input, icon) => {
@@ -1604,7 +1146,7 @@ import { requestApimart } from '../../services/apimart-proxy';
   };
 
   const updateSavedState = (saved) => {
-    setStatus(saved ? '本地配置：已保存' : '本地配置：未保存', saved ? 'success' : 'warn');
+    setStatus(saved ? '云端配置已同步' : '尚未保存配置', saved ? 'success' : 'warn');
   };
 
   const saveLog = (entry) => {
@@ -1733,7 +1275,7 @@ import { requestApimart } from '../../services/apimart-proxy';
   const formatOfficialCnyPerMillion = (value) => {
     const amount = normalizePriceValue(value);
     if (amount == null) return '未返回';
-    return `¥${amount.toFixed(amount >= 100 ? 0 : amount >= 1 ? 2 : 3).replace(/\.?0+$/, '')}`;
+    return `¥${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 }).format(amount)}`;
   };
 
   const getPricingLabel = (pricing) => {
@@ -1741,13 +1283,16 @@ import { requestApimart } from '../../services/apimart-proxy';
     const outputCny = findFirstDefined(pricing?.outputCnyPerMillion, pricing?.completionCnyPerMillion);
     const cachedInputCny = pricing?.cachedInputCnyPerMillion;
     if (inputCny !== undefined || outputCny !== undefined) {
-      const base = `${formatOfficialCnyPerMillion(inputCny)} / ${formatOfficialCnyPerMillion(outputCny)}`;
+      if (pricing?.peak) {
+        return `闲时：输入 ${formatOfficialCnyPerMillion(inputCny)} / 输出 ${formatOfficialCnyPerMillion(outputCny)}\n高峰：输入 ${formatOfficialCnyPerMillion(pricing.peak.inputCnyPerMillion)} / 输出 ${formatOfficialCnyPerMillion(pricing.peak.outputCnyPerMillion)}\n元 / 百万 tokens${pricing.snapshot ? ' · 官方快照' : ''}`;
+      }
+      const base = `入 ${formatOfficialCnyPerMillion(inputCny)} / 出 ${formatOfficialCnyPerMillion(outputCny)}（每百万 tokens）`;
       return cachedInputCny !== undefined ? `${base} · 缓存 ${formatOfficialCnyPerMillion(cachedInputCny)}` : base;
     }
     if (pricing?.unavailable) return '官方未返回价格';
     const prompt = formatCnyPerMillionTokens(pricing?.prompt);
     const completion = formatCnyPerMillionTokens(pricing?.completion);
-    return `${prompt} / ${completion}`;
+    return prompt === '—' && completion === '—' ? '官方未返回价格' : `${prompt} / ${completion}（折合元/百万 tokens）`;
   };
 
   const formatContextLength = (value) => {
@@ -1852,26 +1397,7 @@ import { requestApimart } from '../../services/apimart-proxy';
       || text.includes('nomic-embed');
   };
 
-  const supportsImageOutput = (valueOrItem) => {
-    const raw = typeof valueOrItem === 'string'
-      ? valueOrItem
-      : [
-          valueOrItem?.id,
-          valueOrItem?.name,
-          valueOrItem?.category,
-          valueOrItem?.output_modalities?.join(' '),
-        ].filter(Boolean).join(' ');
-
-    const text = String(raw || '').toLowerCase();
-    return text.includes('image') || text.includes('图像');
-  };
-
-  const getProviderGroupLabel = (value) => {
-    const raw = String(value || '');
-    if (!raw) return '其他';
-    const provider = raw.split('/')[0] || raw;
-    return provider.replace(/[-_]/g, ' ').toUpperCase();
-  };
+  const getProviderGroupLabel = (value) => getModelManufacturerLabel(value, getAiProvider());
 
   const getProviderSortRank = (value) => {
     const raw = String(value || '').toLowerCase();
@@ -1919,6 +1445,7 @@ import { requestApimart } from '../../services/apimart-proxy';
     if (!refs.modelDropdown || !refs.modelSelectTrigger) return;
     refs.modelDropdown.classList.toggle('is-open', open);
     refs.modelSelectTrigger.setAttribute('aria-expanded', String(open));
+    if (open) positionConfigDropdown(refs.modelDropdown);
   };
 
   const closeModelDropdown = () => {
@@ -1947,12 +1474,24 @@ import { requestApimart } from '../../services/apimart-proxy';
   };
 
   const openModelDropdown = () => {
+    const config = getFormConfig();
+    if (!isLmStudioProvider(config.aiProvider) && config.apiKey && Date.now() - lastModelSyncAt > 300000) void fetchModels();
     syncModelDropdown();
     setModelDropdownOpen(true);
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      refs.modelSelectPanel?.querySelector('.model-dropdown-search-input')?.focus();
+      refs.modelSelectPanel?.querySelector('.model-dropdown-search-input')?.focus({ preventScroll: true });
       scrollActiveModelIntoView();
     }));
+  };
+
+  const renderModelOptionContent = (option) => {
+    const provider = getAiProvider();
+    const knownReasoning = provider === PROVIDER_DEEPSEEK && Boolean(findOfficialModelPrice(DEEPSEEK_OFFICIAL_SNAPSHOT, option.value));
+    const display = getModelOptionPresentation(option, provider, knownReasoning);
+    return `<span class="model-dropdown-option-body">
+      <span class="model-dropdown-option-label" title="${utils.escapeHtml(display.title)}">${utils.escapeHtml(display.title)}</span>
+      <span class="model-dropdown-option-id" title="${utils.escapeHtml(display.id)}">${utils.escapeHtml(display.id)}</span>
+    </span><span class="model-dropdown-option-meta">${utils.escapeHtml(display.meta)}</span>`;
   };
 
   const normalizeModelSearchText = (value) => String(value || '').trim().toLowerCase();
@@ -1965,7 +1504,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       option.label,
       provider,
       option.category,
-      option.pricingLabel,
       option.contextLabel,
     ].some((value) => normalizeModelSearchText(value).includes(query));
   };
@@ -2006,7 +1544,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       ? filteredGroups.map(([provider, items]) => {
       const rows = items.map((option) => {
         const isActive = option.value === currentValue;
-        const showSubline = !isLocal && (option.pricingLabel || option.contextLabel);
         return `
           <button
             type="button"
@@ -2014,14 +1551,7 @@ import { requestApimart } from '../../services/apimart-proxy';
             role="option"
             aria-selected="${isActive ? 'true' : 'false'}"
             data-model-value="${option.value}">
-            <span class="model-dropdown-option-body">
-              <span class="model-dropdown-option-label">${utils.escapeHtml(option.title)}</span>
-              ${showSubline ? `<span class="model-dropdown-option-subline">
-                <span class="model-dropdown-option-price">${utils.escapeHtml(option.pricingLabel)}</span>
-                ${option.contextLabel ? `<span class="model-dropdown-option-context">${utils.escapeHtml(option.contextLabel)}</span>` : ''}
-              </span>` : ''}
-            </span>
-            <span class="model-dropdown-option-meta">${utils.escapeHtml(option.category || '通用文本')}</span>
+            ${renderModelOptionContent(option)}
           </button>
         `;
       }).join('');
@@ -2041,7 +1571,7 @@ import { requestApimart } from '../../services/apimart-proxy';
         <input
           class="model-dropdown-search-input"
           type="search"
-          placeholder="搜索模型、供应商或分类"
+          placeholder="搜索模型或厂商"
           aria-label="搜索模型"
           value="${searchValue}">
       </label>
@@ -2184,19 +1714,29 @@ import { requestApimart } from '../../services/apimart-proxy';
     syncPreview();
   };
 
+  let lastModelSyncAt = 0;
+  let modelSyncTimer = 0;
+  let modelRequestId = 0;
+  let modelRequestController: AbortController | null = null;
   const fetchModels = async () => {
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
     const isDeepSeek = isDeepSeekProvider(config.aiProvider);
     const isSiliconFlow = isSiliconFlowProvider(config.aiProvider);
     const requestedProvider = config.aiProvider;
-    const isStaleProviderRequest = () => getAiProvider() !== requestedProvider;
+    const requestId = ++modelRequestId;
+    modelRequestController?.abort();
+    const isStaleProviderRequest = () => {
+      const current = getFormConfig();
+      return requestId !== modelRequestId || current.aiProvider !== requestedProvider || current.apiKey !== config.apiKey || current.baseUrl !== config.baseUrl;
+    };
     if (isLocal && refs.openrouterBaseUrl) {
       refs.openrouterBaseUrl.value = config.baseUrl;
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    modelRequestController = controller;
 
     try {
       setStatus(isLocal
@@ -2217,9 +1757,22 @@ import { requestApimart } from '../../services/apimart-proxy';
       }, 15000);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
-      const rawModels = Array.isArray(payload?.data)
+      let rawModels = Array.isArray(payload?.data)
         ? payload.data.filter((item) => item && typeof item.id === 'string')
         : [];
+      if (isStaleProviderRequest()) return;
+      if (isDeepSeek && /^https:\/\/api\.deepseek\.com(?:\/v1)?\/?$/i.test(config.baseUrl)) {
+        try {
+          const snapshot = await fetchOfficialDeepSeekPricing(controller.signal);
+          rawModels = rawModels.map((item) => {
+            const official = findOfficialModelPrice(snapshot, item.id);
+            return official ? { ...item, context_length: item.context_length || official.contextLength,
+              pricing: { ...official.pricing, source: snapshot.source, updatedAt: snapshot.fetchedAt } } : item;
+          });
+        } catch {
+          // Keep the verified official snapshot without an extra persistent notice.
+        }
+      }
       if (isStaleProviderRequest()) return;
       const models = isLocal
         ? rawModels
@@ -2296,6 +1849,8 @@ import { requestApimart } from '../../services/apimart-proxy';
           : isSiliconFlow
             ? `已加载硅基流动模型列表：${models.length || 0} 项`
         : `已加载模型列表：${models.length || 0} 项`, 'success');
+      lastModelSyncAt = Date.now();
+      // Snapshot provenance remains in the price row and tooltip, not the save area.
       if (config.logEnabled) saveLog({ type: 'models', provider: config.aiProvider, at: new Date().toISOString(), count: models.length || 0 });
       return true;
     } catch (error) {
@@ -2370,7 +1925,36 @@ import { requestApimart } from '../../services/apimart-proxy';
     }
   };
 
+  let balanceRefreshTimer = 0;
+  let balanceConfigSignature = '';
+  let balanceRequestId = 0;
+  let balanceController: AbortController | null = null;
+  const cancelBalanceRequest = () => {
+    window.clearTimeout(balanceRefreshTimer);
+    balanceRefreshTimer = 0;
+    balanceRequestId += 1;
+    balanceController?.abort();
+    balanceController = null;
+    const { button } = getBalanceRefs();
+    if (button) button.disabled = false;
+  };
+  const queueBalanceRefresh = () => {
+    const config = getFormConfig();
+    const signature = JSON.stringify([config.aiProvider, config.baseUrl, config.apiKey]);
+    if (signature === balanceConfigSignature) return;
+    balanceConfigSignature = signature;
+    cancelBalanceRequest();
+    if (isLmStudioProvider(config.aiProvider)) {
+      setBalanceStatus('余额：本地模型无需查询');
+      return;
+    }
+    setBalanceStatus(config.apiKey ? '余额：正在查询...' : '余额：未配置密钥');
+    if (config.apiKey) balanceRefreshTimer = window.setTimeout(() => { void readBalance(); }, 400);
+  };
+
   const readBalance = async () => {
+    cancelBalanceRequest();
+    const requestId = balanceRequestId;
     const config = getFormConfig();
     const isLocal = isLmStudioProvider(config.aiProvider);
     const isDeepSeek = isDeepSeekProvider(config.aiProvider);
@@ -2387,25 +1971,32 @@ import { requestApimart } from '../../services/apimart-proxy';
 
     const baseUrl = utils.normalizeBaseUrl(config.baseUrl);
     const controller = new AbortController();
+    balanceController = controller;
     const timeout = setTimeout(() => controller.abort(), 12000);
+    const publishBalance = (message, tone = 'success') => {
+      if (requestId === balanceRequestId) setBalanceStatus(message, tone);
+    };
     if (balanceRefs.button) balanceRefs.button.disabled = true;
     setBalanceStatus('余额：正在查询...');
 
     try {
       if (isDeepSeek) {
         const payload = await fetchBalanceJson(`${baseUrl}/user/balance`, config, controller.signal);
-        setBalanceStatus(formatDeepSeekBalance(payload));
+        publishBalance(formatDeepSeekBalance(payload));
       } else if (isSiliconFlow) {
         const payload = await fetchBalanceJson(`${baseUrl}/user/info`, config, controller.signal);
-        setBalanceStatus(formatSiliconFlowUserInfo(payload));
+        publishBalance(formatSiliconFlowUserInfo(payload));
       } else {
-        setBalanceStatus('余额：当前接入暂不支持余额查询');
+        publishBalance('余额：当前接入暂不支持余额查询');
       }
     } catch (error) {
-      setBalanceStatus(`余额：读取失败（${error?.message || '未知错误'}）`, 'warn');
+      publishBalance(`余额：读取失败（${error?.message || '未知错误'}）`, 'warn');
     } finally {
       clearTimeout(timeout);
-      if (balanceRefs.button) balanceRefs.button.disabled = false;
+      if (requestId === balanceRequestId) {
+        balanceController = null;
+        if (balanceRefs.button) balanceRefs.button.disabled = false;
+      }
     }
   };
 
@@ -2427,7 +2018,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       { role: 'system', content: config.systemPrompt || constants.DEFAULT_CONFIG.systemPrompt },
       { role: 'user', content: '请用一句话回复：连接测试通过。' },
     ];
-    const callStartedAt = new Date().toISOString();
     const callStartMs = window.performance?.now?.() ?? Date.now();
 
     try {
@@ -2450,53 +2040,8 @@ import { requestApimart } from '../../services/apimart-proxy';
       setStatus(answer
         ? `接入正常，AI 已返回：${answer.slice(0, 24)}${answer.length > 24 ? '…' : ''}`
         : '接入正常，AI 已返回结果。', 'success');
-      App.aiCallAnalysis?.record?.({
-        source: 'config-test',
-        provider: config.aiProvider,
-        model,
-        endpoint: `${config.baseUrl}/chat/completions`,
-        pageId: 'ai-config',
-        startedAt: callStartedAt,
-        endedAt: new Date().toISOString(),
-        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: 'success',
-        statusText: 'connection-ok',
-        prompt: '配置中心连接测试',
-        responsePreview: answer || '',
-        apiUsage: payload?.usage || null,
-        requestMessages: testMessages,
-        completionText: answer || '',
-        requestMeta: {
-          messages: testMessages.length,
-          images: 0,
-          files: 0,
-          attachedData: false,
-          stream: false,
-        },
-      });
     } catch (error) {
       setStatus(`测试失败：${error?.message || '网络或权限错误'}`, 'warn');
-      App.aiCallAnalysis?.record?.({
-        source: 'config-test',
-        provider: config.aiProvider,
-        model,
-        endpoint: `${config.baseUrl}/chat/completions`,
-        pageId: 'ai-config',
-        startedAt: callStartedAt,
-        endedAt: new Date().toISOString(),
-        durationMs: (window.performance?.now?.() ?? Date.now()) - callStartMs,
-        status: 'failed',
-        error: error?.message || '网络或权限错误',
-        prompt: '配置中心连接测试',
-        requestMessages: testMessages,
-        requestMeta: {
-          messages: testMessages.length,
-          images: 0,
-          files: 0,
-          attachedData: false,
-          stream: false,
-        },
-      });
     } finally {
       clearTimeout(timeout);
     }
@@ -2543,8 +2088,8 @@ import { requestApimart } from '../../services/apimart-proxy';
 
   const clearConfig = async () => {
     const confirmed = await App.confirmDialog?.confirmDelete?.({
-      title: '清空本地配置',
-      message: '确认清空本地配置并恢复默认值？',
+      title: '清空云端配置',
+      message: '确认清空云端共享配置并恢复默认值？其他设备也会受到影响。',
       confirmText: '确认清空',
     });
     if (!confirmed) return;
@@ -2560,8 +2105,8 @@ import { requestApimart } from '../../services/apimart-proxy';
     lastLoadedOpenRouterApiKey = '';
     updateSavedState(false);
     syncPreview();
-    setStatus('已清空本地配置', 'warn');
-    App.notify?.warn?.('已清空本地配置', { key: 'config-clear' });
+    setStatus('已清空云端配置', 'warn');
+    App.notify?.warn?.('已清空云端配置', { key: 'config-clear' });
   };
 
   const syncConfigBindings = () => {
@@ -2609,21 +2154,12 @@ import { requestApimart } from '../../services/apimart-proxy';
       refs.httpReferer,
       refs.systemPrompt,
       refs.maxTokens,
-      getSearchRefs().provider,
-      getSearchRefs().apiKey,
-      getSearchRefs().depth,
-      getSearchRefs().maxResults,
-      getSearchRefs().topic,
       getApimartRefs().accessKey,
       getApimartRefs().baseUrl,
       getApimartRefs().imageModel,
       getApimartRefs().imageModelCustom,
       getApimartRefs().videoModel,
       getApimartRefs().videoModelCustom,
-      getAgentModelRefs().data,
-      getAgentModelRefs().spectrum,
-      getAgentModelRefs().dataCustom,
-      getAgentModelRefs().spectrumCustom,
       refs.ossBucket,
       refs.ossEndpoint,
       refs.ossObjectKey,
@@ -2638,13 +2174,6 @@ import { requestApimart } from '../../services/apimart-proxy';
           if (apimartRefs.imageModelCustom) apimartRefs.imageModelCustom.hidden = apimartRefs.imageModel?.value !== 'custom';
           if (apimartRefs.videoModelCustom) apimartRefs.videoModelCustom.hidden = apimartRefs.videoModel?.value !== 'custom';
         }
-        if (input === getAgentModelRefs().data || input === getAgentModelRefs().spectrum) {
-          const agentRefs = getAgentModelRefs();
-          if (agentRefs.dataCustom) agentRefs.dataCustom.hidden = agentRefs.data?.value !== 'custom';
-          if (agentRefs.spectrumCustom) agentRefs.spectrumCustom.hidden = agentRefs.spectrum?.value !== 'custom';
-        }
-        if (input === getAgentModelRefs().dataCustom) renderAgentModelDropdown('data');
-        if (input === getAgentModelRefs().spectrumCustom) renderAgentModelDropdown('spectrum');
         syncProviderUi();
         storeActiveProviderDraft();
         syncPreview();
@@ -2657,67 +2186,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       syncTemperatureLabel();
       syncPreview();
     });
-
-    [getAgentModelRefs().data, getAgentModelRefs().spectrum]
-      .filter(Boolean)
-      .forEach((select) => select.addEventListener('change', () => {
-        const agentRefs = getAgentModelRefs();
-        if (agentRefs.dataCustom) agentRefs.dataCustom.hidden = agentRefs.data?.value !== 'custom';
-        if (agentRefs.spectrumCustom) agentRefs.spectrumCustom.hidden = agentRefs.spectrum?.value !== 'custom';
-        renderAgentModelDropdown('data');
-        renderAgentModelDropdown('spectrum');
-        storeActiveProviderDraft();
-        syncPreview();
-      }));
-
-    [
-      ['data', getAgentModelRefs().dataTrigger],
-      ['spectrum', getAgentModelRefs().spectrumTrigger],
-    ].forEach(([role, trigger]: any[]) => {
-      trigger?.addEventListener('click', () => {
-        const agentRefs = getAgentModelRefs();
-        const isOpen = agentRefs[`${role}Dropdown`]?.classList.contains('is-open');
-        closeAgentDropdown(role === 'data' ? 'spectrum' : 'data');
-        renderAgentModelDropdown(role);
-        setAgentDropdownOpen(role, !isOpen);
-        requestAnimationFrame(() => {
-          agentRefs[`${role}Panel`]?.querySelector('.model-dropdown-search-input')?.focus();
-        });
-      });
-    });
-
-    [getAgentModelRefs().dataPanel, getAgentModelRefs().spectrumPanel]
-      .filter(Boolean)
-      .forEach((panel) => {
-        panel.addEventListener('input', (event) => {
-          const searchInput = event.target.closest('.model-dropdown-search-input[data-agent-model-search]');
-          if (!searchInput) return;
-          const role = searchInput.dataset.agentModelSearch;
-          agentModelSearchQuery[role] = searchInput.value || '';
-          renderAgentModelDropdown(role);
-          requestAnimationFrame(() => {
-            const nextInput = getAgentModelRefs()[`${role}Panel`]?.querySelector('.model-dropdown-search-input');
-            nextInput?.focus();
-            if (nextInput) {
-              const length = nextInput.value.length;
-              nextInput.setSelectionRange(length, length);
-            }
-          });
-        });
-
-        panel.addEventListener('click', (event) => {
-          const option = event.target.closest('.model-dropdown-option[data-agent-model-role]');
-          if (!option) return;
-          const role = option.dataset.agentModelRole;
-          const value = option.dataset.agentModelValue || '';
-          const agentRefs = getAgentModelRefs();
-          if (!agentRefs[role]) return;
-          agentRefs[role].value = value;
-          agentRefs[role].dispatchEvent(new Event('change', { bubbles: true }));
-          closeAgentDropdown(role);
-          agentRefs[`${role}Trigger`]?.focus();
-        });
-      });
 
     refs.openrouterBaseUrl?.addEventListener('blur', () => {
       if (!isLmStudioProvider(getAiProvider())) return;
@@ -2745,10 +2213,9 @@ import { requestApimart } from '../../services/apimart-proxy';
       const config = getFormConfig();
       const hasOssConfig = Boolean(config.ossBucket || config.ossEndpoint || config.ossObjectKey || config.ossAccessKeyId || config.ossAccessKeySecret);
       const hasApimartConfig = Boolean(config.apimartApiKey);
-      const hasSearchConfig = Boolean(config.searchApiKey || config.searchDepth !== constants.DEFAULT_CONFIG.searchDepth || config.searchTopic !== constants.DEFAULT_CONFIG.searchTopic || Number(config.searchMaxResults) !== Number(constants.DEFAULT_CONFIG.searchMaxResults));
-      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig && !hasSearchConfig) {
-        setStatus('请先填写模型 API 密钥、Tavily API Key、APIMart 密钥或 OSS 配置', 'warn');
-        App.notify?.warn?.('请先填写模型 API 密钥、Tavily API Key、APIMart 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
+      if (!isLmStudioProvider(config.aiProvider) && !config.apiKey && !hasOssConfig && !hasApimartConfig) {
+        setStatus('请先填写模型 API 密钥、APIMart 密钥或 OSS 配置', 'warn');
+        App.notify?.warn?.('请先填写模型 API 密钥、APIMart 密钥或 OSS 配置', { key: 'config-save-missing-secret' });
         return;
       }
       try {
@@ -2761,6 +2228,7 @@ import { requestApimart } from '../../services/apimart-proxy';
       clearOpenRouterModelRefreshTimer();
       if (!isLmStudioProvider(config.aiProvider) && config.apiKey) {
         fetchModels();
+        void readBalance();
       }
       updateSavedState(true);
       syncPreview();
@@ -2787,18 +2255,6 @@ import { requestApimart } from '../../services/apimart-proxy';
       );
       refs.ossSecretToggle.classList.toggle('is-visible', refs.ossAccessKeySecret.type === 'text');
       syncOssSecretToggleIcon();
-    });
-
-    getSearchRefs().apiKeyToggle?.addEventListener('click', () => {
-      const searchRefs = getSearchRefs();
-      if (!searchRefs.apiKey) return;
-      searchRefs.apiKey.type = searchRefs.apiKey.type === 'password' ? 'text' : 'password';
-      searchRefs.apiKeyToggle.setAttribute(
-        'aria-label',
-        searchRefs.apiKey.type === 'password' ? '显示 Tavily API 密钥' : '隐藏 Tavily API 密钥',
-      );
-      searchRefs.apiKeyToggle.classList.toggle('is-visible', searchRefs.apiKey.type === 'text');
-      syncSearchKeyToggleIcon();
     });
 
     getApimartRefs().accessKeyToggle?.addEventListener('click', () => {
@@ -2839,7 +2295,7 @@ import { requestApimart } from '../../services/apimart-proxy';
       requestAnimationFrame(() => {
         const nextInput = refs.modelSelectPanel?.querySelector('.model-dropdown-search-input');
         if (!nextInput) return;
-        nextInput.focus();
+        nextInput.focus({ preventScroll: true });
         nextInput.setSelectionRange(modelSearchQuery.length, modelSearchQuery.length);
       });
     });
@@ -2864,15 +2320,6 @@ import { requestApimart } from '../../services/apimart-proxy';
     document.addEventListener('click', (event) => {
       if (!refs.modelDropdown || refs.modelDropdown.contains(event.target)) return;
       closeModelDropdown();
-    });
-
-    document.addEventListener('click', (event) => {
-      const agentRefs = getAgentModelRefs();
-      ['data', 'spectrum'].forEach((role) => {
-        const dropdown = agentRefs[`${role}Dropdown`];
-        if (!dropdown || dropdown.contains(event.target)) return;
-        closeAgentDropdown(role);
-      });
     });
 
     refs.loadModelsBtn?.addEventListener('click', fetchModels);
@@ -2917,15 +2364,15 @@ import { requestApimart } from '../../services/apimart-proxy';
       `;
       configPage.appendChild(loadingShell);
     }
-    mountSearchConfigSection();
     mountApimartConfigSection();
-    mountAgentRoutingConfigSection();
     mountAssistantBehaviorControls();
     mountDeepSeekProviderOption();
     mountSiliconFlowProviderOption();
     mountBalanceControl();
     removeLegacyStorageConfigSection();
     mountConfigContentPanel();
+    stopDropdownPositioning?.();
+    if (refs.aiConfigForm) stopDropdownPositioning = watchConfigDropdowns(refs.aiConfigForm);
     App.customSelects?.enhanceAll?.();
     syncConfigBindings();
 
@@ -2941,26 +2388,36 @@ import { requestApimart } from '../../services/apimart-proxy';
 
     syncApiKeyToggleIcon();
     syncOssSecretToggleIcon();
-    syncSearchKeyToggleIcon();
     syncApimartKeyToggleIcon();
     syncTemperatureLabel();
     syncPreview();
     const initialConfig = getFormConfig();
     if (!isLmStudioProvider(initialConfig.aiProvider) && initialConfig.apiKey) {
+      void readBalance();
       window.setTimeout(() => {
         fetchModels();
       }, 0);
     } else {
       setStatus('配置已加载；模型列表和实时汇率将在手动刷新时联网获取。', 'success');
     }
+    window.clearInterval(modelSyncTimer);
+    modelSyncTimer = window.setInterval(() => {
+      const config = getFormConfig();
+      if (document.visibilityState === 'visible' && configPage?.classList.contains('active') && !isLmStudioProvider(config.aiProvider) && config.apiKey) void fetchModels();
+    }, 300000);
     configPage?.classList.add('config-ready');
   };
 
   const cleanup = () => {
+    window.clearInterval(modelSyncTimer);
+    modelRequestId += 1;
+    modelRequestController?.abort();
+    modelRequestController = null;
+    cancelBalanceRequest();
+    balanceConfigSignature = '';
+    stopDropdownPositioning?.();
     clearOpenRouterModelRefreshTimer();
     closeModelDropdown();
-    closeAgentDropdown('data');
-    closeAgentDropdown('spectrum');
   };
 
   App.config = {

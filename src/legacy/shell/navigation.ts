@@ -1,7 +1,8 @@
 ﻿import { getLegacyApp, getPublicApp } from '../core/app-context';
 import { setCloudBackedLocalStorageItem } from '../../services/cloud-sync';
 import { parseJsonOr } from '../../utils/json';
-import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
+import { ensureLegacyPageFeature, getLegacyPageFeature, isLegacyPageFeatureReady, preloadLegacyPageFeature } from '../bootstrap/feature-loader';
+import { afterPagePaint, showPageLoading } from '../../utils/pageLoading';
 
 (function () {
   'use strict';
@@ -11,7 +12,6 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
   const PublicApp = getPublicApp();
 
   const { refs, constants } = App;
-  let assistantFullscreenExitTimer = null;
   let collapsedNavFlyout = null;
   let collapsedNavFlyoutTimer = null;
   let draggedVisitedPageId = '';
@@ -20,9 +20,12 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
   let visitedDragPlaceholder = null;
   let suppressVisitedClick = false;
   let pageRenderSeq = 0;
+  let displayedPageId = '';
+  let renderedBusinessPageId = '';
+  let pageLoading: ReturnType<typeof showPageLoading> | null = null;
   let navigationBound = false;
   let navigationGlobalListenersBound = false;
-  const DEFAULT_PAGE_ID = 'dashboard';
+  const DEFAULT_PAGE_ID = 'property-analysis';
   const NAV_GROUP_STATE_KEY = 'sidebar-expanded-groups';
   const SIDEBAR_TRANSITION_MS = 520;
   const MAX_RECENT_PAGES = 8;
@@ -87,12 +90,13 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
 
   const isPageVisible = (pageId) => {
     if (!pageId) return true;
+    if (!isAvailablePageId(pageId)) return false;
     const canView = App.permissions?.canCurrentUserViewPage;
     return typeof canView === 'function' ? canView(pageId) !== false : true;
   };
 
   const getFallbackPageId = () => (
-    ['dashboard', 'ai-config', ...Object.keys(constants.PAGE_DEFS || {})].find((pageId) => isAvailablePageId(pageId) && isPageVisible(pageId))
+    ['property-analysis', 'ai-config', ...Object.keys(constants.PAGE_DEFS || {})].find((pageId) => isAvailablePageId(pageId) && isPageVisible(pageId))
     || DEFAULT_PAGE_ID
   );
 
@@ -124,6 +128,33 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
       const hidden = Boolean(pageButtons.length || groups.length) && !hasVisiblePage && !hasVisibleGroup;
       section.hidden = hidden;
       section.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+    });
+
+    // Flat navigation labels: in the collapsed rail the text is hidden, so show
+    // the page name in a lightweight flyout instead of clipping it in the rail.
+    document.querySelectorAll('.nav-item[data-page]').forEach((navItem) => {
+      if (navItem.dataset.labelFlyoutBound === '1') return;
+      navItem.dataset.labelFlyoutBound = '1';
+      const openLabelFlyout = () => {
+        if (!isSidebarCollapsed()) return;
+        const label = navItem.dataset.label || (navItem.querySelector('.nav-text')?.textContent || '').trim();
+        if (!label) return;
+        removeCollapsedNavFlyout();
+        const rect = navItem.getBoundingClientRect();
+        const flyout = document.createElement('div');
+        flyout.className = 'sidebar-flyout sidebar-flyout--label';
+        flyout.innerHTML = `<div class="sidebar-flyout-card"><span class="sidebar-flyout-label">${label}</span></div>`;
+        flyout.style.top = `${Math.round(rect.top + rect.height / 2)}px`;
+        flyout.style.left = `${Math.round(rect.right + 10)}px`;
+        flyout.addEventListener('mouseenter', clearCollapsedNavFlyoutTimer);
+        flyout.addEventListener('mouseleave', scheduleCollapsedNavFlyoutClose);
+        document.body.appendChild(flyout);
+        collapsedNavFlyout = flyout;
+      };
+      navItem.addEventListener('mouseenter', openLabelFlyout);
+      navItem.addEventListener('focus', openLabelFlyout);
+      navItem.addEventListener('mouseleave', scheduleCollapsedNavFlyoutClose);
+      navItem.addEventListener('blur', scheduleCollapsedNavFlyoutClose);
     });
 
     const currentPage = localStorage.getItem(constants.NAV_PAGE_KEY) || '';
@@ -233,110 +264,6 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     };
     refs.sidebarTransitionTimer = animations?.schedule?.(SIDEBAR_TRANSITION_MS, clearTransitionState)
       ?? window.setTimeout(clearTransitionState, SIDEBAR_TRANSITION_MS);
-  };
-
-  const updateAssistantToggle = () => {
-    if (!refs.askAiToggle || !refs.shell) return;
-    const collapsed = refs.shell.classList.contains('assistant-collapsed');
-    refs.askAiToggle.setAttribute('aria-expanded', String(!collapsed));
-    refs.askAiToggle.setAttribute('aria-label', collapsed ? '展开 Gjun AI' : '收起 Gjun AI');
-  };
-
-  const updateAssistantFullscreenToggle = () => {
-    if (!refs.assistantExpandBtn || !refs.shell) return;
-    const fullscreen = refs.shell.classList.contains('assistant-fullscreen');
-    refs.assistantExpandBtn.setAttribute('aria-label', fullscreen ? '退出全屏' : '展开聊天区');
-  };
-
-  const syncAssistantCollapsedAttr = (collapsed) => {
-    document.documentElement.dataset.assistantCollapsed = collapsed ? '1' : '0';
-  };
-
-  const syncAssistantFullscreenAttr = (fullscreen) => {
-    document.documentElement.dataset.assistantFullscreen = fullscreen ? '1' : '0';
-  };
-
-  const clearAssistantFullscreenExitTimer = () => {
-    if (assistantFullscreenExitTimer) {
-      PublicApp?.animations?.clearDelay?.(assistantFullscreenExitTimer) ?? window.clearTimeout(assistantFullscreenExitTimer);
-      assistantFullscreenExitTimer = null;
-    }
-  };
-
-  const setAssistantCollapsed = (collapsed) => {
-    if (!refs.shell) return;
-    clearAssistantFullscreenExitTimer();
-    if (!collapsed) {
-      removeCollapsedNavFlyout();
-    }
-    if (collapsed) {
-      refs.shell.classList.remove('assistant-fullscreen');
-      refs.shell.classList.remove('assistant-fullscreen-open');
-      syncAssistantFullscreenAttr(false);
-    }
-    refs.shell.classList.toggle('assistant-collapsed', collapsed);
-    setCloudBackedLocalStorageItem(constants.ASSISTANT_STATE_KEY, collapsed ? '1' : '0');
-    syncAssistantCollapsedAttr(Boolean(collapsed));
-    updateAssistantToggle();
-    updateAssistantFullscreenToggle();
-  };
-
-  const setAssistantFullscreen = (fullscreen) => {
-    if (!refs.shell) return;
-    clearAssistantFullscreenExitTimer();
-    removeCollapsedNavFlyout();
-
-    if (fullscreen) {
-      refs.shell.classList.remove('assistant-collapsed');
-      refs.shell.classList.add('assistant-fullscreen');
-      refs.shell.classList.remove('assistant-fullscreen-open');
-      syncAssistantCollapsedAttr(false);
-      syncAssistantFullscreenAttr(true);
-      setCloudBackedLocalStorageItem(constants.ASSISTANT_STATE_KEY, '0');
-      updateAssistantToggle();
-      updateAssistantFullscreenToggle();
-      (PublicApp?.animations?.doubleFrame ?? ((callback) => requestAnimationFrame(() => requestAnimationFrame(callback))))(() => {
-        if (!refs.shell?.classList.contains('assistant-fullscreen') || assistantFullscreenExitTimer) return;
-        void refs.shell?.offsetWidth;
-        refs.shell?.classList.add('assistant-fullscreen-open');
-        App?.chat?.renderChat?.();
-      });
-      return;
-    }
-
-    refs.shell.classList.remove('assistant-fullscreen-open');
-    syncAssistantFullscreenAttr(false);
-    assistantFullscreenExitTimer = PublicApp?.animations?.schedule?.(380, () => {
-      refs.shell?.classList.remove('assistant-fullscreen');
-      refs.shell?.classList.remove('assistant-fullscreen-open');
-      updateAssistantFullscreenToggle();
-      App?.chat?.renderChat?.();
-      assistantFullscreenExitTimer = null;
-    }) ?? window.setTimeout(() => {
-      refs.shell?.classList.remove('assistant-fullscreen');
-      refs.shell?.classList.remove('assistant-fullscreen-open');
-      updateAssistantFullscreenToggle();
-      App?.chat?.renderChat?.();
-      assistantFullscreenExitTimer = null;
-    }, 380);
-  };
-
-  const toggleAssistantFullscreen = () => {
-    if (!refs.shell) return;
-    const fullscreen = refs.shell.classList.contains('assistant-fullscreen');
-    setAssistantFullscreen(!fullscreen);
-  };
-
-  const handleAssistantExpandClick = () => {
-    toggleAssistantFullscreen();
-  };
-
-  const handleAssistantCloseClick = () => {
-    if (refs.shell?.classList.contains('assistant-fullscreen')) {
-      setAssistantFullscreen(false);
-      return;
-    }
-    setAssistantCollapsed(true);
   };
 
   const getNavLabel = (button) => {
@@ -715,90 +642,89 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     }
   };
 
+  const activatePageSection = (pageId: string) => {
+    const target = document.querySelector(`[data-page-section="${pageId}"]`) || refs.placeholderPageSection;
+    document.querySelectorAll('.page-section').forEach((section) => {
+      section.classList.toggle('active', section === target);
+    });
+    refs.shell?.classList.toggle('page-other', pageId !== 'ai-config');
+    return target;
+  };
+
   const showPage = async (pageId, options = {} as any) => {
-    const renderSeq = ++pageRenderSeq;
     pageId = isAvailablePageId(pageId) ? pageId : DEFAULT_PAGE_ID;
     if (!isPageVisible(pageId)) pageId = getFallbackPageId();
-    await ensureLegacyPageFeature(pageId);
-    if (renderSeq !== pageRenderSeq) return;
-    refs.dataRecognitionPageSection = document.querySelector('[data-page-section="data-recognition"]');
-    refs.inspectionReportsPageSection = document.querySelector('[data-page-section="inspection-reports"]');
-    refs.navPageButtons = document.querySelectorAll('[data-page]');
+    if (pageId === displayedPageId && !pageLoading && !options.force) return;
+    const renderSeq = ++pageRenderSeq;
     const { scrollTop = true, trackRecent = true } = options;
-    const isAiPage = pageId === 'ai-config';
-    const isAnalysisPage = pageId === 'property-analysis';
-    const isSpectrumPage = pageId === 'spectrum-analysis';
-    const isDataRecognitionPage = pageId === 'data-recognition';
-    const isInspectionReportsPage = pageId === 'inspection-reports';
-    const isImageCutoutPage = pageId === 'image-cutout';
-    const isThemeSettingsPage = pageId === 'theme-settings';
-    const isProjectSkillPage = pageId === 'project-skills';
-    const isApimartMediaPage = pageId === 'apimart-media';
-    const isAiCallAnalysisPage = pageId === 'ai-call-analysis';
+    const content = document.querySelector<HTMLElement>('.content');
+    const previousScrollTop = content?.scrollTop || 0;
+    pageLoading?.finish();
+    pageLoading = null;
+    refs.navPageButtons = document.querySelectorAll('[data-page]');
     const activeButton = document.querySelector(`[data-page="${pageId}"]`);
-    const label = getNavLabel(activeButton);
-    const def = getPageDefinition(pageId, label);
-
-    refs.aiPageSection?.classList.toggle('active', isAiPage);
-    refs.propertyAnalysisPageSection?.classList.toggle('active', isAnalysisPage);
-    refs.spectrumAnalysisPageSection?.classList.toggle('active', isSpectrumPage);
-    refs.dataRecognitionPageSection?.classList.toggle('active', isDataRecognitionPage);
-    refs.inspectionReportsPageSection?.classList.toggle('active', isInspectionReportsPage);
-    refs.imageCutoutPageSection?.classList.toggle('active', isImageCutoutPage);
-    refs.themeSettingsPageSection?.classList.toggle('active', isThemeSettingsPage);
-    refs.projectSkillPageSection?.classList.toggle('active', isProjectSkillPage);
-    refs.apimartMediaPageSection?.classList.toggle('active', isApimartMediaPage);
-    refs.aiCallAnalysisPageSection?.classList.toggle('active', isAiCallAnalysisPage);
-    refs.placeholderPageSection?.classList.toggle('active', !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage);
-    refs.shell?.classList.toggle('page-other', !isAiPage);
-    removeCollapsedNavFlyout();
-
-    const isBusinessPage = !isAiPage && !isAnalysisPage && !isSpectrumPage && !isDataRecognitionPage && !isInspectionReportsPage && !isImageCutoutPage && !isThemeSettingsPage && !isProjectSkillPage && !isApimartMediaPage && !isAiCallAnalysisPage;
-
-    if (isBusinessPage) {
-      refreshNavAccess({ redirect: false });
-    }
-    if (isBusinessPage && renderSeq === pageRenderSeq) {
-      App.businessPages?.render?.(pageId, def);
-    }
-    if (isApimartMediaPage) {
-      App.apimartMedia?.render?.(false);
-    }
-    if (isAiCallAnalysisPage) {
-      App.aiCallAnalysis?.render?.();
-    }
-    if (isAnalysisPage) {
-      App.propertyAnalysis?.ensureLoaded?.();
-    }
-
+    const def = getPageDefinition(pageId, getNavLabel(activeButton));
+    const breadcrumb = document.getElementById('workspaceBreadcrumb');
+    if (breadcrumb) breadcrumb.textContent = def.title || '';
+    document.title = `${def.title} · 广俊塑料科技`;
+    getNavPageButtons().forEach((button) => {
+      if (button.dataset.page === pageId) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
     setActiveNavPage(pageId);
     localStorage.setItem(constants.NAV_PAGE_KEY, pageId);
-    if (trackRecent) {
-      trackRecentPage(pageId);
-    }
+    if (trackRecent) trackRecentPage(pageId);
     renderRecentPages(pageId);
-
-    if (scrollTop) {
-      (PublicApp?.animations?.nextFrame ?? ((callback) => requestAnimationFrame(callback)))(() => {
-        const content = document.querySelector('.content');
-        content?.scrollTo({ top: 0, behavior: 'smooth' });
-      });
+    setMobileSidebarOpen(false);
+    removeCollapsedNavFlyout();
+    // Switch the destination immediately, rather than leaving the old page on screen
+    // until downloads / network reads finish. Newly injected sections are synced below.
+    activatePageSection(pageId);
+    const featureWasReady = isLegacyPageFeatureReady(pageId);
+    const needsBusinessRender = getLegacyPageFeature(pageId) === 'officeRecords'
+      && (renderedBusinessPageId !== pageId || !refs.businessPageContent?.firstElementChild);
+    try {
+      if (!featureWasReady || needsBusinessRender || options.force) {
+        if (content) pageLoading = showPageLoading(content, def.title, () => {
+          void showPage(pageId, { ...options, trackRecent: false, force: true });
+        });
+        // A cached import may initialise synchronously: give the loading state a paint first.
+        await afterPagePaint();
+        if (renderSeq !== pageRenderSeq) return;
+        await ensureLegacyPageFeature(pageId);
+        if (renderSeq !== pageRenderSeq) return;
+      }
+      refs.inspectionReportsPageSection = document.querySelector('[data-page-section="inspection-reports"]');
+      refs.navPageButtons = document.querySelectorAll('[data-page]');
+      const activeSection = activatePageSection(pageId);
+      const isBusinessPage = activeSection === refs.placeholderPageSection;
+      if (isBusinessPage) refreshNavAccess({ redirect: false });
+      if (isBusinessPage && (needsBusinessRender || options.force)) {
+        await App.officeRecords?.render?.(pageId, def);
+        if (renderSeq !== pageRenderSeq) return;
+        renderedBusinessPageId = pageId;
+      }
+      // Initial init now waits for data itself; only revisit the recovery check on warm entries.
+      if (pageId === 'property-analysis' && featureWasReady) App.propertyAnalysis?.ensureLoaded?.();
+      if (renderSeq !== pageRenderSeq) return;
+      pageLoading?.finish();
+      pageLoading = null;
+      displayedPageId = pageId;
+      activeSection?.classList.add('is-navigation-ready');
+      if (content) content.scrollTop = scrollTop ? 0 : previousScrollTop;
+    } catch (error) {
+      if (renderSeq !== pageRenderSeq) return;
+      console.error('[navigation] Failed to load page:', pageId, error);
+      pageLoading?.fail();
     }
   };
 
   const restoreLayoutState = () => {
     const sidebarCollapsed = window.innerWidth <= 980 || localStorage.getItem(constants.SIDEBAR_STATE_KEY) === '1';
-    const assistantCollapsed = localStorage.getItem(constants.ASSISTANT_STATE_KEY) === '1';
-
     refs.shell?.classList.toggle('sidebar-collapsed', sidebarCollapsed);
-    refs.shell?.classList.toggle('assistant-collapsed', assistantCollapsed);
     syncSidebarCollapsedAttr(sidebarCollapsed);
-    syncAssistantCollapsedAttr(assistantCollapsed);
-    syncAssistantFullscreenAttr(false);
     setMobileSidebarOpen(false);
     updateSidebarToggle(sidebarCollapsed);
-    updateAssistantToggle();
-    updateAssistantFullscreenToggle();
   };
 
   const handleNavigationStorage = (event) => {
@@ -821,7 +747,7 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
       renderRecentPages(localStorage.getItem(constants.NAV_PAGE_KEY) || currentPage);
     }
 
-    if (key === constants.SIDEBAR_STATE_KEY || key === constants.ASSISTANT_STATE_KEY || key === null) {
+    if (key === constants.SIDEBAR_STATE_KEY || key === null) {
       restoreLayoutState();
       removeCollapsedNavFlyout();
     }
@@ -887,6 +813,13 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     updateSidebarToggle(collapsed);
   };
 
+  const handleNavigationIntent = (event: Event) => {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-page]') : null;
+    const pageId = target?.dataset.page;
+    if (!pageId || target?.hidden || !isPageVisible(pageId)) return;
+    preloadLegacyPageFeature(pageId);
+  };
+
   const cleanupNavigationGlobals = () => {
     if (!navigationGlobalListenersBound) return;
     window.removeEventListener('storage', handleNavigationStorage);
@@ -894,6 +827,9 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     window.removeEventListener('scroll', removeCollapsedNavFlyout, true);
     document.removeEventListener('keydown', handleNavigationKeydown);
     document.removeEventListener('click', handleNavigationDocumentClick);
+    document.removeEventListener('pointerover', handleNavigationIntent);
+    document.removeEventListener('focusin', handleNavigationIntent);
+    document.removeEventListener('touchstart', handleNavigationIntent);
     navigationGlobalListenersBound = false;
   };
 
@@ -904,15 +840,19 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     window.addEventListener('scroll', removeCollapsedNavFlyout, true);
     document.addEventListener('keydown', handleNavigationKeydown);
     document.addEventListener('click', handleNavigationDocumentClick);
+    document.addEventListener('pointerover', handleNavigationIntent, { passive: true });
+    document.addEventListener('focusin', handleNavigationIntent);
+    document.addEventListener('touchstart', handleNavigationIntent, { passive: true });
     navigationGlobalListenersBound = true;
   };
 
   const cleanupNavigation = () => {
     pageRenderSeq += 1;
+    pageLoading?.finish();
+    pageLoading = null;
+    displayedPageId = '';
+    renderedBusinessPageId = '';
     navigationBound = false;
-    refs.assistantExpandBtn?.removeEventListener('click', handleAssistantExpandClick);
-    refs.assistantCloseBtn?.removeEventListener('click', handleAssistantCloseClick);
-    clearAssistantFullscreenExitTimer();
     cleanupNavigationGlobals();
     cleanupVisitedDrag();
     removeCollapsedNavFlyout();
@@ -996,24 +936,6 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
       });
     });
 
-    if (refs.askAiToggle) {
-      updateAssistantToggle();
-      refs.askAiToggle.addEventListener('click', () => {
-        if (window.innerWidth <= 720 && isMobileSidebarOpen()) {
-          setAssistantCollapsed(false);
-          setMobileSidebarOpen(false);
-          return;
-        }
-        const collapsed = !refs.shell?.classList.contains('assistant-collapsed');
-        setAssistantCollapsed(Boolean(collapsed));
-      });
-    }
-
-    updateAssistantFullscreenToggle();
-
-    refs.assistantExpandBtn?.addEventListener('click', handleAssistantExpandClick);
-    refs.assistantCloseBtn?.addEventListener('click', handleAssistantCloseClick);
-
     bindTopVisitedDragging();
     refs.topVisitedPages?.addEventListener('click', (event) => {
       if (suppressVisitedClick) return;
@@ -1049,8 +971,6 @@ import { ensureLegacyPageFeature } from '../bootstrap/feature-loader';
     showPage,
     refreshAccess: refreshNavAccess,
     restoreLayoutState,
-    setAssistantCollapsed,
     updateSidebarToggle,
-    updateAssistantToggle,
   };
 })();

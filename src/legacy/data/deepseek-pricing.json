@@ -1,0 +1,47 @@
+{
+  "provider": "deepseek",
+  "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+  "fetchedAt": "2026-10-16T00:16:21.080Z",
+  "models": [
+    {
+      "id": "deepseek-flash",
+      "aliases": [
+        "DeepSeek-V4.1-Flash",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp"
+      ],
+      "contextLength": 1000000,
+      "pricing": {
+        "cachedInputCnyPerMillion": 0.02,
+        "peak": {
+          "cachedInputCnyPerMillion": 0.04,
+          "inputCnyPerMillion": 2,
+          "outputCnyPerMillion": 8
+        },
+        "inputCnyPerMillion": 1,
+        "outputCnyPerMillion": 4,
+        "currency": "CNY",
+        "unit": "million_tokens"
+      }
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "aliases": [
+        "DeepSeek-V4-Pro-0813"
+      ],
+      "contextLength": 1000000,
+      "pricing": {
+        "cachedInputCnyPerMillion": 0.15,
+        "peak": {
+          "cachedInputCnyPerMillion": 0.3,
+          "inputCnyPerMillion": 9,
+          "outputCnyPerMillion": 27
+        },
+        "inputCnyPerMillion": 4.5,
+        "outputCnyPerMillion": 13.5,
+        "currency": "CNY",
+        "unit": "million_tokens"
+      }
+    }
+  ]
+}

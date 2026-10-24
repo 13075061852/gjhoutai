@@ -1,89 +1,101 @@
 import { getLegacyApp } from '../core/app-context';
 
 export type LegacyPageFeature =
-  | 'dashboard'
-  | 'businessPages'
+  | 'officeRecords'
   | 'propertyAnalysis'
   | 'spectrumAnalysis'
-  | 'dataRecognition'
   | 'inspectionReports'
-  | 'imageCutout'
+  | 'aiAnalysis'
   | 'config'
-  | 'themeSettings'
-  | 'projectSkills'
-  | 'apimartMedia'
-  | 'aiCallAnalysis';
+  | 'themeSettings';
 
 const dedicatedPageFeatures: Record<string, LegacyPageFeature> = {
-  dashboard: 'dashboard',
   'property-analysis': 'propertyAnalysis',
   'spectrum-analysis': 'spectrumAnalysis',
-  'data-recognition': 'dataRecognition',
+  'office-records': 'officeRecords',
   'inspection-reports': 'inspectionReports',
-  'image-cutout': 'imageCutout',
+  'ai-analysis': 'aiAnalysis',
   'ai-config': 'config',
   'theme-settings': 'themeSettings',
-  'project-skills': 'projectSkills',
-  'apimart-media': 'apimartMedia',
-  'ai-call-analysis': 'aiCallAnalysis',
 };
 
 const featureImports: Record<LegacyPageFeature, () => Promise<unknown>> = {
-  dashboard: () => import('../features/business-pages/dashboard-page'),
-  businessPages: async () => {
-    const dashboardApi = getLegacyApp()?.businessPages as (LegacyLifecycleModule & { dashboardOnly?: boolean }) | undefined;
-    if (dashboardApi?.dashboardOnly) dashboardApi.cleanup?.();
-    await import('../features/business-pages');
-  },
+  officeRecords: () => import('../features/office-records'),
   propertyAnalysis: () => import('../features/property-analysis'),
   spectrumAnalysis: () => import('../features/spectrum-analysis'),
-  dataRecognition: () => import('../features/data-recognition'),
   inspectionReports: () => import('../features/inspection-reports'),
-  imageCutout: () => import('../features/image-cutout'),
+  aiAnalysis: () => import('../features/ai-analysis'),
   config: () => import('../features/config'),
   themeSettings: () => import('../features/theme-settings'),
-  projectSkills: () => import('../features/project-skills'),
-  apimartMedia: () => import('../features/apimart-media'),
-  aiCallAnalysis: () => import('../features/ai-call-analysis'),
 };
 
 const featurePromises = new Map<LegacyPageFeature, Promise<void>>();
+const modulePromises = new Map<LegacyPageFeature, Promise<unknown>>();
+const readyFeatures = new Set<LegacyPageFeature>();
+let featureGeneration = 0;
 
-export function resetLegacyPageFeatures(): void {
-  featurePromises.clear();
+export function isLegacyPageFeatureReady(pageId: string): boolean {
+  const feature = getLegacyPageFeature(pageId);
+  return feature !== null && readyFeatures.has(feature);
 }
 
-export function getLegacyPageFeature(pageId: string): LegacyPageFeature {
-  return dedicatedPageFeatures[pageId] || 'businessPages';
+function loadFeatureModule(feature: LegacyPageFeature): Promise<unknown> {
+  const existing = modulePromises.get(feature);
+  if (existing) return existing;
+  const loading = featureImports[feature]().catch((error) => {
+    modulePromises.delete(feature);
+    throw error;
+  });
+  modulePromises.set(feature, loading);
+  return loading;
+}
+
+/** Download only on navigation intent, never initialise or fetch another page's business data. */
+export function preloadLegacyPageFeature(pageId: string): void {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || '')) return;
+  const feature = getLegacyPageFeature(pageId);
+  if (!feature || feature === 'officeRecords') return;
+  void loadFeatureModule(feature).catch(() => {});
+}
+
+export function resetLegacyPageFeatures(): void {
+  featureGeneration += 1;
+  featurePromises.clear();
+  readyFeatures.clear();
+}
+
+export function getLegacyPageFeature(pageId: string): LegacyPageFeature | null {
+  return dedicatedPageFeatures[pageId] || null;
 }
 
 async function initializeFeature(feature: LegacyPageFeature): Promise<void> {
   const App = getLegacyApp();
   switch (feature) {
-    case 'dashboard': break;
+    case 'officeRecords': await App?.officeRecords?.init?.(); break;
     case 'propertyAnalysis': await App?.propertyAnalysis?.init?.(); break;
     case 'spectrumAnalysis': await App?.spectrumAnalysis?.init?.(); break;
-    case 'dataRecognition': await App?.dataRecognition?.init?.(); break;
     case 'inspectionReports': await App?.inspectionReports?.init?.(); break;
-    case 'imageCutout': await App?.imageCutout?.init?.(); break;
+    case 'aiAnalysis': await App?.aiAnalysis?.init?.(); break;
     case 'config': await App?.config?.init?.(); break;
     case 'themeSettings': await App?.themeSettings?.init?.(); break;
-    case 'projectSkills': await App?.projectSkills?.init?.(); break;
-    case 'apimartMedia': await App?.apimartMedia?.init?.(); break;
-    case 'aiCallAnalysis': await App?.aiCallAnalysis?.init?.(); break;
-    case 'businessPages': await App?.businessPages?.init?.(); break;
   }
 }
 
 export function ensureLegacyPageFeature(pageId: string): Promise<void> {
   const feature = getLegacyPageFeature(pageId);
+  if (!feature) return Promise.reject(new Error('页面不在当前项目范围内'));
   const existing = featurePromises.get(feature);
   if (existing) return existing;
 
-  const loading = featureImports[feature]()
-    .then(() => initializeFeature(feature))
+  const generation = featureGeneration;
+  const loading = loadFeatureModule(feature)
+    .then(() => generation === featureGeneration ? initializeFeature(feature) : undefined)
+    .then(() => {
+      if (generation === featureGeneration) readyFeatures.add(feature);
+    })
     .catch((error) => {
-      featurePromises.delete(feature);
+      if (generation === featureGeneration) featurePromises.delete(feature);
       throw error;
     });
   featurePromises.set(feature, loading);

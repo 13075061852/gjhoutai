@@ -1,0 +1,172 @@
+/* Scoped office layout, preserving the deployed seven-page workspace geometry. */
+.app .shell .biz-office-page { --office-record-dialog-width: 760px; gap: 12px; min-width: 0; min-height: 0; }
+.app .shell .biz-office-page .biz-office-table-panel { box-shadow: none; background: 0 0; border: 0; border-radius: 0; gap: 0; min-width: 0; padding: 0; overflow: hidden; }
+.app .shell .biz-office-page .biz-office-table-head { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; flex: none; min-height: 0; padding: 12px; }
+.app .shell .biz-office-page .biz-office-table-actions.biz-formula-table-actions { grid-template-columns: 300px minmax(0, 1fr) auto; gap: 10px; min-width: 0; display: grid; }
+.app .shell .biz-office-page .biz-office-tabs { background: var(--surface-2); border: 0; border-radius: 6px; gap: 4px; width: 100%; height: 38px; min-height: 38px; padding: 3px; }
+.app .shell .biz-office-page .biz-office-tabs:before { display: none; }
+.app .shell .biz-office-page .biz-office-tabs button { color: var(--text-2); box-shadow: none; border: 1px solid #0000; border-radius: 5px; font-size: 12px; font-weight: 500; transition: color .16s, background-color .16s, border-color .16s; }
+.app .shell .biz-office-page .biz-office-tabs button:hover { background: var(--surface); color: var(--accent); }
+.app .shell .biz-office-page .biz-office-tabs button.is-active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.app .shell .biz-office-page .biz-office-search { background: var(--surface-2); min-width: 0; height: 38px; min-height: 38px; box-shadow: none; border-radius: 6px; }
+.app .shell .biz-office-page .biz-office-search input { width: 100%; min-width: 0; font-size: 12px; }
+.app .shell .biz-office-page .biz-office-search:focus-within { border-color: var(--accent); }
+.app .shell .biz-office-page .biz-formula-new-btn { width: auto; min-width: 80px; height: 38px; min-height: 38px; box-shadow: none; border-radius: 6px; padding: 0 14px; font-size: 12px; transform: none; }
+.app .shell .biz-office-page .biz-office-record-list { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; background: 0 0; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-items: start; gap: 12px; padding: 12px 4px 12px 0; scroll-padding-block: 12px; }
+.app .shell .biz-office-page .biz-office-record-card { border: 1px solid var(--border); background: var(--surface); box-shadow: none; border-radius: 8px; gap: 0; padding: 0; overflow: hidden; }
+.app .shell .biz-office-page .biz-office-record-top { align-items: flex-start; gap: 10px; padding: 12px; }
+.app .shell .biz-office-page .biz-office-record-card[data-office-view], .app .shell .biz-office-page .biz-office-record-card[data-ash-view] { cursor: pointer; }
+.app .shell .biz-office-page .biz-office-record-card:hover { border-color: var(--accent); }
+.app .shell .biz-office-page .biz-office-card-open { min-width: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; background: 0 0; border: 0; flex-direction: column; flex: 1 1 0; align-items: flex-start; gap: 8px; padding: 0; display: flex; }
+.app .shell .biz-office-page .biz-office-card-open strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 600; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-card-summary { color: var(--muted); overflow-wrap: anywhere; font-size: 12px; line-height: 18px; }
+.app .shell .biz-office-page .biz-office-card-hint { color: var(--accent); font-size: 12px; line-height: 18px; }
+.app .shell .biz-office-page .biz-office-details-overlay { z-index: 1000; background: #152e3866; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px; display: grid; position: fixed; inset: 0; }
+.app .shell .biz-office-page .biz-office-details-dialog { width: min(var(--office-record-dialog-width), 100%); box-sizing: border-box; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; flex-direction: column; min-width: 0; max-width: 100%; max-height: calc(100dvh - 40px); padding: 0; display: flex; overflow: hidden; }
+.app .shell .biz-office-page .biz-office-details-head { justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; display: flex; }
+.app .shell .biz-office-page .biz-office-details-head>div { min-width: 0; }
+.app .shell .biz-office-page .biz-office-details-actions { flex: none; align-items: center; gap: 8px; display: flex; }
+.app .shell .biz-office-page .biz-office-details-actions button { white-space: nowrap; }
+.app .shell .biz-office-page .biz-office-details-actions [aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.app .shell .biz-office-page :is(.biz-office-details-overlay, .biz-office-modal)[popover] { box-sizing: border-box; background: 0 0; border: 0; border-radius: 0; max-width: none; max-height: none; margin: 0; }
+.app .shell .biz-office-page :is(.biz-office-details-overlay, .biz-office-modal)[popover]::backdrop { background: #152e3866; }
+.app .shell .biz-office-page .biz-office-details-overlay.is-landscape { box-sizing: border-box; width: 100dvw; height: 100dvh; padding: 12px; }
+.app .shell .biz-office-page .biz-office-details-overlay.is-landscape .biz-office-details-dialog { width: min(1120px, 100%); height: 100%; max-height: 100%; }
+.app .shell .biz-office-page .biz-office-details-overlay.is-landscape .biz-office-details-head { flex: none; gap: 10px; padding: 10px 14px; }
+.app .shell .biz-office-page .biz-office-details-overlay.is-landscape .biz-office-details-head h2 { margin-top: 2px; font-size: 14px; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-details-overlay.is-landscape .biz-office-details-body { flex: 1 1 0; padding: 0 14px 14px; }
+@media (orientation:portrait) {
+  .app .shell .biz-office-page .biz-office-details-overlay.is-landscape { width: 100dvh; height: 100dvw; padding: max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-top)); inset: 50% auto auto 50%; transform: translate(-50%, -50%)rotate(90deg); }
+}
+.app .shell .biz-office-page .biz-office-details-head span { color: var(--muted); font-size: 12px; }
+.app .shell .biz-office-page .biz-office-details-head h2 { overflow-wrap: anywhere; margin: 4px 0 0; font-size: 16px; font-weight: 600; line-height: 24px; }
+.app .shell .biz-office-page .biz-office-details-head button { border: 1px solid var(--border); background: var(--surface-2); height: 32px; color: var(--text-2); cursor: pointer; border-radius: 6px; flex: none; padding: 0 12px; font-size: 12px; }
+.app .shell .biz-office-page .biz-office-details-body { min-height: 0; padding: 0 20px 20px; overflow: auto; }
+.app .shell .biz-office-page .biz-office-details-body .biz-office-table-summary { margin: 0; }
+.app .shell .biz-office-page .biz-office-details-meta { color: var(--muted); margin: 0 0 12px; font-size: 12px; }
+.app .shell .biz-office-page .is-ash-details .biz-office-table-summary table { table-layout: fixed; width: 100%; min-width: 576px; }
+.app .shell .biz-office-page .is-ash-details .biz-office-table-summary :is(th, td) { border-right: 1px solid var(--border); min-width: 0; height: 36px; padding: 6px; font-size: 12px; }
+.app .shell .biz-office-page .is-ash-details .biz-office-table-summary :is(th, td):first-child { width: 48px; }
+.app .shell .biz-office-page .is-ash-details .biz-office-table-summary :is(th, td):last-child { border-right: 0; }
+.app .shell .biz-office-page .biz-office-record-title { flex: 1 1 0; min-width: 0; }
+.app .shell .biz-office-page .biz-office-record-title strong { max-width: 100%; color: var(--text); font-size: 13px; font-weight: 600; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-record-actions { gap: 6px; }
+.app .shell .biz-office-page .biz-office-record-actions button { background: var(--surface); width: 32px; min-width: 32px; height: 32px; min-height: 32px; box-shadow: none; border-radius: 6px; flex-basis: 32px; transform: none; }
+.app .shell .biz-office-page .biz-office-table-summary { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; border-radius: 6px; width: auto; margin: 0 12px 12px; }
+.app .shell .biz-office-page .biz-office-table-summary table { border-radius: 6px; }
+.app .shell .biz-office-page .biz-office-table-summary :is(th, td) { font-variant-numeric: tabular-nums; border-right: 0; height: 34px; padding: 6px 10px; font-size: 12px; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-table-summary th { background: var(--surface-2); color: var(--text-2); font-weight: 600; }
+.app .shell .biz-office-page .biz-office-table-summary tbody tr:hover td { background: var(--surface-2); }
+.app .shell .biz-office-page .biz-office-record-list:has(>.biz-office-empty-list) { flex-direction: column; align-items: stretch; display: flex; }
+.app .shell .biz-office-page .biz-office-empty-list { border: 0; border-radius: 8px; flex: 1 1 0; grid-column: 1/-1; align-self: stretch; min-height: 0; padding: 24px; }
+.app .shell .biz-office-page .biz-office-pagination { background: 0 0; border: 0; min-height: 40px; padding: 8px 0 0; }
+.app .shell .biz-office-page .biz-office-pagination .biz-formula-pagination-actions { flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: 12px; width: 100%; margin: 0; display: flex; }
+.app .shell .biz-office-page .biz-formula-page-size { font-weight: 400; }
+.app .shell .biz-office-page [data-ash-modal] .biz-office-dialog { width: min(var(--office-record-dialog-width), calc(100vw - 32px)); box-sizing: border-box; min-width: 0; max-width: 100%; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll table { table-layout: fixed; width: 100%; min-width: 620px; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll :is(th, td) { box-sizing: border-box; width: auto; min-width: 0; max-width: none; padding: 5px; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll :is(th, td):first-child { width: 48px; min-width: 0; max-width: none; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll :is(th, td):last-child { width: 44px; min-width: 0; max-width: none; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-ash-index-column { width: 48px; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-ash-action-column { width: 44px; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll th { white-space: normal; font-size: 12px; line-height: 20px; }
+.app .shell .biz-office-page .biz-ash-detail-table .biz-office-detail-scroll td input { box-sizing: border-box; text-align: center; font-variant-numeric: tabular-nums; width: 100%; min-width: 0; height: 32px; padding: 0 6px; font-size: 13px; font-weight: 500; }
+@media (min-width:1101px) {
+  .app .shell .biz-office-page .biz-office-record-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app .shell .biz-office-page .biz-office-pagination .biz-formula-pagination-actions { gap: 20px; width: auto; margin-left: auto; }
+}
+@media (min-width:601px) and (max-width:1100px) {
+  .app .shell .biz-office-page .biz-office-record-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width:900px) {
+  .app .shell .biz-office-page .biz-office-table-actions.biz-formula-table-actions { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .app .shell .biz-office-page .biz-office-tabs { grid-area: 1/1/auto/-1; }
+  .app .shell .biz-office-page .biz-office-table-actions>.biz-office-search { grid-area: 2/1; width: 100%; min-width: 0; }
+  .app .shell .biz-office-page .biz-office-table-actions>.biz-formula-new-btn { grid-area: 2/2; width: auto; min-width: 80px; margin: 0; }
+}
+.app .shell .biz-office-page .biz-office-modal .biz-inventory-dialog-head { background: var(--surface); border-bottom: 0; gap: 12px; padding: 14px 16px; }
+.app .shell .biz-office-page .biz-office-modal .biz-inventory-dialog-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 24px; }
+.app .shell .biz-office-page .biz-office-modal .dialog-close { width: 32px; height: 32px; min-height: 32px; color: var(--muted); box-shadow: none; background: 0 0; border: 0; border-radius: 6px; flex: none; padding: 0; position: static; }
+.app .shell .biz-office-page .biz-office-modal .dialog-close:hover { background: var(--surface-2); color: var(--text); }
+.app .shell .biz-office-page .biz-office-modal .biz-office-editor { gap: 14px; padding: 0 16px 16px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-editor label { color: var(--text-2); gap: 6px; font-size: 12px; font-weight: 500; line-height: 18px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-editor label>:is(input, select, textarea) { box-sizing: border-box; border: 1px solid var(--border); background: var(--surface-2); min-height: 40px; color: var(--text); box-shadow: none; border-radius: 6px; padding: 9px 11px; font-size: 14px; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-editor input::placeholder, .app .shell .biz-office-page .biz-office-modal .biz-office-editor textarea::placeholder { color: var(--muted); font-weight: 400; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-editor :is(input, textarea, select):focus { border-color: var(--accent); background: var(--surface); box-shadow: none; outline: none; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-table { gap: 8px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-head { border: 0; gap: 8px; padding: 0; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-head strong { font-size: 12px; font-weight: 600; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-actions { gap: 6px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-actions button { background: var(--surface); border-radius: 6px; min-height: 30px; padding: 0 9px; font-size: 12px; font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-actions button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-scroll { scrollbar-color: var(--border-2) transparent; border-radius: 6px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-scroll :is(th, td) { box-sizing: border-box; font-variant-numeric: tabular-nums; height: 40px; padding: 4px; font-size: 13px; font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-scroll th { background: var(--surface-2); box-shadow: none; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-column-field input, .app .shell .biz-office-page .biz-office-modal .biz-office-detail-scroll td input { border-radius: 6px; height: 32px; padding: 0 6px; font-size: 13px; font-weight: 400; line-height: 20px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-column-field input { background: 0 0; border-color: #0000; font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-detail-scroll td input.biz-office-fixed-cell { font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-fixed-column { padding: 0 4px; font-size: 12px; font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-modal-actions { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); background: var(--surface); border-top: 0; gap: 8px; margin: 0 -16px -16px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-modal-actions button { min-height: 38px; box-shadow: none; border-radius: 6px; padding: 0 18px; font-size: 13px; font-weight: 500; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-modal-actions .biz-inventory-ghost-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
+.app .shell .biz-office-page .biz-office-modal .biz-office-modal-actions .biz-inventory-primary-btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; box-shadow: none; }
+.app .shell .biz-office-page .biz-office-modal :is(button, input, textarea, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@keyframes office-record-dialog-in {
+  0% { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes office-record-dialog-out {
+  0% { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(12px); }
+}
+@keyframes office-record-sheet-in {
+  0% { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes office-record-sheet-out {
+  0% { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+@keyframes office-record-backdrop-in {
+  0% { background-color: #0000; }
+  to { background-color: #152e3866; }
+}
+@keyframes office-record-backdrop-out {
+  0% { background-color: #152e3866; }
+  to { background-color: #0000; }
+}
+.app .shell .biz-office-page .biz-office-modal { place-items: center; padding: 20px; }
+.app .shell .biz-office-page .biz-office-modal .biz-office-dialog { animation: .24s cubic-bezier(.2, .8, .2, 1) both office-record-dialog-in; }
+.app .shell .biz-office-page .biz-office-modal.is-closing .biz-office-dialog { animation: .18s ease-in both office-record-dialog-out; }
+.app .shell .biz-office-page .biz-office-modal[popover]::backdrop { animation: .24s ease-out both office-record-backdrop-in; }
+.app .shell .biz-office-page .biz-office-modal[popover].is-closing::backdrop { animation: .18s ease-in both office-record-backdrop-out; }
+@media (max-width:720px) {
+  .app .shell .biz-office-page .biz-office-modal { border-radius: 0; place-items: end stretch; padding: 0; }
+  .app .shell .biz-office-page .biz-office-modal .biz-office-dialog { box-sizing: border-box; border: 0; border-radius: 12px 12px 0 0; align-self: end; width: 100%; min-width: 0; max-width: 100%; max-height: 94dvh; margin: 0; animation: .24s cubic-bezier(.2, .8, .2, 1) both office-record-sheet-in; transform: none; }
+  .app .shell .biz-office-page .biz-office-modal.is-closing .biz-office-dialog { animation: .18s ease-in both office-record-sheet-out; }
+  .app .shell .biz-office-page .biz-office-modal-actions { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .app .shell .biz-office-page .biz-office-modal .biz-office-dialog, .app .shell .biz-office-page .biz-office-modal.is-closing .biz-office-dialog, .app .shell .biz-office-page .biz-office-modal[popover]::backdrop, .app .shell .biz-office-page .biz-office-modal[popover].is-closing::backdrop { animation: none; }
+}
+html[data-reduced-motion="1"] .app .shell .biz-office-page .biz-office-modal .biz-office-dialog, html[data-reduced-motion="1"] .app .shell .biz-office-page .biz-office-modal[popover]::backdrop { animation: none; }
+@media (max-width:600px) {
+  .app .shell .biz-office-page .biz-office-table-head { padding: 10px; }
+  .app .shell .biz-office-page .biz-office-details-overlay { padding: 12px; }
+  .app .shell .biz-office-page .biz-office-details-dialog { max-height: calc(100dvh - 24px); }
+  .app .shell .biz-office-page .biz-office-details-head { padding: 12px; }
+  .app .shell .biz-office-page .biz-office-details-body { padding: 0 12px 12px; }
+  .app .shell .biz-office-page .biz-office-record-list { gap: 10px; padding-top: 10px; padding-bottom: 10px; }
+  .app .shell .biz-office-page .biz-office-record-top { padding: 8px 10px; }
+  .app .shell .biz-office-page .biz-office-table-summary { margin: 0 10px 10px; }
+  .app .shell .biz-office-page .biz-office-table-summary :is(th, td) { padding: 5px 8px; }
+  .app .shell .biz-office-page .biz-office-pagination { padding-top: 4px; }
+  .app .shell .biz-office-page .biz-formula-page-size { gap: 4px; }
+}
+.app .shell .biz-office-page .biz-office-record-title strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
+.app .shell .biz-office-page .biz-office-card-summary { line-height: 1.65; }
+.app .shell .biz-office-page .biz-office-record-actions { flex-shrink: 0; }
+.app .shell .biz-office-page .biz-office-table-summary { overscroll-behavior-x: contain; }
+.app .shell .biz-office-page .biz-office-table-summary :is(th, td) { font-variant-numeric: tabular-nums; }
+.app .shell .biz-office-page .biz-office-table-summary th { font-weight: 500; }
+.app .shell .biz-office-page .biz-office-record-list { overscroll-behavior-y: contain; align-items: stretch; }

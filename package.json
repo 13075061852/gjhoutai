@@ -7,7 +7,10 @@
     "dev": "vite",
     "dev:web": "vite",
     "dev:worker": "wrangler dev",
-    "build": "npm run check:legacy-types && tsc -b && vite build",
+    "build": "npm run check:legacy-types && tsc -b && vite build && node scripts/precompress-assets.mjs",
+    "build:server": "node scripts/build-server-bundle.mjs",
+    "build:all": "npm run build:server && npm run build",
+    "start:server": "node server/index.mjs",
     "deploy:web": "npm run build && wrangler pages deploy dist --project-name gjhoutai-web",
     "web": "npm run deploy:web",
     "deploy:api": "wrangler deploy",
@@ -16,10 +19,13 @@
     "check:lockfile": "node scripts/check-package-lock.mjs",
     "typecheck": "npm run check:legacy-types && tsc -b --noEmit && npm run typecheck:worker",
     "typecheck:worker": "tsc -p tsconfig.worker.json",
-    "check": "npm run check:lockfile && npm run check:ui && npm run typecheck:worker && npm test && npm run build",
+    "check": "npm run check:lockfile && npm run check:ui && npm run check:scope && npm run typecheck:worker && npm test && npm run test:server-performance && npm run test:ai-spectrum && npm run build",
     "test": "vitest run",
+    "test:server-performance": "node --test server/lib/performance.node-test.mjs",
+    "test:ai-spectrum": "node --test server/ai/spectrum-tools.node-test.mjs server/ai/data.node-test.mjs server/ai/prompt.node-test.mjs",
     "check-icons": "node scripts/check-icon-mappings.mjs",
     "check:ui": "node scripts/check-ui-consistency.mjs",
+    "check:scope": "node scripts/check-current-scope.mjs",
     "optimize:images": "node scripts/optimize-images.mjs",
     "check:legacy-types": "node scripts/check-legacy-ts-nocheck.mjs",
     "update:siliconflow-catalog": "node scripts/update-siliconflow-catalog.mjs"
@@ -30,8 +36,7 @@
     "motion": "12.38.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "undici": "8.10.2",
-    "zod": "4.4.3"
+    "undici": "8.10.2"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",

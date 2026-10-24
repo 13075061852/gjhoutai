@@ -23,10 +23,9 @@
       border-color:var(--border);
     }
     body:not([data-theme="dark"]) .content,
-    body:not([data-theme="dark"]) .dashboard,
-    body:not([data-theme="dark"]) .spectrum-page,
-    body:not([data-theme="dark"]) .image-cutout-page,
-    body:not([data-theme="dark"]) .analysis-page{
+body:not([data-theme="dark"]) .dashboard,
+body:not([data-theme="dark"]) .spectrum-page,
+body:not([data-theme="dark"]) .analysis-page{
       background:var(--bg);
     }
     body:not([data-theme="dark"]) .assistant-body{
@@ -311,13 +310,12 @@
 
     /* Dark theme surface normalization */
     body[data-theme="dark"] .main,
-    body[data-theme="dark"] .content,
-    body[data-theme="dark"] .dashboard,
-    body[data-theme="dark"] .analysis-page,
-    body[data-theme="dark"] .spectrum-page,
-    body[data-theme="dark"] .image-cutout-page,
-    body[data-theme="dark"] .theme-settings-page,
-    body[data-theme="dark"] .assistant-body{
+body[data-theme="dark"] .content,
+body[data-theme="dark"] .dashboard,
+body[data-theme="dark"] .analysis-page,
+body[data-theme="dark"] .spectrum-page,
+body[data-theme="dark"] .theme-settings-page,
+body[data-theme="dark"] .assistant-body{
       background:var(--bg);
     }
     body[data-theme="dark"] .topbar,

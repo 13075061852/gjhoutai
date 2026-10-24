@@ -8,7 +8,6 @@ import {
 const CLOUD_LOCAL_STORAGE_KEY_SET = new Set<string>(CLOUD_LOCAL_STORAGE_KEYS);
 const SEED_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET = new Set<string>(SEED_LOCAL_WHEN_REMOTE_EMPTY_KEYS);
 const CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEY_SET = new Set<string>(CLEAR_LOCAL_WHEN_REMOTE_EMPTY_KEYS);
-const HYDRATION_CONCURRENCY = 6;
 
 type CloudSyncOperation = 'put' | 'delete' | 'seed';
 type CloudHydrationResult = {
@@ -46,16 +45,17 @@ export function removeCloudBackedLocalStorageItem(key: string): void {
 
 export async function hydrateCloudBackedLocalStorage(signal?: AbortSignal): Promise<CloudHydrationResult> {
   const changedKeys = new Set<string>();
-  let nextKeyIndex = 0;
-  const hydrateKey = async (key: string): Promise<void> => {
-    let remoteValue: string | null = null;
-    try {
-      remoteValue = await cloudStorage.getJson<string>(key);
-    } catch (error) {
-      console.error(`Failed to hydrate cloud-backed localStorage key "${key}".`, error);
-      // A failed read is not an empty remote record: never clear or seed on network errors.
-      return;
-    }
+  if (signal?.aborted) return { changedKeys: [] };
+  let values: Record<string, unknown>;
+  try {
+    values = await cloudStorage.getJsonBatch(CLOUD_LOCAL_STORAGE_KEYS, signal);
+  } catch (error) {
+    if (!signal?.aborted) console.error('Failed to hydrate cloud-backed localStorage.', error);
+    // A failed read is not an empty remote record: never clear or seed on network errors.
+    return { changedKeys: [] };
+  }
+  const hydrateKey = (key: string): void => {
+    const remoteValue = values[key];
     if (signal?.aborted) return;
     if (remoteValue != null) {
       const nextValue = typeof remoteValue === 'string' ? remoteValue : JSON.stringify(remoteValue);
@@ -77,19 +77,6 @@ export async function hydrateCloudBackedLocalStorage(signal?: AbortSignal): Prom
       }
     }
   };
-  const hydrateNextKeys = async (): Promise<void> => {
-    while (!signal?.aborted && nextKeyIndex < CLOUD_LOCAL_STORAGE_KEYS.length) {
-      const key = CLOUD_LOCAL_STORAGE_KEYS[nextKeyIndex];
-      nextKeyIndex += 1;
-      await hydrateKey(key);
-    }
-  };
-
-  await Promise.all(
-    Array.from(
-      { length: Math.min(HYDRATION_CONCURRENCY, CLOUD_LOCAL_STORAGE_KEYS.length) },
-      () => hydrateNextKeys(),
-    ),
-  );
+  CLOUD_LOCAL_STORAGE_KEYS.forEach(hydrateKey);
   return { changedKeys: [...changedKeys] };
 }

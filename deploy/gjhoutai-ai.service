@@ -1,0 +1,32 @@
+[Unit]
+Description=Gjhoutai AI analysis service (pi kernel, Node 22)
+Documentation=file:/var/www/gjhoutai/ai/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gjhoutai
+Group=gjhoutai
+WorkingDirectory=/var/www/gjhoutai/ai
+EnvironmentFile=/etc/gjhoutai/ai.env
+# Node 22 独立安装，不使用系统 nodejs（系统版仍服务于其他站点）
+ExecStart=/opt/node22/bin/node --disable-warning=ExperimentalWarning service.mjs
+Restart=always
+RestartSec=3
+
+# 只读业务库、只写自己的 agent 目录
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/gjhoutai/pi
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

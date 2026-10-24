@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .wrangler/
+server/worker.mjs
 *.tsbuildinfo
 *.log
 

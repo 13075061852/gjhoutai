@@ -1,0 +1,54 @@
+/* Shared geometry for the property and spectrum headers; feature actions remain independent. */
+html .app .shell :is(.analysis-page .analysis-filter-bottom, .spectrum-page .spectrum-toolbar-tags) {
+  border-top: 0;
+  padding-top: 0;
+}
+html .app .shell .spectrum-page .spectrum-toolbar-tags { grid-template-columns: minmax(0, 1fr); }
+html .app .shell .spectrum-page .spectrum-toolbar-tags > .spectrum-toolbar-label { display: none; }
+@media (min-width: 981px) {
+  html .app .shell :is(.analysis-page .analysis-filter-card, .spectrum-page .spectrum-toolbar) {
+    padding: 16px;
+    gap: 12px;
+  }
+  html .app .shell :is(.analysis-page .analysis-filter-top, .spectrum-page .spectrum-toolbar-row) {
+    align-items: center;
+    gap: 8px;
+  }
+  html .app .shell :is(.analysis-page .analysis-search-lg, .spectrum-page .spectrum-search) {
+    height: 42px;
+    min-height: 42px;
+    padding: 0 4px 0 14px;
+    gap: 10px;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+  html .app .shell :is(.analysis-page .analysis-action-group, .spectrum-page .spectrum-toolbar-actions) {
+    gap: 8px;
+  }
+  html .app .shell :is(.analysis-page .analysis-filter-card .analysis-action-group, .spectrum-page .spectrum-toolbar .spectrum-toolbar-actions) .analysis-toolbar-btn {
+    height: 42px;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 6px;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    box-sizing: border-box;
+  }
+  html .app .shell .analysis-page .analysis-filter-bottom .analysis-status-row {
+    height: 28px;
+    min-height: 0;
+  }
+  html .app .shell :is(.analysis-page .analysis-sheet-tabs, .spectrum-page .spectrum-tag-cloud) {
+    gap: 8px;
+  }
+  html .app .shell :is(.analysis-page .analysis-sheet-tab, .spectrum-page .spectrum-tag-filter) {
+    height: 28px;
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    box-sizing: border-box;
+  }
+}

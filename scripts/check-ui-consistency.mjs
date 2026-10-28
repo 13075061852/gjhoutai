@@ -86,8 +86,8 @@ if (hasTranslucentSelectedTableCells(propertyAnalysisSource) || hasTranslucentSe
   failures.push('property analysis: sticky selected cells require an opaque background to prevent scroll-through text');
 }
 const firstTableColumnRule = propertyAnalysisSource.match(/\.analysis-table th:first-child,\s*\.analysis-table td:first-child\s*\{[^}]*\}/)?.[0] || '';
-if (!/border-left:\s*1px solid var\(--border\)/.test(firstTableColumnRule)) {
-  failures.push('src/styles/pages/property-analysis.css: sticky first table column must retain its left border');
+if (/border-left:\s*1px solid var\(--border\)/.test(firstTableColumnRule)) {
+  failures.push('src/styles/pages/property-analysis.css: first table column must not duplicate the outer panel border');
 }
 const tableScrollRule = propertyAnalysisSource.match(/\.analysis-table-scroll\s*\{[^}]*\}/)?.[0] || '';
 const secondStickyColumnRule = propertyAnalysisSource.match(/\.analysis-table th:nth-child\(2\),\s*\.analysis-table td:nth-child\(2\)\s*\{[^}]*\}/)?.[0] || '';

@@ -19,14 +19,14 @@ html[data-color-theme] .app .shell .top-visited-entry.is-active .top-visited-ite
 
 html[data-color-theme] body .app .shell :is(
   .analysis-toolbar-btn-primary, .analysis-toolbar-btn.is-active,
-  .analysis-sheet-tab.is-active, .analysis-search-mode-btn,
+  .analysis-sheet-tab.is-active,
   .analysis-page-btn.is-active, .spectrum-mode-btn.is-active,
   .spectrum-icon-btn.is-active, .spectrum-filter-btn.is-active,
   .biz-formula-page-btn.is-active, .save-btn, .send-btn
 ):not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 html[data-color-theme] body .app .shell :is(
   .analysis-toolbar-btn-primary, .analysis-toolbar-btn.is-active,
-  .analysis-sheet-tab.is-active, .analysis-search-mode-btn,
+  .analysis-sheet-tab.is-active,
   .analysis-page-btn.is-active, .spectrum-mode-btn.is-active,
   .spectrum-icon-btn.is-active, .spectrum-filter-btn.is-active,
   .biz-formula-page-btn.is-active, .save-btn, .send-btn

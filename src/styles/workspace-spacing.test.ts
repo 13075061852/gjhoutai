@@ -21,8 +21,9 @@ describe('workspace spacing contracts', () => {
   });
 
   it('defines separate shared scales for page, panel and control spacing', () => {
-    expect(css).toContain('--workspace-page-pad: 20px');
-    expect(css).toContain('--workspace-panel-gap: 16px');
+    expect(css).toContain('--workspace-page-pad: 12px');
+    expect(css).toContain('--workspace-panel-gap: 12px');
+    expect(css).not.toMatch(/--workspace-page-pad:\s*(16|20)px/);
     expect(css).toContain('--workspace-panel-pad: 16px');
     expect(css).toContain('--workspace-control-gap: 8px');
     expect(css).toContain('.content { padding: var(--workspace-page-pad)');
@@ -43,6 +44,13 @@ describe('workspace spacing contracts', () => {
     expect(css).toContain('.spectrum-search .spectrum-mode-btn { height: 28px; border-radius: 5px; }');
   });
 
+  it('keeps the query mode switch text-only, including hover, with a keyboard focus indicator', () => {
+    expect(css).toMatch(/\.analysis-search-mode-btn \{[^}]*border: 0;[^}]*color: var\(--accent\); background: transparent;/);
+    expect(css).toContain('.analysis-search-mode-btn:hover { color: var(--text); background: transparent; }');
+    expect(css).toContain('.analysis-search-mode-btn:focus-visible { outline: 2px solid var(--accent);');
+    const palette = readFileSync(new URL('./foundation/theme-colors.css', import.meta.url), 'utf8');
+    expect(palette).not.toContain('.analysis-search-mode-btn');
+  });
   it('keeps module and gallery gutters on the same scale', () => {
     expect(css).toContain('.spectrum-workbench { gap: var(--workspace-panel-gap); }');
     expect(css).toContain('.spectrum-gallery.is-grid { gap: var(--workspace-panel-gap); }');

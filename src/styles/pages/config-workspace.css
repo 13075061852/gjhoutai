@@ -1,11 +1,11 @@
 /* Configuration workspace: one active form section and one shared save area. */
-.app .shell .ai-config .config-layout { width: 100%; max-width: 1040px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); }
-.app .shell .ai-config .config-form { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; height: 100%; overflow: hidden; }
+.app .shell .ai-config .config-layout { width: 100%; max-width: none; margin: 0; grid-template-columns: minmax(0, 1fr); }
+.app .shell .ai-config .config-form { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: start; gap: var(--workspace-panel-gap); height: 100%; overflow: auto; }
 .app .shell .ai-config .config-section-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .app .shell .ai-config .config-section-tab { min-width: 0; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
 .app .shell .ai-config .config-section-tab:hover { color: var(--accent); background: var(--surface-2); }
 .app .shell .ai-config .config-section-tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent-border, var(--border)); background: var(--accent-soft); font-weight: 600; }
-.app .shell .ai-config .config-content-panel { min-width: 0; min-height: 0; gap: 0; border: 0; border-radius: 10px; padding: 0; overflow: auto; scrollbar-gutter: auto; overscroll-behavior: contain; }
+.app .shell .ai-config .config-content-panel { min-width: 0; min-height: 0; gap: 0; border: 0; border-radius: 10px; padding: 0; overflow: visible; scrollbar-gutter: auto; overscroll-behavior: contain; }
 .app .shell .ai-config .config-module { flex: none; padding: 20px; gap: 20px; box-shadow: none; overflow: visible; border-radius: 10px; }
 .app .shell .ai-config .config-module[hidden] { display: none; }
 .app .shell .ai-config .config-module-head { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 0 0 14px; margin: 0; border-bottom: 1px solid var(--border); }

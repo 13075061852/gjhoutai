@@ -1,8 +1,8 @@
 /* Workspace presentation system. Scoped specificity intentionally survives
    lazy-loaded legacy page CSS; no layout/state classes are overridden globally. */
 .app .shell {
-  --workspace-page-pad: 20px;
-  --workspace-panel-gap: 16px;
+  --workspace-page-pad: 12px;
+  --workspace-panel-gap: 12px;
   --workspace-panel-pad: 16px;
   --workspace-control-gap: 8px;
   --panel-gap: var(--workspace-panel-gap);
@@ -11,7 +11,16 @@
 }
 .app .shell::before { display: none; }
 .app .shell .main { background: var(--bg); }
-.app .shell .sidebar { background: var(--sidebar-bg); border: 0; border-right: 1px solid var(--sidebar-border); color: var(--sidebar-text); }
+.app .shell .sidebar {
+  margin: var(--workspace-page-pad) 0 var(--workspace-page-pad) var(--workspace-page-pad);
+  height: calc(100% - 2 * var(--workspace-page-pad));
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: 10px;
+  box-shadow: 0 2px 3px #152e3803;
+  color: var(--sidebar-text);
+  overflow: hidden;
+}
 .app .shell .sidebar-top { height: 88px; min-height: 88px; padding: 0 20px; }
 .app .shell .brand { grid-template-columns: 36px minmax(0, 1fr); column-gap: 12px; }
 .app .shell .brand-badge { width: 36px; height: 36px; border-radius: 8px; background: #fff; padding: 4px; }
@@ -119,8 +128,8 @@
 .app .shell .analysis-page #analysisSearchInput { flex: 1 1 0; width: 0; min-width: 0; }
 .app .shell .analysis-page .analysis-search-mode { display: flex; flex: 0 0 auto; width: auto; height: 32px; grid-column: auto; padding: 0; background: transparent; }
 .app .shell .analysis-page .analysis-search-mode::before { content: none; }
-.app .shell .analysis-page .analysis-search-mode-btn { width: auto; height: 32px; padding: 0 12px; border-radius: 6px; color: #fff; background: var(--accent); white-space: nowrap; }
-.app .shell .analysis-page .analysis-search-mode-btn:hover { color: #fff; background: var(--accent); }
+.app .shell .analysis-page .analysis-search-mode-btn { width: auto; height: 32px; padding: 0 12px; border: 0; border-radius: 0; color: var(--accent); background: transparent; white-space: nowrap; }
+.app .shell .analysis-page .analysis-search-mode-btn:hover { color: var(--text); background: transparent; }
 .app .shell .analysis-page .analysis-search-mode-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app .shell :is(.analysis-toolbar-btn-primary, .inspection-report-upload-btn) .ti { color: inherit; }
 .app .shell #inspectionReportUploadBtn { background: var(--surface); color: var(--accent); border-color: var(--border); }
@@ -242,7 +251,7 @@
   .workspace-location > span, .workspace-location > .ti { display: none; }
 }
 @media (max-width: 980px) {
-  .app .shell { --workspace-page-pad: 16px; }
+  .app .shell { --workspace-page-pad: 12px; }
   .app .shell .topbar { padding-inline: 16px; }
   .app .shell .top-visited { justify-content: flex-start; }
   .workspace-location { display: none; }
@@ -266,6 +275,18 @@
   .app .shell.sidebar-open .brand { grid-template-columns: 36px minmax(0, 1fr); }
 
   .app .shell .inspection-report-list-view { width: 300px; min-width: 240px; }
+}
+/* The phone drawer floats too; its closed position clears the outer gutter. */
+@media (max-width: 720px) {
+  .app .shell .sidebar {
+    inset: var(--workspace-page-pad) auto var(--workspace-page-pad) var(--workspace-page-pad);
+    margin: 0;
+    height: auto;
+    max-height: calc(100% - 2 * var(--workspace-page-pad));
+  }
+  .app .shell:not(.sidebar-open) .sidebar {
+    transform: translateX(calc(-100% - var(--workspace-page-pad)));
+  }
 }
 @media (max-width: 600px) {
   .app .shell { --workspace-page-pad: 12px; --workspace-panel-gap: 12px; --workspace-panel-pad: 12px; }

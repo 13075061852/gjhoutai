@@ -29,6 +29,19 @@ describe('cross-page workspace refinements', () => {
     expect(css).not.toContain('position: static');
     expect(css).not.toContain('overflow-x: hidden');
   });
+  it('aligns theme panels with the shared page gutter and avoids doubled header spacing', () => {
+    expect(css).toMatch(/\.theme-settings-shell \{ width: 100%; max-width: none; margin: 0;/);
+    expect(css).toMatch(/\.theme-settings-shell \{[^}]*border: 1px solid var\(--border\); border-radius: 10px;/);
+    expect(css).toMatch(/:is\(\.theme-settings-panel, \.font-settings-panel\) \{[^}]*flex: 0 0 auto;[^}]*border: 0; border-radius: 0;/);
+    expect(css).toMatch(/:is\(\.theme-settings-panel-head, \.font-settings-head\) \{[^}]*margin-bottom: 0;/);
+  });
+  it('scrolls palette and fonts inside one bounded panel instead of the whole page', () => {
+    expect(css).toContain('.content:has(> .theme-settings-page.active) { overflow: hidden; }');
+    expect(css).toContain('.theme-settings-page.active { height: 100%; min-height: 0; overflow: hidden; }');
+    expect(css).toMatch(/\.theme-settings-shell \{[^}]*height: 100%; min-height: 0; gap: 0; overflow-y: auto;/);
+    expect(css).toContain('.font-settings-panel { border-top: 1px solid var(--border); }');
+    expect(css).not.toContain('.theme-settings-shell { gap: 12px; }');
+  });
   it('keeps theme selection accessible and adaptive with unclipped palette previews', () => {
     expect(css).toContain('minmax(min(220px, 100%), 1fr)');
     expect(css).toContain('.theme-card-swatches { height: 110px; flex: 0 0 110px;');

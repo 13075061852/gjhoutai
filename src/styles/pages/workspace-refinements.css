@@ -43,22 +43,25 @@
 .app .shell .biz-office-page .biz-office-record-list { align-items: stretch; overscroll-behavior-y: contain; }
 
 /* Configuration: tabs, content and save bar form one clear hierarchy. */
-.app .shell .ai-config .config-section-nav { border: 0; background: var(--surface-2); }
-.app .shell .ai-config .config-section-tab[aria-selected="true"] { border-color: transparent; background: var(--surface); color: var(--accent); font-weight: 500; }
-.app .shell .ai-config .config-module { padding: 20px; gap: 16px; border-radius: 8px; }
+.app .shell .ai-config .config-section-nav { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.app .shell .ai-config .config-section-tab[aria-selected="true"] { border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.app .shell .ai-config .config-module { padding: var(--workspace-panel-pad); gap: 16px; border-radius: 10px; }
 .app .shell .ai-config .config-module-head { padding-bottom: 0; border-bottom: 0; }
 .app .shell .ai-config .config-module-head h2 { font-size: 14px; font-weight: 500; }
 .app .shell .ai-config .config-module-icon { width: 28px; height: 28px; flex-basis: 28px; border-radius: 6px; font-size: 17px; }
-.app .shell .ai-config .config-actions-panel { border: 0; border-radius: 8px; padding: 12px 16px; }
+.app .shell .ai-config .config-actions-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
 .app .shell .ai-config .config-section-tab { transition: color 160ms ease, background-color 160ms ease; }
 .app .shell .ai-config .field > label { flex-wrap: wrap; }
 .app .shell .ai-config .field-label-main { overflow-wrap: anywhere; }
 
-/* Theme settings: actual swatches and samples carry the hierarchy, not heavy borders. */
-.app .shell .theme-settings-page .theme-settings-shell { max-width: 1040px; margin-inline: auto; min-width: 0; gap: 16px; }
-.app .shell .theme-settings-page :is(.theme-settings-panel, .font-settings-panel) { min-width: 0; padding: 20px; gap: 16px; border: 0; border-radius: 8px; box-shadow: none; }
+/* One appearance panel owns scrolling for both palette and font choices. */
+.app .shell .content:has(> .theme-settings-page.active) { overflow: hidden; }
+.app .shell .theme-settings-page.active { height: 100%; min-height: 0; overflow: hidden; }
+.app .shell .theme-settings-page .theme-settings-shell { width: 100%; max-width: none; margin: 0; min-width: 0; height: 100%; min-height: 0; gap: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.app .shell .theme-settings-page :is(.theme-settings-panel, .font-settings-panel) { flex: 0 0 auto; min-width: 0; padding: var(--workspace-panel-pad); gap: var(--workspace-panel-gap); border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.app .shell .theme-settings-page .font-settings-panel { border-top: 1px solid var(--border); }
 .app .shell .theme-settings-page .theme-settings-kicker { display: none; }
-.app .shell .theme-settings-page :is(.theme-settings-panel-head, .font-settings-head) { align-items: center; flex-wrap: wrap; gap: 10px; }
+.app .shell .theme-settings-page :is(.theme-settings-panel-head, .font-settings-head) { align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 0; }
 .app .shell .theme-settings-page :is(.theme-settings-panel-head, .font-settings-head) h2 { margin: 0; font-size: 15px; line-height: 1.5; font-weight: 500; }
 .app .shell .theme-settings-page .font-settings-head p { margin-top: 6px; font-size: 12px; font-weight: 400; line-height: 1.7; }
 .app .shell .theme-settings-page :is(.theme-reset-btn) { min-height: 36px; height: auto; padding: 0 12px; gap: 6px; border-radius: 6px; font-size: 12px; font-weight: 500; }
@@ -83,7 +86,7 @@
   .app .shell .ai-config .config-actions-panel { padding: 10px 12px max(10px, env(safe-area-inset-bottom)); }
   .app .shell .ai-config .config-section-tab { min-height: 36px; }
   .app .shell .theme-settings-page :is(.theme-settings-panel, .font-settings-panel) { padding: 14px; gap: 14px; }
-  .app .shell .theme-settings-page .theme-settings-shell { gap: 12px; }
+  .app .shell .theme-settings-page .theme-settings-shell { gap: 0; }
   .app .shell .theme-settings-page :is(.theme-card, .font-card) { padding: 12px; }
   .app .shell .analysis-page .analysis-table :is(th, td) { padding: 8px 10px; }
 }

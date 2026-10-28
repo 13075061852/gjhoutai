@@ -2,6 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 const css = readFileSync(new URL('./pages/config-workspace.css', import.meta.url), 'utf8');
+it('aligns settings to the page gutter and keeps save actions directly after the form', () => {
+  expect(css).toMatch(/\.config-layout \{[^}]*max-width: none; margin: 0;/);
+  expect(css).toMatch(/\.config-form \{[^}]*grid-template-rows: auto auto auto; align-content: start;/);
+  expect(css).toMatch(/\.config-form \{[^}]*overflow: auto;/);
+  expect(css).toMatch(/\.config-content-panel \{[^}]*overflow: visible;/);
+});
 it('distributes the three configuration tabs equally without a vacant fourth column', () => {
   expect(css).toMatch(/\.config-section-nav \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   expect(css).not.toMatch(/\.config-section-nav \{[^}]*grid-template-columns: repeat\(4,/);

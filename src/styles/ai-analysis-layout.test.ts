@@ -6,6 +6,10 @@ const businessCss = readFileSync(new URL('./pages/ai-business-actions.css', impo
 import { legacyMarkup } from '../legacy/legacyMarkup';
 
 describe('redesigned AI conversation layout', () => {
+  it('uses the shared page gutter and a rounded panel instead of an edge-to-edge canvas', () => {
+    expect(css).toMatch(/\.content:has\(> \.ai-analysis-page.active\)\s*\{[^}]*padding: var\(--workspace-page-pad\);[^}]*background: var\(--bg\);/);
+    expect(css).toMatch(/\.ai-analysis-shell\s*\{[^}]*border: 1px solid var\(--border\);[^}]*border-radius: 10px;[^}]*overflow: hidden;/);
+  });
   it('aligns history and conversation header dividers with explicit border-box heights', () => {
     expect(css).toMatch(/\.ai-analysis-toolbar \{[^}]*height: 64px;[^}]*min-height: 64px;[^}]*box-sizing: border-box;/);
     expect(css).toMatch(/\.ai-analysis-history-head \{[^}]*height: 64px;[^}]*min-height: 64px;[^}]*box-sizing: border-box;/);

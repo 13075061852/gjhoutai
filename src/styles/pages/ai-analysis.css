@@ -2,9 +2,9 @@
 html .app .shell .content:has(> .ai-analysis-page.active) {
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: var(--workspace-page-pad);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--bg);
 }
 .app .shell:has(.ai-analysis-page.active) { height: 100dvh; }
 .page-section.active.ai-analysis-page {
@@ -24,6 +24,9 @@ html .app .shell .content:has(> .ai-analysis-page.active) {
   min-height: 0;
   background: var(--surface);
   color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 .ai-analysis-page button { font-family: var(--app-font-family); }
 .ai-analysis-toolbar {

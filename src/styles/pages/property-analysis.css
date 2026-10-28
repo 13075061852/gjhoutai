@@ -655,10 +655,6 @@
       white-space:nowrap;
       background:var(--surface);
     }
-    .analysis-table th:first-child,
-    .analysis-table td:first-child{
-      border-left:1px solid var(--border);
-    }
     .analysis-table th{
       position:sticky;
       top:0;

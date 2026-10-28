@@ -4,6 +4,7 @@
  */
 import { Type } from 'typebox';
 import { projectTools } from './project-tools.mjs';
+import { businessWriteTools } from './write-tools.mjs';
 import { spectrumImageTools, buildSpectrumListing } from './spectrum-tools.mjs';
 import { createHash } from 'node:crypto';
 const rowRef = (row) => `row-${createHash('sha256').update(JSON.stringify(row)).digest('hex')}`;
@@ -221,6 +222,6 @@ const businessToolsBase = [
 export const businessToolsFor = (context = {}) => [
   ...businessToolsBase.map(tool => tool.name === 'list_spectrum_records'
     ? { ...tool, execute: (_id, params) => guard(() => spectrumListResult(params, context)) } : tool),
-  ...spectrumImageTools(context), ...projectTools(context),
+  ...spectrumImageTools(context), ...projectTools(context), ...businessWriteTools(context),
 ];
 export const businessTools = businessToolsFor();

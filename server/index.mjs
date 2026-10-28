@@ -7,6 +7,7 @@ import { createR2Bucket } from './lib/r2.mjs';
 import { serveStatic } from './lib/static.mjs';
 import { prepareApiResponse } from './lib/http-performance.mjs';
 import { createImageOptimizer } from './lib/images.mjs';
+import { createBusinessActions } from './lib/business-actions.mjs';
 import worker from './worker.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,8 @@ const env = {
   BOOTSTRAP_ADMIN_TOKEN: process.env.BOOTSTRAP_ADMIN_TOKEN || '',
   CONFIG_ENCRYPTION_KEY: process.env.CONFIG_ENCRYPTION_KEY || '',
 };
+
+const businessActions = createBusinessActions({ db: env.DB._raw, files: env.FILES, allowedOrigins: env.CORS_ORIGINS, appBasePath: APP_BASE_PATH || '/gjhoutai', readOnly: false });
 
 const HOP_BY_HOP_REQUEST_HEADERS = new Set([
   'host',
@@ -110,7 +113,7 @@ const server = http.createServer(async (req, res) => {
     if (internalPath === '/api' || internalPath.startsWith('/api/')) {
       const url = `${forwardedProto}://${forwardedHost}${internalPath}${search}`;
       const request = buildWebRequest(req, url);
-      const response = await worker.fetch(request, env);
+      const response = await businessActions.handle(request) || await worker.fetch(request, env);
       await writeWebResponse(res, response, req.method === 'HEAD', request, internalPath);
       return;
     }

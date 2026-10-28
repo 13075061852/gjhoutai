@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { legacyMarkup } from '../legacyMarkup';
 
-const api = vi.hoisted(() => ({ start: vi.fn(), stream: vi.fn(), abort: vi.fn(), health: vi.fn(), upload: vi.fn(), submitProjectAction: vi.fn(), resolveAssetUrl: (url: string) => url, toolLabel: (name: string) => name === 'web_search' ? '联网搜索' : '读取数据概况' }));
+const api = vi.hoisted(() => ({ start: vi.fn(), stream: vi.fn(), abort: vi.fn(), health: vi.fn(), upload: vi.fn(), history: vi.fn(), saveHistory: vi.fn(), submitProjectAction: vi.fn(), resolveAssetUrl: (url: string) => url, toolLabel: (name: string) => name === 'web_search' ? '联网搜索' : '读取数据概况' }));
 vi.mock('../../services/ai-analysis', () => ({ aiAnalysis: api }));
 const businessActions = vi.hoisted(() => ({ submit: vi.fn(), refresh: vi.fn() }));
 vi.mock('../../services/business-actions', () => ({ submitBusinessAction: businessActions.submit }));
@@ -14,7 +14,7 @@ vi.mock('../../utils/aiImageFiles', () => ({
   shareAiImageFile: async () => 'unsupported',
 }));
 let app: any;
-const flush = async () => { for (let i = 0; i < 8; i += 1) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 40; i += 1) await Promise.resolve(); };
 const element = (id: string) => document.getElementById(id)!;
 const done = { type: 'done', status: 'completed', seq: 3, at: 1 };
 
@@ -25,6 +25,14 @@ beforeEach(async () => {
   document.body.innerHTML = legacyMarkup;
   app = { currentUser: { id: 'test-user', department: '系统管理员' }, utils: { escapeHtml: (value: unknown) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;'), markdownLite: (value: string) => `<p>${value}</p>` } };
   window.GJHApp = app;
+  const cloud = new Map<string, Map<string, any>>();
+  api.history.mockImplementation(async (owner: string) => JSON.parse(JSON.stringify([...(cloud.get(owner)?.values() || [])])));
+  api.saveHistory.mockImplementation(async (owner: string, items: any[], deleted: string[] = [], migrate = false) => {
+    const records = cloud.get(owner) || new Map();
+    cloud.set(owner, records);
+    for (const item of items) if (!migrate || !records.has(item.id)) records.set(item.id, JSON.parse(JSON.stringify(item)));
+    for (const id of deleted) records.delete(id);
+  });
   api.start.mockResolvedValue({ id: 'run1' });
   api.abort.mockResolvedValue(true);
   api.upload.mockImplementation(async (file: File) => ({ id: `up-${file.name}`, name: file.name, type: file.type, size: file.size, kind: file.type.startsWith('image/') ? 'image' : 'binary', url: `/gjhoutai/api/ai/uploads/up-${file.name}` }));
@@ -37,9 +45,9 @@ beforeEach(async () => {
     onEvent(done);
   });
   await import('./ai-analysis');
-  app.aiAnalysis.init();
+  await app.aiAnalysis.init();
 });
-afterEach(() => { app.aiAnalysis.cleanup(); document.body.innerHTML = ''; });
+afterEach(async () => { app.aiAnalysis.cleanup(); await flush(); document.body.innerHTML = ''; });
 
 describe('single rewritten AI workspace', () => {
   it('isolates browser history on account switches and does not import unowned old history', async () => {
@@ -124,20 +132,25 @@ describe('single rewritten AI workspace', () => {
     expect(document.querySelectorAll('.ai-spectrum-gallery img')).toHaveLength(3);
   });
 
-  it('旧业务写入卡片不再提供提交入口', async () => {
+  it('业务变更先展示卡片并在用户确认后提交', async () => {
     let proposal: any;
     api.stream.mockImplementation(async (_id, emit) => {
       const threadId = api.start.mock.calls.at(-1)![1].threadId;
-      proposal = { id: 'proposal1', threadId, dataset: 'ash_records', operation: 'create', label: '灰份记录', count: 1, pageId: 'office-records', expiresAt: new Date(Date.now()+600_000).toISOString(), status: 'pending', changes: [{ id: 'ASH-1', before: null, after: { name: '测试材料', rows: [{ content: '25%' }] } }] };
+      proposal = { id: '12345678-1234-1234-1234-123456789abc', threadId, dataset: 'ash_records', operation: 'create', label: '灰份记录', count: 1, pageId: 'office-records', expiresAt: new Date(Date.now()+600_000).toISOString(), status: 'pending', changes: [{ id: 'ASH-1', before: null, after: { name: '测试材料', rows: [{ content: '25%' }] } }] };
       emit({ type: 'tool_end', name: 'prepare_business_change', isError: false, proposal, seq: 1, at: 1 });
       emit({ type: 'text', delta: '已准备好。\n\n| 名称 | 灰份含量 |\n| --- | --- |\n| 测试材料 | 25% |', seq: 2, at: 1 });
       emit(done);
     });
     await app.aiAnalysis.run('帮我录入灰份');
     expect(businessActions.submit).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-business-action]')).toBeNull();
-    expect(element('aiAnalysisThread').textContent).toContain('AI业务变更权限已关闭');
+    expect(element('aiAnalysisThread').textContent).toContain('待确认，尚未写入');
     expect(businessActions.refresh).not.toHaveBeenCalled();
+    businessActions.submit.mockResolvedValue({ proposal: { ...proposal, status: 'committed' } });
+    (document.querySelector('[data-business-action="commit"]') as HTMLButtonElement).click();
+    await flush();
+    expect(businessActions.submit).toHaveBeenCalledWith(proposal.id, proposal.threadId, 'commit');
+    expect(businessActions.refresh).toHaveBeenCalledOnce();
+    expect(element('aiAnalysisThread').textContent).toContain('已提交');
   });
 
   it('项目启停必须点击独立确认按钮，失败不伪装成功', async () => {
@@ -309,6 +322,7 @@ describe('single rewritten AI workspace', () => {
     await app.aiAnalysis.run('历史问题');
     element('aiAnalysisNewBtn').click();
     element('aiAnalysisHistoryBtn').click();
+    await flush();
     const dialog = element('aiAnalysisHistory') as HTMLDialogElement;
     expect(dialog.open).toBe(true);
     expect(element('aiAnalysisHistoryBtn').getAttribute('aria-expanded')).toBe('true');
@@ -389,6 +403,7 @@ describe('single rewritten AI workspace', () => {
   it('requires confirmation and can cancel a history deletion without changing stored records', async () => {
     await app.aiAnalysis.run('保留这条记录');
     element('aiAnalysisHistoryBtn').click();
+    await flush();
     (document.querySelector('[data-delete-session]') as HTMLButtonElement).click();
     expect(document.querySelector('[data-confirm-session-delete]')).not.toBeNull();
     expect(document.querySelectorAll('[data-session]')).toHaveLength(1);
@@ -403,6 +418,7 @@ describe('single rewritten AI workspace', () => {
     element('aiAnalysisNewBtn').click();
     await app.aiAnalysis.run('当前记录');
     element('aiAnalysisHistoryBtn').click();
+    await flush();
     const old = [...document.querySelectorAll<HTMLButtonElement>('[data-session]')].find((button) => button.textContent?.includes('旧记录'))!;
     (old.closest('.ai-analysis-session-row')!.querySelector('[data-delete-session]') as HTMLButtonElement).click();
     (document.querySelector('[data-confirm-session-delete]') as HTMLButtonElement).click();
@@ -421,6 +437,7 @@ describe('single rewritten AI workspace', () => {
     element('aiAnalysisNewBtn').click();
     await app.aiAnalysis.run('第二条');
     element('aiAnalysisHistoryBtn').click();
+    await flush();
     const removeActive = () => {
       (document.querySelector('.ai-analysis-session-row.is-active [data-delete-session]') as HTMLButtonElement).click();
       (document.querySelector('[data-confirm-session-delete]') as HTMLButtonElement).click();

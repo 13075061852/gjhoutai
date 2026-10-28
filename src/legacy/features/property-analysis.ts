@@ -3626,6 +3626,7 @@ import {
     init,
     cleanup,
     loadData,
+    loadReportRanges,
     ensureLoaded,
     render,
     parseExcelWorkbook,

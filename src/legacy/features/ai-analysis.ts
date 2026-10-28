@@ -5,10 +5,14 @@
  * 取数、模型调用、密钥都在服务端，页面不接触数据查询。
  */
 import { getLegacyApp } from '../core/app-context';
+import { AiCloudHistory } from '../../utils/aiCloudHistory';
 import { aiAnalysis, type AiAttachment, type AiRunEvent, type AiUsage, type AiSpectrumGallery } from '../../services/ai-analysis';
 import { renderAiMarkdown } from '../../utils/aiMarkdown';
 import { formatAiResponseMetrics } from '../../utils/aiResponseMetrics';
 import { parseAiProjectAction, renderAiProjectActions, type AiProjectAction } from '../../utils/aiProjectActions';
+import { parseBusinessProposal, renderBusinessActions } from '../../utils/aiBusinessActions';
+import { submitBusinessAction, type BusinessProposal } from '../../services/business-actions';
+import { refreshBusinessData } from '../../utils/refreshBusinessData';
 import { patchAiChildren, patchAiTurn } from '../../utils/aiStreamDom';
 import { mountAiImagePreview } from '../../utils/aiImagePreview';
 import '../../styles/pages/ai-analysis.css';
@@ -42,6 +46,7 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     text: string;
     attachments?: AiAttachment[];
     retiredBusinessChange?: boolean;
+    businessProposals?: BusinessProposal[];
     projectActions?: AiProjectAction[];
     spectrumGalleries?: AiSpectrumGallery[];
     /** 工具调用前的说明（模型偶尔会输出，单独降级展示，不混进正式回答）。 */
@@ -58,6 +63,10 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
   type Session = { id: string; title: string; turns: Turn[]; updatedAt: number };
 
   let sessions: Session[] = [];
+  let cloudHistory: AiCloudHistory<Session> | null = null;
+  let historyReady: Promise<void> = Promise.resolve();
+  let historyLoading = false;
+  let historyStatus = '正在读取云端历史…';
   let activeId = '';
   let deleteCandidateId = '';
   let running: { runId: string; controller: AbortController } | null = null;
@@ -89,15 +98,14 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
 
   const activeSession = () => sessions.find((item) => item.id === activeId) || null;
 
-  const loadSessions = () => {
+  const loadSessions = (cloud?: unknown) => {
     try {
       if (!sessionsKey) return [];
-      const raw = localStorage.getItem(sessionsKey);
-      const parsed = raw ? JSON.parse(raw) : [];
+      const raw = cloud === undefined ? localStorage.getItem(sessionsKey) : null;
+      const parsed = cloud ?? (raw ? JSON.parse(raw) : []);
       if (!Array.isArray(parsed)) return [];
       return parsed
         .filter((item: any) => item && typeof item.id === 'string' && Array.isArray(item.turns))
-        .slice(0, MAX_SESSIONS)
         .map((item: any) => ({
           id: item.id,
           title: String(item.title || '历史分析'),
@@ -107,6 +115,7 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
             .map((turn: any) => ({
               role: turn.role,
               text: String(turn.text || ''),
+              attachments: Array.isArray(turn.attachments) ? turn.attachments : [],
               plan: turn.plan ? String(turn.plan) : '',
               tools: Array.isArray(turn.tools) ? turn.tools.map((tool: ToolStep) => ({ ...tool, status: tool.status === 'running' ? 'stopped' : tool.status })) : [],
               state: turn.state === 'streaming' ? 'stopped' : (turn.state || 'done'),
@@ -117,6 +126,7 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
               finishedAt: Number(turn.finishedAt) || undefined,
               projectActions: Array.isArray(turn.projectActions) ? turn.projectActions.map(parseAiProjectAction).filter(Boolean) : [],
               retiredBusinessChange: Boolean(turn.retiredBusinessChange || turn.proposals?.length),
+              businessProposals: Array.isArray(turn.businessProposals) ? turn.businessProposals.map(parseBusinessProposal).filter(Boolean) : [],
               spectrumGalleries: Array.isArray(turn.spectrumGalleries) ? turn.spectrumGalleries.map(parseSpectrumGallery).filter(Boolean).slice(-10) : [],
             })),
         }));
@@ -125,13 +135,14 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     }
   };
 
-  const persistSessions = () => {
+  const persistSessions = (deletedId?: string) => {
     if (!sessionsKey) return;
     try {
       const trimmed = [...sessions]
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, MAX_SESSIONS)
         .map((session) => ({ ...session, turns: session.turns.slice(-40) }));
+      cloudHistory?.save(trimmed, deletedId);
       localStorage.setItem(sessionsKey, JSON.stringify(trimmed));
     } catch {
       /* 存储不可用时不影响本次分析 */
@@ -299,7 +310,8 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
         ${tools.panel}
         <div class="ai-analysis-text">${body}</div>
         ${renderAiProjectActions(turn.projectActions || [], turn.state === 'streaming')}
-        ${turn.retiredBusinessChange ? '<p class="ai-analysis-state">AI业务变更权限已关闭，请在业务页面人工操作。</p>' : ''}
+        ${renderBusinessActions(turn.businessProposals || [], turn.state === 'streaming')}
+        ${turn.retiredBusinessChange ? '<p class="ai-analysis-state">历史业务变更卡片已失效，请重新准备。</p>' : ''}
         ${error}${actions}
       </div>
     </article>`;
@@ -377,16 +389,16 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     const list = refs.sessions as HTMLElement | null;
     if (!list) return;
     const items = sessions.filter((session) => session.turns.length).sort((a, b) => b.updatedAt - a.updatedAt);
-    list.innerHTML = items.length
+    list.innerHTML = `<div class="ai-analysis-session-empty" role="status">${escapeHtml(historyStatus)}</div>` + (items.length
       ? items.map((session) => `<div class="ai-analysis-session-row${session.id === activeId ? ' is-active' : ''}">
-          <button class="ai-analysis-session" type="button" data-session="${escapeHtml(session.id)}"${running ? ' disabled' : ''}${session.id === activeId ? ' aria-current="true"' : ''}>
+          <button class="ai-analysis-session" type="button" data-session="${escapeHtml(session.id)}"${running || historyLoading ? ' disabled' : ''}${session.id === activeId ? ' aria-current="true"' : ''}>
             <span class="ai-analysis-session-title">${escapeHtml(session.title)}</span>
             <span class="ai-analysis-session-time">${formatTime(session.updatedAt)}</span>
           </button>
-          <button class="ai-analysis-session-delete" type="button" data-delete-session="${escapeHtml(session.id)}" aria-label="删除分析：${escapeHtml(session.title)}" title="删除分析"${running ? ' disabled' : ''}><i class="ti ti-trash" aria-hidden="true"></i></button>
-          ${deleteCandidateId === session.id ? `<div class="ai-analysis-delete-confirm" role="alert"><p>删除这条分析记录？<span>仅删除当前浏览器中的记录，无法恢复。</span></p><div><button type="button" data-cancel-session-delete>取消</button><button class="is-danger" type="button" data-confirm-session-delete="${escapeHtml(session.id)}">删除</button></div></div>` : ''}
+          <button class="ai-analysis-session-delete" type="button" data-delete-session="${escapeHtml(session.id)}" aria-label="删除分析：${escapeHtml(session.title)}" title="删除分析"${running || historyLoading ? ' disabled' : ''}><i class="ti ti-trash" aria-hidden="true"></i></button>
+          ${deleteCandidateId === session.id ? `<div class="ai-analysis-delete-confirm" role="alert"><p>删除这条分析记录？<span>将从云端及其他设备的历史中删除，无法恢复。</span></p><div><button type="button" data-cancel-session-delete>取消</button><button class="is-danger" type="button" data-confirm-session-delete="${escapeHtml(session.id)}">删除</button></div></div>` : ''}
         </div>`).join('')
-      : '<div class="ai-analysis-session-empty">还没有分析记录。<br>发送问题后，会自动保存在这里。</div>';
+      : '<div class="ai-analysis-session-empty">还没有分析记录。<br>发送问题后，会自动保存到云端。</div>');
   };
 
   const renderSamples = () => {
@@ -400,11 +412,11 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
   };
 
   const setComposerState = () => {
-    const busy = Boolean(running);
+    const busy = Boolean(running) || historyLoading;
     const hasDraft = Boolean(refs.input?.value.trim() || pendingAttachments.length);
     if (refs.sendBtn) (refs.sendBtn as HTMLButtonElement).disabled = busy || uploading || !hasDraft;
     refs.form?.setAttribute('aria-busy', String(busy || uploading));
-    if (refs.stopBtn) (refs.stopBtn as HTMLButtonElement).hidden = !busy;
+    if (refs.stopBtn) (refs.stopBtn as HTMLButtonElement).hidden = !running;
     if (refs.attachBtn) (refs.attachBtn as HTMLButtonElement).disabled = busy || uploading;
     if (refs.newBtn) (refs.newBtn as HTMLButtonElement).disabled = busy;
     refs.sessions?.querySelectorAll('button').forEach((button: HTMLButtonElement) => { button.disabled = busy; });
@@ -465,7 +477,10 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
           const action = parseAiProjectAction(event.projectAction);
           if (action && action.threadId === session.id) turn.projectActions = [...(turn.projectActions || []).filter(item => item.id !== action.id), action];
         }
-        if (event.name === 'prepare_business_change') turn.retiredBusinessChange = true;
+        if (event.name === 'prepare_business_change' && !event.isError) {
+          const proposal = parseBusinessProposal(event.proposal);
+          if (proposal && proposal.threadId === session.id) turn.businessProposals = [...(turn.businessProposals || []).filter(item => item.id !== proposal.id), proposal];
+        }
         paintStreaming(true);
         return true;
       }
@@ -499,6 +514,9 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
   };
 
   const runAnalysis = async (question: string, attachments: AiAttachment[] = []) => {
+    const context = cloudHistory;
+    if (historyLoading) await historyReady;
+    if (cloudHistory !== context) return;
     const session = ensureSession();
     const prompt = String(question || '').trim();
     if ((!prompt && !attachments.length) || running) return;
@@ -660,7 +678,7 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
       resizeInput();
       renderThread();
     }
-    persistSessions();
+    persistSessions(id);
     renderSessions();
     setComposerState();
     (refs.sessions?.querySelector('[aria-current="true"]') || refs.historyClose)?.focus();
@@ -683,6 +701,29 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     }, options);
     refs.stopBtn?.addEventListener('click', stopAnalysis, options);
     refs.historyBtn?.addEventListener('click', () => {
+      if (!running && !historyLoading && cloudHistory) {
+        const context = cloudHistory;
+        historyStatus = '正在读取云端历史…';
+        historyLoading = true;
+        setComposerState();
+        void context.refresh().then((items) => {
+          if (cloudHistory !== context) return;
+          const draft = activeSession();
+          sessions = loadSessions(items);
+          if (draft && !draft.turns.length) sessions.unshift(draft);
+          if (!activeSession()) activeId = '';
+          ensureSession();
+          historyStatus = '历史对话已保存到云端';
+          renderThread();
+        }).catch(() => {
+          if (cloudHistory === context) historyStatus = '云端同步失败，暂显示本机备份；关闭后重试。';
+        }).finally(() => {
+          if (cloudHistory !== context) return;
+          historyLoading = false;
+          renderSessions();
+          setComposerState();
+        });
+      }
       renderSessions();
       setComposerState();
       (refs.history as HTMLDialogElement | null)?.showModal();
@@ -791,6 +832,25 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
       submit();
     }, options);
     refs.thread?.addEventListener('click', async (event) => {
+      const businessButton = (event.target as HTMLElement)?.closest<HTMLButtonElement>('[data-business-action]');
+      if (businessButton) {
+        if (businessButton.disabled || running) return;
+        const session = activeSession();
+        const proposal = session?.turns.flatMap(turn => turn.businessProposals || []).find(item => item.id === businessButton.dataset.businessId);
+        if (!session || !proposal || proposal.threadId !== session.id || proposal.status !== 'pending' || proposal.submitting || Date.parse(proposal.expiresAt) <= Date.now()) return;
+        proposal.submitting = true; proposal.error = ''; renderThread();
+        try {
+          const result = await submitBusinessAction(proposal.id, session.id, businessButton.dataset.businessAction === 'cancel' ? 'cancel' : 'commit');
+          const next = parseBusinessProposal(result.proposal);
+          if (!next || next.id !== proposal.id || next.threadId !== session.id) throw new Error('Invalid response');
+          Object.assign(proposal, next);
+          if (next.status === 'committed') {
+            try { await refreshBusinessData(result); } catch { proposal.error = '数据已提交，页面刷新失败，请重新加载页面。'; }
+          }
+        } catch { proposal.error = '提交未确认，请检查操作状态或重新准备。'; }
+        finally { proposal.submitting = false; persistSessions(); if (activeId === session.id) renderThread(); }
+        return;
+      }
       const actionButton = (event.target as HTMLElement)?.closest<HTMLButtonElement>('[data-project-action]');
       if (actionButton) {
         if (actionButton.disabled || running) return;
@@ -843,6 +903,15 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     const userId = String(App.currentUser?.id || '');
     sessionsKey = userId ? `gjh-ai-analysis-sessions-v2:${encodeURIComponent(userId)}` : '';
     sessions = loadSessions();
+    cloudHistory?.dispose();
+    historyLoading = Boolean(userId);
+    historyStatus = '正在读取云端历史…';
+    const context = userId ? new AiCloudHistory<Session>(userId, sessionsKey, sessions, (message) => {
+      if (cloudHistory !== context) return;
+      historyStatus = message;
+      renderSessions();
+    }) : null;
+    cloudHistory = context;
     activeId = sessions[0]?.id || '';
     deleteCandidateId = '';
     ensureSession();
@@ -854,6 +923,17 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
     setComposerState();
     resizeInput();
     bind();
+    historyReady = context ? context.initialize(sessions).then((items) => {
+      if (cloudHistory !== context) return;
+      sessions = loadSessions(items);
+      activeId = sessions[0]?.id || '';
+      ensureSession();
+      historyLoading = false;
+      renderSessions();
+      renderThread();
+      setComposerState();
+    }) : Promise.resolve();
+    return historyReady;
   };
 
   const cleanup = () => {
@@ -867,6 +947,9 @@ import { parseSpectrumGallery, selectSpectrumGalleries, spectrumImagePrefixes, r
       turn.tools.forEach((tool) => { if (tool.status === 'running') tool.status = 'stopped'; });
     });
     persistSessions();
+    cloudHistory?.dispose();
+    cloudHistory = null;
+    historyLoading = false;
     clearAttachments();
     running = null;
     bindings?.abort();

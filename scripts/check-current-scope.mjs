@@ -5,7 +5,6 @@ const retired=[
  'src/legacy/features/business-pages','src/legacy/features/business-pages.ts','src/legacy/features/agent-runtime',
  'src/legacy/features/project-skills.ts','src/legacy/features/data-recognition.ts','src/legacy/features/image-cutout.ts',
  'src/legacy/features/apimart-media.ts','src/legacy/features/ai-call-analysis.ts','src/components/reactbits',
- 'server/ai/write-tools.mjs','server/lib/business-actions.mjs',
 ];
 const errors=[];
 for(const file of retired)if(await stat(path.join(root,file)).then(()=>true,()=>false))errors.push(`Retired source remains: ${file}`);
@@ -20,4 +19,4 @@ for (const name of ['property-analysis', 'spectrum-analysis', 'config']) {
 const api=await readFile(path.join(root,'worker/index.ts'),'utf8');
 for(const handler of ['handleDataRecognitionHistory','handleUsers','handleLiblibAiProxy','mergeAiCallLogs','LEGACY_PROPERTY_DATA_URL'])if(api.includes(handler))errors.push(`Retired server handler remains: ${handler}`);
 if(errors.length){console.error(errors.join('\n'));process.exit(1);}
-console.log('Current scope check passed: seven pages, no retired ERP/browser-agent/write runtimes.');
+console.log('Current scope check passed: seven pages, no retired ERP/browser-agent runtimes.');

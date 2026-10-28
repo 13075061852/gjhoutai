@@ -7,6 +7,7 @@
  */
 import { DEFAULT_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../utils/fetch';
 import { parseAiProjectAction, type AiProjectAction } from '../utils/aiProjectActions';
+import type { BusinessProposal } from './business-actions';
 
 const API_BASE = String(import.meta.env.VITE_STORAGE_API_BASE || '').replace(/\/+$/, '');
 const buildUrl = (path: string) => `${API_BASE}${path}`;
@@ -55,7 +56,7 @@ export type AiRunEvent =
   | { seq: number; at: number; type: 'text'; delta: string; flush?: boolean }
   | { seq: number; at: number; type: 'thinking'; delta: string }
   | { seq: number; at: number; type: 'tool_start'; toolCallId: string; name: string; args: unknown }
-  | { seq: number; at: number; type: 'tool_end'; toolCallId: string; name: string; isError: boolean; result?: string; spectrumGallery?: AiSpectrumGallery; projectAction?: AiProjectAction }
+  | { seq: number; at: number; type: 'tool_end'; toolCallId: string; name: string; isError: boolean; result?: string; spectrumGallery?: AiSpectrumGallery; projectAction?: AiProjectAction; proposal?: BusinessProposal }
   | { seq: number; at: number; type: 'usage'; usage: AiUsage }
   | { seq: number; at: number; type: 'status'; status: string; attempt?: number; message?: string; images?: number; files?: number }
   | { seq: number; at: number; type: 'done'; status: 'completed' | 'failed' | 'aborted'; error?: string; usage?: AiUsage };
@@ -90,6 +91,7 @@ export const AI_TOOL_LABELS: Record<string, string> = {
   list_server_projects: '查询服务器项目',
   read_server_project: '读取项目资料',
   prepare_project_lifecycle: '准备项目启停',
+  prepare_business_change: '准备业务数据变更',
   list_inspection_reports: '查询检测报告',
   list_office_records: '查询办事记录',
   list_ash_records: '查询灰份记录',
@@ -253,7 +255,25 @@ export async function submitAiProjectAction(id: string, threadId: string, operat
   return action;
 }
 
+export type AiHistorySession = { id: string; title: string; turns: Array<{ role: 'user' | 'assistant'; text: string }>; updatedAt: number };
+export async function fetchAiHistory(ownerId: string): Promise<AiHistorySession[]> {
+  const response = await fetchWithTimeout(buildUrl(`/api/ai/history?ownerId=${encodeURIComponent(ownerId)}`), { credentials: 'include' });
+  if (!response.ok) throw new Error('读取云端历史失败，请稍后重试。');
+  const payload = await response.json();
+  if (!Array.isArray(payload.sessions)) throw new Error('云端历史格式无效。');
+  return payload.sessions;
+}
+export async function saveAiHistory(ownerId: string, sessions: AiHistorySession[], deletedIds: string[] = [], migrate = false): Promise<void> {
+  const response = await fetchWithTimeout(buildUrl('/api/ai/history'), {
+    method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ownerId, sessions, deletedIds, migrate }),
+  });
+  if (!response.ok) throw new Error('云端历史保存失败，请稍后重试。');
+}
+
 export const aiAnalysis = {
+  history: fetchAiHistory,
+  saveHistory: saveAiHistory,
   start: startAiRun,
   submitProjectAction: submitAiProjectAction,
   abort: abortAiRun,

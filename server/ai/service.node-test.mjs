@@ -27,6 +27,8 @@ before(async () => {
   `);
   db.prepare('INSERT INTO users VALUES (?,?,?,?,?,1)').run('u1', 'kingpolymer', '管理员', 'system_admin', '系统管理员');
   db.prepare('INSERT INTO sessions VALUES (?,?,?)').run('u1', createHash('sha256').update(TOKEN).digest('hex'), new Date(Date.now() + 3600_000).toISOString());
+  db.prepare('INSERT INTO users VALUES (?,?,?,?,?,1)').run('u2', 'other', '其他用户', 'user', '测试');
+  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run('u2', createHash('sha256').update('other-token').digest('hex'), new Date(Date.now() + 3600_000).toISOString());
   db.close();
 
   process.env.DATA_DIR = dir;
@@ -51,7 +53,9 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((resolve) => server?.close(resolve));
+  await new Promise((resolve) => { server?.close(resolve); server?.closeAllConnections(); });
+  const { closeHistoryStore } = await import('./history.mjs');
+  closeHistoryStore();
   const { closeDataConnection } = await import('./data.mjs');
   closeDataConnection();
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -68,6 +72,23 @@ test('health 公开可读，其它接口必须登录', async () => {
     body: JSON.stringify({ prompt: 'hi' }),
   }));
   assert.equal(anonymous.status, 401);
+});
+
+test('云端历史要求登录、校验来源与账号，并按账户隔离、支持读取和删除', async () => {
+  const endpoint = `${BASE}/api/ai/history`;
+  const headers = { cookie: `gjh_session=${TOKEN}`, origin: 'http://127.0.0.1:5001', 'content-type': 'application/json' };
+  const session = { id: 'test-thread', title: '跨设备记录', updatedAt: Date.now(), turns: [{ role: 'user', text: '私密问题' }] };
+  assert.equal((await fetch(`${endpoint}?ownerId=u1`)).status, 401);
+  assert.equal((await fetch(endpoint, { method: 'POST', headers: { cookie: headers.cookie, 'content-type': 'application/json' }, body: JSON.stringify({ ownerId: 'u1', sessions: [session] }) })).status, 403);
+  assert.equal((await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ ownerId: 'u2', sessions: [session] }) })).status, 403);
+  assert.equal((await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ ownerId: 'u1', sessions: [session] }) })).status, 200);
+  const history = await json(await fetch(`${endpoint}?ownerId=u1`, { headers }));
+  assert.equal(history.body.sessions[0].title, '跨设备记录');
+  assert.equal((await fetch(`${endpoint}?ownerId=u2`, { headers })).status, 403);
+  const other = await json(await fetch(`${endpoint}?ownerId=u2`, { headers: { cookie: 'gjh_session=other-token' } }));
+  assert.deepEqual(other.body.sessions, []);
+  assert.equal((await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ ownerId: 'u1', sessions: [], deletedIds: [session.id] }) })).status, 200);
+  assert.deepEqual((await json(await fetch(`${endpoint}?ownerId=u1`, { headers }))).body.sessions, []);
 });
 
 test('跨域上传预检放行文件名请求头，同时保持来源白名单与凭据限制', async () => {

@@ -71,7 +71,7 @@ test('verifies spectra from pixels and axes, never from a DSC filename or stored
   assert.match(prompt, /不能把DTG通道当热流通道/);
   assert.match(prompt, /登记为某类型（尚未核验图像）/);
   assert.match(prompt, /登记为DSC，但图片显示TGA\/DTG特征/);
-  assert.match(prompt, /不要自动修改记录/);
+  assert.match(prompt, /不能因发现冲突自行修改记录/);
   assert.match(prompt, /DSC、TGA、FTIR只要各有可用图片，就必须各展示一张/);
   assert.match(prompt, /不能用两张FTIR挤掉DSC/);
   assert.match(prompt, /工具spectrumGallery已从全量匹配记录中按类型选好/);
@@ -92,7 +92,12 @@ test('preserves private-data boundaries and honest attribution, without requirin
   assert.match(prompt, /提供实际返回的可点击来源链接/);
   assert.match(prompt, /不声称查证了没有查证的内容/);
   assert.match(prompt, /prepare_business_change/);
-  assert.match(prompt, /原prepare_business_change能力已经撤销/);
+  assert.match(prompt, /只有用户在独立卡片确认才会提交/);
+  assert.match(prompt, /同一轮先查询再直接调用prepare_business_change生成确认卡片/);
+  assert.match(prompt, /不要先问“是否确认\/需要我生成卡片吗”/);
+  assert.match(prompt, /目标不唯一、范围不清、查询不完整或缺少必填字段时/);
+  assert.match(prompt, /用户明确指定项目与启停时直接调用prepare_project_lifecycle/);
+  assert.doesNotMatch(prompt, /当前AI对业务数据只有读取权限|AI仅有读取权限/);
   assert.match(prompt, /用户必须点击界面按钮/);
   assert.match(prompt, /不能修改账号、权限、密钥/);
   assert.match(prompt, /不可启动、关闭、重启/);

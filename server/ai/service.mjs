@@ -20,6 +20,7 @@ import {
 import { config, uploadsDir } from './config.mjs';
 import { queryOne } from './data.mjs';
 import { projectAccess } from './project-access.mjs';
+import { historyStore } from './history.mjs';
 import { abortRun, describeModel, getRun, listThreads, searchWeb, startRun, stats } from './runtime.mjs';
 
 const SESSION_COOKIE = 'gjh_session';
@@ -128,12 +129,12 @@ const sendJson = (response, status, payload, cors = {}) => {
   response.end(body);
 };
 
-const readJson = (request) => new Promise((resolve, reject) => {
+const readJson = (request, maxBytes = MAX_BODY_BYTES) => new Promise((resolve, reject) => {
   let size = 0;
   const chunks = [];
   request.on('data', (chunk) => {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       reject(Object.assign(new Error('请求体过大'), { status: 413 }));
       request.destroy();
       return;
@@ -228,6 +229,23 @@ const handle = async (request, response) => {
 
   const user = getSessionUser(request);
   if (!user) return sendJson(response, 401, { error: 'unauthorized' }, cors);
+
+  if (route === '/history') {
+    try {
+      if (request.method === 'GET') {
+        if (url.searchParams.get('ownerId') !== String(user.id)) return sendJson(response, 403, { error: 'account_changed' }, cors);
+        return sendJson(response, 200, { sessions: historyStore().list(user.id) }, cors);
+      }
+      if (request.method === 'POST') {
+        if (!allowedOrigin) return sendJson(response, 403, { error: '历史同步必须来自受信任页面' }, cors);
+        const body = await readJson(request, 4 * 1024 * 1024);
+        if (body.ownerId !== String(user.id)) return sendJson(response, 403, { error: 'account_changed' }, cors);
+        historyStore().save(user.id, body);
+        return sendJson(response, 200, { ok: true }, cors);
+      }
+      return sendJson(response, 405, { error: 'method_not_allowed' }, cors);
+    } catch (error) { return sendJson(response, Number(error.status) || 500, { error: Number(error.status) === 400 ? error.message : '云端历史暂时不可用' }, cors); }
+  }
 
   // Only authenticated browser requests can confirm; no model tool calls this route.
   const projectAction = route.match(/^\/project-actions\/([a-f0-9-]{36})\/(confirm|cancel)$/);

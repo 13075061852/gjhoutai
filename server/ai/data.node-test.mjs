@@ -87,6 +87,7 @@ test('exposes one tool per real page data domain and nothing else', () => {
     'list_office_records',
     'list_server_projects',
     'list_spectrum_records',
+    'prepare_business_change',
     'prepare_project_lifecycle',
     'query_property_rows',
     'query_report_ranges',

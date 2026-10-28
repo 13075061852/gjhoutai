@@ -16,7 +16,7 @@ export function projectTools(context = {}) {
     execute: (_id, params, signal) => guarded(async () => result(await projectAccess.read(context.user, params, signal))),
   }, {
     name: 'prepare_project_lifecycle', label: '准备项目启停',
-    description: '仅为根站kingpolymer或官网guangjun准备启动(start)/关闭(stop)确认卡片。必须用户明确要求具体项目启停；工具不会直接执行，用户点击卡片确认后执行。gjhoutai与AI自身仅只读，禁止restart/部署/编辑/其他服务。',
+    description: '仅为根站kingpolymer或官网guangjun准备启动(start)/关闭(stop)确认卡片。用户明确要求具体项目启停时直接准备卡片，无需再在聊天里询问确认；项目或操作不明确时先澄清。工具不会直接执行，用户点击卡片确认后执行。gjhoutai与AI自身仅只读，禁止restart/部署/编辑/其他服务。',
     parameters: Type.Object({ project: Type.Union([Type.Literal('kingpolymer'), Type.Literal('guangjun')]), operation: Type.Union([Type.Literal('start'), Type.Literal('stop')]) }, { additionalProperties: false }),
     execute: (_id, params) => guarded(async () => {
       const projectAction = await projectAccess.prepare(context.user, context.threadId, params.project, params.operation);

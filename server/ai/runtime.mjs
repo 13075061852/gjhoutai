@@ -191,6 +191,7 @@ const mapSessionEvent = (run, event) => {
         isError: Boolean(event.isError || event.result?.isError),
         result: summarizeResult(event.result),
         ...(event.result?.details?.projectAction ? { projectAction: event.result.details.projectAction } : {}),
+        ...(event.result?.details?.proposal ? { proposal: event.result.details.proposal } : {}),
         ...(event.result?.details?.spectrumGallery ? { spectrumGallery: event.result.details.spectrumGallery } : {}),
       });
     case 'message_end': {
